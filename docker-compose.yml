@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: smfc_db
+    environment:
+      POSTGRES_USER: smfc
+      POSTGRES_PASSWORD: smfc_secret
+      POSTGRES_DB: smfc_erp
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smfc -d smfc_erp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smfc_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: smfc_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smfc_network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smfc_backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@db:5432/smfc_erp
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 15
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+      APP_ENV: development
+      DEBUG: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - smfc_network
+
+  worker:
+    # Arq background-job worker. Runs the same app code as `backend` but
+    # as an arq consumer instead of a uvicorn HTTP server. See
+    # `backend/Dockerfile.worker` and `STAGE-6-PENDING-arq-worker-pool`
+    # in .stubs-approved.md for rationale. Horizontal scale via
+    # `docker compose up --scale worker=N`.
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@db:5432/smfc_erp
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
+      JWT_ALGORITHM: HS256
+      APP_ENV: development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    networks:
+      - smfc_network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    container_name: smfc_frontend
+    environment:
+      VITE_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./src:/app
+      - /app/node_modules
+    networks:
+      - smfc_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  smfc_network:
+    driver: bridge

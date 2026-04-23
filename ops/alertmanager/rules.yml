@@ -1,0 +1,170 @@
+# Prometheus alerting rules for SMFC ERP (STAGE-6-PENDING-alerting-rules closure).
+#
+# Load via Prometheus:
+#   rule_files:
+#     - /etc/prometheus/rules/smfc.yml
+# then route via Alertmanager config (see alertmanager.yml in this dir).
+#
+# Severity conventions:
+#   critical — wakes on-call (PagerDuty)
+#   warning  — Slack only (#smfc-oncall)
+#
+# Every alert has `runbook_url` — document the investigation + mitigation
+# path in the linked runbook before firing in production.
+
+groups:
+  - name: smfc_api_health
+    interval: 30s
+    rules:
+      - alert: High5xxRate
+        expr: |
+          100 * sum(rate(http_server_duration_milliseconds_count{env="production", http_status_code=~"5.."}[5m]))
+              / sum(rate(http_server_duration_milliseconds_count{env="production"}[5m])) > 1
+        for: 5m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "5xx rate >1% for 5 min"
+          description: "{{ $value | printf \"%.2f\" }}% of requests returning 5xx. Check /dashboards/smfc-api first."
+          runbook_url: "https://internal/runbook/smfc-5xx"
+
+      - alert: RequestLatencyP95High
+        expr: |
+          histogram_quantile(0.95,
+            sum by (le) (rate(http_server_duration_milliseconds_bucket{env="production"}[5m]))
+          ) > 2000
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "p95 latency >2s"
+          description: "p95 latency is {{ $value | printf \"%.0f\" }}ms. Check DB pool + external integrations."
+          runbook_url: "https://internal/runbook/smfc-latency"
+
+      - alert: DBPoolExhausted
+        expr: |
+          db_client_connections_usage{env="production", pool_name="smfc", state="used"}
+            >= db_client_connections_max{env="production", pool_name="smfc"} * 0.95
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "DB pool near saturation"
+          description: "Used connections {{ $value }} at ≥95% of pool max. Investigate slow queries + pool sizing."
+          runbook_url: "https://internal/runbook/smfc-db-pool"
+
+  - name: smfc_worker_queue
+    interval: 30s
+    rules:
+      - alert: ArqQueueBacklog
+        expr: arq_queue_depth{env="production"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Arq queue {{ $labels.queue }} backlog >1000"
+          description: "Queue depth is {{ $value }}. Either scale workers or investigate a failing job."
+          runbook_url: "https://internal/runbook/smfc-arq-backlog"
+
+      - alert: ArqWorkerDown
+        expr: |
+          up{job="arq_worker", env="production"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Arq worker {{ $labels.instance }} down"
+          runbook_url: "https://internal/runbook/smfc-worker-down"
+
+  - name: smfc_security
+    interval: 15s
+    rules:
+      - alert: WebhookVerificationFailed
+        # Any HMAC verification failure is worth waking someone — either a
+        # vendor rotated keys without telling us, or a replay attack is in
+        # progress. The primitive lives at app/core/webhook_signature.py.
+        expr: |
+          increase(webhook_verification_failures_total{env="production"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Webhook verification failed ({{ $labels.vendor }})"
+          description: "{{ $value }} failed webhooks from {{ $labels.vendor }} in the last 5 min."
+          runbook_url: "https://internal/runbook/smfc-webhook-hmac"
+
+      - alert: AuthRateLimitHit
+        # Sustained 429s on auth mean someone is grinding on login — not
+        # necessarily compromise, but always worth a look.
+        expr: |
+          increase(http_server_duration_milliseconds_count{
+            env="production", http_route=~"/api/v1/auth/.*", http_status_code="429"
+          }[5m]) > 100
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Auth 429s spiked ({{ $value }} in 5m)"
+          runbook_url: "https://internal/runbook/smfc-auth-lockout"
+
+      - alert: AuditChainGap
+        # The daily compute_audit_anchors_job is supposed to write one row
+        # per active org per day. Any day missing an anchor is a tampering
+        # investigation. See STAGE-5-PENDING-002 closure.
+        expr: audit_chain_days_missing_anchor{env="production"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: compliance
+        annotations:
+          summary: "Audit-chain anchor missing for {{ $value }} day(s)"
+          description: "The nightly compute_audit_anchors_job either failed or has not run. Chain integrity at risk."
+          runbook_url: "https://internal/runbook/smfc-audit-chain"
+
+      - alert: AuditChainMismatch
+        # `/api/v1/audit-logs/verify-chain` reports mismatched days. Any
+        # mismatch means historical audit rows changed after they were
+        # anchored — treat as compliance incident.
+        expr: audit_chain_days_mismatched{env="production"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: compliance
+        annotations:
+          summary: "Audit-chain tampering detected — {{ $value }} day(s) mismatched"
+          runbook_url: "https://internal/runbook/smfc-audit-tamper"
+
+  - name: smfc_integrations
+    interval: 30s
+    rules:
+      - alert: IntegrationCircuitOpen
+        # IntegrationClient moves to CIRCUIT_OPEN after 5 consecutive
+        # failures (see app/integrations/base/client.py). Any vendor sitting
+        # open >5 min means a dependency is down.
+        expr: integration_client_circuit_state{env="production", state="open"} == 1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.vendor }} circuit OPEN for 5m"
+          runbook_url: "https://internal/runbook/smfc-integration-circuit"
+
+      - alert: IntegrationHighErrorRate
+        expr: |
+          sum by (vendor) (rate(integration_client_requests_total{env="production", outcome="error"}[5m]))
+              / sum by (vendor) (rate(integration_client_requests_total{env="production"}[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "{{ $labels.vendor }} error rate >10%"
+          runbook_url: "https://internal/runbook/smfc-integration-errors"

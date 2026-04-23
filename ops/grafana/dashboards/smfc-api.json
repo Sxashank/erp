@@ -1,0 +1,183 @@
+{
+  "__schema": "Grafana dashboard JSON — provision via docker compose mount at /etc/grafana/provisioning/dashboards/ OR import via UI. STAGE-6-PENDING-grafana-dashboards closure.",
+  "title": "SMFC API — request latency, errors, deps",
+  "uid": "smfc-api",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "Asia/Kolkata",
+  "tags": ["smfc", "api", "nbfc"],
+  "templating": {
+    "list": [
+      {
+        "name": "env",
+        "type": "custom",
+        "label": "Environment",
+        "query": "local,staging,production",
+        "current": { "text": "production", "value": "production" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "HTTP request latency (p50 / p95 / p99) per route",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, http_route) (rate(http_server_duration_milliseconds_bucket{env=\"$env\"}[5m])))",
+          "legendFormat": "p50 {{http_route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, http_route) (rate(http_server_duration_milliseconds_bucket{env=\"$env\"}[5m])))",
+          "legendFormat": "p95 {{http_route}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, http_route) (rate(http_server_duration_milliseconds_bucket{env=\"$env\"}[5m])))",
+          "legendFormat": "p99 {{http_route}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "ms" } }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "5xx error rate (% of requests)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(http_server_duration_milliseconds_count{env=\"$env\",http_status_code=~\"5..\"}[5m])) / sum(rate(http_server_duration_milliseconds_count{env=\"$env\"}[5m]))",
+          "legendFormat": "5xx %"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.5 },
+              { "color": "red", "value": 1.0 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "DB connection pool usage",
+      "gridPos": { "x": 0, "y": 8, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "db_client_connections_usage{env=\"$env\", pool_name=\"smfc\", state=\"used\"}",
+          "legendFormat": "used"
+        },
+        {
+          "expr": "db_client_connections_usage{env=\"$env\", pool_name=\"smfc\", state=\"idle\"}",
+          "legendFormat": "idle"
+        },
+        {
+          "expr": "db_client_connections_max{env=\"$env\", pool_name=\"smfc\"}",
+          "legendFormat": "max"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Redis hit/miss ratio",
+      "gridPos": { "x": 8, "y": 8, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "redis_keyspace_hits_total{env=\"$env\"} / (redis_keyspace_hits_total{env=\"$env\"} + redis_keyspace_misses_total{env=\"$env\"})",
+          "legendFormat": "hit ratio"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Arq queue depth",
+      "gridPos": { "x": 16, "y": 8, "w": 8, "h": 6 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "arq_queue_depth{env=\"$env\"}",
+          "legendFormat": "{{queue}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Per-vendor integration failure rate (from IntegrationClient)",
+      "gridPos": { "x": 0, "y": 14, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "sum by (vendor) (rate(integration_client_requests_total{env=\"$env\", outcome=\"error\"}[5m])) / sum by (vendor) (rate(integration_client_requests_total{env=\"$env\"}[5m]))",
+          "legendFormat": "{{vendor}} error rate"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 } }
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "Webhook verification failures (last 1h)",
+      "gridPos": { "x": 12, "y": 14, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "sum(increase(webhook_verification_failures_total{env=\"$env\"}[1h]))",
+          "legendFormat": "failures"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Audit-chain gaps (days missing anchor, last 30d)",
+      "gridPos": { "x": 18, "y": 14, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "PROM" },
+      "targets": [
+        {
+          "expr": "audit_chain_days_missing_anchor{env=\"$env\"}",
+          "legendFormat": "days"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

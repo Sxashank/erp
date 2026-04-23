@@ -1,0 +1,689 @@
+/**
+ * Fixed Deposit View Page
+ */
+
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import {
+  ArrowLeft,
+  CheckCircle,
+  XCircle,
+  RefreshCw,
+  FileText,
+  Calendar,
+  User,
+  CreditCard,
+} from 'lucide-react';
+
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/useAuth';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import fixedDepositService, {
+  FixedDeposit,
+  FDTransaction,
+  FDInterestAccrual,
+  FDMaturityProjection,
+} from '@/services/fixedDepositService';
+
+const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  DRAFT: 'outline',
+  PENDING_APPROVAL: 'secondary',
+  ACTIVE: 'default',
+  MATURED: 'default',
+  PREMATURE_CLOSED: 'secondary',
+  RENEWED: 'default',
+  CANCELLED: 'destructive',
+};
+
+export default function FDView() {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  const { toast } = useToast();
+
+  const [fd, setFD] = useState<FixedDeposit | null>(null);
+  const [transactions, setTransactions] = useState<FDTransaction[]>([]);
+  const [accruals, setAccruals] = useState<FDInterestAccrual[]>([]);
+  const [projection, setProjection] = useState<FDMaturityProjection | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const { user } = useAuth();
+  const userId = user?.id ?? '';
+
+  useEffect(() => {
+    if (id) {
+      loadFD(id);
+    }
+  }, [id]);
+
+  const loadFD = async (fdId: string) => {
+    try {
+      setLoading(true);
+      const [fdData, txnData, accrualData] = await Promise.all([
+        fixedDepositService.getDeposit(fdId),
+        fixedDepositService.getTransactions(fdId),
+        fixedDepositService.getAccruals(fdId),
+      ]);
+      setFD(fdData);
+      setTransactions(txnData);
+      setAccruals(accrualData);
+
+      // Load projection for active FDs
+      if (fdData.status === 'ACTIVE') {
+        try {
+          const proj = await fixedDepositService.getProjection(fdId);
+          setProjection(proj);
+        } catch (e) {
+          console.error('Failed to load projection', e);
+        }
+      }
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to load fixed deposit',
+        variant: 'destructive',
+      });
+      navigate('/admin/fixed-deposits');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    if (!id) return;
+    try {
+      setActionLoading(true);
+      await fixedDepositService.approveDeposit(id, userId);
+      toast({
+        title: 'Success',
+        description: 'Fixed deposit approved successfully',
+      });
+      loadFD(id);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.detail || 'Failed to approve FD',
+        variant: 'destructive',
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (!id || !fd) return;
+
+    const isMaturity = new Date(fd.maturity_date) <= new Date();
+    const closureReason = isMaturity ? 'MATURITY' : 'PREMATURE';
+
+    if (
+      !confirm(
+        `Are you sure you want to ${isMaturity ? 'mature' : 'prematurely close'} this FD?`
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await fixedDepositService.closeDeposit(id, {
+        closure_date: new Date().toISOString().split('T')[0],
+        closure_reason: closureReason,
+        payout_mode: 'BANK_TRANSFER',
+      });
+      toast({
+        title: 'Success',
+        description: 'Fixed deposit closed successfully',
+      });
+      loadFD(id);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.detail || 'Failed to close FD',
+        variant: 'destructive',
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleRenew = async () => {
+    if (!id) return;
+
+    if (!confirm('Are you sure you want to renew this FD?')) return;
+
+    try {
+      setActionLoading(true);
+      const newFD = await fixedDepositService.renewDeposit(id, {
+        include_interest: true,
+      });
+      toast({
+        title: 'Success',
+        description: `Fixed deposit renewed. New FD: ${newFD.fd_number}`,
+      });
+      navigate(`/admin/fixed-deposits/${newFD.id}`);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.detail || 'Failed to renew FD',
+        variant: 'destructive',
+      });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR',
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="text-center py-8">Loading...</div>
+      </div>
+    );
+  }
+
+  if (!fd) {
+    return (
+      <div className="container mx-auto py-6">
+        <div className="text-center py-8">Fixed deposit not found</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto py-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">{fd.fd_number}</h1>
+              <Badge variant={STATUS_COLORS[fd.status]}>{fd.status.replace('_', ' ')}</Badge>
+            </div>
+            <p className="text-muted-foreground">
+              {fd.product_name || fd.product_code}
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {fd.status === 'DRAFT' && (
+            <Button onClick={handleApprove} disabled={actionLoading}>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              Approve
+            </Button>
+          )}
+          {fd.status === 'ACTIVE' && (
+            <>
+              <Button variant="outline" onClick={handleRenew} disabled={actionLoading}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Renew
+              </Button>
+              <Button variant="destructive" onClick={handleClose} disabled={actionLoading}>
+                <XCircle className="mr-2 h-4 w-4" />
+                Close
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Summary Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Deposit Amount
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(fd.deposit_amount)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Interest Rate
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {fd.interest_rate.toFixed(2)}%
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Maturity Amount
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {formatCurrency(fd.maturity_amount)}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Accrued Interest
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(fd.accrued_interest)}</div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Tabs defaultValue="details">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="transactions">Transactions</TabsTrigger>
+          <TabsTrigger value="accruals">Interest Accruals</TabsTrigger>
+          <TabsTrigger value="projection">Projection</TabsTrigger>
+          <TabsTrigger value="nominees">Nominees</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="details" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* FD Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  FD Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">FD Number</span>
+                  <span className="font-medium">{fd.fd_number}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Certificate Number</span>
+                  <span className="font-medium">{fd.certificate_number || '-'}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Product</span>
+                  <span className="font-medium">{fd.product_name || fd.product_code}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Customer Category</span>
+                  <span className="font-medium">{fd.customer_category}</span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Dates */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Dates
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Deposit Date</span>
+                  <span className="font-medium">
+                    {new Date(fd.deposit_date).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Value Date</span>
+                  <span className="font-medium">
+                    {new Date(fd.value_date).toLocaleDateString()}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tenure</span>
+                  <span className="font-medium">{fd.tenure_days} days</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Maturity Date</span>
+                  <span className="font-medium">
+                    {new Date(fd.maturity_date).toLocaleDateString()}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Interest Details */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CreditCard className="h-5 w-5" />
+                  Interest Details
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Interest Rate</span>
+                  <span className="font-medium">{fd.interest_rate.toFixed(2)}%</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Payout Frequency</span>
+                  <span className="font-medium">
+                    {fd.interest_payout_frequency.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Compounding</span>
+                  <span className="font-medium">
+                    {fd.compounding_frequency.replace('_', ' ')}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Payout Mode</span>
+                  <span className="font-medium">
+                    {fd.interest_payout_mode.replace('_', ' ')}
+                  </span>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Settings</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Auto Renew</span>
+                  <Badge variant={fd.auto_renew ? 'default' : 'outline'}>
+                    {fd.auto_renew ? 'Yes' : 'No'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Renewal Count</span>
+                  <span className="font-medium">{fd.renewal_count}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Has Loan</span>
+                  <Badge variant={fd.has_loan ? 'destructive' : 'outline'}>
+                    {fd.has_loan ? 'Yes' : 'No'}
+                  </Badge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">TDS Deducted</span>
+                  <span className="font-medium">{formatCurrency(fd.tds_deducted)}</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="transactions">
+          <Card>
+            <CardHeader>
+              <CardTitle>Transaction History</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Description</TableHead>
+                    <TableHead className="text-right">Debit</TableHead>
+                    <TableHead className="text-right">Credit</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center py-8">
+                        No transactions
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((txn) => (
+                      <TableRow key={txn.id}>
+                        <TableCell>
+                          {new Date(txn.transaction_date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{txn.transaction_type}</Badge>
+                        </TableCell>
+                        <TableCell>{txn.description}</TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {txn.debit_amount > 0 ? formatCurrency(txn.debit_amount) : '-'}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {txn.credit_amount > 0 ? formatCurrency(txn.credit_amount) : '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(txn.balance)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="accruals">
+          <Card>
+            <CardHeader>
+              <CardTitle>Interest Accruals</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Accrual Date</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead>Days</TableHead>
+                    <TableHead className="text-right">Principal</TableHead>
+                    <TableHead>Rate</TableHead>
+                    <TableHead className="text-right">Interest</TableHead>
+                    <TableHead className="text-right">Cumulative</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accruals.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-8">
+                        No accruals recorded
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    accruals.map((acc) => (
+                      <TableRow key={acc.id}>
+                        <TableCell>
+                          {new Date(acc.accrual_date).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(acc.period_from).toLocaleDateString()} -{' '}
+                          {new Date(acc.period_to).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell>{acc.days}</TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(acc.principal_amount)}
+                        </TableCell>
+                        <TableCell>{acc.interest_rate.toFixed(2)}%</TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(acc.interest_amount)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(acc.cumulative_interest)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={acc.is_paid ? 'default' : 'outline'}>
+                            {acc.is_paid ? 'Paid' : 'Pending'}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="projection">
+          {projection ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Maturity Projection</CardTitle>
+                <CardDescription>
+                  Estimated values based on current interest rate
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">Projected Interest</p>
+                    <p className="text-xl font-bold">
+                      {formatCurrency(projection.projected_interest)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">Maturity Amount</p>
+                    <p className="text-xl font-bold text-blue-600">
+                      {formatCurrency(projection.projected_maturity_amount)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">TDS Estimate</p>
+                    <p className="text-xl font-bold text-red-600">
+                      {formatCurrency(projection.tds_estimate)}
+                    </p>
+                  </div>
+                  <div className="p-4 bg-muted rounded-lg">
+                    <p className="text-sm text-muted-foreground">Net Maturity</p>
+                    <p className="text-xl font-bold text-green-600">
+                      {formatCurrency(projection.net_maturity_amount)}
+                    </p>
+                  </div>
+                </div>
+
+                {projection.schedule.length > 0 && (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Period</TableHead>
+                        <TableHead>Days</TableHead>
+                        <TableHead className="text-right">Principal</TableHead>
+                        <TableHead className="text-right">Interest</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projection.schedule.map((item, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell>
+                            {new Date(item.period_from).toLocaleDateString()} -{' '}
+                            {new Date(item.period_to).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell>{item.days}</TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(item.principal)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatCurrency(item.interest)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="py-8 text-center text-muted-foreground">
+                Projection available only for active FDs
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="nominees">
+          <Card>
+            <CardHeader>
+              <CardTitle>Nominees</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {fd.nominees.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  No nominees registered
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Relationship</TableHead>
+                      <TableHead>Date of Birth</TableHead>
+                      <TableHead className="text-right">Share %</TableHead>
+                      <TableHead>Minor</TableHead>
+                      <TableHead>Guardian</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {fd.nominees.map((nominee) => (
+                      <TableRow key={nominee.id}>
+                        <TableCell className="font-medium">{nominee.nominee_name}</TableCell>
+                        <TableCell>{nominee.relationship}</TableCell>
+                        <TableCell>
+                          {nominee.date_of_birth
+                            ? new Date(nominee.date_of_birth).toLocaleDateString()
+                            : '-'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {nominee.share_percentage}%
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={nominee.is_minor ? 'secondary' : 'outline'}>
+                            {nominee.is_minor ? 'Yes' : 'No'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{nominee.guardian_name || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}

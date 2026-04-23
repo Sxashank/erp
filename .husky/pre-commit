@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+# SMFC ERP pre-commit hook. See CLAUDE.md §12 item 10 — do NOT skip with --no-verify.
+
+set -e
+
+# Stub discipline (CLAUDE.md §12.2): reject commits that introduce unapproved
+# TODO/FIXME/XXX/HACK markers.
+node scripts/check-stubs.mjs
+
+# Frontend: lint + format staged files via lint-staged
+pnpm exec lint-staged
+
+# Backend: ruff + black --check + mypy if any python changed
+if git diff --cached --name-only | grep -qE '^backend/.*\.py$'; then
+  echo "[pre-commit] Python changes detected — running ruff / black / mypy"
+  cd backend
+  if [ -f .venv/bin/activate ]; then
+    # shellcheck disable=SC1091
+    . .venv/bin/activate
+  fi
+  ruff check .
+  black --check .
+  mypy app
+  cd -
+fi

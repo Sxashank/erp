@@ -1,0 +1,22 @@
+# Grafana dashboard provisioning (STAGE-6-PENDING-grafana-dashboards closure).
+#
+# Mount this file at /etc/grafana/provisioning/dashboards/smfc.yml and the
+# dashboards/ directory at /var/lib/grafana/dashboards/smfc — on boot
+# Grafana picks them up without an operator clicking through the UI.
+#
+# Example docker-compose snippet (add to your Grafana container):
+#   volumes:
+#     - ./ops/grafana/provisioning/dashboards/smfc.yml:/etc/grafana/provisioning/dashboards/smfc.yml:ro
+#     - ./ops/grafana/dashboards:/var/lib/grafana/dashboards/smfc:ro
+apiVersion: 1
+providers:
+  - name: smfc
+    orgId: 1
+    folder: SMFC
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards/smfc
+      foldersFromFilesStructure: false

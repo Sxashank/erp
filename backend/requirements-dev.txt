@@ -1,0 +1,27 @@
+# Dev/test dependencies. Install in addition to requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Split out from requirements.txt because testcontainers pulls docker, and the
+# production image should not need those deps. See CLAUDE.md §10.4.
+-r requirements.txt
+
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+
+# Used by a subset of unit tests that only need SQLite (no Docker).
+aiosqlite>=0.19.0
+
+# Real Postgres via containers for integration tests.
+testcontainers[postgres]>=4.8.0
+
+# Model factories.
+factory-boy>=3.3.0
+
+# Test client lifespan wrapper.
+asgi-lifespan>=2.1.0
+
+# Lint / type / format.
+black>=24.1.0
+ruff>=0.1.0
+mypy>=1.8.0

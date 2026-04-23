@@ -1,0 +1,1 @@
+"""SMFC ERP Backend Application."""

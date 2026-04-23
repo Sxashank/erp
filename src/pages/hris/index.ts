@@ -1,0 +1,10 @@
+export { HRISDashboard } from './HRISDashboard';
+export * from './employees';
+export * from './shifts';
+export * from './holidays';
+export * from './leave-types';
+export * from './leave-applications';
+export * from './attendance';
+export * from './separation';
+export * from './training';
+export * from './performance';

@@ -1,0 +1,50 @@
+# Prometheus scrape + rule-file config for SMFC ERP.
+#
+# Pairs with ops/alertmanager/rules.yml and ops/alertmanager/alertmanager.yml.
+#
+# Mount this at /etc/prometheus/prometheus.yml and mount the rules file at
+# /etc/prometheus/rules/smfc.yml.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: smfc
+    env: production
+
+rule_files:
+  - /etc/prometheus/rules/smfc.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  - job_name: smfc_api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["backend:8000"]
+        labels:
+          service: api
+
+  - job_name: arq_worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["worker:9100"]
+        labels:
+          service: worker
+
+  - job_name: otel_collector
+    # OpenTelemetry Collector exposes Prometheus-format metrics here when
+    # configured with `prometheusexporter`. See app/core/telemetry.py.
+    static_configs:
+      - targets: ["otel-collector:9464"]
+
+  - job_name: redis
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+
+  - job_name: postgres
+    static_configs:
+      - targets: ["postgres-exporter:9187"]

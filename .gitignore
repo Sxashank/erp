@@ -1,0 +1,26 @@
+node_modules
+.DS_Store
+dist
+build
+coverage
+.vscode
+.idea
+.env
+.env.*
+!.env.example
+
+# test artifacts
+playwright-report
+test-results
+blob-report
+
+# husky internal
+.husky/_
+
+# python / backend
+backend/.venv
+backend/**/__pycache__
+**/*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
