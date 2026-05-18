@@ -1,5 +1,4 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { TrendingUp } from 'lucide-react';
 import {
   LineChart,
   Line,
@@ -12,7 +11,9 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { TrendingUp } from 'lucide-react';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 interface TrendDataPoint {
   period: string;
@@ -41,19 +42,33 @@ const formatCompact = (value: number | undefined | null) => {
   return num.toFixed(0);
 };
 
-const CustomTooltip = ({ active, payload, label }: any) => {
+interface RechartsTooltipEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+  dataKey?: string;
+  payload?: Record<string, unknown>;
+}
+
+interface RechartsTooltipProps {
+  active?: boolean;
+  payload?: RechartsTooltipEntry[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload, label }: RechartsTooltipProps) => {
   if (active && payload && payload.length) {
     return (
       <div className="bg-white border rounded-lg shadow-lg p-3">
         <p className="font-medium mb-2">{label}</p>
-        {payload.map((entry: any, index: number) => (
+        {payload.map((entry: RechartsTooltipEntry, index: number) => (
           <div key={index} className="flex items-center gap-2 text-sm">
             <div
               className="w-3 h-3 rounded-full"
               style={{ backgroundColor: entry.color }}
             />
             <span className="text-muted-foreground">{entry.name}:</span>
-            <span className="font-medium">{formatCompact(entry.value)}</span>
+            <span className="font-medium">{formatCompact(Number(entry.value ?? 0))}</span>
           </div>
         ))}
       </div>

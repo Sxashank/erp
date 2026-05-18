@@ -4,26 +4,22 @@ Provides business logic for generating legal portfolio
 reports, recovery metrics, and performance analytics.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from decimal import Decimal
-from typing import List, Optional, Dict, Any
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_, case
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.lending.collections import LegalCase, LegalHearing, PropertyAuction
-from app.models.lending.enums import (
-    LegalCaseType,
-    LegalForumType,
-    LegalCaseStatus,
-    AuctionStatus,
-)
+from app.models.legal.advocate import AdvocateAssignment
 from app.models.legal.expense import LegalExpense
 from app.models.legal.notice import LegalNotice
-from app.models.legal.advocate import AdvocateAssignment, AdvocatePerformance
 from app.models.legal.statutory_period import PeriodTracking
-from app.models.legal.enums import ExpenseStatus, AlertPriority
+from app.models.lending.collections import LegalCase, LegalHearing
+from app.models.lending.enums import (
+    LegalCaseStatus,
+)
 
 
 class LegalAnalyticsService:
@@ -39,8 +35,8 @@ class LegalAnalyticsService:
     async def get_dashboard(
         self,
         organization_id: UUID,
-        as_of_date: Optional[date] = None,
-    ) -> Dict[str, Any]:
+        as_of_date: date | None = None,
+    ) -> dict[str, Any]:
         """Get legal dashboard summary."""
         check_date = as_of_date or date.today()
 
@@ -59,9 +55,7 @@ class LegalAnalyticsService:
     # Portfolio Analysis
     # =========================================================================
 
-    async def get_portfolio_legal_status(
-        self, organization_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_portfolio_legal_status(self, organization_id: UUID) -> dict[str, Any]:
         """Get legal portfolio status summary."""
         # Total cases
         total_query = select(func.count()).where(
@@ -174,26 +168,20 @@ class LegalAnalyticsService:
     async def get_recovery_efficiency(
         self,
         organization_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> Dict[str, Any]:
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> dict[str, Any]:
         """Get recovery efficiency metrics."""
         query = select(
             func.sum(LegalCase.total_claim).label("total_claim"),
             func.sum(LegalCase.recovery_through_case).label("total_recovery"),
             func.count().label("total_cases"),
-            func.sum(
-                case(
-                    (LegalCase.status == LegalCaseStatus.RECOVERED, 1),
-                    else_=0
-                )
-            ).label("recovered_cases"),
-            func.sum(
-                case(
-                    (LegalCase.status == LegalCaseStatus.SETTLED, 1),
-                    else_=0
-                )
-            ).label("settled_cases"),
+            func.sum(case((LegalCase.status == LegalCaseStatus.CLOSED, 1), else_=0)).label(
+                "closed_cases"
+            ),
+            func.sum(case((LegalCase.status == LegalCaseStatus.SETTLED, 1), else_=0)).label(
+                "settled_cases"
+            ),
         ).where(
             and_(
                 LegalCase.organization_id == organization_id,
@@ -218,7 +206,7 @@ class LegalAnalyticsService:
             "total_recovery_amount": total_recovery,
             "recovery_rate_percentage": round(recovery_rate, 2),
             "total_cases": result.total_cases or 0,
-            "recovered_cases": result.recovered_cases or 0,
+            "recovered_cases": result.closed_cases or 0,
             "settled_cases": result.settled_cases or 0,
             "pending_amount": total_claim - total_recovery,
         }
@@ -231,18 +219,15 @@ class LegalAnalyticsService:
         self,
         organization_id: UUID,
         limit: int = 10,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get advocate-wise performance metrics."""
         query = (
             select(
                 AdvocateAssignment.advocate_id,
                 func.count().label("total_cases"),
-                func.sum(
-                    case(
-                        (AdvocateAssignment.is_active == True, 1),
-                        else_=0
-                    )
-                ).label("active_cases"),
+                func.sum(case((AdvocateAssignment.is_active == True, 1), else_=0)).label(
+                    "active_cases"
+                ),
             )
             .group_by(AdvocateAssignment.advocate_id)
             .order_by(func.count().desc())
@@ -256,18 +241,21 @@ class LegalAnalyticsService:
         for row in assignments:
             # Get advocate details
             from app.models.legal.advocate import Advocate
+
             adv_result = await self.db.execute(
                 select(Advocate).where(Advocate.id == row.advocate_id)
             )
             advocate = adv_result.scalar_one_or_none()
 
             if advocate:
-                performance_list.append({
-                    "advocate_id": str(row.advocate_id),
-                    "advocate_name": advocate.full_name,
-                    "total_cases": row.total_cases,
-                    "active_cases": row.active_cases,
-                })
+                performance_list.append(
+                    {
+                        "advocate_id": str(row.advocate_id),
+                        "advocate_name": advocate.full_name,
+                        "total_cases": row.total_cases,
+                        "active_cases": row.active_cases,
+                    }
+                )
 
         return performance_list
 
@@ -275,9 +263,7 @@ class LegalAnalyticsService:
     # Forum Analysis
     # =========================================================================
 
-    async def get_forum_wise_analysis(
-        self, organization_id: UUID
-    ) -> List[Dict[str, Any]]:
+    async def get_forum_wise_analysis(self, organization_id: UUID) -> list[dict[str, Any]]:
         """Get forum-wise case analysis."""
         query = (
             select(
@@ -285,9 +271,9 @@ class LegalAnalyticsService:
                 func.count().label("total_cases"),
                 func.sum(LegalCase.total_claim).label("total_claim"),
                 func.sum(LegalCase.recovery_through_case).label("total_recovery"),
-                func.avg(
-                    func.extract('day', LegalCase.closure_date - LegalCase.filing_date)
-                ).label("avg_resolution_days"),
+                func.avg(func.extract("day", LegalCase.closure_date - LegalCase.filing_date)).label(
+                    "avg_resolution_days"
+                ),
             )
             .where(
                 and_(
@@ -318,9 +304,7 @@ class LegalAnalyticsService:
     # Aging Analysis
     # =========================================================================
 
-    async def get_aging_analysis(
-        self, organization_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_aging_analysis(self, organization_id: UUID) -> dict[str, Any]:
         """Get aging analysis of legal cases."""
         today = date.today()
 
@@ -339,11 +323,12 @@ class LegalAnalyticsService:
             conditions = [
                 LegalCase.organization_id == organization_id,
                 LegalCase.is_active == True,
-                LegalCase.status.not_in([
-                    LegalCaseStatus.RECOVERED,
-                    LegalCaseStatus.SETTLED,
-                    LegalCaseStatus.CLOSED,
-                ]),
+                LegalCase.status.not_in(
+                    [
+                        LegalCaseStatus.SETTLED,
+                        LegalCaseStatus.CLOSED,
+                    ]
+                ),
             ]
 
             if max_days:
@@ -378,9 +363,7 @@ class LegalAnalyticsService:
     # Expense Analysis
     # =========================================================================
 
-    async def get_expense_recovery_ratio(
-        self, organization_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_expense_recovery_ratio(self, organization_id: UUID) -> dict[str, Any]:
         """Get expense to recovery ratio."""
         # Total expenses
         expense_query = select(
@@ -424,9 +407,7 @@ class LegalAnalyticsService:
     # Helper Methods
     # =========================================================================
 
-    async def _get_deadline_summary(
-        self, organization_id: UUID
-    ) -> Dict[str, Any]:
+    async def _get_deadline_summary(self, organization_id: UUID) -> dict[str, Any]:
         """Get upcoming deadline summary."""
         today = date.today()
 
@@ -471,9 +452,7 @@ class LegalAnalyticsService:
             "upcoming_30_days": upcoming,
         }
 
-    async def _get_upcoming_hearings_summary(
-        self, organization_id: UUID
-    ) -> Dict[str, Any]:
+    async def _get_upcoming_hearings_summary(self, organization_id: UUID) -> dict[str, Any]:
         """Get upcoming hearings summary."""
         today = date.today()
 
@@ -506,7 +485,7 @@ class LegalAnalyticsService:
         self,
         organization_id: UUID,
         days: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get recent activity summary."""
         since_date = date.today() - timedelta(days=days)
 

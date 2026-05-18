@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Copy,
   Edit,
@@ -12,11 +10,14 @@ import {
   Star,
   Trash2,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,8 +42,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { organizationsApi, voucherTemplatesApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -65,9 +68,11 @@ interface TemplateStats {
   total_templates: number;
   active_templates: number;
   favorite_templates: number;
-  categories: Array<{ category: string; count: number }>;
+  categories: { category: string; count: number }[];
   most_used: VoucherTemplate[];
 }
+
+type VoucherTemplateListParams = Parameters<typeof voucherTemplatesApi.list>[0];
 
 const CATEGORIES = [
   'PAYROLL',
@@ -95,17 +100,7 @@ export function VoucherTemplates() {
   const [filterFavorite, setFilterFavorite] = useState<boolean | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchData();
-    }
-  }, [selectedOrgId, filterCategory, filterFavorite, searchQuery]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -113,14 +108,14 @@ export function VoucherTemplates() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params: any = { organization_id: selectedOrgId, page_size: 50 };
+      const params: VoucherTemplateListParams = { organization_id: selectedOrgId, page_size: 50 };
       if (filterCategory && filterCategory !== 'ALL') params.category = filterCategory;
       if (filterFavorite !== undefined) params.is_favorite = filterFavorite;
       if (searchQuery) params.search = searchQuery;
@@ -133,18 +128,28 @@ export function VoucherTemplates() {
       setTemplates(listRes.data.items);
       setStats(statsRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterCategory, filterFavorite, searchQuery, selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchData();
+    }
+  }, [fetchData, selectedOrgId]);
 
   const handleToggleFavorite = async (id: string) => {
     try {
       await voucherTemplatesApi.toggleFavorite(id);
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to update', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -154,8 +159,8 @@ export function VoucherTemplates() {
       await voucherTemplatesApi.delete(id);
       toast({ title: 'Success', description: 'Template deleted' });
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to delete', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -164,17 +169,10 @@ export function VoucherTemplates() {
       await voucherTemplatesApi.duplicate(id);
       toast({ title: 'Success', description: 'Template duplicated' });
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to duplicate', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
 
   return (
     <div className="space-y-6">
@@ -245,17 +243,20 @@ export function VoucherTemplates() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {stats.most_used.map((t) => (
-                <div
+                <button
+                  type="button"
                   key={t.id}
-                  className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2 hover:bg-slate-100 cursor-pointer"
+                  className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2 hover:bg-slate-100 text-left"
                   onClick={() => navigate(`/admin/finance/voucher-templates/${t.id}/use`)}
                 >
                   <div>
                     <p className="font-medium text-sm">{t.template_name}</p>
                     <p className="text-xs text-slate-500">Used {t.usage_count} times</p>
                   </div>
-                  <Badge variant="outline">{formatCurrency(t.total_amount)}</Badge>
-                </div>
+                  <Badge variant="outline">
+                    <AmountDisplay amount={t.total_amount} />
+                  </Badge>
+                </button>
               ))}
             </div>
           </CardContent>
@@ -347,7 +348,9 @@ export function VoucherTemplates() {
                     <TableCell>
                       {t.category && <Badge variant="outline">{t.category}</Badge>}
                     </TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(t.total_amount)}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      <AmountDisplay amount={t.total_amount} />
+                    </TableCell>
                     <TableCell className="text-center">{t.usage_count}</TableCell>
                     <TableCell className="text-center">
                       <Badge className={t.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}>

@@ -511,21 +511,21 @@ class VoucherService:
 
         if voucher.status != VoucherStatus.APPROVED:
             raise BadRequestException("Only approved vouchers can be posted")
+        if posted_by is None:
+            raise BadRequestException("posted_by is required to post a voucher")
 
         # Capture old state
         old_values = model_to_dict(voucher)
 
-        # Update account balances
-        for line in voucher.lines:
-            account = await self.account_repo.get(line.account_id)
-            if account:
-                if line.debit_amount > 0:
-                    account.current_balance += line.debit_amount
-                if line.credit_amount > 0:
-                    account.current_balance -= line.credit_amount
-
-        # Create GL Entry records for auditability
-        await self._create_gl_entries(voucher, posted_by)
+        # Create GL entries and account balance updates through the canonical
+        # posting service. VoucherService must not mutate balances directly.
+        await self.gl_posting_service.post_voucher(
+            voucher=voucher,
+            posted_by=posted_by,
+            source_type=GLEntrySourceType.MANUAL,
+            source_reference=voucher.voucher_number,
+            source_id=voucher.id,
+        )
 
         voucher.status = VoucherStatus.POSTED
         voucher.posted_at = datetime.now(timezone.utc)
@@ -570,7 +570,7 @@ class VoucherService:
                 financial_year_id=voucher.financial_year_id,
                 period_id=voucher.period_id,
                 voucher_date=voucher.voucher_date,
-                source_type=GLEntrySourceType.VOUCHER,
+                source_type=GLEntrySourceType.MANUAL,
                 source_id=voucher.id,
                 source_reference=voucher.voucher_number,
                 lines=gl_lines,
@@ -597,16 +597,16 @@ class VoucherService:
 
         # If posted, reverse the account balances and create reversal GL entries
         if voucher.status == VoucherStatus.POSTED:
-            for line in voucher.lines:
-                account = await self.account_repo.get(line.account_id)
-                if account:
-                    if line.debit_amount > 0:
-                        account.current_balance -= line.debit_amount
-                    if line.credit_amount > 0:
-                        account.current_balance += line.credit_amount
+            if cancelled_by is None:
+                raise BadRequestException("cancelled_by is required to cancel a posted voucher")
 
-            # Create reversal GL entries
-            await self._create_reversal_gl_entries(voucher, cancelled_by, reason)
+            await self.gl_posting_service.reverse_entries(
+                original_voucher_id=voucher.id,
+                reversal_voucher_id=voucher.id,
+                reversal_date=datetime.now(timezone.utc).date(),
+                reversed_by=cancelled_by,
+                reversal_reason=reason,
+            )
 
         voucher.status = VoucherStatus.CANCELLED
         voucher.cancelled_at = datetime.now(timezone.utc)
@@ -662,7 +662,7 @@ class VoucherService:
                 financial_year_id=voucher.financial_year_id,
                 period_id=voucher.period_id,
                 voucher_date=datetime.now(timezone.utc).date(),
-                source_type=GLEntrySourceType.VOUCHER,
+                source_type=GLEntrySourceType.MANUAL,
                 source_id=voucher.id,
                 source_reference=f"REV-{voucher.voucher_number}",
                 lines=gl_lines,

@@ -3,14 +3,6 @@
  * View all loans and their details
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Wallet,
   IndianRupee,
@@ -21,9 +13,20 @@ import {
   TrendingUp,
   Clock,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { portalDashboardApi } from '@/services/portalApi';
 import type { LoanSummary } from '@/types/portal';
 
+import { logger } from "@/lib/logger";
 export default function PortalLoans() {
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<LoanSummary[]>([]);
@@ -38,7 +41,7 @@ export default function PortalLoans() {
       const response = await portalDashboardApi.getLoans();
       setLoans(response.data);
     } catch (error) {
-      console.error('Failed to fetch loans:', error);
+      logger.error('Failed to fetch loans:', error);
     } finally {
       setLoading(false);
     }
@@ -231,9 +234,7 @@ function LoanCard({ loan }: { loan: LoanSummary }) {
           </div>
           <div>
             <p className="text-xs text-gray-500">Next EMI Date</p>
-            <p className="font-medium">
-              {loan.next_emi_date ? new Date(loan.next_emi_date).toLocaleDateString() : '-'}
-            </p>
+            <DateDisplay date={loan.next_emi_date} className="font-medium" />
           </div>
         </div>
 

@@ -1,45 +1,45 @@
 """KYC service for the lending module."""
 
 from datetime import date, datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.models.lending.enums import (
+    BureauPullStatus,
+    BureauType,
+    CKYCTransactionType,
+    EntityType,
+    KYCDocCategory,
+    KYCVerificationMethod,
+    KYCVerificationStatus,
+)
 from app.models.lending.kyc import (
-    KYCDocumentType,
-    EntityKYCDocument,
-    CKYCTransaction,
     BureauPull,
     BureauReport,
-)
-from app.models.lending.enums import (
-    KYCDocCategory,
-    KYCVerificationStatus,
-    KYCVerificationMethod,
-    CKYCTransactionType,
-    BureauType,
-    BureauPullStatus,
-    EntityType,
-)
-from app.schemas.lending.kyc import (
-    KYCDocumentTypeCreate,
-    KYCDocumentTypeUpdate,
-    EntityKYCDocumentCreate,
-    EntityKYCDocumentUpdate,
-    CKYCSearchRequest,
-    CKYCDownloadRequest,
-    BureauPullRequest,
-)
-from app.repositories.lending.kyc_repo import (
-    KYCDocumentTypeRepository,
-    EntityKYCDocumentRepository,
-    CKYCTransactionRepository,
-    BureauPullRepository,
-    BureauReportRepository,
+    CKYCTransaction,
+    EntityKYCDocument,
+    KYCDocumentType,
 )
 from app.repositories.lending.entity_repo import EntityRepository
-from app.core.exceptions import NotFoundException, ConflictException, ValidationException
+from app.repositories.lending.kyc_repo import (
+    BureauPullRepository,
+    BureauReportRepository,
+    CKYCTransactionRepository,
+    EntityKYCDocumentRepository,
+    KYCDocumentTypeRepository,
+)
+from app.schemas.lending.kyc import (
+    BureauPullRequest,
+    CKYCDownloadRequest,
+    CKYCSearchRequest,
+    EntityKYCDocumentCreate,
+    EntityKYCDocumentUpdate,
+    KYCDocumentTypeCreate,
+    KYCDocumentTypeUpdate,
+)
 
 
 class KYCService:
@@ -71,7 +71,7 @@ class KYCService:
             created_by=created_by,
         )
         self.session.add(doc_type)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(doc_type)
         return doc_type
 
@@ -88,7 +88,7 @@ class KYCService:
             setattr(doc_type, field, value)
         doc_type.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(doc_type)
         return doc_type
 
@@ -105,9 +105,9 @@ class KYCService:
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        category: Optional[KYCDocCategory] = None,
-        entity_type: Optional[EntityType] = None,
-    ) -> Tuple[List[KYCDocumentType], int]:
+        category: KYCDocCategory | None = None,
+        entity_type: EntityType | None = None,
+    ) -> tuple[list[KYCDocumentType], int]:
         """Get all KYC document types."""
         return await self.doc_type_repo.get_all_by_organization(
             organization_id=organization_id,
@@ -121,12 +121,10 @@ class KYCService:
     async def get_mandatory_document_types(
         self,
         organization_id: UUID,
-        entity_type: Optional[EntityType] = None,
-    ) -> List[KYCDocumentType]:
+        entity_type: EntityType | None = None,
+    ) -> list[KYCDocumentType]:
         """Get mandatory KYC document types."""
-        return await self.doc_type_repo.get_mandatory_documents(
-            organization_id, entity_type
-        )
+        return await self.doc_type_repo.get_mandatory_documents(organization_id, entity_type)
 
     # =========================================================================
     # Entity KYC Document Operations
@@ -151,7 +149,7 @@ class KYCService:
             created_by=created_by,
         )
         self.session.add(kyc_doc)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(kyc_doc)
         return kyc_doc
 
@@ -168,7 +166,7 @@ class KYCService:
             setattr(kyc_doc, field, value)
         kyc_doc.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(kyc_doc)
         return kyc_doc
 
@@ -177,7 +175,7 @@ class KYCService:
         id: UUID,
         verification_method: KYCVerificationMethod,
         verified_by: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> EntityKYCDocument:
         """Verify a KYC document."""
         kyc_doc = await self.entity_kyc_repo.get(id)
@@ -191,7 +189,7 @@ class KYCService:
         kyc_doc.verification_remarks = remarks
         kyc_doc.updated_by = verified_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(kyc_doc)
         return kyc_doc
 
@@ -212,19 +210,25 @@ class KYCService:
         kyc_doc.verified_at = datetime.utcnow()
         kyc_doc.updated_by = rejected_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(kyc_doc)
         return kyc_doc
 
+    async def delete_kyc_document(self, id: UUID, deleted_by: UUID) -> None:
+        """Soft delete a KYC document."""
+        kyc_doc = await self.entity_kyc_repo.get(id)
+        if not kyc_doc:
+            raise NotFoundException("KYC document not found")
+        kyc_doc.soft_delete(deleted_by)
+        await self.session.flush()
+
     async def get_entity_kyc_documents(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityKYCDocument]:
+    ) -> list[EntityKYCDocument]:
         """Get all KYC documents for an entity."""
         return await self.entity_kyc_repo.get_by_entity(entity_id, include_inactive)
 
-    async def check_kyc_complete(
-        self, entity_id: UUID, organization_id: UUID
-    ) -> Dict[str, Any]:
+    async def check_kyc_complete(self, entity_id: UUID, organization_id: UUID) -> dict[str, Any]:
         """Check KYC completion status for an entity."""
         entity = await self.entity_repo.get(entity_id)
         if not entity:
@@ -259,18 +263,14 @@ class KYCService:
             "verified_count": len(verified_ids & mandatory_ids),
             "pending_count": len(pending_ids & mandatory_ids),
             "missing_count": len(missing_ids),
-            "missing_documents": [
-                dt for dt in mandatory_types if dt.id in missing_ids
-            ],
+            "missing_documents": [dt for dt in mandatory_types if dt.id in missing_ids],
         }
 
     # =========================================================================
     # CKYC Operations
     # =========================================================================
 
-    async def search_ckyc(
-        self, request: CKYCSearchRequest, initiated_by: UUID
-    ) -> CKYCTransaction:
+    async def search_ckyc(self, request: CKYCSearchRequest, initiated_by: UUID) -> CKYCTransaction:
         """Search CKYC registry by PAN."""
         entity = await self.entity_repo.get(request.entity_id)
         if not entity:
@@ -294,11 +294,9 @@ class KYCService:
         # For now, simulate a response
         transaction.status = "SUCCESS"
         transaction.completed_at = datetime.utcnow()
-        transaction.response_payload = {
-            "message": "CKYC search completed - integration pending"
-        }
+        transaction.response_payload = {"message": "CKYC search completed - integration pending"}
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transaction)
         return transaction
 
@@ -324,20 +322,16 @@ class KYCService:
         # TODO: Call actual CKYC API
         transaction.status = "SUCCESS"
         transaction.completed_at = datetime.utcnow()
-        transaction.response_payload = {
-            "message": "CKYC download completed - integration pending"
-        }
+        transaction.response_payload = {"message": "CKYC download completed - integration pending"}
 
         # Update entity CKYC number
         entity.ckyc_number = request.ckyc_number
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transaction)
         return transaction
 
-    async def get_ckyc_transactions(
-        self, entity_id: UUID
-    ) -> List[CKYCTransaction]:
+    async def get_ckyc_transactions(self, entity_id: UUID) -> list[CKYCTransaction]:
         """Get all CKYC transactions for an entity."""
         return await self.ckyc_repo.get_by_entity(entity_id)
 
@@ -390,7 +384,9 @@ class KYCService:
         bureau_pull.completed_at = datetime.utcnow()
         bureau_pull.pull_reference_number = f"{request.bureau_type.value}-{bureau_pull.id}"
         bureau_pull.report_valid_till = date.today().replace(
-            month=date.today().month + 3 if date.today().month <= 9 else (date.today().month + 3) % 12,
+            month=(
+                date.today().month + 3 if date.today().month <= 9 else (date.today().month + 3) % 12
+            ),
             year=date.today().year if date.today().month <= 9 else date.today().year + 1,
         )
 
@@ -408,26 +404,24 @@ class KYCService:
         )
         self.session.add(bureau_report)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(bureau_pull)
         return bureau_pull
 
     async def get_bureau_pulls(
         self, entity_id: UUID, include_failed: bool = False
-    ) -> List[BureauPull]:
+    ) -> list[BureauPull]:
         """Get all bureau pulls for an entity."""
         return await self.bureau_pull_repo.get_by_entity(entity_id, include_failed)
 
-    async def get_bureau_report(
-        self, bureau_pull_id: UUID
-    ) -> Optional[BureauReport]:
+    async def get_bureau_report(self, bureau_pull_id: UUID) -> BureauReport | None:
         """Get bureau report for a pull."""
         return await self.bureau_report_repo.get_by_pull(bureau_pull_id)
 
     async def get_latest_credit_score(
         self,
         entity_id: UUID,
-        bureau_type: Optional[BureauType] = None,
-    ) -> Optional[int]:
+        bureau_type: BureauType | None = None,
+    ) -> int | None:
         """Get latest credit score for an entity."""
         return await self.bureau_report_repo.get_latest_score(entity_id, bureau_type)

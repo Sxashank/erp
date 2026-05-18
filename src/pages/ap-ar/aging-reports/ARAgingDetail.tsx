@@ -1,14 +1,10 @@
+import { format } from 'date-fns';
+import { FileSpreadsheet, Printer, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
-import {
-  ArrowLeft,
-  Download,
-  FileSpreadsheet,
-  Printer,
-  RefreshCw,
-} from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
@@ -19,9 +15,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { agingReportsApi, customersApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
 interface AgingInvoice {
   invoice_id: string;
@@ -63,7 +60,7 @@ export function ARAgingDetail() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const organizationId = localStorage.getItem('organization_id') || '';
+  const organizationId = useActiveOrganizationId() || '';
   const asOfDate = searchParams.get('as_of_date') || format(new Date(), 'yyyy-MM-dd');
 
   const [loading, setLoading] = useState(false);
@@ -72,7 +69,7 @@ export function ARAgingDetail() {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!customerId) return;
+      if (!organizationId || !customerId) return;
 
       setLoading(true);
       try {
@@ -86,19 +83,15 @@ export function ARAgingDetail() {
           as_of_date: asOfDate,
         });
         setReportData(response.data);
-      } catch (error: any) {
-        toast({
-          title: 'Error',
-          description: error.response?.data?.detail || 'Failed to fetch report',
-          variant: 'destructive',
-        });
+      } catch (error) {
+        showErrorToast(error, toast);
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-  }, [customerId, asOfDate, organizationId]);
+  }, [customerId, asOfDate, organizationId, toast]);
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -111,15 +104,35 @@ export function ARAgingDetail() {
   const getAgingBadge = (bucket: string) => {
     switch (bucket) {
       case 'current':
-        return <Badge variant="outline" className="bg-green-50 text-green-700">Current</Badge>;
+        return (
+          <Badge variant="outline" className="bg-green-50 text-green-700">
+            Current
+          </Badge>
+        );
       case '1-30':
-        return <Badge variant="outline" className="bg-blue-50 text-blue-700">1-30 Days</Badge>;
+        return (
+          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+            1-30 Days
+          </Badge>
+        );
       case '31-60':
-        return <Badge variant="outline" className="bg-yellow-50 text-yellow-700">31-60 Days</Badge>;
+        return (
+          <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+            31-60 Days
+          </Badge>
+        );
       case '61-90':
-        return <Badge variant="outline" className="bg-orange-50 text-orange-700">61-90 Days</Badge>;
+        return (
+          <Badge variant="outline" className="bg-orange-50 text-orange-700">
+            61-90 Days
+          </Badge>
+        );
       case '90+':
-        return <Badge variant="outline" className="bg-red-50 text-red-700">90+ Days</Badge>;
+        return (
+          <Badge variant="outline" className="bg-red-50 text-red-700">
+            90+ Days
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{bucket}</Badge>;
     }
@@ -135,23 +148,23 @@ export function ARAgingDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 print:hidden">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">AR Aging Detail</h1>
-          <p className="text-sm text-slate-500">
-            {customer ? `${customer.code} - ${customer.name}` : 'Loading...'}
-          </p>
-        </div>
-        {reportData && (
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        )}
+      <div className="print:hidden">
+        <PageHeader
+          title="AR Aging Detail"
+          subtitle={customer ? `${customer.code} - ${customer.name}` : 'Loading...'}
+          breadcrumbs={[
+            { label: 'AR Aging', to: '/admin/ap-ar/aging-reports/ar' },
+            { label: customer?.code ?? 'Detail' },
+          ]}
+          actions={
+            reportData ? (
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* Summary Cards */}
@@ -245,8 +258,12 @@ export function ARAgingDetail() {
                     <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                     <TableCell>{format(new Date(invoice.invoice_date), 'dd/MM/yyyy')}</TableCell>
                     <TableCell>{format(new Date(invoice.due_date), 'dd/MM/yyyy')}</TableCell>
-                    <TableCell className="text-right">{formatAmount(invoice.total_amount)}</TableCell>
-                    <TableCell className="text-right">{formatAmount(invoice.received_amount)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatAmount(invoice.total_amount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatAmount(invoice.received_amount)}
+                    </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatAmount(invoice.balance_amount)}
                     </TableCell>

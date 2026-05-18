@@ -128,7 +128,7 @@ interface Row {
 
 const rows: Row[] = [{ id: 'r1', name: 'Alice', amount: 100 }];
 
-const columns: Array<Column<Row>> = [
+const columns: Column<Row>[] = [
   { key: 'name', header: 'Name' },
   { key: 'amount', header: 'Amount', align: 'right' },
 ];

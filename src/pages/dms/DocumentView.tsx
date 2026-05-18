@@ -3,8 +3,6 @@
  * View document details, preview, and manage document
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
   FileText,
   Download,
@@ -29,29 +27,10 @@ import {
   File,
   ExternalLink,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -62,11 +41,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { documentApi, tagApi } from '@/services/dmsApi';
 import type { DMSDocument, DocumentVersion, DocumentHistory, DMSTag } from '@/types/dms';
 import { formatFileSize, DOCUMENT_TYPES, ACCESS_LEVELS } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
 export default function DocumentView() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -123,7 +126,7 @@ export default function DocumentView() {
         keywords: doc.keywords?.join(', ') || '',
       });
     } catch (error) {
-      console.error('Failed to fetch document:', error);
+      logger.error('Failed to fetch document:', error);
       toast({
         title: 'Error',
         description: 'Failed to load document',
@@ -178,7 +181,10 @@ export default function DocumentView() {
         document_type: editData.document_type || undefined,
         access_level: editData.access_level,
         keywords: editData.keywords
-          ? editData.keywords.split(',').map((k) => k.trim()).filter(Boolean)
+          ? editData.keywords
+              .split(',')
+              .map((k) => k.trim())
+              .filter(Boolean)
           : undefined,
       });
 
@@ -287,7 +293,7 @@ export default function DocumentView() {
     return (
       <div className="space-y-6 p-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <Skeleton className="h-96 lg:col-span-2" />
           <Skeleton className="h-96" />
         </div>
@@ -298,13 +304,13 @@ export default function DocumentView() {
   if (!document) {
     return (
       <div className="p-6 text-center">
-        <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">Document Not Found</h2>
-        <p className="text-muted-foreground mb-4">
+        <FileText className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+        <h2 className="mb-2 text-xl font-semibold">Document Not Found</h2>
+        <p className="mb-4 text-muted-foreground">
           The document you're looking for doesn't exist or has been deleted.
         </p>
         <Button onClick={() => navigate('/admin/dms')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Back to DMS
         </Button>
       </div>
@@ -313,49 +319,35 @@ export default function DocumentView() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div className="flex items-center gap-4">
-            {getDocIcon()}
-            <div>
-              <h1 className="text-2xl font-bold">{document.name}</h1>
-              <div className="flex items-center gap-2 mt-1 text-muted-foreground">
-                <span>{document.file_name}</span>
-                <span>•</span>
-                <span>{formatFileSize(document.file_size)}</span>
-                <span>•</span>
-                <Badge variant="outline">v{document.current_version}</Badge>
-              </div>
-            </div>
+      <PageHeader
+        title={document.name}
+        subtitle={`${document.file_name} • ${formatFileSize(document.file_size)} • v${document.current_version}`}
+        breadcrumbs={[{ label: 'DMS', to: '/admin/dms' }, { label: document.name }]}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setShowEditDialog(true)}>
+              <Pencil className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+            <Button variant="outline" onClick={() => handleDownload()}>
+              <Download className="mr-2 h-4 w-4" />
+              Download
+            </Button>
+            <Button
+              variant="outline"
+              className="text-red-600"
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowEditDialog(true)}>
-            <Pencil className="h-4 w-4 mr-2" />
-            Edit
-          </Button>
-          <Button variant="outline" onClick={() => handleDownload()}>
-            <Download className="h-4 w-4 mr-2" />
-            Download
-          </Button>
-          <Button
-            variant="outline"
-            className="text-red-600"
-            onClick={() => setShowDeleteDialog(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Preview (if applicable) */}
           {canPreview() && (
             <Card>
@@ -375,17 +367,13 @@ export default function DocumentView() {
                     />
                   </div>
                 ) : (
-                  <div className="bg-muted rounded-lg p-8 text-center">
-                    <FileText className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <div className="rounded-lg bg-muted p-8 text-center">
+                    <FileText className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
                     <p className="text-muted-foreground">
                       Preview not available. Click download to view the file.
                     </p>
-                    <Button
-                      variant="outline"
-                      className="mt-4"
-                      onClick={() => handleDownload()}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
+                    <Button variant="outline" className="mt-4" onClick={() => handleDownload()}>
+                      <ExternalLink className="mr-2 h-4 w-4" />
                       Open File
                     </Button>
                   </div>
@@ -398,12 +386,8 @@ export default function DocumentView() {
           <Tabs defaultValue="details">
             <TabsList>
               <TabsTrigger value="details">Details</TabsTrigger>
-              <TabsTrigger value="versions">
-                Versions ({versions.length})
-              </TabsTrigger>
-              <TabsTrigger value="history">
-                History ({history.length})
-              </TabsTrigger>
+              <TabsTrigger value="versions">Versions ({versions.length})</TabsTrigger>
+              <TabsTrigger value="history">History ({history.length})</TabsTrigger>
             </TabsList>
 
             <TabsContent value="details" className="mt-4">
@@ -439,9 +423,7 @@ export default function DocumentView() {
                     <div>
                       <dt className="text-sm text-muted-foreground">Status</dt>
                       <dd>
-                        <Badge
-                          variant={document.status === 'active' ? 'default' : 'secondary'}
-                        >
+                        <Badge variant={document.status === 'active' ? 'default' : 'secondary'}>
                           {document.status}
                         </Badge>
                       </dd>
@@ -452,11 +434,11 @@ export default function DocumentView() {
                     </div>
                     <div>
                       <dt className="text-sm text-muted-foreground">Code</dt>
-                      <dd className="font-medium font-mono">{document.code}</dd>
+                      <dd className="font-mono font-medium">{document.code}</dd>
                     </div>
                     <div>
                       <dt className="text-sm text-muted-foreground">Checksum</dt>
-                      <dd className="font-medium font-mono text-xs truncate">
+                      <dd className="truncate font-mono text-xs font-medium">
                         {document.checksum || 'N/A'}
                       </dd>
                     </div>
@@ -464,14 +446,14 @@ export default function DocumentView() {
 
                   {document.description && (
                     <div className="mt-6">
-                      <dt className="text-sm text-muted-foreground mb-1">Description</dt>
+                      <dt className="mb-1 text-sm text-muted-foreground">Description</dt>
                       <dd className="text-sm">{document.description}</dd>
                     </div>
                   )}
 
                   {document.keywords && document.keywords.length > 0 && (
                     <div className="mt-6">
-                      <dt className="text-sm text-muted-foreground mb-2">Keywords</dt>
+                      <dt className="mb-2 text-sm text-muted-foreground">Keywords</dt>
                       <dd className="flex flex-wrap gap-2">
                         {document.keywords.map((keyword, i) => (
                           <Badge key={i} variant="secondary">
@@ -499,7 +481,7 @@ export default function DocumentView() {
                 </CardHeader>
                 <CardContent>
                   {versions.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4">
+                    <p className="py-4 text-center text-muted-foreground">
                       No version history available
                     </p>
                   ) : (
@@ -507,13 +489,11 @@ export default function DocumentView() {
                       {versions.map((version) => (
                         <div
                           key={version.id}
-                          className="flex items-center justify-between p-3 border rounded-lg"
+                          className="flex items-center justify-between rounded-lg border p-3"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/10">
-                              <span className="text-sm font-medium">
-                                v{version.version_number}
-                              </span>
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10">
+                              <span className="text-sm font-medium">v{version.version_number}</span>
                             </div>
                             <div>
                               <p className="font-medium">{version.file_name}</p>
@@ -522,16 +502,14 @@ export default function DocumentView() {
                                 {new Date(version.created_at).toLocaleString()}
                               </p>
                               {version.change_notes && (
-                                <p className="text-xs text-muted-foreground mt-1">
+                                <p className="mt-1 text-xs text-muted-foreground">
                                   {version.change_notes}
                                 </p>
                               )}
                             </div>
                           </div>
                           <div className="flex items-center gap-2">
-                            {version.is_current && (
-                              <Badge variant="default">Current</Badge>
-                            )}
+                            {version.is_current && <Badge variant="default">Current</Badge>}
                             <Button
                               variant="ghost"
                               size="sm"
@@ -555,7 +533,7 @@ export default function DocumentView() {
                 </CardHeader>
                 <CardContent>
                   {history.length === 0 ? (
-                    <p className="text-muted-foreground text-center py-4">
+                    <p className="py-4 text-center text-muted-foreground">
                       No activity history available
                     </p>
                   ) : (
@@ -563,16 +541,16 @@ export default function DocumentView() {
                       {history.map((entry) => (
                         <div
                           key={entry.id}
-                          className="flex items-start gap-3 p-3 border rounded-lg"
+                          className="flex items-start gap-3 rounded-lg border p-3"
                         >
-                          <History className="h-5 w-5 text-muted-foreground mt-0.5" />
+                          <History className="mt-0.5 h-5 w-5 text-muted-foreground" />
                           <div className="flex-1">
                             <p className="font-medium capitalize">{entry.action}</p>
                             <p className="text-xs text-muted-foreground">
                               {new Date(entry.performed_at).toLocaleString()}
                             </p>
                             {entry.action_details && (
-                              <pre className="text-xs bg-muted p-2 rounded mt-2 overflow-auto">
+                              <pre className="mt-2 overflow-auto rounded bg-muted p-2 text-xs">
                                 {JSON.stringify(entry.action_details, null, 2)}
                               </pre>
                             )}
@@ -599,9 +577,7 @@ export default function DocumentView() {
                 <Calendar className="h-4 w-4 text-muted-foreground" />
                 <div>
                   <p className="text-xs text-muted-foreground">Created</p>
-                  <p className="text-sm">
-                    {new Date(document.created_at).toLocaleString()}
-                  </p>
+                  <p className="text-sm">{new Date(document.created_at).toLocaleString()}</p>
                 </div>
               </div>
               {document.updated_at && (
@@ -609,9 +585,7 @@ export default function DocumentView() {
                   <RefreshCw className="h-4 w-4 text-muted-foreground" />
                   <div>
                     <p className="text-xs text-muted-foreground">Updated</p>
-                    <p className="text-sm">
-                      {new Date(document.updated_at).toLocaleString()}
-                    </p>
+                    <p className="text-sm">{new Date(document.updated_at).toLocaleString()}</p>
                   </div>
                 </div>
               )}
@@ -644,9 +618,7 @@ export default function DocumentView() {
                     <Button
                       variant="link"
                       className="h-auto p-0 text-sm"
-                      onClick={() =>
-                        navigate(`/admin/dms/folders?folder=${document.folder_id}`)
-                      }
+                      onClick={() => navigate(`/admin/dms/folders?folder=${document.folder_id}`)}
                     >
                       View Folder
                     </Button>
@@ -660,11 +632,7 @@ export default function DocumentView() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-lg">Tags</CardTitle>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowAddTagDialog(true)}
-              >
+              <Button variant="ghost" size="sm" onClick={() => setShowAddTagDialog(true)}>
                 <Plus className="h-4 w-4" />
               </Button>
             </CardHeader>
@@ -711,9 +679,7 @@ export default function DocumentView() {
                 {document.entity_id && (
                   <div className="mt-2">
                     <p className="text-xs text-muted-foreground">ID</p>
-                    <p className="font-medium font-mono text-sm">
-                      {document.entity_id}
-                    </p>
+                    <p className="font-mono text-sm font-medium">{document.entity_id}</p>
                   </div>
                 )}
               </CardContent>
@@ -727,27 +693,21 @@ export default function DocumentView() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Edit Document</DialogTitle>
-            <DialogDescription>
-              Update document metadata
-            </DialogDescription>
+            <DialogDescription>Update document metadata</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Name</Label>
               <Input
                 value={editData.name}
-                onChange={(e) =>
-                  setEditData({ ...editData, name: e.target.value })
-                }
+                onChange={(e) => setEditData({ ...editData, name: e.target.value })}
               />
             </div>
             <div>
               <Label>Description</Label>
               <Textarea
                 value={editData.description}
-                onChange={(e) =>
-                  setEditData({ ...editData, description: e.target.value })
-                }
+                onChange={(e) => setEditData({ ...editData, description: e.target.value })}
                 rows={3}
               />
             </div>
@@ -755,9 +715,7 @@ export default function DocumentView() {
               <Label>Document Type</Label>
               <Select
                 value={editData.document_type}
-                onValueChange={(value) =>
-                  setEditData({ ...editData, document_type: value })
-                }
+                onValueChange={(value) => setEditData({ ...editData, document_type: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select type" />
@@ -775,9 +733,7 @@ export default function DocumentView() {
               <Label>Access Level</Label>
               <Select
                 value={editData.access_level}
-                onValueChange={(value) =>
-                  setEditData({ ...editData, access_level: value })
-                }
+                onValueChange={(value) => setEditData({ ...editData, access_level: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -795,9 +751,7 @@ export default function DocumentView() {
               <Label>Keywords</Label>
               <Input
                 value={editData.keywords}
-                onChange={(e) =>
-                  setEditData({ ...editData, keywords: e.target.value })
-                }
+                onChange={(e) => setEditData({ ...editData, keywords: e.target.value })}
                 placeholder="keyword1, keyword2, ..."
               />
             </div>
@@ -817,8 +771,7 @@ export default function DocumentView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Document</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{document.name}"? This action cannot
-              be undone.
+              Are you sure you want to delete "{document.name}"? This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

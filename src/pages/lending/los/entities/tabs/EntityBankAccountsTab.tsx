@@ -3,22 +3,16 @@
  * Inline management of entity bank accounts (NO MODALS)
  */
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Edit, Trash2, X, Check, Loader2, ShieldCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Edit, Trash2, X, Check, Loader2, ShieldCheck } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Form,
   FormControl,
@@ -28,27 +22,32 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { entityApi } from '@/services/lending';
 import type { EntityBankAccount } from '@/types/lending';
 
 const ACCOUNT_TYPES = [
   { value: 'SAVINGS', label: 'Savings Account' },
   { value: 'CURRENT', label: 'Current Account' },
-  { value: 'OVERDRAFT', label: 'Overdraft Account' },
-  { value: 'CASH_CREDIT', label: 'Cash Credit Account' },
+  { value: 'OD', label: 'Overdraft Account' },
+  { value: 'CC', label: 'Cash Credit Account' },
 ];
 
 const bankAccountSchema = z.object({
-  bank_name: z.string().min(2, 'Bank name is required'),
-  branch_name: z.string().min(2, 'Branch name is required'),
-  account_number: z.string().min(9, 'Account number must be at least 9 digits').max(18),
-  ifsc_code: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC code format'),
-  account_type: z.enum(['SAVINGS', 'CURRENT', 'OVERDRAFT', 'CASH_CREDIT']),
-  account_holder_name: z.string().optional(),
-  is_primary: z.boolean().default(false),
+  bankName: z.string().min(2, 'Bank name is required'),
+  branchName: z.string().min(2, 'Branch name is required'),
+  accountNumber: z.string().min(9, 'Account number must be at least 9 digits').max(30),
+  ifscCode: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC code format'),
+  accountType: z.enum(['SAVINGS', 'CURRENT', 'OD', 'CC']),
+  accountHolderName: z.string().min(2, 'Account holder name is required'),
+  isPrimary: z.boolean(),
 });
 
 type BankAccountFormData = z.infer<typeof bankAccountSchema>;
@@ -65,15 +64,15 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
   const [saving, setSaving] = useState(false);
 
   const form = useForm<BankAccountFormData>({
-    resolver: zodResolver(bankAccountSchema) as any,
+    resolver: zodResolver(bankAccountSchema),
     defaultValues: {
-      bank_name: '',
-      branch_name: '',
-      account_number: '',
-      ifsc_code: '',
-      account_type: 'CURRENT',
-      account_holder_name: '',
-      is_primary: false,
+      bankName: '',
+      branchName: '',
+      accountNumber: '',
+      ifscCode: '',
+      accountType: 'CURRENT',
+      accountHolderName: '',
+      isPrimary: false,
     },
   });
 
@@ -86,8 +85,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
     try {
       const data = await entityApi.getEntityBankAccounts(entityId);
       setAccounts(data);
-    } catch (error) {
-      console.error('Failed to load bank accounts:', error);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -95,13 +93,13 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
   const handleAddNew = () => {
     form.reset({
-      bank_name: '',
-      branch_name: '',
-      account_number: '',
-      ifsc_code: '',
-      account_type: 'CURRENT',
-      account_holder_name: '',
-      is_primary: false,
+      bankName: '',
+      branchName: '',
+      accountNumber: '',
+      ifscCode: '',
+      accountType: 'CURRENT',
+      accountHolderName: '',
+      isPrimary: false,
     });
     setIsAdding(true);
     setEditingId(null);
@@ -109,15 +107,15 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
   const handleEdit = (account: EntityBankAccount) => {
     form.reset({
-      bank_name: account.bank_name,
-      branch_name: account.branch_name,
-      account_number: account.account_number,
-      ifsc_code: account.ifsc_code,
-      account_type: account.account_type as BankAccountFormData['account_type'],
-      account_holder_name: account.account_holder_name || '',
-      is_primary: account.is_primary,
+      bankName: account.bankName,
+      branchName: account.branchName || '',
+      accountNumber: account.accountNumber,
+      ifscCode: account.ifscCode,
+      accountType: account.accountType as BankAccountFormData['accountType'],
+      accountHolderName: account.accountHolderName || '',
+      isPrimary: account.isPrimary,
     });
-    setEditingId(account.bank_account_id);
+    setEditingId(account.id);
     setIsAdding(false);
   };
 
@@ -131,14 +129,13 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
     setSaving(true);
     try {
       if (editingId) {
-        await entityApi.updateEntityBankAccount(entityId, editingId, data as any);
+        await entityApi.updateEntityBankAccount(entityId, editingId, data);
       } else {
-        await entityApi.addEntityBankAccount(entityId, data as any);
+        await entityApi.addEntityBankAccount(entityId, data);
       }
       await loadAccounts();
       handleCancel();
-    } catch (error) {
-      console.error('Failed to save bank account:', error);
+    } catch {
     } finally {
       setSaving(false);
     }
@@ -149,36 +146,34 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
     try {
       await entityApi.deleteEntityBankAccount(entityId, accountId);
       await loadAccounts();
-    } catch (error) {
-      console.error('Failed to delete bank account:', error);
-    }
+    } catch {}
   };
 
   // Auto-populate bank name from IFSC (simplified)
   const handleIFSCChange = (value: string) => {
-    form.setValue('ifsc_code', value.toUpperCase());
+    form.setValue('ifscCode', value.toUpperCase());
     // In production, this would call an API to get bank details
     const bankCodes: Record<string, string> = {
-      'HDFC': 'HDFC Bank',
-      'ICIC': 'ICICI Bank',
-      'SBIN': 'State Bank of India',
-      'AXIS': 'Axis Bank',
-      'KKBK': 'Kotak Mahindra Bank',
-      'UTIB': 'Axis Bank',
-      'YESB': 'Yes Bank',
-      'PUNB': 'Punjab National Bank',
-      'BARB': 'Bank of Baroda',
-      'CNRB': 'Canara Bank',
+      HDFC: 'HDFC Bank',
+      ICIC: 'ICICI Bank',
+      SBIN: 'State Bank of India',
+      AXIS: 'Axis Bank',
+      KKBK: 'Kotak Mahindra Bank',
+      UTIB: 'Axis Bank',
+      YESB: 'Yes Bank',
+      PUNB: 'Punjab National Bank',
+      BARB: 'Bank of Baroda',
+      CNRB: 'Canara Bank',
     };
     const bankCode = value.substring(0, 4).toUpperCase();
     if (bankCodes[bankCode]) {
-      form.setValue('bank_name', bankCodes[bankCode]);
+      form.setValue('bankName', bankCodes[bankCode]);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48">
+      <div className="flex h-48 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
       </div>
     );
@@ -189,9 +184,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Bank Accounts</CardTitle>
-          <CardDescription>
-            Bank accounts for disbursement and collection
-          </CardDescription>
+          <CardDescription>Bank accounts for disbursement and collection</CardDescription>
         </div>
         {!isAdding && !editingId && (
           <Button onClick={handleAddNew}>
@@ -203,16 +196,16 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
       <CardContent>
         {/* Add/Edit Form */}
         {(isAdding || editingId) && (
-          <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-            <h4 className="font-medium mb-4">
+          <div className="mb-6 rounded-lg border bg-gray-50 p-4">
+            <h4 className="mb-4 font-medium">
               {editingId ? 'Edit Bank Account' : 'Add New Bank Account'}
             </h4>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave as any)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <FormField
                     control={form.control}
-                    name="ifsc_code"
+                    name="ifscCode"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>IFSC Code *</FormLabel>
@@ -232,7 +225,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
                   <FormField
                     control={form.control}
-                    name="bank_name"
+                    name="bankName"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Bank Name *</FormLabel>
@@ -246,7 +239,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
                   <FormField
                     control={form.control}
-                    name="branch_name"
+                    name="branchName"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Branch Name *</FormLabel>
@@ -260,7 +253,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
                   <FormField
                     control={form.control}
-                    name="account_number"
+                    name="accountNumber"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Account Number *</FormLabel>
@@ -274,7 +267,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
                   <FormField
                     control={form.control}
-                    name="account_type"
+                    name="accountType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Account Type *</FormLabel>
@@ -299,10 +292,10 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
                   <FormField
                     control={form.control}
-                    name="account_holder_name"
+                    name="accountHolderName"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Account Holder Name</FormLabel>
+                        <FormLabel>Account Holder Name *</FormLabel>
                         <FormControl>
                           <Input placeholder="Name as in bank" {...field} />
                         </FormControl>
@@ -314,14 +307,11 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
                 <FormField
                   control={form.control}
-                  name="is_primary"
+                  name="isPrimary"
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <FormLabel className="font-normal">
                         Primary Account (for disbursement)
@@ -348,61 +338,50 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
 
         {/* Accounts List */}
         {accounts.length === 0 && !isAdding ? (
-          <p className="text-center py-8 text-gray-500">
+          <p className="py-8 text-center text-gray-500">
             No bank accounts added yet. Click "Add Bank Account" to add one.
           </p>
         ) : (
           <div className="space-y-3">
             {accounts.map((account) => (
               <div
-                key={account.bank_account_id}
-                className={`flex items-start justify-between p-4 border rounded-lg ${
-                  editingId === account.bank_account_id ? 'hidden' : ''
+                key={account.id}
+                className={`flex items-start justify-between rounded-lg border p-4 ${
+                  editingId === account.id ? 'hidden' : ''
                 }`}
               >
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="font-medium">{account.bank_name}</p>
+                    <p className="font-medium">{account.bankName}</p>
                     <Badge variant="outline">
-                      {ACCOUNT_TYPES.find(t => t.value === account.account_type)?.label || account.account_type}
+                      {ACCOUNT_TYPES.find((t) => t.value === account.accountType)?.label ||
+                        account.accountType}
                     </Badge>
-                    {account.is_primary && <Badge>Primary</Badge>}
+                    {account.isPrimary && <Badge>Primary</Badge>}
                   </div>
-                  <p className="text-sm text-gray-600 mt-1">
-                    A/C: {account.account_number}
-                  </p>
+                  <p className="mt-1 text-sm text-gray-600">A/C: {account.accountNumber}</p>
                   <p className="text-sm text-gray-600">
-                    IFSC: {account.ifsc_code} | Branch: {account.branch_name}
+                    IFSC: {account.ifscCode} | Branch: {account.branchName}
                   </p>
-                  {account.account_holder_name && (
-                    <p className="text-sm text-gray-500">
-                      Holder: {account.account_holder_name}
-                    </p>
+                  {account.accountHolderName && (
+                    <p className="text-sm text-gray-500">Holder: {account.accountHolderName}</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={account.is_verified ? 'default' : 'secondary'}>
-                    {account.is_verified ? (
+                  <Badge variant={account.isVerified ? 'default' : 'secondary'}>
+                    {account.isVerified ? (
                       <>
-                        <ShieldCheck className="h-3 w-3 mr-1" />
+                        <ShieldCheck className="mr-1 h-3 w-3" />
                         Verified
                       </>
                     ) : (
                       'Pending'
                     )}
                   </Badge>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(account)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(account)}>
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(account.bank_account_id)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(account.id)}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
                 </div>

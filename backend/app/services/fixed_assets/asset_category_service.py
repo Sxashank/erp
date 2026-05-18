@@ -28,6 +28,13 @@ class AssetCategoryService:
         created_by: Optional[UUID] = None,
     ) -> AssetCategory:
         """Create a new asset category."""
+        self._validate_gl_mapping(
+            depreciation_method=data.depreciation_method,
+            gl_asset_account_id=data.gl_asset_account_id,
+            gl_accum_dep_account_id=data.gl_accum_dep_account_id,
+            gl_dep_expense_account_id=data.gl_dep_expense_account_id,
+        )
+
         # Check for duplicate code
         existing = await self._get_by_code(data.category_code, data.organization_id)
         if existing:
@@ -48,7 +55,7 @@ class AssetCategoryService:
 
         category = AssetCategory(**category_data)
         self.session.add(category)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(category)
         return category
 
@@ -104,13 +111,28 @@ class AssetCategoryService:
                 if await self._would_create_cycle(id, new_parent_id):
                     raise ValueError("Cannot set parent: would create circular reference")
 
+        self._validate_gl_mapping(
+            depreciation_method=update_data.get(
+                "depreciation_method", category.depreciation_method
+            ),
+            gl_asset_account_id=update_data.get(
+                "gl_asset_account_id", category.gl_asset_account_id
+            ),
+            gl_accum_dep_account_id=update_data.get(
+                "gl_accum_dep_account_id", category.gl_accum_dep_account_id
+            ),
+            gl_dep_expense_account_id=update_data.get(
+                "gl_dep_expense_account_id", category.gl_dep_expense_account_id
+            ),
+        )
+
         # Update fields
         for key, value in update_data.items():
             setattr(category, key, value)
         if updated_by:
             category.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(category)
         return category
 
@@ -135,7 +157,7 @@ class AssetCategoryService:
             raise ValueError("Cannot delete category with sub-categories")
 
         category.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
         return True
 
     async def list_by_organization(
@@ -314,3 +336,29 @@ class AssetCategoryService:
             current_id = parent.parent_category_id
 
         return False
+
+    @staticmethod
+    def _validate_gl_mapping(
+        *,
+        depreciation_method,
+        gl_asset_account_id: Optional[UUID],
+        gl_accum_dep_account_id: Optional[UUID],
+        gl_dep_expense_account_id: Optional[UUID],
+    ) -> None:
+        """Ensure the operational-core category stays postable."""
+        if not gl_asset_account_id:
+            raise ValueError("Asset account is required for fixed asset categories")
+
+        if str(depreciation_method) == "DepreciationMethod.NO_DEPRECIATION":
+            return
+        if str(depreciation_method) == "NO_DEPRECIATION":
+            return
+
+        if not gl_accum_dep_account_id:
+            raise ValueError(
+                "Accumulated depreciation account is required for depreciable categories"
+            )
+        if not gl_dep_expense_account_id:
+            raise ValueError(
+                "Depreciation expense account is required for depreciable categories"
+            )

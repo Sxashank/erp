@@ -5,12 +5,13 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from app.schemas.base import CamelSchema
 
 from app.core.constants import RecurrenceFrequency, RecurringVoucherStatus
 
 
-class RecurringVoucherLineTemplate(BaseModel):
+class RecurringVoucherLineTemplate(CamelSchema):
     """Template line item for recurring voucher."""
 
     account_id: UUID
@@ -27,7 +28,7 @@ class RecurringVoucherLineTemplate(BaseModel):
         return v
 
 
-class RecurringVoucherCreate(BaseModel):
+class RecurringVoucherCreate(CamelSchema):
     """Schema for creating a recurring voucher template."""
 
     organization_id: UUID
@@ -59,7 +60,7 @@ class RecurringVoucherCreate(BaseModel):
         return v
 
 
-class RecurringVoucherUpdate(BaseModel):
+class RecurringVoucherUpdate(CamelSchema):
     """Schema for updating a recurring voucher template."""
 
     template_name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -77,7 +78,7 @@ class RecurringVoucherUpdate(BaseModel):
     lines: Optional[List[RecurringVoucherLineTemplate]] = None
 
 
-class RecurringVoucherLineResponse(BaseModel):
+class RecurringVoucherLineResponse(CamelSchema):
     """Line item in recurring voucher response."""
 
     account_id: str
@@ -89,7 +90,7 @@ class RecurringVoucherLineResponse(BaseModel):
     cost_center_id: Optional[str] = None
 
 
-class RecurringVoucherResponse(BaseModel):
+class RecurringVoucherResponse(CamelSchema):
     """Full recurring voucher response."""
 
     id: str
@@ -119,11 +120,8 @@ class RecurringVoucherResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class RecurringVoucherListItem(BaseModel):
+class RecurringVoucherListItem(CamelSchema):
     """List item for recurring voucher."""
 
     id: str
@@ -139,7 +137,7 @@ class RecurringVoucherListItem(BaseModel):
     auto_post: bool
 
 
-class RecurringVoucherListResponse(BaseModel):
+class RecurringVoucherListResponse(CamelSchema):
     """Paginated list of recurring vouchers."""
 
     items: List[RecurringVoucherListItem]
@@ -149,7 +147,7 @@ class RecurringVoucherListResponse(BaseModel):
     pages: int
 
 
-class RecurringVoucherLogResponse(BaseModel):
+class RecurringVoucherLogResponse(CamelSchema):
     """Response for recurring voucher log entry."""
 
     id: str
@@ -164,7 +162,7 @@ class RecurringVoucherLogResponse(BaseModel):
     error_message: Optional[str] = None
 
 
-class RecurringVoucherLogListResponse(BaseModel):
+class RecurringVoucherLogListResponse(CamelSchema):
     """Paginated list of recurring voucher logs."""
 
     items: List[RecurringVoucherLogResponse]
@@ -174,14 +172,14 @@ class RecurringVoucherLogListResponse(BaseModel):
     pages: int
 
 
-class GenerateVoucherRequest(BaseModel):
+class GenerateVoucherRequest(CamelSchema):
     """Request to manually generate voucher from recurring template."""
 
     voucher_date: Optional[date] = None
     narration_override: Optional[str] = None
 
 
-class GenerateVoucherResponse(BaseModel):
+class GenerateVoucherResponse(CamelSchema):
     """Response after generating voucher."""
 
     success: bool
@@ -190,13 +188,13 @@ class GenerateVoucherResponse(BaseModel):
     voucher_number: Optional[str] = None
 
 
-class PauseResumeRequest(BaseModel):
+class PauseResumeRequest(CamelSchema):
     """Request to pause or resume recurring voucher."""
 
     reason: Optional[str] = None
 
 
-class UpcomingRecurringVoucher(BaseModel):
+class UpcomingRecurringVoucher(CamelSchema):
     """Upcoming recurring voucher for dashboard."""
 
     id: str
@@ -207,7 +205,7 @@ class UpcomingRecurringVoucher(BaseModel):
     days_until_due: int
 
 
-class RecurringVoucherStats(BaseModel):
+class RecurringVoucherStats(CamelSchema):
     """Statistics for recurring vouchers."""
 
     total_active: int

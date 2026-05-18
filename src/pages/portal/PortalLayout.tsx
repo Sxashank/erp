@@ -1,10 +1,28 @@
 /**
- * Customer Portal Layout
- * Common layout wrapper with navigation for portal pages
+ * Scheme Portal Layout
+ * Common layout wrapper with navigation for scheme portal pages
  */
 
+import {
+  Wallet,
+  LayoutDashboard,
+  FileText,
+  Bell,
+  User,
+  LogOut,
+  Menu,
+  X,
+  ChevronDown,
+  FileSignature,
+  Award,
+  Building2,
+  BarChart3,
+} from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -14,30 +32,38 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
 import {
-  Wallet,
-  LayoutDashboard,
-  CreditCard,
-  FileText,
-  HelpCircle,
-  Bell,
-  User,
-  LogOut,
-  Menu,
-  X,
-  ChevronDown,
-} from 'lucide-react';
-import { portalAuthApi, portalCommunicationApi } from '@/services/portalApi';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useActiveEntity } from '@/hooks/portal/useActiveEntity';
+import { resolvePortalActorRole } from '@/hooks/portal/usePortalSession';
+import { clearPortalSession, portalAuthApi, portalCommunicationApi } from '@/services/portalApi';
 import type { PortalUser, Notification } from '@/types/portal';
 
-const navItems = [
-  { label: 'Dashboard', href: '/portal/dashboard', icon: LayoutDashboard },
-  { label: 'My Loans', href: '/portal/loans', icon: Wallet },
-  { label: 'Payments', href: '/portal/payments', icon: CreditCard },
-  { label: 'Documents', href: '/portal/documents', icon: FileText },
-  { label: 'Support', href: '/portal/support', icon: HelpCircle },
-];
+import { logger } from "@/lib/logger";
+function navItemsForRole(role: string) {
+  const base = [
+    { label: 'Workbench', href: '/portal/workbench', icon: LayoutDashboard },
+    { label: 'Applications', href: '/portal/applications', icon: FileSignature },
+    { label: 'Claims', href: '/portal/claims', icon: Award },
+    { label: 'Reports', href: '/portal/reports', icon: BarChart3 },
+  ];
+  if (role === 'scheme_borrower') {
+    return [...base, { label: 'Documents', href: '/portal/applications', icon: FileText }];
+  }
+  if (role === 'scheme_smfcl_reviewer' || role === 'scheme_admin') {
+    return [...base, { label: 'Registrations', href: '/portal/registrations', icon: FileText }];
+  }
+  return base;
+}
+
+function resolvePortalUserDisplayName(user: PortalUser | null): string {
+  return user?.displayName || user?.display_name || user?.fullName || user?.full_name || 'Borrower';
+}
 
 export default function PortalLayout() {
   const navigate = useNavigate();
@@ -46,6 +72,10 @@ export default function PortalLayout() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { entities, activeEntityId, setActiveEntityId, setEntities } = useActiveEntity();
+  const showEntitySwitcher = entities.length > 1;
+  const actorRole = resolvePortalActorRole(user);
+  const navItems = navItemsForRole(actorRole);
 
   useEffect(() => {
     const token = localStorage.getItem('portal_access_token');
@@ -56,19 +86,31 @@ export default function PortalLayout() {
 
     const storedUser = localStorage.getItem('portal_user');
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsed = JSON.parse(storedUser) as PortalUser;
+      setUser(parsed);
+      const linked = parsed.linkedEntities ?? parsed.linked_entities ?? [];
+      setEntities(
+        linked.map((entity) => ({
+          id: entity.id,
+          legalName:
+            ('legalName' in entity ? entity.legalName : undefined) ??
+            ('legal_name' in entity ? entity.legal_name : undefined) ??
+            entity.id,
+        })),
+      );
     }
 
     fetchNotifications();
-  }, [navigate]);
+  }, [navigate, setEntities]);
 
   const fetchNotifications = async () => {
     try {
       const response = await portalCommunicationApi.getNotifications({ unread_only: true });
-      setNotifications(response.data.slice(0, 5));
-      setUnreadCount(response.data.filter((n: Notification) => !n.is_read).length);
+      const items = Array.isArray(response.data) ? response.data : (response.data.items ?? []);
+      setNotifications(items.slice(0, 5));
+      setUnreadCount(items.filter((notification: Notification) => !notification.is_read).length);
     } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+      logger.error('Failed to fetch notifications:', error);
     }
   };
 
@@ -76,11 +118,10 @@ export default function PortalLayout() {
     try {
       await portalAuthApi.logout();
     } catch (error) {
-      console.error('Logout error:', error);
+      logger.error('Logout error:', error);
     } finally {
-      localStorage.removeItem('portal_access_token');
-      localStorage.removeItem('portal_refresh_token');
-      localStorage.removeItem('portal_user');
+      clearPortalSession();
+      setEntities([]);
       navigate('/portal/login');
     }
   };
@@ -88,36 +129,36 @@ export default function PortalLayout() {
   const markNotificationRead = async (notificationId: string) => {
     try {
       await portalCommunicationApi.markAsRead(notificationId);
-      setNotifications(prev => prev.filter(n => n.id !== notificationId));
-      setUnreadCount(prev => Math.max(0, prev - 1));
+      setNotifications((prev) => prev.filter((n) => n.id !== notificationId));
+      setUnreadCount((prev) => Math.max(0, prev - 1));
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      logger.error('Failed to mark notification as read:', error);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white border-b sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+      <header className="sticky top-0 z-50 border-b bg-white">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="flex h-16 items-center justify-between">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-600 rounded-lg">
+              <div className="rounded-lg bg-emerald-600 p-2">
                 <Wallet className="h-5 w-5 text-white" />
               </div>
-              <span className="font-bold text-lg text-gray-900">Customer Portal</span>
+              <span className="text-lg font-bold text-gray-900">Scheme Portal</span>
             </div>
 
             {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-1">
+            <nav className="hidden items-center gap-1 md:flex">
               {navItems.map((item) => {
                 const isActive = location.pathname.startsWith(item.href);
                 return (
                   <Link
-                    key={item.href}
+                    key={`${item.href}:${item.label}`}
                     to={item.href}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                       isActive
                         ? 'bg-emerald-50 text-emerald-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -132,13 +173,34 @@ export default function PortalLayout() {
 
             {/* Right Section */}
             <div className="flex items-center gap-2">
+              {/* Entity Switcher (only if user has multiple linked entities) */}
+              {showEntitySwitcher && (
+                <div className="hidden items-center gap-2 md:flex">
+                  <Building2 className="h-4 w-4 text-gray-500" aria-hidden="true" />
+                  <Select
+                    value={activeEntityId ?? ''}
+                    onValueChange={(v) => setActiveEntityId(v || null)}
+                  >
+                    <SelectTrigger className="h-9 w-[200px]">
+                      <SelectValue placeholder="Choose an organisation" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {entities.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.legalName}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               {/* Notifications */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative">
                     <Bell className="h-5 w-5" />
                     {unreadCount > 0 && (
-                      <Badge className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-red-500">
+                      <Badge className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center bg-red-500 p-0">
                         {unreadCount}
                       </Badge>
                     )}
@@ -151,20 +213,18 @@ export default function PortalLayout() {
                     notifications.map((notification) => (
                       <DropdownMenuItem
                         key={notification.id}
-                        className="flex flex-col items-start gap-1 p-3 cursor-pointer"
+                        className="flex cursor-pointer flex-col items-start gap-1 p-3"
                         onClick={() => markNotificationRead(notification.id)}
                       >
-                        <span className="font-medium text-sm">{notification.title}</span>
-                        <span className="text-xs text-gray-500 line-clamp-2">
+                        <span className="text-sm font-medium">{notification.title}</span>
+                        <span className="line-clamp-2 text-xs text-gray-500">
                           {notification.message}
                         </span>
-                        <span className="text-xs text-gray-400">
-                          {new Date(notification.created_at).toLocaleDateString()}
-                        </span>
+                        <DateDisplay date={notification.created_at} className="text-xs text-gray-400" />
                       </DropdownMenuItem>
                     ))
                   ) : (
-                    <div className="p-4 text-center text-gray-500 text-sm">
+                    <div className="p-4 text-center text-sm text-gray-500">
                       No new notifications
                     </div>
                   )}
@@ -175,19 +235,19 @@ export default function PortalLayout() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" className="flex items-center gap-2">
-                    <div className="h-8 w-8 bg-emerald-100 rounded-full flex items-center justify-center">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
                       <User className="h-4 w-4 text-emerald-600" />
                     </div>
-                    <span className="hidden md:inline text-sm font-medium">
-                      {user?.full_name || 'Customer'}
+                    <span className="hidden text-sm font-medium md:inline">
+                      {resolvePortalUserDisplayName(user)}
                     </span>
-                    <ChevronDown className="h-4 w-4 hidden md:inline" />
+                    <ChevronDown className="hidden h-4 w-4 md:inline" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuLabel>
                     <div>
-                      <p className="font-medium">{user?.full_name}</p>
+                      <p className="font-medium">{resolvePortalUserDisplayName(user)}</p>
                       <p className="text-xs text-gray-500">{user?.mobile}</p>
                     </div>
                   </DropdownMenuLabel>
@@ -214,8 +274,8 @@ export default function PortalLayout() {
 
         {/* Mobile Navigation */}
         {mobileMenuOpen && (
-          <nav className="md:hidden border-t bg-white">
-            <div className="px-4 py-2 space-y-1">
+          <nav className="border-t bg-white md:hidden">
+            <div className="space-y-1 px-4 py-2">
               {navItems.map((item) => {
                 const isActive = location.pathname.startsWith(item.href);
                 return (
@@ -223,7 +283,7 @@ export default function PortalLayout() {
                     key={item.href}
                     to={item.href}
                     onClick={() => setMobileMenuOpen(false)}
-                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${
+                    className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium ${
                       isActive
                         ? 'bg-emerald-50 text-emerald-700'
                         : 'text-gray-600 hover:bg-gray-100'
@@ -240,19 +300,19 @@ export default function PortalLayout() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <Outlet />
       </main>
 
       {/* Footer */}
-      <footer className="bg-white border-t mt-auto">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+      <footer className="mt-auto border-t bg-white">
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col items-center justify-between gap-4 text-sm text-gray-500 md:flex-row">
             <p>&copy; {new Date().getFullYear()} TalentFino. All rights reserved.</p>
             <div className="flex items-center gap-4">
-              <a href="#" className="hover:text-gray-700">Privacy Policy</a>
-              <a href="#" className="hover:text-gray-700">Terms of Service</a>
-              <a href="#" className="hover:text-gray-700">Contact Us</a>
+              <span>Institutional borrower access only</span>
+              <span>SMFCL scheme operations</span>
+              <span>Support via scheme administrator</span>
             </div>
           </div>
         </div>

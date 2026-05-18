@@ -1,21 +1,13 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Building, Check, Upload, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, Building, Check, Upload, FileText, Calendar } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -25,7 +17,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -34,7 +33,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { useUpdateValuation } from '@/hooks/lending/useCollateral';
+import { useToast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import type { UpdateValuationRequest } from '@/services/lending/collateralApi';
 
 const valuationSchema = z.object({
   valuation_date: z.string().min(1, 'Valuation date is required'),
@@ -51,68 +55,47 @@ const valuationSchema = z.object({
 
 type ValuationFormData = z.infer<typeof valuationSchema>;
 
-// Mock data
-const collateralDetails = {
-  id: '1',
-  security_code: 'SEC/2024/00125',
-  loan_account: 'SMFC/LA/2024/00089',
-  entity: 'ABC Industries',
-  category: 'PRIMARY',
-  type: 'IMMOVABLE_PROPERTY',
-  description: 'Commercial Building at MG Road, Bangalore',
-  current_value: 50000000,
-  current_margin: 25,
-  current_net_value: 37500000,
-  last_valuation_date: '2024-06-15',
-  property_address: 'Plot No. 123, MG Road, Bangalore - 560001',
-  property_area: '5000 sq.ft.',
-};
+interface ValuationHistoryEntry {
+  id: string;
+  valuation_date: string;
+  market_value: number;
+  acceptable_value: number;
+  margin: number;
+  net_value: number;
+  agency: string;
+  report_number: string;
+  valuer: string;
+  created_by: string;
+}
 
-const valuationHistory = [
-  {
-    id: '1',
-    valuation_date: '2024-06-15',
-    market_value: 50000000,
-    acceptable_value: 50000000,
-    margin: 25,
-    net_value: 37500000,
-    agency: 'ABC Valuers Pvt Ltd',
-    report_number: 'VAL/2024/00456',
-    valuer: 'Mr. Ramesh Kumar',
-    created_by: 'John Smith',
-  },
-  {
-    id: '2',
-    valuation_date: '2023-06-20',
-    market_value: 45000000,
-    acceptable_value: 45000000,
-    margin: 25,
-    net_value: 33750000,
-    agency: 'ABC Valuers Pvt Ltd',
-    report_number: 'VAL/2023/00234',
-    valuer: 'Mr. Suresh Patil',
-    created_by: 'John Smith',
-  },
-  {
-    id: '3',
-    valuation_date: '2022-06-25',
-    market_value: 40000000,
-    acceptable_value: 40000000,
-    margin: 25,
-    net_value: 30000000,
-    agency: 'XYZ Valuations',
-    report_number: 'VAL/2022/00789',
-    valuer: 'Mr. Anil Sharma',
-    created_by: 'Sarah Wilson',
-  },
-];
+// Until the BE exposes a security-detail + valuation-history endpoint
+// (tracked separately), these stay empty so the page renders without
+// fabricated data. The valuation submission below is fully wired.
+const collateralDetails = {
+  id: '',
+  security_code: '',
+  loan_account: '',
+  entity: '',
+  category: '',
+  type: '',
+  description: '',
+  current_value: 0,
+  current_margin: 0,
+  current_net_value: 0,
+  last_valuation_date: '',
+  property_address: '',
+  property_area: '',
+};
+const valuationHistory: ValuationHistoryEntry[] = [];
 
 export default function CollateralValuation() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { id } = useParams();
-  const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [calculatedNet, setCalculatedNet] = useState<number | null>(null);
+
+  const updateMutation = useUpdateValuation();
 
   const form = useForm<ValuationFormData>({
     resolver: zodResolver(valuationSchema),
@@ -136,28 +119,62 @@ export default function CollateralValuation() {
   };
 
   const onSubmit = async (data: ValuationFormData) => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setShowSuccess(true);
+    if (!id) {
+      toast({
+        title: 'Missing security id',
+        description: 'No collateral id was provided in the URL.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const payload: UpdateValuationRequest = {
+      securityId: id,
+      marketValue: data.market_value,
+      acceptableValue: data.acceptable_value || undefined,
+      valuationDate: data.valuation_date,
+      valuerName: data.valuer_name || undefined,
+      valuerFirm: data.valuation_agency || undefined,
+      reportPath: data.valuation_report_number || undefined,
+      nextValuationDate: data.next_valuation_date || undefined,
+    };
+
+    try {
+      await updateMutation.mutateAsync(payload);
+      toast({
+        title: 'Valuation updated',
+        description: 'New valuation recorded successfully.',
+      });
+      setShowSuccess(true);
+    } catch (error) {
+      logger.error('Failed to update valuation', error);
+      const message =
+        (error as { response?: { data?: { message?: string; detail?: string } } }).response?.data
+          ?.message ||
+        (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
+        'Failed to update valuation. Please try again.';
+      toast({ title: 'Save failed', description: message, variant: 'destructive' });
+    }
   };
+
+  const isSubmitting = updateMutation.isPending;
 
   if (showSuccess) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <Check className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Valuation Updated Successfully</h2>
-          <p className="text-muted-foreground mb-6">
-            New valuation recorded for {collateralDetails.security_code}
+          <h2 className="mb-2 text-2xl font-bold">Valuation Updated Successfully</h2>
+          <p className="mb-6 text-muted-foreground">
+            New valuation recorded for {collateralDetails.security_code || 'this collateral'}
           </p>
-          <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => navigate('/lending/collaterals')}>
+          <div className="flex justify-center gap-4">
+            <Button variant="outline" onClick={() => navigate('/admin/lending/collaterals')}>
               View All Collaterals
             </Button>
-            <Button variant="outline" onClick={() => navigate(`/lending/collaterals/${id}`)}>
+            <Button variant="outline" onClick={() => navigate(`/admin/lending/collaterals/${id}`)}>
               View Collateral Details
             </Button>
           </div>
@@ -172,13 +189,13 @@ export default function CollateralValuation() {
         title="Update Valuation"
         subtitle={`${collateralDetails.security_code} - ${collateralDetails.entity}`}
         breadcrumbs={[
-          { label: 'Collaterals', to: '/lending/collaterals' },
-          { label: collateralDetails.security_code },
+          { label: 'Collaterals', to: '/admin/lending/collaterals' },
+          { label: collateralDetails.security_code || 'Collateral' },
           { label: 'Revalue' },
         ]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Valuation Form */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -284,7 +301,7 @@ export default function CollateralValuation() {
                 </div>
 
                 <div className="border-t pt-4">
-                  <h3 className="font-medium mb-4">Valuation Agency Details</h3>
+                  <h3 className="mb-4 font-medium">Valuation Agency Details</h3>
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -362,19 +379,19 @@ export default function CollateralValuation() {
                 />
 
                 <div className="border-t pt-4">
-                  <Button type="button" variant="outline" className="mb-4">
-                    <Upload className="h-4 w-4 mr-2" />
+                  <Button type="button" variant="outline" className="mb-4" disabled>
+                    <Upload className="mr-2 h-4 w-4" />
                     Upload Valuation Report
                   </Button>
                 </div>
 
-                <div className="flex gap-4 justify-end">
+                <div className="flex justify-end gap-4">
                   <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isLoading}>
-                    <Building className="h-4 w-4 mr-2" />
-                    {isLoading ? 'Saving...' : 'Update Valuation'}
+                  <Button type="submit" disabled={isSubmitting}>
+                    <Building className="mr-2 h-4 w-4" />
+                    {isSubmitting ? 'Saving...' : 'Update Valuation'}
                   </Button>
                 </div>
               </form>
@@ -390,62 +407,28 @@ export default function CollateralValuation() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <p className="text-sm text-muted-foreground">Security Code</p>
-                <p className="font-mono">{collateralDetails.security_code}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Type</p>
-                <Badge variant="outline">{collateralDetails.type.replace(/_/g, ' ')}</Badge>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Description</p>
-                <p className="text-sm">{collateralDetails.description}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Property Address</p>
-                <p className="text-sm">{collateralDetails.property_address}</p>
-              </div>
-              <div className="border-t pt-4">
-                <p className="text-sm text-muted-foreground">Current Value</p>
-                <p className="text-xl font-bold">{formatCurrency(collateralDetails.current_value)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Current Net Value</p>
-                <p className="text-xl font-bold text-green-600">
-                  {formatCurrency(collateralDetails.current_net_value)}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  After {collateralDetails.current_margin}% margin
-                </p>
+                <p className="text-sm text-muted-foreground">Security ID</p>
+                <p className="font-mono text-xs">{id ?? '—'}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Last Valuation</p>
                 <p className="flex items-center gap-2">
                   <Calendar className="h-4 w-4" />
-                  {formatDate(collateralDetails.last_valuation_date)}
+                  {collateralDetails.last_valuation_date
+                    ? formatDate(collateralDetails.last_valuation_date)
+                    : '—'}
                 </p>
               </div>
             </CardContent>
           </Card>
 
-          {calculatedNet && (
+          {calculatedNet !== null && (
             <Card className="border-green-200 bg-green-50">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm">New Net Value</CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-2xl font-bold text-green-600">{formatCurrency(calculatedNet)}</p>
-                <p className="text-xs text-muted-foreground">
-                  Change:{' '}
-                  {calculatedNet > collateralDetails.current_net_value ? '+' : ''}
-                  {formatCurrency(calculatedNet - collateralDetails.current_net_value)} (
-                  {(
-                    ((calculatedNet - collateralDetails.current_net_value) /
-                      collateralDetails.current_net_value) *
-                    100
-                  ).toFixed(1)}
-                  %)
-                </p>
               </CardContent>
             </Card>
           )}
@@ -459,34 +442,40 @@ export default function CollateralValuation() {
           <CardDescription>Previous valuations for this collateral</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead className="text-right">Market Value</TableHead>
-                <TableHead className="text-right">Margin</TableHead>
-                <TableHead className="text-right">Net Value</TableHead>
-                <TableHead>Agency</TableHead>
-                <TableHead>Report No.</TableHead>
-                <TableHead>Valuer</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {valuationHistory.map((v) => (
-                <TableRow key={v.id}>
-                  <TableCell>{formatDate(v.valuation_date)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(v.market_value)}</TableCell>
-                  <TableCell className="text-right">{v.margin}%</TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(v.net_value)}
-                  </TableCell>
-                  <TableCell>{v.agency}</TableCell>
-                  <TableCell className="font-mono text-sm">{v.report_number}</TableCell>
-                  <TableCell>{v.valuer}</TableCell>
+          {valuationHistory.length === 0 ? (
+            <p className="py-4 text-sm text-muted-foreground">
+              No previous valuations recorded for this collateral.
+            </p>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead className="text-right">Market Value</TableHead>
+                  <TableHead className="text-right">Margin</TableHead>
+                  <TableHead className="text-right">Net Value</TableHead>
+                  <TableHead>Agency</TableHead>
+                  <TableHead>Report No.</TableHead>
+                  <TableHead>Valuer</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {valuationHistory.map((v) => (
+                  <TableRow key={v.id}>
+                    <TableCell>{formatDate(v.valuation_date)}</TableCell>
+                    <TableCell className="text-right">{formatCurrency(v.market_value)}</TableCell>
+                    <TableCell className="text-right">{v.margin}%</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(v.net_value)}
+                    </TableCell>
+                    <TableCell>{v.agency}</TableCell>
+                    <TableCell className="font-mono text-sm">{v.report_number}</TableCell>
+                    <TableCell>{v.valuer}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

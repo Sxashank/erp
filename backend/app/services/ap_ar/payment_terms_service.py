@@ -30,7 +30,7 @@ class PaymentTermsService:
             created_by=created_by,
         )
         self.session.add(payment_terms)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment_terms)
         return payment_terms
 
@@ -50,7 +50,7 @@ class PaymentTermsService:
             setattr(payment_terms, field, value)
         payment_terms.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment_terms)
         return payment_terms
 
@@ -90,4 +90,4 @@ class PaymentTermsService:
         if not payment_terms:
             raise NotFoundException("Payment terms not found")
         payment_terms.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

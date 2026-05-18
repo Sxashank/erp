@@ -223,7 +223,7 @@ class VendorPortalAuthService:
     ) -> None:
         """Logout and invalidate session."""
         await self.session_repo.invalidate_session(session_id, reason)
-        await self.session.commit()
+        await self.session.flush()
 
     async def logout_all_sessions(
         self,
@@ -232,7 +232,7 @@ class VendorPortalAuthService:
     ) -> int:
         """Logout all sessions for a user."""
         count = await self.session_repo.invalidate_all_sessions(user_id, reason)
-        await self.session.commit()
+        await self.session.flush()
         return count
 
     async def change_password(
@@ -251,7 +251,7 @@ class VendorPortalAuthService:
 
         user.password_hash = get_password_hash(new_password)
         user.password_changed_at = datetime.utcnow()
-        await self.session.commit()
+        await self.session.flush()
 
     async def reset_password(
         self,
@@ -276,7 +276,7 @@ class VendorPortalAuthService:
         # Invalidate all sessions
         await self.session_repo.invalidate_all_sessions(user.id, "password_reset")
 
-        await self.session.commit()
+        await self.session.flush()
 
     async def get_current_user(
         self,

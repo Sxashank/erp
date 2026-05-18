@@ -29,7 +29,7 @@ describe('cn', () => {
 describe('formatCurrency', () => {
   it('formats positive INR amount with 2 decimals', () => {
     // en-IN uses narrow no-break space (U+00A0 or U+202F) between symbol and digits.
-    expect(formatCurrency(1234567.89)).toMatch(/₹[\s  ]?12,34,567\.89/);
+    expect(formatCurrency(1234567.89)).toMatch(/₹[\s\u00A0\u202F]?12,34,567\.89/);
   });
   it('returns dash for null/undefined/empty', () => {
     expect(formatCurrency(null)).toBe('-');

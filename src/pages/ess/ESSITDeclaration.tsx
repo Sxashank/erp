@@ -3,20 +3,6 @@
  * Manage tax declarations and investments
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Progress } from '@/components/ui/progress';
 import {
   Calculator,
   Plus,
@@ -30,11 +16,29 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { essITDeclarationApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { ITDeclaration, ITDeclarationSection, ITDeclarationItem, TaxCalculation } from '@/types/ess';
 
+import { logger } from "@/lib/logger";
 export default function ESSITDeclarationPage() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
   const [loading, setLoading] = useState(true);
   const [declaration, setDeclaration] = useState<ITDeclaration | null>(null);
   const [sections, setSections] = useState<ITDeclarationSection[]>([]);
@@ -46,13 +50,12 @@ export default function ESSITDeclarationPage() {
   const currentFY = '2024-25';
 
   useEffect(() => {
-    const token = localStorage.getItem('ess_access_token');
-    if (!token) {
+    if (!accessToken) {
       navigate('/ess/login');
       return;
     }
     fetchData();
-  }, [navigate]);
+  }, [accessToken, navigate]);
 
   const fetchData = async () => {
     try {
@@ -68,7 +71,7 @@ export default function ESSITDeclarationPage() {
         setTaxCalculation(taxRes.data);
       }
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -93,7 +96,7 @@ export default function ESSITDeclarationPage() {
       setSelectedSection(null);
       fetchData();
     } catch (error) {
-      console.error('Failed to add item:', error);
+      logger.error('Failed to add item:', error);
     } finally {
       setSubmitting(false);
     }
@@ -105,7 +108,7 @@ export default function ESSITDeclarationPage() {
       await essITDeclarationApi.submitDeclaration(declaration.id);
       fetchData();
     } catch (error) {
-      console.error('Failed to submit declaration:', error);
+      logger.error('Failed to submit declaration:', error);
     }
   };
 

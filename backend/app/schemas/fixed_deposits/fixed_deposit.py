@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 from app.models.fixed_deposits.fixed_deposit import FDStatus, FDTransactionType
 from app.models.fixed_deposits.fd_product import (
@@ -18,7 +19,7 @@ from app.models.fixed_deposits.fd_product import (
 
 
 # Nominee Schemas
-class FDNomineeBase(BaseModel):
+class FDNomineeBase(CamelSchema):
     """Base schema for FD nominee."""
     nominee_name: str = Field(..., min_length=1, max_length=200)
     relationship: str = Field(..., min_length=1, max_length=50)
@@ -39,7 +40,7 @@ class FDNomineeCreate(FDNomineeBase):
     pass
 
 
-class FDNomineeUpdate(BaseModel):
+class FDNomineeUpdate(CamelSchema):
     """Schema for updating nominee."""
     nominee_name: Optional[str] = None
     relationship: Optional[str] = None
@@ -57,16 +58,14 @@ class FDNomineeUpdate(BaseModel):
 
 class FDNomineeResponse(FDNomineeBase):
     """Schema for nominee response."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     fixed_deposit_id: UUID
 
 
 # Transaction Schema
-class FDTransactionResponse(BaseModel):
+class FDTransactionResponse(CamelSchema):
     """Schema for FD transaction response."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     fixed_deposit_id: UUID
@@ -84,9 +83,8 @@ class FDTransactionResponse(BaseModel):
 
 
 # Interest Accrual Schema
-class FDInterestAccrualResponse(BaseModel):
+class FDInterestAccrualResponse(CamelSchema):
     """Schema for interest accrual response."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     fixed_deposit_id: UUID
@@ -105,7 +103,7 @@ class FDInterestAccrualResponse(BaseModel):
 
 
 # Fixed Deposit Schemas
-class FixedDepositBase(BaseModel):
+class FixedDepositBase(CamelSchema):
     """Base schema for fixed deposit."""
     product_id: UUID
     customer_id: UUID
@@ -135,7 +133,7 @@ class FixedDepositCreate(FixedDepositBase):
     nominees: Optional[List[FDNomineeCreate]] = None
 
 
-class FixedDepositUpdate(BaseModel):
+class FixedDepositUpdate(CamelSchema):
     """Schema for updating fixed deposit."""
     interest_payout_mode: Optional[str] = None
     payout_bank_account_id: Optional[UUID] = None
@@ -144,9 +142,8 @@ class FixedDepositUpdate(BaseModel):
     remarks: Optional[str] = None
 
 
-class FixedDepositResponse(BaseModel):
+class FixedDepositResponse(CamelSchema):
     """Schema for fixed deposit response."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     organization_id: UUID
@@ -206,13 +203,13 @@ class FixedDepositResponse(BaseModel):
     nominees: List[FDNomineeResponse] = []
 
 
-class FixedDepositListResponse(BaseModel):
+class FixedDepositListResponse(CamelSchema):
     """Schema for paginated fixed deposit list."""
     items: List[FixedDepositResponse]
     total: int
 
 
-class FixedDepositSummary(BaseModel):
+class FixedDepositSummary(CamelSchema):
     """Summary statistics for FDs."""
     total_fds: int
     active_fds: int
@@ -224,7 +221,7 @@ class FixedDepositSummary(BaseModel):
     by_customer_category: dict
 
 
-class FDMaturityProjection(BaseModel):
+class FDMaturityProjection(CamelSchema):
     """Maturity projection for an FD."""
     fd_id: UUID
     fd_number: str
@@ -239,7 +236,7 @@ class FDMaturityProjection(BaseModel):
     schedule: List[dict] = []  # Period-wise breakdown
 
 
-class FDClosureRequest(BaseModel):
+class FDClosureRequest(CamelSchema):
     """Request for closing an FD."""
     closure_date: date
     closure_reason: str = Field(..., pattern="^(MATURITY|PREMATURE|CUSTOMER_REQUEST)$")
@@ -248,7 +245,7 @@ class FDClosureRequest(BaseModel):
     remarks: Optional[str] = None
 
 
-class FDRenewalRequest(BaseModel):
+class FDRenewalRequest(CamelSchema):
     """Request for renewing an FD."""
     new_tenure_days: Optional[int] = None  # If null, same tenure
     new_product_id: Optional[UUID] = None  # If null, same product

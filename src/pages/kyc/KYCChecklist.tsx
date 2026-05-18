@@ -1,10 +1,24 @@
+import {
+  ClipboardCheck,
+  Search,
+  Filter,
+  CheckCircle,
+  XCircle,
+  Clock,
+  AlertTriangle,
+  Eye,
+  Upload,
+  User,
+  FileText,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Progress } from '@/components/ui/progress';
 import {
   Select,
@@ -21,19 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  ClipboardCheck,
-  Search,
-  Filter,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertTriangle,
-  Eye,
-  Upload,
-  User,
-  FileText,
-} from 'lucide-react';
 
 // Mock customer KYC status data
 const customerKYCData = [

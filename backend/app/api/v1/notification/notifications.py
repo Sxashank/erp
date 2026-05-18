@@ -3,11 +3,11 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.notification import NotificationCategory
 from app.services.notification import NotificationService
@@ -24,17 +24,18 @@ from app.schemas.notification import (
     SendNotificationRequest,
     BulkNotificationRequest,
 )
+from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
 
 router = APIRouter()
 
 
-@router.get("/", response_model=NotificationListResponse)
+@router.get("/", response_model=NotificationListResponse, response_model_by_alias=True)
 async def list_notifications(
     category: Optional[NotificationCategory] = None,
     unread_only: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get user's notifications with pagination."""
@@ -66,7 +67,7 @@ async def list_notifications(
 
 @router.get("/unread-count")
 async def get_unread_count(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get count of unread notifications."""
@@ -78,10 +79,10 @@ async def get_unread_count(
     return {"unread_count": count}
 
 
-@router.get("/{notification_id}", response_model=NotificationResponse)
+@router.get("/{notification_id}", response_model=NotificationResponse, response_model_by_alias=True)
 async def get_notification(
     notification_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific notification."""
@@ -89,24 +90,21 @@ async def get_notification(
     notification = await service.get_notification(notification_id)
 
     if not notification:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found",
-        )
+        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
 
     if notification.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
+        raise ForbiddenException(
             detail="Not authorized to view this notification",
+            error_code="NOT_AUTHORIZED_TO_VIEW_THIS_NOTIFICATION",
         )
 
     return NotificationResponse.model_validate(notification)
 
 
-@router.post("/", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=NotificationResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_notification(
     data: NotificationCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new notification (admin only)."""
@@ -139,10 +137,10 @@ async def create_notification(
     return NotificationResponse.model_validate(notification)
 
 
-@router.post("/send", response_model=NotificationResponse)
+@router.post("/send", response_model=NotificationResponse, response_model_by_alias=True)
 async def send_from_template(
     data: SendNotificationRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Send a notification using a template."""
@@ -161,9 +159,9 @@ async def send_from_template(
     )
 
     if not notification:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Failed to send notification. Template may not exist.",
+            error_code="FAILED_TO_SEND_NOTIFICATION_TEMPLATE_MAY",
         )
 
     return NotificationResponse.model_validate(notification)
@@ -172,7 +170,7 @@ async def send_from_template(
 @router.post("/bulk", status_code=status.HTTP_202_ACCEPTED)
 async def send_bulk_notifications(
     data: BulkNotificationRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Send bulk notifications to multiple users."""
@@ -188,7 +186,7 @@ async def send_bulk_notifications(
 @router.post("/mark-read")
 async def mark_notifications_read(
     data: MarkReadRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Mark notifications as read."""
@@ -214,7 +212,7 @@ async def mark_notifications_read(
 @router.post("/{notification_id}/read")
 async def mark_single_notification_read(
     notification_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Mark a single notification as read."""
@@ -222,10 +220,7 @@ async def mark_single_notification_read(
     success = await service.mark_as_read(notification_id, current_user.id)
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found",
-        )
+        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
 
     return {"status": "success"}
 
@@ -233,7 +228,7 @@ async def mark_single_notification_read(
 @router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_notification(
     notification_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete (soft) a notification."""
@@ -241,17 +236,14 @@ async def delete_notification(
     success = await service.delete_notification(notification_id, current_user.id)
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found",
-        )
+        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
 
 
 # Preferences endpoints
 
-@router.get("/preferences", response_model=list[NotificationPreferenceResponse])
+@router.get("/preferences", response_model=list[NotificationPreferenceResponse], response_model_by_alias=True)
 async def get_preferences(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get user's notification preferences."""
@@ -263,10 +255,10 @@ async def get_preferences(
     return [NotificationPreferenceResponse.model_validate(p) for p in preferences]
 
 
-@router.post("/preferences", response_model=NotificationPreferenceResponse)
+@router.post("/preferences", response_model=NotificationPreferenceResponse, response_model_by_alias=True)
 async def create_preference(
     data: NotificationPreferenceCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create or update notification preference for a category."""
@@ -288,11 +280,11 @@ async def create_preference(
     return NotificationPreferenceResponse.model_validate(preference)
 
 
-@router.put("/preferences/{category}", response_model=NotificationPreferenceResponse)
+@router.put("/preferences/{category}", response_model=NotificationPreferenceResponse, response_model_by_alias=True)
 async def update_preference(
     category: NotificationCategory,
     data: NotificationPreferenceUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update notification preference for a category."""

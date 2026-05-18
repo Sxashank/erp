@@ -143,7 +143,7 @@ class ITDepreciationService:
         dep_run.status = "COMPLETED"
         dep_run.run_completed_at = datetime.now(timezone.utc)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(dep_run)
         return dep_run
 
@@ -546,7 +546,7 @@ class ITDepreciationService:
             summary.finalized_at = datetime.now(timezone.utc)
             summary.finalized_by = finalized_by
 
-        await self.session.commit()
+        await self.session.flush()
         return summaries
 
     async def get_run(self, run_id: UUID) -> Optional[DepreciationRun]:

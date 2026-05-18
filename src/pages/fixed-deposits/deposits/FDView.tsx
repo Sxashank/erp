@@ -2,10 +2,7 @@
  * Fixed Deposit View Page
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   CheckCircle,
   XCircle,
   RefreshCw,
@@ -14,17 +11,14 @@ import {
   User,
   CreditCard,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/hooks/useAuth';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -33,20 +27,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, {
+import { useAuth } from '@/hooks/useAuth';
+import type {
   FixedDeposit,
   FDTransaction,
   FDInterestAccrual,
   FDMaturityProjection,
 } from '@/services/fixedDepositService';
+import fixedDepositService from '@/services/fixedDepositService';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   DRAFT: 'outline',
   PENDING_APPROVAL: 'secondary',
@@ -96,7 +89,7 @@ export default function FDView() {
           const proj = await fixedDepositService.getProjection(fdId);
           setProjection(proj);
         } catch (e) {
-          console.error('Failed to load projection', e);
+          logger.error('Failed to load projection', e);
         }
       }
     } catch (error) {
@@ -121,10 +114,10 @@ export default function FDView() {
         description: 'Fixed deposit approved successfully',
       });
       loadFD(id);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve FD',
+        description: getErrorMessage(error, 'Failed to approve FD'),
         variant: 'destructive',
       });
     } finally {
@@ -139,9 +132,7 @@ export default function FDView() {
     const closureReason = isMaturity ? 'MATURITY' : 'PREMATURE';
 
     if (
-      !confirm(
-        `Are you sure you want to ${isMaturity ? 'mature' : 'prematurely close'} this FD?`
-      )
+      !confirm(`Are you sure you want to ${isMaturity ? 'mature' : 'prematurely close'} this FD?`)
     ) {
       return;
     }
@@ -158,10 +149,10 @@ export default function FDView() {
         description: 'Fixed deposit closed successfully',
       });
       loadFD(id);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to close FD',
+        description: getErrorMessage(error, 'Failed to close FD'),
         variant: 'destructive',
       });
     } finally {
@@ -184,10 +175,10 @@ export default function FDView() {
         description: `Fixed deposit renewed. New FD: ${newFD.fd_number}`,
       });
       navigate(`/admin/fixed-deposits/${newFD.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to renew FD',
+        description: getErrorMessage(error, 'Failed to renew FD'),
         variant: 'destructive',
       });
     } finally {
@@ -206,7 +197,7 @@ export default function FDView() {
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
@@ -214,52 +205,47 @@ export default function FDView() {
   if (!fd) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Fixed deposit not found</div>
+        <div className="py-8 text-center">Fixed deposit not found</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-bold">{fd.fd_number}</h1>
-              <Badge variant={STATUS_COLORS[fd.status]}>{fd.status.replace('_', ' ')}</Badge>
-            </div>
-            <p className="text-muted-foreground">
-              {fd.product_name || fd.product_code}
-            </p>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title={fd.fd_number}
+        subtitle={fd.product_name || fd.product_code}
+        breadcrumbs={[
+          { label: 'Fixed Deposits', to: '/admin/fixed-deposits' },
+          { label: fd.fd_number },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge variant={STATUS_COLORS[fd.status]}>{fd.status.replace('_', ' ')}</Badge>
+            {fd.status === 'DRAFT' && (
+              <Button onClick={handleApprove} disabled={actionLoading}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Approve
+              </Button>
+            )}
+            {fd.status === 'ACTIVE' && (
+              <>
+                <Button variant="outline" onClick={handleRenew} disabled={actionLoading}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Renew
+                </Button>
+                <Button variant="destructive" onClick={handleClose} disabled={actionLoading}>
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Close
+                </Button>
+              </>
+            )}
           </div>
-        </div>
-        <div className="flex gap-2">
-          {fd.status === 'DRAFT' && (
-            <Button onClick={handleApprove} disabled={actionLoading}>
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Approve
-            </Button>
-          )}
-          {fd.status === 'ACTIVE' && (
-            <>
-              <Button variant="outline" onClick={handleRenew} disabled={actionLoading}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Renew
-              </Button>
-              <Button variant="destructive" onClick={handleClose} disabled={actionLoading}>
-                <XCircle className="mr-2 h-4 w-4" />
-                Close
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -277,9 +263,7 @@ export default function FDView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {fd.interest_rate.toFixed(2)}%
-            </div>
+            <div className="text-2xl font-bold text-green-600">{fd.interest_rate.toFixed(2)}%</div>
           </CardContent>
         </Card>
         <Card>
@@ -316,7 +300,7 @@ export default function FDView() {
         </TabsList>
 
         <TabsContent value="details" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* FD Details */}
             <Card>
               <CardHeader>
@@ -357,13 +341,13 @@ export default function FDView() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Deposit Date</span>
                   <span className="font-medium">
-                    {new Date(fd.deposit_date).toLocaleDateString()}
+                    <DateDisplay date={fd.deposit_date} />
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Value Date</span>
                   <span className="font-medium">
-                    {new Date(fd.value_date).toLocaleDateString()}
+                    <DateDisplay date={fd.value_date} />
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -373,7 +357,7 @@ export default function FDView() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Maturity Date</span>
                   <span className="font-medium">
-                    {new Date(fd.maturity_date).toLocaleDateString()}
+                    <DateDisplay date={fd.maturity_date} />
                   </span>
                 </div>
               </CardContent>
@@ -400,15 +384,11 @@ export default function FDView() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Compounding</span>
-                  <span className="font-medium">
-                    {fd.compounding_frequency.replace('_', ' ')}
-                  </span>
+                  <span className="font-medium">{fd.compounding_frequency.replace('_', ' ')}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Payout Mode</span>
-                  <span className="font-medium">
-                    {fd.interest_payout_mode.replace('_', ' ')}
-                  </span>
+                  <span className="font-medium">{fd.interest_payout_mode.replace('_', ' ')}</span>
                 </div>
               </CardContent>
             </Card>
@@ -464,16 +444,14 @@ export default function FDView() {
                 <TableBody>
                   {transactions.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
+                      <TableCell colSpan={6} className="py-8 text-center">
                         No transactions
                       </TableCell>
                     </TableRow>
                   ) : (
                     transactions.map((txn) => (
                       <TableRow key={txn.id}>
-                        <TableCell>
-                          {new Date(txn.transaction_date).toLocaleDateString()}
-                        </TableCell>
+                        <TableCell><DateDisplay date={txn.transaction_date} /></TableCell>
                         <TableCell>
                           <Badge variant="outline">{txn.transaction_type}</Badge>
                         </TableCell>
@@ -518,19 +496,16 @@ export default function FDView() {
                 <TableBody>
                   {accruals.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8">
+                      <TableCell colSpan={8} className="py-8 text-center">
                         No accruals recorded
                       </TableCell>
                     </TableRow>
                   ) : (
                     accruals.map((acc) => (
                       <TableRow key={acc.id}>
+                        <TableCell><DateDisplay date={acc.accrual_date} /></TableCell>
                         <TableCell>
-                          {new Date(acc.accrual_date).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell>
-                          {new Date(acc.period_from).toLocaleDateString()} -{' '}
-                          {new Date(acc.period_to).toLocaleDateString()}
+                          <DateDisplay date={acc.period_from} /> - <DateDisplay date={acc.period_to} />
                         </TableCell>
                         <TableCell>{acc.days}</TableCell>
                         <TableCell className="text-right">
@@ -562,31 +537,29 @@ export default function FDView() {
             <Card>
               <CardHeader>
                 <CardTitle>Maturity Projection</CardTitle>
-                <CardDescription>
-                  Estimated values based on current interest rate
-                </CardDescription>
+                <CardDescription>Estimated values based on current interest rate</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 bg-muted rounded-lg">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">Projected Interest</p>
                     <p className="text-xl font-bold">
                       {formatCurrency(projection.projected_interest)}
                     </p>
                   </div>
-                  <div className="p-4 bg-muted rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">Maturity Amount</p>
                     <p className="text-xl font-bold text-blue-600">
                       {formatCurrency(projection.projected_maturity_amount)}
                     </p>
                   </div>
-                  <div className="p-4 bg-muted rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">TDS Estimate</p>
                     <p className="text-xl font-bold text-red-600">
                       {formatCurrency(projection.tds_estimate)}
                     </p>
                   </div>
-                  <div className="p-4 bg-muted rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">Net Maturity</p>
                     <p className="text-xl font-bold text-green-600">
                       {formatCurrency(projection.net_maturity_amount)}
@@ -608,8 +581,7 @@ export default function FDView() {
                       {projection.schedule.map((item, idx) => (
                         <TableRow key={idx}>
                           <TableCell>
-                            {new Date(item.period_from).toLocaleDateString()} -{' '}
-                            {new Date(item.period_to).toLocaleDateString()}
+                            <DateDisplay date={item.period_from} /> - <DateDisplay date={item.period_to} />
                           </TableCell>
                           <TableCell>{item.days}</TableCell>
                           <TableCell className="text-right">
@@ -641,9 +613,7 @@ export default function FDView() {
             </CardHeader>
             <CardContent>
               {fd.nominees.length === 0 ? (
-                <p className="text-center text-muted-foreground py-8">
-                  No nominees registered
-                </p>
+                <p className="py-8 text-center text-muted-foreground">No nominees registered</p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -662,13 +632,9 @@ export default function FDView() {
                         <TableCell className="font-medium">{nominee.nominee_name}</TableCell>
                         <TableCell>{nominee.relationship}</TableCell>
                         <TableCell>
-                          {nominee.date_of_birth
-                            ? new Date(nominee.date_of_birth).toLocaleDateString()
-                            : '-'}
+                          <DateDisplay date={nominee.date_of_birth} />
                         </TableCell>
-                        <TableCell className="text-right">
-                          {nominee.share_percentage}%
-                        </TableCell>
+                        <TableCell className="text-right">{nominee.share_percentage}%</TableCell>
                         <TableCell>
                           <Badge variant={nominee.is_minor ? 'secondary' : 'outline'}>
                             {nominee.is_minor ? 'Yes' : 'No'}

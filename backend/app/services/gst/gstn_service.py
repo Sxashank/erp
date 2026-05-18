@@ -8,13 +8,14 @@ Business logic for GST return filing operations including:
 """
 
 import logging
-from datetime import datetime, date, timedelta
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Any, Dict, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import noload
 
 from app.models.gst.gstn_models import (
     GSTNSession,
@@ -32,15 +33,11 @@ from app.models.core.integration_config import IntegrationConfig, IntegrationTyp
 from app.integrations.gstn import GSTNClient, GSTNAuthManager
 from app.core.encryption import decrypt_value
 from app.schemas.gst.gstn import (
-    GSTReturnFilingResponse,
     GSTReturnFilingListResponse,
-    GSTR1Data,
-    GSTR3BData,
-    ITCMismatchResponse,
+    GSTReturnFilingResponse,
     ITCMismatchListResponse,
+    ITCMismatchResponse,
     ITCReconciliationSummary,
-    GSTR2BInvoiceResponse,
-    GSTR2BListResponse,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,7 +129,7 @@ class GSTNService:
                     initiated_by=initiated_by,
                 )
                 self.db.add(session)
-                await self.db.commit()
+                await self.db.flush()
                 await self.db.refresh(session)
 
                 return {
@@ -199,7 +196,7 @@ class GSTNService:
                 session.sek_key = result["sek"]
                 session.token_expires_at = result["token_expires_at"]
                 session.last_activity = datetime.utcnow()
-                await self.db.commit()
+                await self.db.flush()
 
                 return {
                     "success": True,
@@ -210,7 +207,7 @@ class GSTNService:
             else:
                 session.status = GSTNSessionStatus.INVALID
                 session.error_message = result.get("message")
-                await self.db.commit()
+                await self.db.flush()
                 return result
 
         finally:
@@ -270,7 +267,7 @@ class GSTNService:
             raise ValueError("GST registration not found")
 
         # Check for existing
-        query = select(GSTReturnFiling).where(
+        query = select(GSTReturnFiling).options(noload("*")).where(
             and_(
                 GSTReturnFiling.organization_id == organization_id,
                 GSTReturnFiling.gstin == gst_reg.gstin,
@@ -295,7 +292,7 @@ class GSTNService:
             status=GSTReturnStatus.NOT_STARTED,
         )
         self.db.add(filing)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(filing)
         return filing
 
@@ -371,15 +368,6 @@ class GSTNService:
             financial_year=financial_year,
         )
 
-        # Parse period to get date range
-        month = int(return_period[:2])
-        year = int(return_period[2:])
-        start_date = date(year, month, 1)
-        if month == 12:
-            end_date = date(year + 1, 1, 1) - timedelta(days=1)
-        else:
-            end_date = date(year, month + 1, 1) - timedelta(days=1)
-
         # Fetch sales invoices for the period
         # This would query the sales_invoice table
         # For now, initialize with empty structure
@@ -423,7 +411,7 @@ class GSTNService:
         filing.invoice_count = b2b_count + b2c_count
         filing.prepared_by = prepared_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(filing)
 
         logger.info(f"Generated GSTR-1 for {filing.gstin}, period {return_period}")
@@ -509,7 +497,7 @@ class GSTNService:
         filing.total_itc_claimed = Decimal("0")
         filing.prepared_by = prepared_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(filing)
 
         logger.info(f"Generated GSTR-3B for {filing.gstin}, period {return_period}")
@@ -592,7 +580,7 @@ class GSTNService:
                     await self.db.merge(gstr2b_record)
                     stored_count += 1
 
-            await self.db.commit()
+            await self.db.flush()
 
             return {
                 "success": True,
@@ -742,7 +730,7 @@ class GSTNService:
                 self.db.add(mismatch)
                 mismatches_created += 1
 
-        await self.db.commit()
+        await self.db.flush()
 
         # Calculate summary
         return ITCReconciliationSummary(
@@ -822,7 +810,7 @@ class GSTNService:
         mismatch.resolved_at = datetime.utcnow()
         mismatch.resolved_by = resolved_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(mismatch)
         return mismatch
 
@@ -887,7 +875,7 @@ class GSTNService:
             if errors:
                 filing.status = GSTReturnStatus.ERROR
                 filing.error_details = {"validation_errors": errors}
-                await self.db.commit()
+                await self.db.flush()
                 await self.db.refresh(filing)
                 raise ValueError(f"Validation failed: {errors}")
 
@@ -897,7 +885,7 @@ class GSTNService:
             filing.gstn_session_id = session_id
             filing.error_details = None
 
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(filing)
 
             logger.info(f"Validated GSTR-1 for {filing.gstin}, period {filing.return_period}")
@@ -953,7 +941,7 @@ class GSTNService:
                         "error_message": result.get("error_message"),
                     }
                 }
-                await self.db.commit()
+                await self.db.flush()
                 raise ValueError(f"Submission failed: {result.get('error_message')}")
 
             # Update filing status
@@ -963,7 +951,7 @@ class GSTNService:
             filing.gstn_session_id = session_id
             filing.error_details = None
 
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(filing)
 
             logger.info(f"Submitted GSTR-1 for {filing.gstin}, period {filing.return_period}")
@@ -1027,7 +1015,7 @@ class GSTNService:
                         "error_message": result.get("error_message"),
                     }
                 }
-                await self.db.commit()
+                await self.db.flush()
                 raise ValueError(f"Filing failed: {result.get('error_message')}")
 
             # Extract ARN from response
@@ -1043,7 +1031,7 @@ class GSTNService:
             filing.gstn_session_id = session_id
             filing.error_details = None
 
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(filing)
 
             logger.info(f"Filed GSTR-1 for {filing.gstin}, period {filing.return_period}, ARN: {arn}")
@@ -1107,7 +1095,7 @@ class GSTNService:
                         "error_message": result.get("error_message"),
                     }
                 }
-                await self.db.commit()
+                await self.db.flush()
                 raise ValueError(f"Validation failed: {result.get('error_message')}")
 
             # Update filing status
@@ -1116,7 +1104,7 @@ class GSTNService:
             filing.gstn_session_id = session_id
             filing.error_details = None
 
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(filing)
 
             logger.info(f"Validated GSTR-3B for {filing.gstin}, period {filing.return_period}")
@@ -1172,7 +1160,7 @@ class GSTNService:
                         "error_message": result.get("error_message"),
                     }
                 }
-                await self.db.commit()
+                await self.db.flush()
                 raise ValueError(f"Submission failed: {result.get('error_message')}")
 
             # Update filing status
@@ -1182,7 +1170,7 @@ class GSTNService:
             filing.gstn_session_id = session_id
             filing.error_details = None
 
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(filing)
 
             logger.info(f"Submitted GSTR-3B for {filing.gstin}, period {filing.return_period}")
@@ -1246,7 +1234,7 @@ class GSTNService:
                         "error_message": result.get("error_message"),
                     }
                 }
-                await self.db.commit()
+                await self.db.flush()
                 raise ValueError(f"Filing failed: {result.get('error_message')}")
 
             # Extract ARN from response
@@ -1262,7 +1250,7 @@ class GSTNService:
             filing.gstn_session_id = session_id
             filing.error_details = None
 
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(filing)
 
             logger.info(f"Filed GSTR-3B for {filing.gstin}, period {filing.return_period}, ARN: {arn}")
@@ -1352,7 +1340,7 @@ class GSTNService:
                     filing.arn = data["arn"]
                     filing.status = GSTReturnStatus.FILED
                     filing.filed_at = datetime.utcnow()
-                    await self.db.commit()
+                    await self.db.flush()
 
                 return {
                     "success": True,

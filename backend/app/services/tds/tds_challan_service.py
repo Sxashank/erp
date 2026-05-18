@@ -125,7 +125,7 @@ class TDSChallanService:
         if data.entry_ids:
             await self._add_entries_to_challan(challan, data.entry_ids)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -216,7 +216,7 @@ class TDSChallanService:
         if any(k in update_data for k in ["interest_amount", "penalty_amount", "other_amount"]):
             await self._recalculate_challan_totals(challan)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -237,7 +237,7 @@ class TDSChallanService:
         await self._add_entries_to_challan(challan, entry_ids)
         challan.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -262,7 +262,7 @@ class TDSChallanService:
         await self._recalculate_challan_totals(challan)
         challan.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -292,7 +292,7 @@ class TDSChallanService:
         challan.status = ChallanStatus.PENDING
         challan.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -333,7 +333,7 @@ class TDSChallanService:
             entry.bsr_code = data.bsr_code
             entry.challan_status = TDSChallanStatus.PAID
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -362,7 +362,7 @@ class TDSChallanService:
         for entry in entries:
             entry.challan_status = TDSChallanStatus.VERIFIED
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -399,7 +399,7 @@ class TDSChallanService:
         challan.total_amount = Decimal("0")
         challan.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(challan)
         return challan
 
@@ -532,7 +532,7 @@ class TDSChallanService:
                 await self._add_entries_to_challan(challan, entry_ids)
                 created_challans.append(challan)
 
-        await self.session.commit()
+        await self.session.flush()
 
         # Refresh all created challans
         for challan in created_challans:
@@ -559,4 +559,4 @@ class TDSChallanService:
             await self.repo.unlink_entries_from_challan(entry_ids)
 
         challan.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

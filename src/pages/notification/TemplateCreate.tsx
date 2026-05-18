@@ -2,20 +2,16 @@
  * Create Notification Template Page
  */
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { ArrowLeft, Save, Eye, Plus, X } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -23,13 +19,7 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
   FormControl,
@@ -39,11 +29,23 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { templateApi } from '@/services/notificationApi';
-import { NotificationCategory, NotificationTemplateType, NotificationChannel } from '@/types/notification';
+import type { NotificationChannel } from '@/types/notification';
+import { NotificationCategory, NotificationTemplateType } from '@/types/notification';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const formSchema = z.object({
   code: z.string().min(1, 'Code is required').max(100),
@@ -119,13 +121,13 @@ export default function TemplateCreate() {
       await templateApi.createTemplate({
         ...data,
         variables: variables.length > 0 ? variables : undefined,
-      } as any);
+      } as unknown as Parameters<typeof templateApi.createTemplate>[0]);
       toast({ title: 'Template created successfully' });
       navigate('/admin/notifications/templates');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create template',
+        description: getErrorMessage(error, 'Failed to create template'),
         variant: 'destructive',
       });
     } finally {
@@ -145,8 +147,8 @@ export default function TemplateCreate() {
   };
 
   const insertVariable = (variable: string, fieldName: string) => {
-    const currentValue = form.getValues(fieldName as any) || '';
-    form.setValue(fieldName as any, currentValue + `{${variable}}`);
+    const currentValue = (form.getValues(fieldName as keyof FormValues) ?? '') as string;
+    form.setValue(fieldName as keyof FormValues, currentValue + `{${variable}}`);
   };
 
   const selectedChannels = form.watch('channels');

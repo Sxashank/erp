@@ -3,22 +3,16 @@
  * Inline management of entity contacts (NO MODALS)
  */
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Edit, Trash2, X, Check, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Edit, Trash2, X, Check, Loader2 } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Form,
   FormControl,
@@ -27,28 +21,47 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { entityApi } from '@/services/lending';
 import type { EntityContact } from '@/types/lending';
 
 const CONTACT_TYPES = [
   { value: 'DIRECTOR', label: 'Director' },
   { value: 'PROMOTER', label: 'Promoter' },
-  { value: 'KEY_PERSON', label: 'Key Management Person' },
+  { value: 'KEY_MANAGERIAL_PERSON', label: 'Key Management Person' },
   { value: 'AUTHORIZED_SIGNATORY', label: 'Authorized Signatory' },
-  { value: 'CONTACT_PERSON', label: 'Contact Person' },
+  { value: 'GUARANTOR', label: 'Guarantor' },
 ];
 
 const contactSchema = z.object({
-  contact_type: z.enum(['DIRECTOR', 'PROMOTER', 'KEY_PERSON', 'AUTHORIZED_SIGNATORY', 'CONTACT_PERSON']),
+  contactType: z.enum([
+    'DIRECTOR',
+    'PROMOTER',
+    'KEY_MANAGERIAL_PERSON',
+    'AUTHORIZED_SIGNATORY',
+    'GUARANTOR',
+  ]),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   designation: z.string().optional(),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
-  phone: z.string().regex(/^[6-9]\d{9}$/, 'Invalid phone number').optional().or(z.literal('')),
-  din: z.string().regex(/^\d{8}$/, 'DIN must be 8 digits').optional().or(z.literal('')),
-  is_primary: z.boolean().default(false),
+  phone: z
+    .string()
+    .regex(/^[6-9]\d{9}$/, 'Invalid phone number')
+    .optional()
+    .or(z.literal('')),
+  din: z
+    .string()
+    .regex(/^\d{8}$/, 'DIN must be 8 digits')
+    .optional()
+    .or(z.literal('')),
+  isPrimary: z.boolean(),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -65,15 +78,15 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
   const [saving, setSaving] = useState(false);
 
   const form = useForm<ContactFormData>({
-    resolver: zodResolver(contactSchema) as any,
+    resolver: zodResolver(contactSchema),
     defaultValues: {
-      contact_type: 'CONTACT_PERSON',
+      contactType: 'KEY_MANAGERIAL_PERSON',
       name: '',
       designation: '',
       email: '',
       phone: '',
       din: '',
-      is_primary: false,
+      isPrimary: false,
     },
   });
 
@@ -87,8 +100,7 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
     try {
       const data = await entityApi.getEntityContacts(entityId);
       setContacts(data);
-    } catch (error) {
-      console.error('Failed to load contacts:', error);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -97,13 +109,13 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
   // Start adding new contact
   const handleAddNew = () => {
     form.reset({
-      contact_type: 'CONTACT_PERSON',
+      contactType: 'KEY_MANAGERIAL_PERSON',
       name: '',
       designation: '',
       email: '',
       phone: '',
       din: '',
-      is_primary: false,
+      isPrimary: false,
     });
     setIsAdding(true);
     setEditingId(null);
@@ -112,15 +124,15 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
   // Start editing existing contact
   const handleEdit = (contact: EntityContact) => {
     form.reset({
-      contact_type: contact.contact_type as ContactFormData['contact_type'],
+      contactType: contact.contactType as ContactFormData['contactType'],
       name: contact.name,
       designation: contact.designation || '',
       email: contact.email || '',
       phone: contact.phone || '',
       din: contact.din || '',
-      is_primary: contact.is_primary,
+      isPrimary: contact.isPrimary,
     });
-    setEditingId(contact.contact_id);
+    setEditingId(contact.id);
     setIsAdding(false);
   };
 
@@ -137,15 +149,14 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
     try {
       if (editingId) {
         // Update existing
-        await entityApi.updateEntityContact(entityId, editingId, data as any);
+        await entityApi.updateEntityContact(entityId, editingId, data);
       } else {
         // Add new
-        await entityApi.addEntityContact(entityId, data as any);
+        await entityApi.addEntityContact(entityId, data);
       }
       await loadContacts();
       handleCancel();
-    } catch (error) {
-      console.error('Failed to save contact:', error);
+    } catch {
     } finally {
       setSaving(false);
     }
@@ -157,14 +168,12 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
     try {
       await entityApi.deleteEntityContact(entityId, contactId);
       await loadContacts();
-    } catch (error) {
-      console.error('Failed to delete contact:', error);
-    }
+    } catch {}
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48">
+      <div className="flex h-48 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
       </div>
     );
@@ -175,9 +184,7 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Contacts</CardTitle>
-          <CardDescription>
-            Directors, key persons, and authorized signatories
-          </CardDescription>
+          <CardDescription>Directors, key persons, and authorized signatories</CardDescription>
         </div>
         {!isAdding && !editingId && (
           <Button onClick={handleAddNew}>
@@ -189,16 +196,14 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
       <CardContent>
         {/* Add/Edit Form */}
         {(isAdding || editingId) && (
-          <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-            <h4 className="font-medium mb-4">
-              {editingId ? 'Edit Contact' : 'Add New Contact'}
-            </h4>
+          <div className="mb-6 rounded-lg border bg-gray-50 p-4">
+            <h4 className="mb-4 font-medium">{editingId ? 'Edit Contact' : 'Add New Contact'}</h4>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave as any)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <FormField
                     control={form.control}
-                    name="contact_type"
+                    name="contactType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Contact Type *</FormLabel>
@@ -294,14 +299,11 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
 
                 <FormField
                   control={form.control}
-                  name="is_primary"
+                  name="isPrimary"
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <FormLabel className="font-normal">Primary Contact</FormLabel>
                     </FormItem>
@@ -326,25 +328,26 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
 
         {/* Contacts List */}
         {contacts.length === 0 && !isAdding ? (
-          <p className="text-center py-8 text-gray-500">
+          <p className="py-8 text-center text-gray-500">
             No contacts added yet. Click "Add Contact" to add one.
           </p>
         ) : (
           <div className="space-y-3">
             {contacts.map((contact) => (
               <div
-                key={contact.contact_id}
-                className={`flex items-start justify-between p-4 border rounded-lg ${
-                  editingId === contact.contact_id ? 'hidden' : ''
+                key={contact.id}
+                className={`flex items-start justify-between rounded-lg border p-4 ${
+                  editingId === contact.id ? 'hidden' : ''
                 }`}
               >
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{contact.name}</p>
                     <Badge variant="outline">
-                      {CONTACT_TYPES.find(t => t.value === contact.contact_type)?.label || contact.contact_type}
+                      {CONTACT_TYPES.find((t) => t.value === contact.contactType)?.label ||
+                        contact.contactType}
                     </Badge>
-                    {contact.is_primary && <Badge>Primary</Badge>}
+                    {contact.isPrimary && <Badge>Primary</Badge>}
                   </div>
                   {contact.designation && (
                     <p className="text-sm text-gray-500">{contact.designation}</p>
@@ -353,23 +356,13 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
                     {contact.email && <span>{contact.email}</span>}
                     {contact.phone && <span>{contact.phone}</span>}
                   </div>
-                  {contact.din && (
-                    <p className="text-xs text-gray-400 mt-1">DIN: {contact.din}</p>
-                  )}
+                  {contact.din && <p className="mt-1 text-xs text-gray-400">DIN: {contact.din}</p>}
                 </div>
                 <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEdit(contact)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => handleEdit(contact)}>
                     <Edit className="h-4 w-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDelete(contact.contact_id)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => handleDelete(contact.id)}>
                     <Trash2 className="h-4 w-4 text-red-500" />
                   </Button>
                 </div>

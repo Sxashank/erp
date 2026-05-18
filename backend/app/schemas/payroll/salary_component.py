@@ -9,12 +9,13 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
 # ============== Salary Component ==============
 
-class SalaryComponentBase(BaseModel):
+class SalaryComponentBase(CamelSchema):
     """Base schema for salary component"""
     component_code: str = Field(..., min_length=1, max_length=20)
     component_name: str = Field(..., min_length=1, max_length=100)
@@ -49,7 +50,7 @@ class SalaryComponentCreate(SalaryComponentBase):
     organization_id: UUID
 
 
-class SalaryComponentUpdate(BaseModel):
+class SalaryComponentUpdate(CamelSchema):
     """Schema for updating salary component"""
     component_name: Optional[str] = None
     description: Optional[str] = None
@@ -77,11 +78,8 @@ class SalaryComponentResponse(SalaryComponentBase):
     id: UUID
     organization_id: UUID
 
-    class Config:
-        from_attributes = True
 
-
-class SalaryComponentList(BaseModel):
+class SalaryComponentList(CamelSchema):
     """Minimal schema for listing"""
     id: UUID
     component_code: str
@@ -92,13 +90,10 @@ class SalaryComponentList(BaseModel):
     default_value: Optional[Decimal]
     is_active: bool
 
-    class Config:
-        from_attributes = True
-
 
 # ============== Salary Structure ==============
 
-class SalaryStructureComponentBase(BaseModel):
+class SalaryStructureComponentBase(CamelSchema):
     """Base schema for structure component"""
     component_id: UUID
     calculation_type: str
@@ -119,11 +114,8 @@ class SalaryStructureComponentResponse(SalaryStructureComponentBase):
     component_name: Optional[str] = None
     component_type: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class SalaryStructureBase(BaseModel):
+class SalaryStructureBase(CamelSchema):
     """Base schema for salary structure"""
     structure_code: str = Field(..., min_length=1, max_length=20)
     structure_name: str = Field(..., min_length=1, max_length=100)
@@ -143,7 +135,7 @@ class SalaryStructureCreate(SalaryStructureBase):
     components: List[SalaryStructureComponentCreate] = []
 
 
-class SalaryStructureUpdate(BaseModel):
+class SalaryStructureUpdate(CamelSchema):
     """Schema for updating salary structure"""
     structure_name: Optional[str] = None
     description: Optional[str] = None
@@ -161,11 +153,8 @@ class SalaryStructureResponse(SalaryStructureBase):
     organization_id: UUID
     components: List[SalaryStructureComponentResponse] = []
 
-    class Config:
-        from_attributes = True
 
-
-class SalaryStructureList(BaseModel):
+class SalaryStructureList(CamelSchema):
     """Minimal schema for listing"""
     id: UUID
     structure_code: str
@@ -174,13 +163,10 @@ class SalaryStructureList(BaseModel):
     effective_to: Optional[date]
     is_active: bool
 
-    class Config:
-        from_attributes = True
-
 
 # ============== Employee Salary ==============
 
-class EmployeeSalaryComponentCreate(BaseModel):
+class EmployeeSalaryComponentCreate(CamelSchema):
     """Schema for employee salary component"""
     component_id: UUID
     monthly_amount: Decimal
@@ -188,7 +174,7 @@ class EmployeeSalaryComponentCreate(BaseModel):
     is_overridden: bool = False
 
 
-class EmployeeSalaryComponentResponse(BaseModel):
+class EmployeeSalaryComponentResponse(CamelSchema):
     """Schema for employee salary component response"""
     id: UUID
     component_id: UUID
@@ -199,11 +185,8 @@ class EmployeeSalaryComponentResponse(BaseModel):
     annual_amount: Decimal
     is_overridden: bool
 
-    class Config:
-        from_attributes = True
 
-
-class EmployeeSalaryBase(BaseModel):
+class EmployeeSalaryBase(CamelSchema):
     """Base schema for employee salary"""
     structure_id: UUID
     effective_from: date
@@ -227,7 +210,7 @@ class EmployeeSalaryCreate(EmployeeSalaryBase):
     components: List[EmployeeSalaryComponentCreate] = []
 
 
-class EmployeeSalaryUpdate(BaseModel):
+class EmployeeSalaryUpdate(CamelSchema):
     """Schema for updating employee salary"""
     structure_id: Optional[UUID] = None
     effective_from: Optional[date] = None
@@ -257,11 +240,8 @@ class EmployeeSalaryResponse(EmployeeSalaryBase):
     structure_code: Optional[str] = None
     structure_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class EmployeeSalaryList(BaseModel):
+class EmployeeSalaryList(CamelSchema):
     """Minimal schema for listing"""
     id: UUID
     employee_id: UUID
@@ -273,5 +253,3 @@ class EmployeeSalaryList(BaseModel):
     monthly_gross: Decimal
     status: str
 
-    class Config:
-        from_attributes = True

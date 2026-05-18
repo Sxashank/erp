@@ -59,7 +59,7 @@ class EscalationService:
             except Exception as e:
                 logger.error(f"Error processing escalation for task {task.id}: {e}")
 
-        await self.db.commit()
+        await self.db.flush()
         logger.info(f"Escalation check complete. Escalated {escalated_count} tasks.")
         return escalated_count
 
@@ -475,7 +475,7 @@ class EscalationService:
         )
 
         result = await self.db.execute(stmt)
-        await self.db.commit()
+        await self.db.flush()
 
         count = result.rowcount
         logger.info(f"Cleanup complete. Archived {count} old instances.")

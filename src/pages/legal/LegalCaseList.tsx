@@ -3,29 +3,6 @@
  * View and manage all legal cases
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Briefcase,
   Plus,
@@ -37,9 +14,35 @@ import {
   Scale,
   Filter,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { legalCaseApi } from '@/services/legalApi';
 import type { LegalCase } from '@/types/legal';
 
+import { logger } from "@/lib/logger";
 const forumTypes = [
   { value: 'DRT', label: 'DRT' },
   { value: 'DRAT', label: 'DRAT' },
@@ -88,9 +91,10 @@ export default function LegalCaseList() {
         forum_type: filterForum !== 'all' ? filterForum : undefined,
         case_type: filterType !== 'all' ? filterType : undefined,
       });
-      setCases(response.data);
+      const body = response.data as LegalCase[] | { items?: LegalCase[] } | undefined;
+      setCases(Array.isArray(body) ? body : (body?.items ?? []));
     } catch (error) {
-      console.error('Failed to fetch cases:', error);
+      logger.error('Failed to fetch cases:', error);
     } finally {
       setLoading(false);
     }
@@ -124,13 +128,15 @@ export default function LegalCaseList() {
     active: cases.filter((c) => c.is_active).length,
     sarfaesi: cases.filter((c) => c.case_type === 'SARFAESI').length,
     hearingDue: cases.filter(
-      (c) => c.next_hearing_date && new Date(c.next_hearing_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      (c) =>
+        c.next_hearing_date &&
+        new Date(c.next_hearing_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
     ).length,
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -144,7 +150,7 @@ export default function LegalCaseList() {
         actions={
           <Link to="/admin/legal/cases/new">
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               New Case
             </Button>
           </Link>
@@ -152,11 +158,11 @@ export default function LegalCaseList() {
       />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <Briefcase className="h-5 w-5 text-blue-600" />
               </div>
               <div>
@@ -169,7 +175,7 @@ export default function LegalCaseList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-2">
                 <Scale className="h-5 w-5 text-green-600" />
               </div>
               <div>
@@ -182,7 +188,7 @@ export default function LegalCaseList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
+              <div className="rounded-lg bg-purple-100 p-2">
                 <Briefcase className="h-5 w-5 text-purple-600" />
               </div>
               <div>
@@ -195,7 +201,7 @@ export default function LegalCaseList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
+              <div className="rounded-lg bg-yellow-100 p-2">
                 <Calendar className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
@@ -210,9 +216,9 @@ export default function LegalCaseList() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex flex-col gap-4 md:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 placeholder="Search by case number, borrower, or loan account..."
                 value={searchQuery}
@@ -296,7 +302,7 @@ export default function LegalCaseList() {
                       {legalCase.forum_type}
                     </Badge>
                     {legalCase.court_name && (
-                      <p className="text-xs text-gray-500 mt-1">{legalCase.court_name}</p>
+                      <p className="mt-1 text-xs text-gray-500">{legalCase.court_name}</p>
                     )}
                   </TableCell>
                   <TableCell className="text-right">
@@ -306,7 +312,7 @@ export default function LegalCaseList() {
                     {legalCase.next_hearing_date ? (
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4 text-gray-400" />
-                        <span>{new Date(legalCase.next_hearing_date).toLocaleDateString()}</span>
+                        <DateDisplay date={legalCase.next_hearing_date} />
                       </div>
                     ) : (
                       '-'
@@ -323,7 +329,7 @@ export default function LegalCaseList() {
                       {legalCase.current_status || (legalCase.is_active ? 'Active' : 'Closed')}
                     </Badge>
                     {legalCase.sarfaesi_stage && (
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="mt-1 text-xs text-gray-500">
                         {legalCase.sarfaesi_stage.replace(/_/g, ' ')}
                       </p>
                     )}
@@ -339,8 +345,8 @@ export default function LegalCaseList() {
               ))}
               {filteredCases.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    <Briefcase className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <TableCell colSpan={8} className="py-8 text-center text-gray-500">
+                    <Briefcase className="mx-auto mb-4 h-12 w-12 opacity-50" />
                     <p>No cases found</p>
                   </TableCell>
                 </TableRow>

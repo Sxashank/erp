@@ -2,18 +2,15 @@
  * Vendor Purchase Order Detail
  */
 
+import { CheckCircle, XCircle, Download, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import {
-  ArrowLeft,
-  CheckCircle,
-  XCircle,
-  Download,
-  Loader2,
-} from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import {
   Table,
@@ -27,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder, POAcknowledgement } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorPODetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -46,7 +44,7 @@ export default function VendorPODetail() {
       setPO(response.data.purchase_order);
       setAcknowledgement(response.data.acknowledgement || null);
     } catch (error) {
-      console.error('Failed to fetch PO:', error);
+      logger.error('Failed to fetch PO:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -83,7 +81,7 @@ export default function VendorPODetail() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
       </div>
     );
@@ -95,32 +93,27 @@ export default function VendorPODetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4">
-          <Button variant="ghost" onClick={() => navigate('/vendor/purchase-orders')}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">PO: {po.po_number}</h1>
-            <p className="text-gray-600">
-              Date: {new Date(po.po_date).toLocaleDateString()}
-            </p>
+      <PageHeader
+        title={`PO: ${po.po_number}`}
+        subtitle={`Date: ${new Date(po.po_date).toLocaleDateString()}`}
+        breadcrumbs={[
+          { label: 'Purchase Orders', to: '/vendor/purchase-orders' },
+          { label: po.po_number },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            {getStatusBadge()}
+            <Button variant="outline" onClick={() => vendorPOApi.downloadPdf(id!)}>
+              <Download className="mr-2 h-4 w-4" />
+              Download PDF
+            </Button>
           </div>
-        </div>
-        <div className="flex items-center space-x-2">
-          {getStatusBadge()}
-          <Button variant="outline" onClick={() => vendorPOApi.downloadPdf(id!)}>
-            <Download className="h-4 w-4 mr-2" />
-            Download PDF
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Action Buttons for Pending POs */}
       {(!acknowledgement || acknowledgement.status === 'PENDING') && (
-        <Card className="bg-yellow-50 border-yellow-200">
+        <Card className="border-yellow-200 bg-yellow-50">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -133,15 +126,15 @@ export default function VendorPODetail() {
                 <Link to={`/vendor/purchase-orders/${id}/reject`}>
                   <Button
                     variant="outline"
-                    className="text-red-600 hover:text-red-700 border-red-300"
+                    className="border-red-300 text-red-600 hover:text-red-700"
                   >
-                    <XCircle className="h-4 w-4 mr-2" />
+                    <XCircle className="mr-2 h-4 w-4" />
                     Reject
                   </Button>
                 </Link>
                 <Link to={`/vendor/purchase-orders/${id}/acknowledge`}>
                   <Button className="bg-green-600 hover:bg-green-700">
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <CheckCircle className="mr-2 h-4 w-4" />
                     Acknowledge
                   </Button>
                 </Link>
@@ -153,13 +146,17 @@ export default function VendorPODetail() {
 
       {/* Acknowledgement Info */}
       {acknowledgement && acknowledgement.status !== 'PENDING' && (
-        <Card className={
-          acknowledgement.status === 'ACKNOWLEDGED' ? 'bg-green-50 border-green-200' :
-          acknowledgement.status === 'REJECTED' ? 'bg-red-50 border-red-200' :
-          'bg-yellow-50 border-yellow-200'
-        }>
+        <Card
+          className={
+            acknowledgement.status === 'ACKNOWLEDGED'
+              ? 'border-green-200 bg-green-50'
+              : acknowledgement.status === 'REJECTED'
+                ? 'border-red-200 bg-red-50'
+                : 'border-yellow-200 bg-yellow-50'
+          }
+        >
           <CardContent className="pt-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div>
                 <Label className="text-gray-500">Status</Label>
                 <p className="font-medium">{acknowledgement.status}</p>
@@ -167,17 +164,13 @@ export default function VendorPODetail() {
               {acknowledgement.acknowledged_at && (
                 <div>
                   <Label className="text-gray-500">Acknowledged On</Label>
-                  <p className="font-medium">
-                    {new Date(acknowledgement.acknowledged_at).toLocaleDateString()}
-                  </p>
+                  <DateDisplay date={acknowledgement.acknowledged_at} className="font-medium" />
                 </div>
               )}
               {acknowledgement.committed_delivery_date && (
                 <div>
                   <Label className="text-gray-500">Committed Delivery</Label>
-                  <p className="font-medium">
-                    {new Date(acknowledgement.committed_delivery_date).toLocaleDateString()}
-                  </p>
+                  <DateDisplay date={acknowledgement.committed_delivery_date} className="font-medium" />
                 </div>
               )}
               {acknowledgement.delivery_remarks && (
@@ -192,7 +185,7 @@ export default function VendorPODetail() {
       )}
 
       {/* PO Details */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle>Order Details</CardTitle>
@@ -205,13 +198,11 @@ export default function VendorPODetail() {
               </div>
               <div>
                 <Label className="text-gray-500">Order Date</Label>
-                <p className="font-medium">{new Date(po.po_date).toLocaleDateString()}</p>
+                <DateDisplay date={po.po_date} className="font-medium" />
               </div>
               <div>
                 <Label className="text-gray-500">Delivery Date</Label>
-                <p className="font-medium">
-                  {po.delivery_date ? new Date(po.delivery_date).toLocaleDateString() : '-'}
-                </p>
+                <DateDisplay date={po.delivery_date} className="font-medium" />
               </div>
               <div>
                 <Label className="text-gray-500">Payment Terms</Label>
@@ -256,8 +247,8 @@ export default function VendorPODetail() {
                 <span>{formatCurrency(po.igst_amount)}</span>
               </div>
             )}
-            <div className="border-t pt-2 mt-2">
-              <div className="flex justify-between font-bold text-lg">
+            <div className="mt-2 border-t pt-2">
+              <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
                 <span className="text-purple-600">{formatCurrency(po.total_amount)}</span>
               </div>
@@ -292,9 +283,7 @@ export default function VendorPODetail() {
                   <TableCell>
                     <div>
                       <p className="font-medium">{line.item_description}</p>
-                      {line.item_code && (
-                        <p className="text-sm text-gray-500">{line.item_code}</p>
-                      )}
+                      {line.item_code && <p className="text-sm text-gray-500">{line.item_code}</p>}
                     </div>
                   </TableCell>
                   <TableCell>{line.hsn_sac_code || '-'}</TableCell>

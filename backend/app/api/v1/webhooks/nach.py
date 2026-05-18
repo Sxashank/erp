@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Header
+from fastapi import APIRouter, Depends, Request, status, Header
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from app.models.lending.enums import (
     MandateStatus, ReceiptMode, ReceiptStatus, ReceiptType
 )
 from app.models.core.integration_config import IntegrationConfig, IntegrationType, IntegrationProvider
+from app.core.exceptions import UnauthorizedException
 
 logger = logging.getLogger(__name__)
 
@@ -68,10 +69,7 @@ async def razorpay_webhook(
 
         if not hmac.compare_digest(expected, x_razorpay_signature):
             logger.warning("Invalid Razorpay webhook signature")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid signature",
-            )
+            raise UnauthorizedException(detail="Invalid signature", error_code="INVALID_SIGNATURE")
 
     event = payload.get("event", "")
     entity = payload.get("payload", {}).get("token", {}).get("entity", {}) or \
@@ -253,10 +251,7 @@ async def cashfree_webhook(
 
         if not hmac.compare_digest(expected, x_cf_signature):
             logger.warning("Invalid Cashfree webhook signature")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid signature",
-            )
+            raise UnauthorizedException(detail="Invalid signature", error_code="INVALID_SIGNATURE")
 
     event_type = payload.get("type", "")
     data = payload.get("data", {})

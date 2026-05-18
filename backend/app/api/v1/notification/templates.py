@@ -3,7 +3,7 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -27,10 +27,12 @@ from app.schemas.notification import (
     TemplatePreviewResponse,
 )
 
+from app.api.deps import get_db_with_tenant
+from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter()
 
 
-@router.get("", response_model=NotificationTemplateListResponse)
+@router.get("", response_model=NotificationTemplateListResponse, response_model_by_alias=True)
 async def list_templates(
     category: Optional[NotificationCategory] = None,
     template_type: Optional[NotificationTemplateType] = None,
@@ -38,7 +40,7 @@ async def list_templates(
     search: Optional[str] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List notification templates with filters."""
@@ -87,10 +89,10 @@ async def list_templates(
     )
 
 
-@router.get("/{template_id}", response_model=NotificationTemplateResponse)
+@router.get("/{template_id}", response_model=NotificationTemplateResponse, response_model_by_alias=True)
 async def get_template(
     template_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific notification template."""
@@ -106,18 +108,15 @@ async def get_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
-        )
+        raise NotFoundException(detail="Template not found", error_code="TEMPLATE_NOT_FOUND")
 
     return NotificationTemplateResponse.model_validate(template)
 
 
-@router.get("/code/{code}", response_model=NotificationTemplateResponse)
+@router.get("/code/{code}", response_model=NotificationTemplateResponse, response_model_by_alias=True)
 async def get_template_by_code(
     code: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a notification template by code."""
@@ -143,18 +142,15 @@ async def get_template_by_code(
         template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
-        )
+        raise NotFoundException(detail="Template not found", error_code="TEMPLATE_NOT_FOUND")
 
     return NotificationTemplateResponse.model_validate(template)
 
 
-@router.post("", response_model=NotificationTemplateResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=NotificationTemplateResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_template(
     data: NotificationTemplateCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new notification template."""
@@ -166,9 +162,9 @@ async def create_template(
         )
     )
     if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Template with this code already exists",
+            error_code="TEMPLATE_WITH_THIS_CODE_ALREADY_EXISTS",
         )
 
     template = SysNotificationTemplate(
@@ -225,11 +221,11 @@ async def create_template(
     return NotificationTemplateResponse.model_validate(template)
 
 
-@router.put("/{template_id}", response_model=NotificationTemplateResponse)
+@router.put("/{template_id}", response_model=NotificationTemplateResponse, response_model_by_alias=True)
 async def update_template(
     template_id: UUID,
     data: NotificationTemplateUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update a notification template."""
@@ -242,10 +238,7 @@ async def update_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
-        )
+        raise NotFoundException(detail="Template not found", error_code="TEMPLATE_NOT_FOUND")
 
     # Update fields
     update_data = data.model_dump(exclude_unset=True)
@@ -263,7 +256,7 @@ async def update_template(
 @router.delete("/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_template(
     template_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete (soft) a notification template."""
@@ -276,19 +269,16 @@ async def delete_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
-        )
+        raise NotFoundException(detail="Template not found", error_code="TEMPLATE_NOT_FOUND")
 
     template.soft_delete(current_user.id)
     await db.commit()
 
 
-@router.post("/preview", response_model=TemplatePreviewResponse)
+@router.post("/preview", response_model=TemplatePreviewResponse, response_model_by_alias=True)
 async def preview_template(
     data: TemplatePreviewRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Preview a notification template with sample data."""
@@ -314,10 +304,7 @@ async def preview_template(
         template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
-        )
+        raise NotFoundException(detail="Template not found", error_code="TEMPLATE_NOT_FOUND")
 
     # Get content based on channel
     channel = data.channel
@@ -378,10 +365,10 @@ async def preview_template(
 
 # Template variables endpoints
 
-@router.get("/{template_id}/variables", response_model=list[TemplateVariableResponse])
+@router.get("/{template_id}/variables", response_model=list[TemplateVariableResponse], response_model_by_alias=True)
 async def list_template_variables(
     template_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List variables for a template."""
@@ -394,11 +381,11 @@ async def list_template_variables(
     return [TemplateVariableResponse.model_validate(v) for v in variables]
 
 
-@router.post("/{template_id}/variables", response_model=TemplateVariableResponse)
+@router.post("/{template_id}/variables", response_model=TemplateVariableResponse, response_model_by_alias=True)
 async def add_template_variable(
     template_id: UUID,
     data: TemplateVariableCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add a variable to a template."""
@@ -412,10 +399,7 @@ async def add_template_variable(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Template not found",
-        )
+        raise NotFoundException(detail="Template not found", error_code="TEMPLATE_NOT_FOUND")
 
     variable = NotificationTemplateVariable(
         template_id=template_id,
@@ -443,7 +427,7 @@ async def add_template_variable(
 async def delete_template_variable(
     template_id: UUID,
     variable_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a template variable."""
@@ -456,10 +440,7 @@ async def delete_template_variable(
     variable = result.scalar_one_or_none()
 
     if not variable:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Variable not found",
-        )
+        raise NotFoundException(detail="Variable not found", error_code="VARIABLE_NOT_FOUND")
 
     await db.delete(variable)
     await db.commit()

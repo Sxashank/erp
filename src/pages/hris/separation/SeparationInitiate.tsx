@@ -1,8 +1,4 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import {
   ArrowLeft,
   Search,
@@ -14,19 +10,16 @@ import {
   Building,
   Briefcase,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -36,10 +29,20 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
+import { hrisApi } from '@/services/api';
 
-import { logger } from '@/lib/logger';
 const separationSchema = z.object({
   employee_id: z.string().min(1, 'Employee is required'),
   separation_type: z.enum(['RESIGNATION', 'TERMINATION', 'RETIREMENT', 'ABSCONDING', 'DEATH']),
@@ -51,44 +54,34 @@ const separationSchema = z.object({
   buyout_notice_days: z.number().optional(),
 });
 
-type SeparationFormData = z.infer<typeof separationSchema>;
+type SeparationFormInput = z.input<typeof separationSchema>;
+type SeparationFormData = z.output<typeof separationSchema>;
 
 interface EmployeeInfo {
   id: string;
   employee_code: string;
   full_name: string;
-  department: string;
-  designation: string;
+  department?: string;
+  department_name?: string;
+  designation?: string;
+  designation_name?: string;
   date_of_joining: string;
   employment_type: string;
   notice_period_days: number;
-  pending_leaves: number;
-  pending_loans: number;
+  pending_leaves?: number;
+  pending_loans?: number;
 }
-
-// Mock employee search result
-const mockEmployee: EmployeeInfo = {
-  id: 'emp-001',
-  employee_code: 'EMP001',
-  full_name: 'Rahul Sharma',
-  department: 'Engineering',
-  designation: 'Senior Developer',
-  date_of_joining: '2020-03-15',
-  employment_type: 'PERMANENT',
-  notice_period_days: 60,
-  pending_leaves: 12,
-  pending_loans: 50000,
-};
 
 export default function SeparationInitiate() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeInfo | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [showBuyout, setShowBuyout] = useState(false);
 
-  const form = useForm<SeparationFormData>({
-    resolver: zodResolver(separationSchema) as any,
+  const form = useForm<SeparationFormInput, unknown, SeparationFormData>({
+    resolver: zodResolver(separationSchema),
     defaultValues: {
       employee_id: '',
       separation_type: 'RESIGNATION',
@@ -101,20 +94,41 @@ export default function SeparationInitiate() {
     },
   });
 
-  const handleSearchEmployee = () => {
+  const handleSearchEmployee = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
-    // Simulate API call
-    setTimeout(() => {
-      setSelectedEmployee(mockEmployee);
-      form.setValue('employee_id', mockEmployee.id);
-      // Calculate default last working date based on notice period
+    try {
+      const response = await hrisApi.listEmployees({
+        search: searchQuery.trim(),
+        employment_status: 'ACTIVE',
+        limit: 10,
+      });
+      const employee = (response.data.items || [])[0] as EmployeeInfo | undefined;
+      if (!employee) {
+        setSelectedEmployee(null);
+        form.setValue('employee_id', '');
+        toast({
+          title: 'Employee not found',
+          description: 'Search by exact employee code or active employee name.',
+          variant: 'destructive',
+        });
+        return;
+      }
+      setSelectedEmployee(employee);
+      form.setValue('employee_id', employee.id);
       const noticeDate = new Date();
       const lwd = new Date(noticeDate);
-      lwd.setDate(lwd.getDate() + mockEmployee.notice_period_days);
+      lwd.setDate(lwd.getDate() + (employee.notice_period_days || 30));
       form.setValue('last_working_date', lwd.toISOString().split('T')[0]);
+    } catch (error) {
+      toast({
+        title: 'Unable to search employees',
+        description: 'Check HRIS employee view access and retry.',
+        variant: 'destructive',
+      });
+    } finally {
       setIsSearching(false);
-    }, 500);
+    }
   };
 
   const calculateYearsOfService = (joiningDate: string) => {
@@ -124,30 +138,37 @@ export default function SeparationInitiate() {
     return years.toFixed(1);
   };
 
-  const onSubmit = (data: SeparationFormData) => {
-    logger.debug('Separation data:', data);
-    // API call would go here
-    navigate('/admin/hris/separation');
+  const onSubmit = async (data: SeparationFormData) => {
+    try {
+      await hrisApi.initiateSeparation({
+        employee_id: data.employee_id,
+        separation_type: data.separation_type,
+        requested_last_working_date: data.last_working_date,
+        reason_category: 'OTHER',
+        reason_detail: [data.reason, data.remarks].filter(Boolean).join('\n\n'),
+      });
+      toast({ title: 'Separation initiated' });
+      navigate('/admin/hris/separation');
+    } catch (error) {
+      toast({
+        title: 'Unable to initiate separation',
+        description: 'Verify employee eligibility and separation permissions.',
+        variant: 'destructive',
+      });
+    }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/hris/separation')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-3xl font-bold">Initiate Employee Separation</h1>
-          <p className="text-muted-foreground">
-            Start the separation process for an employee
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Initiate Employee Separation"
+        subtitle="Start the separation process for an employee"
+        breadcrumbs={[{ label: 'Separation', to: '/admin/hris/separation' }, { label: 'Initiate' }]}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Employee Search */}
           <Card>
             <CardHeader>
@@ -155,9 +176,7 @@ export default function SeparationInitiate() {
                 <Search className="h-5 w-5" />
                 Select Employee
               </CardTitle>
-              <CardDescription>
-                Search for the employee to initiate separation
-              </CardDescription>
+              <CardDescription>Search for the employee to initiate separation</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="flex gap-2">
@@ -173,14 +192,14 @@ export default function SeparationInitiate() {
               </div>
 
               {selectedEmployee && (
-                <div className="mt-4 p-4 border rounded-lg bg-muted/50">
+                <div className="mt-4 rounded-lg border bg-muted/50 p-4">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-4">
-                      <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                         <User className="h-6 w-6 text-primary" />
                       </div>
                       <div>
-                        <h3 className="font-semibold text-lg">{selectedEmployee.full_name}</h3>
+                        <h3 className="text-lg font-semibold">{selectedEmployee.full_name}</h3>
                         <p className="text-sm text-muted-foreground">
                           {selectedEmployee.employee_code}
                         </p>
@@ -188,26 +207,32 @@ export default function SeparationInitiate() {
                     </div>
                     <Badge variant="outline">{selectedEmployee.employment_type}</Badge>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t">
+                  <div className="mt-4 grid grid-cols-2 gap-4 border-t pt-4 md:grid-cols-4">
                     <div className="flex items-center gap-2">
                       <Building className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Department</p>
-                        <p className="text-sm font-medium">{selectedEmployee.department}</p>
+                        <p className="text-sm font-medium">
+                          {selectedEmployee.department_name || selectedEmployee.department || '—'}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Briefcase className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Designation</p>
-                        <p className="text-sm font-medium">{selectedEmployee.designation}</p>
+                        <p className="text-sm font-medium">
+                          {selectedEmployee.designation_name || selectedEmployee.designation || '—'}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-xs text-muted-foreground">Date of Joining</p>
-                        <p className="text-sm font-medium">{formatDate(selectedEmployee.date_of_joining)}</p>
+                        <p className="text-sm font-medium">
+                          {formatDate(selectedEmployee.date_of_joining)}
+                        </p>
                       </div>
                     </div>
                     <div>
@@ -233,18 +258,15 @@ export default function SeparationInitiate() {
               </CardHeader>
               <CardContent>
                 <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <FormField
                         control={form.control}
                         name="separation_type"
                         render={({ field }) => (
                           <FormItem>
                             <FormLabel>Separation Type</FormLabel>
-                            <Select
-                              onValueChange={field.onChange}
-                              defaultValue={field.value}
-                            >
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
                               <FormControl>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select type" />
@@ -287,7 +309,7 @@ export default function SeparationInitiate() {
                               <Input type="date" {...field} />
                             </FormControl>
                             <FormDescription>
-                              Notice period: {selectedEmployee.notice_period_days} days
+                              Notice period: {selectedEmployee.notice_period_days || 30} days
                             </FormDescription>
                             <FormMessage />
                           </FormItem>
@@ -359,10 +381,7 @@ export default function SeparationInitiate() {
                         <FormItem>
                           <FormLabel>Additional Remarks (Optional)</FormLabel>
                           <FormControl>
-                            <Textarea
-                              placeholder="Any additional remarks or notes..."
-                              {...field}
-                            />
+                            <Textarea placeholder="Any additional remarks or notes..." {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -378,7 +397,7 @@ export default function SeparationInitiate() {
                         Cancel
                       </Button>
                       <Button type="submit">
-                        <UserMinus className="h-4 w-4 mr-2" />
+                        <UserMinus className="mr-2 h-4 w-4" />
                         Initiate Separation
                       </Button>
                     </div>
@@ -394,17 +413,17 @@ export default function SeparationInitiate() {
           {selectedEmployee && (
             <>
               {/* Pending Items Alert */}
-              {(selectedEmployee.pending_leaves > 0 || selectedEmployee.pending_loans > 0) && (
+              {((selectedEmployee.pending_leaves || 0) > 0 || (selectedEmployee.pending_loans || 0) > 0) && (
                 <Alert variant="destructive">
                   <AlertTriangle className="h-4 w-4" />
                   <AlertTitle>Pending Items</AlertTitle>
                   <AlertDescription>
-                    <ul className="list-disc list-inside mt-2 space-y-1">
-                      {selectedEmployee.pending_leaves > 0 && (
+                    <ul className="mt-2 list-inside list-disc space-y-1">
+                      {(selectedEmployee.pending_leaves || 0) > 0 && (
                         <li>{selectedEmployee.pending_leaves} pending leave days</li>
                       )}
-                      {selectedEmployee.pending_loans > 0 && (
-                        <li>Loan balance: ₹{selectedEmployee.pending_loans.toLocaleString()}</li>
+                      {(selectedEmployee.pending_loans || 0) > 0 && (
+                        <li>Loan balance: ₹{(selectedEmployee.pending_loans || 0).toLocaleString()}</li>
                       )}
                     </ul>
                   </AlertDescription>
@@ -418,9 +437,7 @@ export default function SeparationInitiate() {
                     <FileText className="h-4 w-4" />
                     Clearance Checklist
                   </CardTitle>
-                  <CardDescription>
-                    Required clearances will be initiated
-                  </CardDescription>
+                  <CardDescription>Required clearances will be initiated</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -452,9 +469,7 @@ export default function SeparationInitiate() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">F&F Settlement Components</CardTitle>
-                  <CardDescription>
-                    Will be calculated on clearance completion
-                  </CardDescription>
+                  <CardDescription>Will be calculated on clearance completion</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <ul className="space-y-2 text-sm">
@@ -464,7 +479,7 @@ export default function SeparationInitiate() {
                     </li>
                     <li className="flex justify-between">
                       <span className="text-muted-foreground">Leave encashment</span>
-                      <span>{selectedEmployee.pending_leaves} days</span>
+                      <span>{selectedEmployee.pending_leaves || 0} days</span>
                     </li>
                     <li className="flex justify-between">
                       <span className="text-muted-foreground">Gratuity</span>
@@ -480,7 +495,7 @@ export default function SeparationInitiate() {
                     </li>
                     <li className="flex justify-between text-red-600">
                       <span>Loan recovery</span>
-                      <span>-₹{selectedEmployee.pending_loans.toLocaleString()}</span>
+                      <span>-₹{(selectedEmployee.pending_loans || 0).toLocaleString()}</span>
                     </li>
                   </ul>
                 </CardContent>

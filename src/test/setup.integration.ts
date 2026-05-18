@@ -11,9 +11,17 @@ import { afterAll, afterEach, beforeAll, beforeEach, vi } from 'vitest';
 // Polyfill them globally so Popover/ScrollArea/Dialog components work.
 if (!('ResizeObserver' in globalThis)) {
   class RO {
-    observe(): void {}
-    unobserve(): void {}
-    disconnect(): void {}
+    observe(): void {
+      return undefined;
+    }
+
+    unobserve(): void {
+      return undefined;
+    }
+
+    disconnect(): void {
+      return undefined;
+    }
   }
   (globalThis as unknown as { ResizeObserver: typeof RO }).ResizeObserver = RO;
 }
@@ -25,10 +33,10 @@ if (
   'function'
 ) {
   Element.prototype.hasPointerCapture = (() => false) as Element['hasPointerCapture'];
-  Element.prototype.releasePointerCapture = (() => {}) as Element['releasePointerCapture'];
+  Element.prototype.releasePointerCapture = (() => undefined) as Element['releasePointerCapture'];
   (
     Element.prototype as unknown as { setPointerCapture: (id: number) => void }
-  ).setPointerCapture = () => {};
+  ).setPointerCapture = () => undefined;
 }
 if (!('matchMedia' in window)) {
   Object.defineProperty(window, 'matchMedia', {
@@ -46,10 +54,11 @@ if (!('matchMedia' in window)) {
   });
 }
 
+import { TEST_ORG, TEST_USER } from './msw/handlers';
 import { server } from './msw/server';
+
 import { useAuthStore } from '@/stores/authStore';
 import { useOrganizationStore } from '@/stores/organizationStore';
-import { TEST_ORG, TEST_USER } from './msw/handlers';
 
 beforeAll(() => {
   server.listen({ onUnhandledRequest: 'error' });

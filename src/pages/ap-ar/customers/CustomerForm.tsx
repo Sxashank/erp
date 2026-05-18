@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { Save, Loader2, Copy } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Loader2, Copy } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -14,10 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { logger } from "@/lib/logger";
 import {
   customersApi,
   organizationsApi,
@@ -34,7 +36,7 @@ interface Organization {
 
 interface TDSSection {
   id: string;
-  section_code: string;
+  sectionCode: string;
   description: string;
 }
 
@@ -163,23 +165,7 @@ export function CustomerForm() {
     is_active: true,
   });
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    if (isEditMode && id) {
-      loadCustomer(id);
-    }
-  }, [id, isEditMode]);
-
-  useEffect(() => {
-    if (formData.organization_id) {
-      loadOrganizationData(formData.organization_id);
-    }
-  }, [formData.organization_id]);
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       const [orgsRes, tdsRes] = await Promise.all([
         organizationsApi.list({ page: 1, page_size: 100 }),
@@ -193,19 +179,19 @@ export function CustomerForm() {
         setFormData((prev) => ({ ...prev, organization_id: firstOrg.id }));
       }
     } catch (error) {
-      console.error('Failed to load initial data:', error);
+      logger.error('Failed to load initial data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load form data',
         variant: 'destructive',
       });
     }
-  };
+  }, [isEditMode, toast]);
 
-  const loadOrganizationData = async (orgId: string) => {
+  const loadOrganizationData = useCallback(async (orgId: string) => {
     try {
       const [accountsRes, termsRes] = await Promise.all([
-        accountsApi.list({ organization_id: orgId, page: 1, page_size: 500 }),
+        accountsApi.list({ organization_id: orgId, page: 1, page_size: 100 }),
         paymentTermsApi.getActive({ organization_id: orgId }),
       ]);
       setAccounts(accountsRes.data.items || []);
@@ -217,11 +203,11 @@ export function CustomerForm() {
         setFormData((prev) => ({ ...prev, code: codeRes.data.code }));
       }
     } catch (error) {
-      console.error('Failed to load organization data:', error);
+      logger.error('Failed to load organization data:', error);
     }
-  };
+  }, [isEditMode]);
 
-  const loadCustomer = async (customerId: string) => {
+  const loadCustomer = useCallback(async (customerId: string) => {
     setLoading(true);
     try {
       const response = await customersApi.get(customerId);
@@ -279,7 +265,7 @@ export function CustomerForm() {
         is_active: customer.is_active ?? true,
       });
     } catch (error) {
-      console.error('Failed to load customer:', error);
+      logger.error('Failed to load customer:', error);
       toast({
         title: 'Error',
         description: 'Failed to load customer details',
@@ -289,9 +275,25 @@ export function CustomerForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, toast]);
 
-  const handleChange = (field: string, value: any) => {
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  useEffect(() => {
+    if (isEditMode && id) {
+      loadCustomer(id);
+    }
+  }, [id, isEditMode, loadCustomer]);
+
+  useEffect(() => {
+    if (formData.organization_id) {
+      loadOrganizationData(formData.organization_id);
+    }
+  }, [formData.organization_id, loadOrganizationData]);
+
+  const handleChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -371,13 +373,9 @@ export function CustomerForm() {
         });
       }
       navigate('/admin/ap-ar/customers');
-    } catch (error: any) {
-      console.error('Failed to save customer:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save customer',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      logger.error('Failed to save customer:', error);
+      showErrorToast(error, toast);
     } finally {
       setSaving(false);
     }
@@ -654,10 +652,10 @@ export function CustomerForm() {
                         </SelectTrigger>
                         <SelectContent>
                           {tdsSections
-                            .filter((s) => s.section_code.startsWith('206'))
+                            .filter((section) => section.sectionCode.startsWith('206'))
                             .map((section) => (
                               <SelectItem key={section.id} value={section.id}>
-                                {section.section_code} - {section.description}
+                                {section.sectionCode} - {section.description}
                               </SelectItem>
                             ))}
                         </SelectContent>

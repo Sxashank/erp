@@ -1,20 +1,12 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Save, Calculator, Loader2 } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -24,30 +16,48 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
-  ArrowLeft,
-  Briefcase,
-  Save,
-  Calculator,
-} from 'lucide-react';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useCreateInvestment } from '@/hooks/lending/useTreasuryInvestments';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { formatCurrency } from '@/lib/utils';
+import type { InvestmentCreateRequest } from '@/services/lending/treasuryInvestmentApi';
 
-const investmentSchema = z.object({
-  type: z.string().min(1, 'Investment type is required'),
-  category: z.string().min(1, 'Category is required'),
-  issuer: z.string().min(1, 'Issuer is required'),
-  description: z.string().min(1, 'Description is required'),
-  isin: z.string().optional(),
-  faceValue: z.number().min(1, 'Face value is required'),
-  purchasePrice: z.number().min(1, 'Purchase price is required'),
-  units: z.number().min(1, 'Units must be at least 1'),
-  couponRate: z.number().min(0, 'Coupon rate must be >= 0'),
-  ytm: z.number().min(0, 'YTM must be >= 0'),
-  purchaseDate: z.string().min(1, 'Purchase date is required'),
-  maturityDate: z.string().min(1, 'Maturity date is required'),
-  couponFrequency: z.string().min(1, 'Coupon frequency is required'),
-  broker: z.string().optional(),
-  remarks: z.string().optional(),
-});
+const investmentSchema = z
+  .object({
+    type: z.string().min(1, 'Investment type is required'),
+    category: z.string().min(1, 'Category is required'),
+    issuer: z.string().min(1, 'Issuer is required'),
+    description: z.string().min(1, 'Description is required'),
+    isin: z.string().optional(),
+    faceValue: z.number().positive('Face value must be greater than 0'),
+    purchasePrice: z.number().positive('Purchase price must be greater than 0'),
+    units: z.number().positive('Units must be greater than 0'),
+    couponRate: z.number().min(0, 'Coupon rate must be >= 0'),
+    ytm: z.number().min(0, 'YTM must be >= 0'),
+    purchaseDate: z.string().min(1, 'Purchase date is required'),
+    maturityDate: z.string().optional(),
+    couponFrequency: z.string().min(1, 'Coupon frequency is required'),
+    broker: z.string().optional(),
+    remarks: z.string().optional(),
+  })
+  .superRefine((val, ctx) => {
+    if (val.maturityDate && val.maturityDate < val.purchaseDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Maturity date cannot precede purchase date',
+        path: ['maturityDate'],
+      });
+    }
+  });
 
 type InvestmentFormData = z.infer<typeof investmentSchema>;
 
@@ -76,17 +86,10 @@ const couponFrequencies = [
   { id: 'ZERO', name: 'Zero Coupon' },
 ];
 
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 export default function InvestmentCreate() {
   const navigate = useNavigate();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const createMutation = useCreateInvestment();
 
   const form = useForm<InvestmentFormData>({
     resolver: zodResolver(investmentSchema),
@@ -114,20 +117,47 @@ export default function InvestmentCreate() {
   const units = form.watch('units');
   const couponRate = form.watch('couponRate');
 
-  const totalFaceValue = faceValue * units;
-  const totalPurchaseValue = purchasePrice * units;
-  const annualCouponIncome = (totalFaceValue * couponRate) / 100;
+  const totalFaceValue = Number(faceValue) * Number(units);
+  const totalPurchaseValue = Number(purchasePrice) * Number(units);
+  const annualCouponIncome = (totalFaceValue * Number(couponRate)) / 100;
 
   const onSubmit = async (data: InvestmentFormData) => {
-    setIsSubmitting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    navigate('/admin/treasury/investments');
+    // Money fields go over the wire as strings to preserve Decimal precision
+    // (CLAUDE.md §6.2). The BE coerces them back to Python Decimal.
+    const payload: InvestmentCreateRequest = {
+      type: data.type as InvestmentCreateRequest['type'],
+      category: data.category as InvestmentCreateRequest['category'],
+      issuer: data.issuer,
+      description: data.description,
+      ...(data.isin ? { isin: data.isin } : {}),
+      faceValue: String(data.faceValue),
+      purchasePrice: String(data.purchasePrice),
+      units: String(data.units),
+      couponRate: String(data.couponRate),
+      ytm: String(data.ytm),
+      couponFrequency: data.couponFrequency as InvestmentCreateRequest['couponFrequency'],
+      purchaseDate: data.purchaseDate,
+      ...(data.maturityDate ? { maturityDate: data.maturityDate } : {}),
+      ...(data.broker ? { broker: data.broker } : {}),
+      ...(data.remarks ? { remarks: data.remarks } : {}),
+    };
+
+    try {
+      const created = await createMutation.mutateAsync(payload);
+      toast({
+        title: 'Investment recorded',
+        description: `Investment ${created.investmentNumber} created successfully.`,
+      });
+      navigate('/admin/treasury/investments');
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
+  const isSubmitting = createMutation.isPending;
+
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="New Investment"
         subtitle="Record a new treasury investment"
@@ -139,9 +169,9 @@ export default function InvestmentCreate() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {/* Main Form */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="space-y-6 lg:col-span-2">
               {/* Investment Details */}
               <Card>
                 <CardHeader>
@@ -149,7 +179,7 @@ export default function InvestmentCreate() {
                   <CardDescription>Basic investment information</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="type"
@@ -163,7 +193,7 @@ export default function InvestmentCreate() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {investmentTypes.map(type => (
+                              {investmentTypes.map((type) => (
                                 <SelectItem key={type.id} value={type.id}>
                                   {type.name}
                                 </SelectItem>
@@ -188,16 +218,14 @@ export default function InvestmentCreate() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {categories.map(cat => (
+                              {categories.map((cat) => (
                                 <SelectItem key={cat.id} value={cat.id}>
                                   {cat.name}
                                 </SelectItem>
                               ))}
                             </SelectContent>
                           </Select>
-                          <FormDescription>
-                            As per RBI investment classification
-                          </FormDescription>
+                          <FormDescription>As per RBI investment classification</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -255,7 +283,7 @@ export default function InvestmentCreate() {
                   <CardDescription>Pricing and yield information</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <FormField
                       control={form.control}
                       name="faceValue"
@@ -314,7 +342,7 @@ export default function InvestmentCreate() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <FormField
                       control={form.control}
                       name="couponRate"
@@ -368,7 +396,7 @@ export default function InvestmentCreate() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {couponFrequencies.map(freq => (
+                              {couponFrequencies.map((freq) => (
                                 <SelectItem key={freq.id} value={freq.id}>
                                   {freq.name}
                                 </SelectItem>
@@ -381,7 +409,7 @@ export default function InvestmentCreate() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <FormField
                       control={form.control}
                       name="purchaseDate"
@@ -401,7 +429,7 @@ export default function InvestmentCreate() {
                       name="maturityDate"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Maturity Date</FormLabel>
+                          <FormLabel>Maturity Date (Optional for MFs)</FormLabel>
                           <FormControl>
                             <Input type="date" {...field} />
                           </FormControl>
@@ -462,22 +490,28 @@ export default function InvestmentCreate() {
                 <CardContent className="space-y-4">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Face Value</span>
-                    <span className="font-bold">{formatCurrency(totalFaceValue)}</span>
+                    <span className="font-bold tabular-nums">{formatCurrency(totalFaceValue)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Total Purchase Value</span>
-                    <span className="font-bold">{formatCurrency(totalPurchaseValue)}</span>
+                    <span className="font-bold tabular-nums">
+                      {formatCurrency(totalPurchaseValue)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Premium / (Discount)</span>
-                    <span className={`font-bold ${totalPurchaseValue - totalFaceValue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        totalPurchaseValue - totalFaceValue > 0 ? 'text-red-600' : 'text-green-600'
+                      }`}
+                    >
                       {formatCurrency(totalPurchaseValue - totalFaceValue)}
                     </span>
                   </div>
                   <div className="border-t pt-4">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Annual Coupon Income</span>
-                      <span className="font-bold text-green-600">
+                      <span className="font-bold tabular-nums text-green-600">
                         {formatCurrency(annualCouponIncome)}
                       </span>
                     </div>
@@ -489,10 +523,20 @@ export default function InvestmentCreate() {
                 <CardContent className="pt-6">
                   <div className="space-y-2">
                     <Button type="submit" className="w-full" disabled={isSubmitting}>
-                      <Save className="h-4 w-4 mr-2" />
-                      {isSubmitting ? 'Saving...' : 'Record Investment'}
+                      {isSubmitting ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Save className="mr-2 h-4 w-4" />
+                      )}
+                      Record Investment
                     </Button>
-                    <Button type="button" variant="outline" className="w-full" onClick={() => navigate(-1)}>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => navigate(-1)}
+                      disabled={isSubmitting}
+                    >
                       Cancel
                     </Button>
                   </div>

@@ -1,20 +1,19 @@
-import { useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Plus,
+  Trash2,
+  Save,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
+import { z } from 'zod';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -24,6 +23,15 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -33,15 +41,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  ArrowLeft,
-  Shield,
-  Plus,
-  Trash2,
-  Save,
-  ArrowUp,
-  ArrowDown,
-} from 'lucide-react';
+  approvalsApi,
+  rolesApi,
+  type ApprovalWorkflowPayload,
+  type ApprovalWorkflowType,
+} from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+
+import { logger } from "@/lib/logger";
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -63,67 +71,51 @@ const matrixSchema = z.object({
   description: z.string().optional(),
   transactionType: z.string().min(1, 'Transaction type is required'),
   isActive: z.boolean(),
-  levels: z.array(levelSchema).min(1, 'At least one level is required'),
+  levels: z.array(levelSchema).min(1, 'At least one level is required').max(3, 'Maximum three levels are supported'),
 });
 
 type MatrixFormData = z.infer<typeof matrixSchema>;
 
-// Mock roles
-const roles = [
-  { id: 'ROLE001', name: 'Branch Manager' },
-  { id: 'ROLE002', name: 'Regional Manager' },
-  { id: 'ROLE003', name: 'Finance Manager' },
-  { id: 'ROLE004', name: 'CFO' },
-  { id: 'ROLE005', name: 'CEO' },
-  { id: 'ROLE006', name: 'Board' },
-];
+interface ApprovalRole {
+  id: string;
+  name: string;
+}
 
-// Mock transaction types
-const transactionTypes = [
-  { id: 'GL_POSTING', name: 'GL Posting' },
-  { id: 'JOURNAL_VOUCHER', name: 'Journal Voucher' },
-  { id: 'PAYMENT', name: 'Payment/Receipt' },
+interface RoleApiResponse {
+  id: string;
+  name?: string;
+  code?: string;
+}
+
+const transactionTypes: { id: ApprovalWorkflowType; name: string }[] = [
+  { id: 'FIN_VOUCHER', name: 'Finance Voucher' },
+  { id: 'FIN_JOURNAL', name: 'Journal Voucher' },
+  { id: 'PAYMENT_RELEASE', name: 'Payment Release' },
+  { id: 'PAYROLL_POSTING', name: 'Payroll Posting' },
   { id: 'LOAN_DISBURSEMENT', name: 'Loan Disbursement' },
   { id: 'LOAN_SANCTION', name: 'Loan Sanction' },
-  { id: 'EXPENSE', name: 'Expense Approval' },
-  { id: 'VENDOR_PAYMENT', name: 'Vendor Payment' },
-  { id: 'SALARY', name: 'Salary Processing' },
 ];
-
-// Mock existing matrix for edit mode
-const existingMatrix = {
-  id: '1',
-  name: 'GL Posting Approval',
-  description: 'Approval workflow for GL postings based on amount',
-  transactionType: 'GL_POSTING',
-  isActive: true,
-  levels: [
-    { level: 1, roleId: 'ROLE001', minAmount: 0, maxAmount: 100000, isOptional: false },
-    { level: 2, roleId: 'ROLE003', minAmount: 100000, maxAmount: 500000, isOptional: false },
-    { level: 3, roleId: 'ROLE004', minAmount: 500000, maxAmount: 5000000, isOptional: false },
-    { level: 4, roleId: 'ROLE005', minAmount: 5000000, maxAmount: 999999999, isOptional: false },
-  ],
-};
 
 export default function ApprovalMatrixCreate() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const organizationId = useActiveOrganizationId();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [roles, setRoles] = useState<ApprovalRole[]>([]);
+  const [rolesError, setRolesError] = useState<string | null>(null);
   const isEditMode = !!id;
 
   const form = useForm<MatrixFormData>({
     resolver: zodResolver(matrixSchema),
-    defaultValues: isEditMode
-      ? existingMatrix
-      : {
-          name: '',
-          description: '',
-          transactionType: '',
-          isActive: true,
-          levels: [
-            { level: 1, roleId: '', minAmount: 0, maxAmount: 100000, isOptional: false },
-          ],
-        },
+    defaultValues: {
+      name: '',
+      description: '',
+      transactionType: '',
+      isActive: true,
+      levels: [
+        { level: 1, roleId: '', minAmount: 0, maxAmount: 100000, isOptional: false },
+      ],
+    },
   });
 
   const { fields, append, remove, move } = useFieldArray({
@@ -131,16 +123,129 @@ export default function ApprovalMatrixCreate() {
     name: 'levels',
   });
 
+  useEffect(() => {
+    let isMounted = true;
+    rolesApi
+      .list()
+      .then((response) => {
+        if (!isMounted) return;
+        const data: RoleApiResponse[] = Array.isArray(response.data)
+          ? response.data
+          : response.data?.items || [];
+        setRoles(
+          data.map((role) => ({
+            id: role.id,
+            name: role.name || role.code || role.id,
+          })),
+        );
+      })
+      .catch(() => {
+        if (isMounted) {
+          setRolesError('Unable to load approver roles.');
+        }
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isEditMode || !id) return;
+    approvalsApi
+      .getWorkflow(id)
+      .then((response) => {
+        const workflow = response.data;
+        const sortedLevels = [...workflow.levels].sort(
+          (a, b) => a.levelNumber - b.levelNumber,
+        );
+        form.reset({
+          name: workflow.workflowName,
+          description: workflow.description || '',
+          transactionType: workflow.workflowType,
+          isActive: workflow.isActive,
+          levels: sortedLevels.map((level, index) => {
+            const nextLevel = sortedLevels[index + 1];
+            const minAmount = Number(level.thresholdAmount || 0);
+            return {
+              level: level.levelNumber,
+              roleId: level.approverRoles?.[0] || '',
+              minAmount,
+              maxAmount: nextLevel ? Number(nextLevel.thresholdAmount || 0) - 1 : 999999999,
+              isOptional: false,
+            };
+          }),
+        });
+      })
+      .catch(() => {
+        form.setError('root', {
+          type: 'manual',
+          message: 'Unable to load approval matrix rule.',
+        });
+      });
+  }, [form, id, isEditMode]);
+
   const onSubmit = async (data: MatrixFormData) => {
+    if (!organizationId) {
+      form.setError('root', {
+        type: 'manual',
+        message: 'Select an organization before saving approval rules.',
+      });
+      return;
+    }
     setIsSubmitting(true);
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSubmitting(false);
-    navigate('/admin/accounting/approval-matrix');
+    try {
+      const payload: ApprovalWorkflowPayload = {
+        organizationId,
+        workflowType: data.transactionType as ApprovalWorkflowType,
+        workflowName: data.name,
+        description: data.description || null,
+        thresholdAmount: Math.min(...data.levels.map((level) => level.minAmount)),
+        thresholdCurrency: 'INR',
+        approvalLevels: data.levels.length,
+        isSequential: true,
+        autoApproveOnTimeout: false,
+        allowSelfApproval: false,
+        notifyOnSubmit: true,
+        notifyOnApproval: true,
+        notifyOnRejection: true,
+        levels: data.levels.map((level, index) => {
+          const role = roles.find((item) => item.id === level.roleId);
+          return {
+            levelNumber: index + 1,
+            levelName: role?.name || `Level ${index + 1}`,
+            approverRoles: [level.roleId],
+            approverUsers: null,
+            minApprovers: 1,
+            thresholdAmount: level.minAmount,
+            escalationHours: null,
+            escalationUserId: null,
+          };
+        }),
+      };
+      if (isEditMode && id) {
+        const { organizationId: _organizationId, workflowType: _workflowType, ...updatePayload } = payload;
+        await approvalsApi.updateWorkflow(id, {
+          ...updatePayload,
+          isActive: data.isActive,
+        });
+      } else {
+        await approvalsApi.createWorkflow(payload);
+      }
+      navigate('/admin/accounting/approval-matrix');
+    } catch (error) {
+      logger.error('Failed to save approval matrix:', error);
+      form.setError('root', {
+        type: 'manual',
+        message: 'Unable to save approval matrix. Check for duplicate transaction type or permission issues.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addLevel = () => {
     const currentLevels = form.getValues('levels');
+    if (currentLevels.length >= 3) return;
     const lastLevel = currentLevels[currentLevels.length - 1];
     append({
       level: currentLevels.length + 1,
@@ -178,6 +283,25 @@ export default function ApprovalMatrixCreate() {
         ]}
       />
 
+      <Card className="border-emerald-200 bg-emerald-50">
+        <CardContent className="pt-6 text-sm text-emerald-900">
+          Approval matrix rules are persisted in the core maker-checker workflow engine and apply
+          server-side for configured transaction types.
+        </CardContent>
+      </Card>
+      {rolesError && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6 text-sm text-red-900">{rolesError}</CardContent>
+        </Card>
+      )}
+      {form.formState.errors.root?.message && (
+        <Card className="border-red-200 bg-red-50">
+          <CardContent className="pt-6 text-sm text-red-900">
+            {form.formState.errors.root.message}
+          </CardContent>
+        </Card>
+      )}
+
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Basic Information */}
@@ -208,7 +332,11 @@ export default function ApprovalMatrixCreate() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Transaction Type</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                        disabled={isEditMode}
+                      >
                         <FormControl>
                           <SelectTrigger>
                             <SelectValue placeholder="Select transaction type" />

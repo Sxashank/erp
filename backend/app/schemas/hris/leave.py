@@ -5,7 +5,8 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 from app.core.constants import (
     LeaveCategory,
@@ -18,7 +19,7 @@ from app.core.constants import (
 # ============================================
 # Leave Type Schemas
 # ============================================
-class LeaveTypeBase(BaseModel):
+class LeaveTypeBase(CamelSchema):
     """Base schema for leave type."""
     leave_code: str = Field(..., max_length=20)
     leave_name: str = Field(..., max_length=100)
@@ -98,7 +99,7 @@ class LeaveTypeCreate(LeaveTypeBase):
     organization_id: UUID
 
 
-class LeaveTypeUpdate(BaseModel):
+class LeaveTypeUpdate(CamelSchema):
     """Schema for updating leave type."""
     leave_name: Optional[str] = None
     category: Optional[LeaveCategory] = None
@@ -143,14 +144,11 @@ class LeaveTypeResponse(LeaveTypeBase):
     id: UUID
     organization_id: UUID
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Leave Balance Schemas
 # ============================================
-class LeaveBalanceBase(BaseModel):
+class LeaveBalanceBase(CamelSchema):
     """Base schema for leave balance."""
     year: int
     opening_balance: Decimal = Field(0, ge=0)
@@ -168,7 +166,7 @@ class LeaveBalanceCreate(LeaveBalanceBase):
     leave_type_id: UUID
 
 
-class LeaveBalanceUpdate(BaseModel):
+class LeaveBalanceUpdate(CamelSchema):
     """Schema for updating leave balance."""
     opening_balance: Optional[Decimal] = None
     accrued: Optional[Decimal] = None
@@ -188,11 +186,8 @@ class LeaveBalanceResponse(LeaveBalanceBase):
     leave_type_name: Optional[str] = None
     leave_type_code: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class LeaveBalanceSummary(BaseModel):
+class LeaveBalanceSummary(CamelSchema):
     """Summary of all leave balances for an employee."""
     employee_id: UUID
     year: int
@@ -202,7 +197,7 @@ class LeaveBalanceSummary(BaseModel):
 # ============================================
 # Leave Application Schemas
 # ============================================
-class LeaveApplicationBase(BaseModel):
+class LeaveApplicationBase(CamelSchema):
     """Base schema for leave application."""
     leave_type_id: UUID
     from_date: date
@@ -221,7 +216,7 @@ class LeaveApplicationCreate(LeaveApplicationBase):
     employee_id: UUID
 
 
-class LeaveApplicationUpdate(BaseModel):
+class LeaveApplicationUpdate(CamelSchema):
     """Schema for updating leave application."""
     from_date: Optional[date] = None
     to_date: Optional[date] = None
@@ -233,17 +228,17 @@ class LeaveApplicationUpdate(BaseModel):
     attachments: Optional[List[str]] = None
 
 
-class LeaveApplicationApprove(BaseModel):
+class LeaveApplicationApprove(CamelSchema):
     """Schema for approving leave application."""
     remarks: Optional[str] = None
 
 
-class LeaveApplicationReject(BaseModel):
+class LeaveApplicationReject(CamelSchema):
     """Schema for rejecting leave application."""
     reason: str = Field(..., min_length=10)
 
 
-class LeaveApplicationCancel(BaseModel):
+class LeaveApplicationCancel(CamelSchema):
     """Schema for cancelling leave application."""
     reason: str = Field(..., min_length=10)
 
@@ -271,11 +266,8 @@ class LeaveApplicationResponse(LeaveApplicationBase):
     leave_type_name: Optional[str] = None
     leave_type_code: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class LeaveApplicationFilters(BaseModel):
+class LeaveApplicationFilters(CamelSchema):
     """Filters for leave application list."""
     organization_id: Optional[UUID] = None
     employee_id: Optional[UUID] = None
@@ -290,7 +282,7 @@ class LeaveApplicationFilters(BaseModel):
 # ============================================
 # Leave Encashment Schemas
 # ============================================
-class LeaveEncashmentBase(BaseModel):
+class LeaveEncashmentBase(CamelSchema):
     """Base schema for leave encashment."""
     leave_type_id: UUID
     year: int
@@ -322,5 +314,3 @@ class LeaveEncashmentResponse(LeaveEncashmentBase):
     employee_name: Optional[str] = None
     leave_type_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True

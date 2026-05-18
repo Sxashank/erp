@@ -2,112 +2,124 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
+from app.models.lending.enums import DisbursementStatus
+from app.schemas.base import CamelSchema, PaginatedResponse
+from app.schemas.lending.loan_account import DisbursementListResponse
 from app.services.lending import DisbursementService
 
 router = APIRouter()
 
 
 # Request/Response Schemas
-class DisbursementCreateRequest(BaseModel):
+class DisbursementCreateRequest(CamelSchema):
     """Request to create a disbursement."""
+
     loan_account_id: UUID
     requested_amount: Decimal = Field(..., gt=0)
     beneficiary_name: str
-    beneficiary_account: str
+    beneficiary_account_number: str
     beneficiary_ifsc: str
     disbursement_mode: str = Field(default="RTGS")
-    scheduled_date: Optional[date] = None
-    purpose: Optional[str] = None
-    beneficiary_bank: Optional[str] = None
-    bank_account_id: Optional[UUID] = None
-    milestone_id: Optional[UUID] = None
+    scheduled_date: date | None = None
+    purpose: str | None = None
+    beneficiary_bank: str | None = None
+    bank_account_id: UUID | None = None
+    milestone_id: UUID | None = None
 
 
-class DisbursementResponse(BaseModel):
+class DisbursementResponse(CamelSchema):
     """Disbursement response."""
+
     id: UUID
     disbursement_reference: str
     loan_account_id: UUID
     disbursement_number: int
     requested_amount: Decimal
-    approved_amount: Optional[Decimal]
-    disbursed_amount: Optional[Decimal]
+    approved_amount: Decimal | None
+    disbursed_amount: Decimal | None
     status: str
     disbursement_mode: str
     beneficiary_name: str
     request_date: date
-    scheduled_date: Optional[date]
-    disbursement_date: Optional[date]
+    scheduled_date: date | None
+    disbursement_date: date | None
     conditions_verified: bool
 
 
-class VerifyConditionsRequest(BaseModel):
+class VerifyConditionsRequest(CamelSchema):
     """Request to verify disbursement conditions."""
+
     disbursement_id: UUID
-    verification_notes: Optional[str] = None
+    verification_notes: str | None = None
 
 
-class ApprovalRequest(BaseModel):
+class ApprovalRequest(CamelSchema):
     """Request to approve disbursement."""
+
     disbursement_id: UUID
-    approved_amount: Optional[Decimal] = None
-    remarks: Optional[str] = None
+    approved_amount: Decimal | None = None
+    remarks: str | None = None
 
 
-class ProcessRequest(BaseModel):
+class ProcessRequest(CamelSchema):
     """Request to process disbursement."""
+
     disbursement_id: UUID
     disbursed_amount: Decimal = Field(..., gt=0)
-    disbursement_date: Optional[date] = None
-    value_date: Optional[date] = None
-    utr_number: Optional[str] = None
-    cheque_number: Optional[str] = None
+    disbursement_date: date | None = None
+    value_date: date | None = None
+    utr_number: str | None = None
+    cheque_number: str | None = None
     disbursement_charges: Decimal = Field(default=Decimal("0"))
 
 
-class RejectRequest(BaseModel):
+class RejectRequest(CamelSchema):
     """Request to reject disbursement."""
+
     disbursement_id: UUID
     rejection_reason: str
 
 
-class ReverseRequest(BaseModel):
+class ReverseRequest(CamelSchema):
     """Request to reverse disbursement."""
+
     disbursement_id: UUID
     reversal_reason: str
-    reversal_date: Optional[date] = None
+    reversal_date: date | None = None
 
 
-class TrancheItem(BaseModel):
+class TrancheItem(CamelSchema):
     """Single tranche in multi-tranche disbursement."""
+
     amount: Decimal = Field(..., gt=0)
     beneficiary_name: str
     beneficiary_account: str
     beneficiary_ifsc: str
     mode: str = Field(default="RTGS")
-    scheduled_date: Optional[date] = None
-    purpose: Optional[str] = None
-    beneficiary_bank: Optional[str] = None
-    milestone_id: Optional[UUID] = None
+    scheduled_date: date | None = None
+    purpose: str | None = None
+    beneficiary_bank: str | None = None
+    milestone_id: UUID | None = None
 
 
-class TrancheRequest(BaseModel):
+class TrancheRequest(CamelSchema):
     """Multi-tranche disbursement request."""
+
     loan_account_id: UUID
-    tranches: List[TrancheItem]
+    tranches: list[TrancheItem]
 
 
-class DisbursementSummaryResponse(BaseModel):
+class DisbursementSummaryResponse(CamelSchema):
     """Disbursement summary response."""
+
     from_date: date
     to_date: date
     disbursed: dict
@@ -116,12 +128,67 @@ class DisbursementSummaryResponse(BaseModel):
     approved: dict
 
 
+class DisbursementActionLoanAccount(CamelSchema):
+    """Loan balance fields returned after a disbursement action."""
+
+    id: UUID
+    total_disbursed: Decimal
+    undisbursed: Decimal | None = None
+    principal_outstanding: Decimal
+    status: str
+
+
+class DisbursementActionResponse(CamelSchema):
+    """Acknowledgement for manual disbursement workflow actions."""
+
+    disbursement_id: UUID
+    status: str
+    message: str
+    approved_amount: Decimal | None = None
+    approval_date: date | None = None
+    disbursed_amount: Decimal | None = None
+    net_disbursement: Decimal | None = None
+    utr_number: str | None = None
+    loan_account: DisbursementActionLoanAccount | None = None
+
+
 # Endpoints
-@router.post("/", response_model=DisbursementResponse)
+@router.get(
+    "",
+    response_model=PaginatedResponse[DisbursementListResponse],
+    response_model_by_alias=True,
+)
+async def list_disbursements(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    search: str | None = Query(None),
+    status: DisbursementStatus | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+):
+    """Paginated list of disbursements scoped to caller's org."""
+    service = DisbursementService(db)
+    skip = (page - 1) * page_size
+    items, total = await service.list_disbursements_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        search=search,
+        status=status,
+    )
+    list_items = [DisbursementListResponse.model_validate(d) for d in items]
+    return PaginatedResponse.create(list_items, total, page, page_size)
+
+
+@router.post(
+    "/",
+    response_model=DisbursementResponse,
+    response_model_by_alias=True,
+)
 async def create_disbursement(
     request: DisbursementCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Create a new disbursement request."""
     service = DisbursementService(db)
@@ -130,7 +197,7 @@ async def create_disbursement(
         loan_account_id=request.loan_account_id,
         requested_amount=request.requested_amount,
         beneficiary_name=request.beneficiary_name,
-        beneficiary_account=request.beneficiary_account,
+        beneficiary_account=request.beneficiary_account_number,
         beneficiary_ifsc=request.beneficiary_ifsc,
         disbursement_mode=request.disbursement_mode,
         scheduled_date=request.scheduled_date,
@@ -162,8 +229,8 @@ async def create_disbursement(
 @router.post("/verify-conditions")
 async def verify_conditions(
     request: VerifyConditionsRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Verify pre-disbursement conditions."""
     service = DisbursementService(db)
@@ -182,11 +249,15 @@ async def verify_conditions(
     }
 
 
-@router.post("/approve")
+@router.post(
+    "/approve",
+    response_model=DisbursementActionResponse,
+    response_model_by_alias=True,
+)
 async def approve_disbursement(
     request: ApprovalRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Approve a disbursement request."""
     service = DisbursementService(db)
@@ -199,7 +270,7 @@ async def approve_disbursement(
     )
 
     return {
-        "disbursement_id": str(disbursement.id),
+        "disbursement_id": disbursement.id,
         "status": disbursement.status.name,
         "approved_amount": disbursement.approved_amount,
         "approval_date": disbursement.approval_date,
@@ -207,11 +278,15 @@ async def approve_disbursement(
     }
 
 
-@router.post("/reject")
+@router.post(
+    "/reject",
+    response_model=DisbursementActionResponse,
+    response_model_by_alias=True,
+)
 async def reject_disbursement(
     request: RejectRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Reject a disbursement request."""
     service = DisbursementService(db)
@@ -223,17 +298,21 @@ async def reject_disbursement(
     )
 
     return {
-        "disbursement_id": str(disbursement.id),
+        "disbursement_id": disbursement.id,
         "status": disbursement.status.name,
         "message": "Disbursement rejected",
     }
 
 
-@router.post("/process")
+@router.post(
+    "/process",
+    response_model=DisbursementActionResponse,
+    response_model_by_alias=True,
+)
 async def process_disbursement(
     request: ProcessRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Process an approved disbursement."""
     service = DisbursementService(db)
@@ -250,13 +329,13 @@ async def process_disbursement(
     )
 
     return {
-        "disbursement_id": str(disbursement.id),
+        "disbursement_id": disbursement.id,
         "status": disbursement.status.name,
         "disbursed_amount": disbursement.disbursed_amount,
         "net_disbursement": disbursement.net_disbursement,
         "utr_number": disbursement.utr_number,
         "loan_account": {
-            "id": str(loan.id),
+            "id": loan.id,
             "total_disbursed": loan.total_disbursed_amount,
             "undisbursed": loan.undisbursed_amount,
             "principal_outstanding": loan.principal_outstanding,
@@ -270,8 +349,8 @@ async def process_disbursement(
 async def cancel_disbursement(
     disbursement_id: UUID = Query(..., description="Disbursement ID"),
     cancellation_reason: str = Query(..., description="Reason for cancellation"),
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Cancel a pending or approved disbursement."""
     service = DisbursementService(db)
@@ -292,8 +371,8 @@ async def cancel_disbursement(
 @router.post("/reverse")
 async def reverse_disbursement(
     request: ReverseRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Reverse a completed disbursement."""
     service = DisbursementService(db)
@@ -321,8 +400,8 @@ async def reverse_disbursement(
 @router.post("/tranches")
 async def create_tranche_disbursements(
     request: TrancheRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Create multiple tranche disbursements."""
     service = DisbursementService(db)
@@ -354,9 +433,9 @@ async def create_tranche_disbursements(
 @router.get("/loan/{loan_account_id}")
 async def get_disbursements_by_loan(
     loan_account_id: UUID,
-    status: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    status: str | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Get disbursements for a loan account."""
     service = DisbursementService(db)
@@ -389,8 +468,8 @@ async def get_disbursements_by_loan(
 
 @router.get("/pending")
 async def get_pending_disbursements(
-    disb_status: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    disb_status: str | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get pending disbursements for organization."""
@@ -408,11 +487,15 @@ async def get_pending_disbursements(
     }
 
 
-@router.get("/summary", response_model=DisbursementSummaryResponse)
+@router.get(
+    "/summary",
+    response_model=DisbursementSummaryResponse,
+    response_model_by_alias=True,
+)
 async def get_disbursement_summary(
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
+    from_date: date | None = None,
+    to_date: date | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get disbursement summary for organization."""

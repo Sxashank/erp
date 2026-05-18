@@ -2,8 +2,6 @@
  * Vendor Purchase Order List
  */
 
-import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
 import {
   ShoppingCart,
   Search,
@@ -16,11 +14,22 @@ import {
   Clock,
   AlertCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -29,17 +38,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorPOList() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -70,7 +73,7 @@ export default function VendorPOList() {
       setPurchaseOrders(response.data.items);
       setTotal(response.data.total);
     } catch (error) {
-      console.error('Failed to fetch POs:', error);
+      logger.error('Failed to fetch POs:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -233,9 +236,9 @@ export default function VendorPOList() {
                 {purchaseOrders.map((po) => (
                   <TableRow key={po.id}>
                     <TableCell className="font-medium">{po.po_number}</TableCell>
-                    <TableCell>{new Date(po.po_date).toLocaleDateString()}</TableCell>
+                    <TableCell><DateDisplay date={po.po_date} /></TableCell>
                     <TableCell>
-                      {po.delivery_date ? new Date(po.delivery_date).toLocaleDateString() : '-'}
+                      <DateDisplay date={po.delivery_date} />
                     </TableCell>
                     <TableCell className="text-right">{formatCurrency(po.total_amount)}</TableCell>
                     <TableCell>{getStatusBadge(po)}</TableCell>

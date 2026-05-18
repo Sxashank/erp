@@ -202,7 +202,7 @@ class FixedDepositService:
         )
         self.db.add(transaction)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fd)
 
         return await self.get_fd(fd.id)
@@ -236,7 +236,7 @@ class FixedDepositService:
         for field, value in update_data.items():
             setattr(fd, field, value)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fd)
         return fd
 
@@ -255,7 +255,7 @@ class FixedDepositService:
         fd.approved_by_user_id = user_id
         fd.approved_at = datetime.utcnow()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fd)
         return fd
 
@@ -465,7 +465,7 @@ class FixedDepositService:
         fd.closure_amount = closure_amount
         fd.closure_remarks = request.remarks
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fd)
         return fd
 
@@ -533,7 +533,7 @@ class FixedDepositService:
         )
         self.db.add(transaction)
 
-        await self.db.commit()
+        await self.db.flush()
         return new_fd
 
     async def add_nominee(
@@ -545,7 +545,7 @@ class FixedDepositService:
             **data.model_dump(),
         )
         self.db.add(nominee)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(nominee)
         return nominee
 
@@ -559,7 +559,7 @@ class FixedDepositService:
             return False
 
         await self.db.delete(nominee)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
 
@@ -664,7 +664,7 @@ class FDInterestService:
             processed += 1
             total_interest += interest_amount
 
-        await self.db.commit()
+        await self.db.flush()
 
         return {
             "processed": processed,
@@ -741,7 +741,7 @@ class FDInterestService:
             processed += 1
             total_payout += unpaid_interest
 
-        await self.db.commit()
+        await self.db.flush()
 
         return {
             "processed": processed,

@@ -105,7 +105,7 @@ class NotificationService:
             entity_reference=entity_reference,
             action_url=action_url,
             action_label=action_label,
-            metadata=metadata,
+            extra_data=metadata,
             scheduled_at=scheduled_at,
             expires_at=expires_at,
             created_by=created_by,
@@ -118,7 +118,7 @@ class NotificationService:
         if not scheduled_at:
             await self.send_notification(notification)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(notification)
 
         return notification
@@ -342,6 +342,47 @@ class NotificationService:
         )
         return result.scalar_one_or_none()
 
+    async def get_delivery_logs(
+        self,
+        organization_id: UUID,
+        notification_id: Optional[UUID] = None,
+        channel: Optional[NotificationChannel] = None,
+        status: Optional[NotificationStatus] = None,
+        skip: int = 0,
+        limit: int = 50,
+    ) -> tuple[list[tuple[NotificationLog, Optional[str]]], int]:
+        """Get delivery logs for the current tenant."""
+        conditions = [Notification.organization_id == organization_id]
+
+        if notification_id:
+            conditions.append(NotificationLog.notification_id == notification_id)
+        if channel:
+            conditions.append(NotificationLog.channel == channel)
+        if status:
+            conditions.append(NotificationLog.status == status)
+
+        base_query = (
+            select(NotificationLog, Notification.title)
+            .join(Notification, Notification.id == NotificationLog.notification_id)
+            .where(and_(*conditions))
+        )
+
+        count_result = await self.db.execute(
+            select(func.count())
+            .select_from(NotificationLog)
+            .join(Notification, Notification.id == NotificationLog.notification_id)
+            .where(and_(*conditions))
+        )
+        total = count_result.scalar_one()
+
+        result = await self.db.execute(
+            base_query
+            .order_by(NotificationLog.attempted_at.desc(), NotificationLog.id.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.all()), total
+
     async def get_user_notifications(
         self,
         user_id: UUID,
@@ -408,7 +449,7 @@ class NotificationService:
         if notification:
             notification.read_at = datetime.now(timezone.utc)
             notification.status = NotificationStatus.READ
-            await self.db.commit()
+            await self.db.flush()
             return True
 
         return False
@@ -429,7 +470,7 @@ class NotificationService:
                 status=NotificationStatus.READ,
             )
         )
-        await self.db.commit()
+        await self.db.flush()
         return result.rowcount
 
     async def get_unread_count(self, user_id: UUID, organization_id: UUID) -> int:
@@ -460,7 +501,7 @@ class NotificationService:
 
         if notification:
             notification.soft_delete(user_id)
-            await self.db.commit()
+            await self.db.flush()
             return True
 
         return False
@@ -639,6 +680,6 @@ class NotificationService:
         if quiet_hours_end is not None:
             preference.quiet_hours_end = quiet_hours_end
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(preference)
         return preference

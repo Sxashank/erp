@@ -6,84 +6,103 @@ import { z } from 'zod';
 
 // Enums
 export const interestTypeSchema = z.enum(['FIXED', 'FLOATING']);
-export const repaymentFrequencySchema = z.enum(['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY', 'BULLET']);
-export const repaymentModeSchema = z.enum(['EMI', 'STRUCTURED', 'BULLET', 'BALLOON', 'STEP_UP', 'STEP_DOWN']);
+export const repaymentFrequencySchema = z.enum([
+  'MONTHLY',
+  'QUARTERLY',
+  'HALF_YEARLY',
+  'YEARLY',
+  'BULLET',
+]);
+export const repaymentModeSchema = z.enum([
+  'EMI',
+  'STRUCTURED',
+  'BULLET',
+  'BALLOON',
+  'STEP_UP',
+  'STEP_DOWN',
+]);
 
 // ============== Application Step Schemas ==============
 
 // Step 1: Entity & Product Selection
 export const applicationStep1Schema = z.object({
-  entity_id: z.string().uuid('Please select an entity'),
-  product_id: z.string().uuid('Please select a product'),
+  entityId: z.string().uuid('Please select an entity'),
+  productId: z.string().uuid('Please select a product'),
 });
 
 // Step 2: Loan Details
 export const applicationStep2Schema = z.object({
-  requested_amount: z.number()
+  requestedAmount: z
+    .number()
     .positive('Amount must be greater than 0')
     .max(100000000000, 'Amount exceeds maximum limit (1000 Cr)'),
-  requested_tenure_months: z.number()
+  requestedTenureMonths: z
+    .number()
     .int('Tenure must be a whole number')
     .min(1, 'Minimum tenure is 1 month')
     .max(360, 'Maximum tenure is 360 months'),
-  purpose: z.string()
+  purpose: z
+    .string()
     .min(10, 'Purpose must be at least 10 characters')
     .max(500, 'Purpose must not exceed 500 characters'),
-  interest_type: interestTypeSchema.optional(),
-  proposed_rate: z.number()
-    .positive()
-    .max(50, 'Rate cannot exceed 50%')
-    .optional(),
-  moratorium_months: z.number()
+  preferredInterestType: interestTypeSchema.optional(),
+  proposedRate: z.number().positive().max(50, 'Rate cannot exceed 50%').optional(),
+  requestedMoratoriumMonths: z
+    .number()
     .int()
     .nonnegative()
     .max(36, 'Maximum moratorium is 36 months')
     .optional()
     .default(0),
-  repayment_frequency: repaymentFrequencySchema.optional(),
+  preferredRepaymentFrequency: repaymentFrequencySchema.optional(),
 });
 
 // Step 3: Project Details (for Project Finance)
-export const applicationStep3Schema = z.object({
-  project_name: z.string().min(2).max(200).optional(),
-  project_cost: z.number().positive().optional(),
-  promoter_contribution: z.number().nonnegative().optional(),
-  bank_finance: z.number().nonnegative().optional(),
-  project_start_date: z.string().optional(),
-  project_end_date: z.string().optional(),
-  milestones: z.array(
-    z.object({
-      milestone_name: z.string().min(2).max(100),
-      description: z.string().max(500).optional(),
-      expected_completion_date: z.string().optional(),
-      disbursement_percent: z.number().min(0).max(100),
-    })
-  ).optional(),
-}).superRefine((data, ctx) => {
-  // Validate promoter contribution + bank finance = project cost
-  if (data.project_cost && data.promoter_contribution && data.bank_finance) {
-    const total = data.promoter_contribution + data.bank_finance;
-    if (Math.abs(total - data.project_cost) > 1) { // Allow 1 rupee variance
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Promoter contribution + Bank finance must equal Project cost',
-        path: ['bank_finance'],
-      });
+export const applicationStep3Schema = z
+  .object({
+    projectName: z.string().min(2).max(200).optional(),
+    projectCost: z.number().positive().optional(),
+    promoterContribution: z.number().nonnegative().optional(),
+    bankFinance: z.number().nonnegative().optional(),
+    projectStartDate: z.string().optional(),
+    projectCompletionDate: z.string().optional(),
+    milestones: z
+      .array(
+        z.object({
+          milestoneName: z.string().min(2).max(100),
+          description: z.string().max(500).optional(),
+          expectedCompletionDate: z.string().optional(),
+          disbursementPercent: z.number().min(0).max(100),
+        }),
+      )
+      .optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Validate promoter contribution + bank finance = project cost
+    if (data.projectCost && data.promoterContribution && data.bankFinance) {
+      const total = data.promoterContribution + data.bankFinance;
+      if (Math.abs(total - data.projectCost) > 1) {
+        // Allow 1 rupee variance
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'Promoter contribution + Bank finance must equal Project cost',
+          path: ['bankFinance'],
+        });
+      }
     }
-  }
 
-  // Validate milestones total = 100%
-  if (data.milestones && data.milestones.length > 0) {
-    const totalPercent = data.milestones.reduce((sum, m) => sum + m.disbursement_percent, 0);
-    if (Math.abs(totalPercent - 100) > 0.01) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: `Milestone disbursement percentages must total 100% (current: ${totalPercent.toFixed(2)}%)`,
-        path: ['milestones'],
-      });
+    // Validate milestones total = 100%
+    if (data.milestones && data.milestones.length > 0) {
+      const totalPercent = data.milestones.reduce((sum, m) => sum + m.disbursementPercent, 0);
+      if (Math.abs(totalPercent - 100) > 0.01) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Milestone disbursement percentages must total 100% (current: ${totalPercent.toFixed(2)}%)`,
+          path: ['milestones'],
+        });
+      }
     }
-  }
-});
+  });
 
 // Step 4: Security/Collateral
 export const securityTypeSchema = z.enum(['PRIMARY', 'COLLATERAL']);
@@ -147,21 +166,21 @@ export const applicationStep6Schema = z.object({
 // ============== Full Application Schema ==============
 
 export const createApplicationSchema = z.object({
-  entity_id: z.string().uuid(),
-  product_id: z.string().uuid(),
-  requested_amount: z.number().positive(),
-  requested_tenure_months: z.number().int().positive(),
+  entityId: z.string().uuid(),
+  productId: z.string().uuid(),
+  requestedAmount: z.number().positive(),
+  requestedTenureMonths: z.number().int().positive(),
   purpose: z.string().min(10).max(500),
 
   // Optional fields
-  project_name: z.string().optional(),
-  project_cost: z.number().positive().optional(),
-  promoter_contribution: z.number().nonnegative().optional(),
-  bank_finance: z.number().nonnegative().optional(),
-  interest_type: interestTypeSchema.optional(),
-  proposed_rate: z.number().positive().optional(),
-  moratorium_months: z.number().int().nonnegative().optional(),
-  repayment_frequency: repaymentFrequencySchema.optional(),
+  projectName: z.string().optional(),
+  projectCost: z.number().positive().optional(),
+  promoterContribution: z.number().nonnegative().optional(),
+  bankFinance: z.number().nonnegative().optional(),
+  preferredInterestType: interestTypeSchema.optional(),
+  proposedRate: z.number().positive().optional(),
+  requestedMoratoriumMonths: z.number().int().nonnegative().optional(),
+  preferredRepaymentFrequency: repaymentFrequencySchema.optional(),
 });
 
 export const updateApplicationSchema = createApplicationSchema.partial();
@@ -180,12 +199,12 @@ export const applicationFeeSchema = z.object({
 // ============== Workflow Schema ==============
 
 export const submitApplicationSchema = z.object({
-  application_id: z.string().uuid(),
+  applicationId: z.string().uuid(),
   remarks: z.string().max(500).optional(),
 });
 
 export const approveApplicationSchema = z.object({
-  application_id: z.string().uuid(),
+  applicationId: z.string().uuid(),
   remarks: z.string().min(1, 'Remarks are required').max(1000),
   action: z.enum(['APPROVE', 'REJECT', 'RETURN']),
 });

@@ -5,7 +5,8 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr, field_validator
+from pydantic import Field, EmailStr, field_validator
+from app.schemas.base import CamelSchema
 
 from app.core.constants import (
     Gender,
@@ -24,7 +25,7 @@ from app.core.pii import MaskedPIIModel
 # ============================================
 # Address Schema
 # ============================================
-class AddressSchema(BaseModel):
+class AddressSchema(CamelSchema):
     """Address schema for JSONB storage."""
     line1: str = Field(..., max_length=200)
     line2: Optional[str] = Field(None, max_length=200)
@@ -37,7 +38,7 @@ class AddressSchema(BaseModel):
 # ============================================
 # Employee Document Schemas
 # ============================================
-class EmployeeDocumentBase(BaseModel):
+class EmployeeDocumentBase(CamelSchema):
     """Base schema for employee document."""
     document_type: DocumentType
     document_number: Optional[str] = Field(None, max_length=100)
@@ -55,7 +56,7 @@ class EmployeeDocumentCreate(EmployeeDocumentBase):
     pass
 
 
-class EmployeeDocumentUpdate(BaseModel):
+class EmployeeDocumentUpdate(CamelSchema):
     """Schema for updating employee document."""
     document_type: Optional[DocumentType] = None
     document_number: Optional[str] = None
@@ -76,14 +77,11 @@ class EmployeeDocumentResponse(EmployeeDocumentBase):
     is_verified: bool
     verified_at: Optional[date] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Employee Family Schemas
 # ============================================
-class EmployeeFamilyBase(BaseModel):
+class EmployeeFamilyBase(CamelSchema):
     """Base schema for employee family."""
     relation: FamilyRelation
     name: str = Field(..., max_length=200)
@@ -103,7 +101,7 @@ class EmployeeFamilyCreate(EmployeeFamilyBase):
     pass
 
 
-class EmployeeFamilyUpdate(BaseModel):
+class EmployeeFamilyUpdate(CamelSchema):
     """Schema for updating employee family."""
     relation: Optional[FamilyRelation] = None
     name: Optional[str] = None
@@ -123,14 +121,11 @@ class EmployeeFamilyResponse(EmployeeFamilyBase):
     id: UUID
     employee_id: UUID
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Employee Bank Account Schemas
 # ============================================
-class EmployeeBankAccountBase(BaseModel):
+class EmployeeBankAccountBase(CamelSchema):
     """Base schema for employee bank account."""
     bank_name: str = Field(..., max_length=200)
     branch_name: Optional[str] = Field(None, max_length=200)
@@ -147,7 +142,7 @@ class EmployeeBankAccountCreate(EmployeeBankAccountBase):
     pass
 
 
-class EmployeeBankAccountUpdate(BaseModel):
+class EmployeeBankAccountUpdate(CamelSchema):
     """Schema for updating employee bank account."""
     bank_name: Optional[str] = None
     branch_name: Optional[str] = None
@@ -167,14 +162,11 @@ class EmployeeBankAccountResponse(EmployeeBankAccountBase):
     is_verified: bool
     verified_at: Optional[date] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Employee Education Schemas
 # ============================================
-class EmployeeEducationBase(BaseModel):
+class EmployeeEducationBase(CamelSchema):
     """Base schema for employee education."""
     level: EducationLevel
     degree_name: str = Field(..., max_length=200)
@@ -194,7 +186,7 @@ class EmployeeEducationCreate(EmployeeEducationBase):
     pass
 
 
-class EmployeeEducationUpdate(BaseModel):
+class EmployeeEducationUpdate(CamelSchema):
     """Schema for updating employee education."""
     level: Optional[EducationLevel] = None
     degree_name: Optional[str] = None
@@ -214,14 +206,11 @@ class EmployeeEducationResponse(EmployeeEducationBase):
     id: UUID
     employee_id: UUID
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Employee Experience Schemas
 # ============================================
-class EmployeeExperienceBase(BaseModel):
+class EmployeeExperienceBase(CamelSchema):
     """Base schema for employee experience."""
     company_name: str = Field(..., max_length=300)
     designation: str = Field(..., max_length=200)
@@ -244,7 +233,7 @@ class EmployeeExperienceCreate(EmployeeExperienceBase):
     pass
 
 
-class EmployeeExperienceUpdate(BaseModel):
+class EmployeeExperienceUpdate(CamelSchema):
     """Schema for updating employee experience."""
     company_name: Optional[str] = None
     designation: Optional[str] = None
@@ -268,14 +257,11 @@ class EmployeeExperienceResponse(EmployeeExperienceBase):
     employee_id: UUID
     duration_months: Optional[int] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Employee Statutory Schemas
 # ============================================
-class EmployeeStatutoryBase(BaseModel):
+class EmployeeStatutoryBase(CamelSchema):
     """Base schema for employee statutory."""
     # PF
     pf_applicable: bool = True
@@ -311,7 +297,7 @@ class EmployeeStatutoryCreate(EmployeeStatutoryBase):
     pass
 
 
-class EmployeeStatutoryUpdate(BaseModel):
+class EmployeeStatutoryUpdate(CamelSchema):
     """Schema for updating employee statutory."""
     pf_applicable: Optional[bool] = None
     pf_account_number: Optional[str] = None
@@ -336,14 +322,11 @@ class EmployeeStatutoryResponse(EmployeeStatutoryBase):
     id: UUID
     employee_id: UUID
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Employee Lifecycle Event Schemas
 # ============================================
-class EmployeeLifecycleEventBase(BaseModel):
+class EmployeeLifecycleEventBase(CamelSchema):
     """Base schema for lifecycle event."""
     event_type: LifecycleEventType
     event_date: date
@@ -373,14 +356,11 @@ class EmployeeLifecycleEventResponse(EmployeeLifecycleEventBase):
     approved_by: Optional[UUID] = None
     approved_at: Optional[date] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Main Employee Schemas
 # ============================================
-class EmployeeBase(BaseModel):
+class EmployeeBase(CamelSchema):
     """Base schema for employee."""
     # Personal Info
     salutation: Optional[Salutation] = None
@@ -452,7 +432,7 @@ class EmployeeCreate(EmployeeBase):
     statutory_info: Optional[EmployeeStatutoryCreate] = None
 
 
-class EmployeeUpdate(BaseModel):
+class EmployeeUpdate(CamelSchema):
     """Schema for updating employee."""
     # Personal Info
     salutation: Optional[Salutation] = None
@@ -514,7 +494,7 @@ class EmployeeUpdate(BaseModel):
     esic_number: Optional[str] = None
 
 
-class EmployeeListResponse(BaseModel):
+class EmployeeListResponse(CamelSchema):
     """Minimal response for employee list."""
     id: UUID
     employee_code: str
@@ -532,9 +512,6 @@ class EmployeeListResponse(BaseModel):
     employment_type: EmploymentType
     employment_status: EmploymentStatus
     photo_url: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 
 class EmployeeResponse(MaskedPIIModel, EmployeeBase):
@@ -566,14 +543,11 @@ class EmployeeResponse(MaskedPIIModel, EmployeeBase):
     statutory_info: Optional[EmployeeStatutoryResponse] = None
     lifecycle_events: Optional[List[EmployeeLifecycleEventResponse]] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Filter Schemas
 # ============================================
-class EmployeeFilters(BaseModel):
+class EmployeeFilters(CamelSchema):
     """Filters for employee list."""
     organization_id: Optional[UUID] = None
     department_id: Optional[UUID] = None

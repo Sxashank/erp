@@ -1,25 +1,23 @@
 """Loan Application repositories for the lending module."""
 
-from datetime import date, datetime
-from typing import List, Optional, Tuple
+from datetime import date
 from uuid import UUID
 
-from sqlalchemy import select, and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.lending.application import (
-    LoanApplication,
     ApplicationDocument,
     ApplicationFee,
-    TechnicalAppraisal,
     FinancialAnalysis,
+    LoanApplication,
     ProjectMilestone,
+    TechnicalAppraisal,
 )
 from app.models.lending.enums import (
     ApplicationStage,
     ApplicationStatus,
-    AppraisalType,
     MilestoneStatus,
 )
 from app.repositories.base import BaseRepository
@@ -33,7 +31,7 @@ class ApplicationDocumentRepository(BaseRepository[ApplicationDocument]):
 
     async def get_by_application(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[ApplicationDocument]:
+    ) -> list[ApplicationDocument]:
         """Get all documents for an application."""
         query = select(ApplicationDocument).where(
             ApplicationDocument.application_id == application_id
@@ -43,9 +41,7 @@ class ApplicationDocumentRepository(BaseRepository[ApplicationDocument]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_verified_documents(
-        self, application_id: UUID
-    ) -> List[ApplicationDocument]:
+    async def get_verified_documents(self, application_id: UUID) -> list[ApplicationDocument]:
         """Get verified documents for an application."""
         query = select(ApplicationDocument).where(
             and_(
@@ -57,9 +53,7 @@ class ApplicationDocumentRepository(BaseRepository[ApplicationDocument]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_pending_verification(
-        self, application_id: UUID
-    ) -> List[ApplicationDocument]:
+    async def get_pending_verification(self, application_id: UUID) -> list[ApplicationDocument]:
         """Get documents pending verification."""
         query = select(ApplicationDocument).where(
             and_(
@@ -72,7 +66,7 @@ class ApplicationDocumentRepository(BaseRepository[ApplicationDocument]):
         return list(result.scalars().all())
 
     async def check_all_mandatory_uploaded(
-        self, application_id: UUID, mandatory_checklist_ids: List[UUID]
+        self, application_id: UUID, mandatory_checklist_ids: list[UUID]
     ) -> bool:
         """Check if all mandatory documents are uploaded."""
         query = select(func.count(ApplicationDocument.id)).where(
@@ -95,19 +89,15 @@ class ApplicationFeeRepository(BaseRepository[ApplicationFee]):
 
     async def get_by_application(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[ApplicationFee]:
+    ) -> list[ApplicationFee]:
         """Get all fees for an application."""
-        query = select(ApplicationFee).where(
-            ApplicationFee.application_id == application_id
-        )
+        query = select(ApplicationFee).where(ApplicationFee.application_id == application_id)
         if not include_inactive:
             query = query.where(ApplicationFee.is_active == True)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_collected_fees(
-        self, application_id: UUID
-    ) -> List[ApplicationFee]:
+    async def get_collected_fees(self, application_id: UUID) -> list[ApplicationFee]:
         """Get collected fees for an application."""
         query = select(ApplicationFee).where(
             and_(
@@ -119,23 +109,19 @@ class ApplicationFeeRepository(BaseRepository[ApplicationFee]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_pending_fees(
-        self, application_id: UUID
-    ) -> List[ApplicationFee]:
+    async def get_pending_fees(self, application_id: UUID) -> list[ApplicationFee]:
         """Get pending fees for an application."""
         query = select(ApplicationFee).where(
             and_(
                 ApplicationFee.application_id == application_id,
-                ApplicationFee.is_collected == False,
+                ApplicationFee.status == "PENDING",
                 ApplicationFee.is_active == True,
             )
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_total_fee_amount(
-        self, application_id: UUID
-    ) -> float:
+    async def get_total_fee_amount(self, application_id: UUID) -> float:
         """Get total fee amount for an application."""
         query = select(func.sum(ApplicationFee.total_amount)).where(
             and_(
@@ -146,13 +132,12 @@ class ApplicationFeeRepository(BaseRepository[ApplicationFee]):
         result = await self.session.execute(query)
         return float(result.scalar() or 0)
 
-    async def get_total_collected_amount(
-        self, application_id: UUID
-    ) -> float:
+    async def get_total_collected_amount(self, application_id: UUID) -> float:
         """Get total collected amount for an application."""
-        query = select(func.sum(ApplicationFee.collected_amount)).where(
+        query = select(func.sum(ApplicationFee.total_amount)).where(
             and_(
                 ApplicationFee.application_id == application_id,
+                ApplicationFee.status == "COLLECTED",
                 ApplicationFee.is_active == True,
             )
         )
@@ -168,7 +153,7 @@ class TechnicalAppraisalRepository(BaseRepository[TechnicalAppraisal]):
 
     async def get_by_application(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[TechnicalAppraisal]:
+    ) -> list[TechnicalAppraisal]:
         """Get all technical appraisals for an application."""
         query = select(TechnicalAppraisal).where(
             TechnicalAppraisal.application_id == application_id
@@ -179,9 +164,7 @@ class TechnicalAppraisalRepository(BaseRepository[TechnicalAppraisal]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_latest(
-        self, application_id: UUID
-    ) -> Optional[TechnicalAppraisal]:
+    async def get_latest(self, application_id: UUID) -> TechnicalAppraisal | None:
         """Get latest technical appraisal for an application."""
         query = (
             select(TechnicalAppraisal)
@@ -206,20 +189,16 @@ class FinancialAnalysisRepository(BaseRepository[FinancialAnalysis]):
 
     async def get_by_application(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[FinancialAnalysis]:
+    ) -> list[FinancialAnalysis]:
         """Get all financial analyses for an application."""
-        query = select(FinancialAnalysis).where(
-            FinancialAnalysis.application_id == application_id
-        )
+        query = select(FinancialAnalysis).where(FinancialAnalysis.application_id == application_id)
         if not include_inactive:
             query = query.where(FinancialAnalysis.is_active == True)
         query = query.order_by(FinancialAnalysis.analysis_date.desc())
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_latest(
-        self, application_id: UUID
-    ) -> Optional[FinancialAnalysis]:
+    async def get_latest(self, application_id: UUID) -> FinancialAnalysis | None:
         """Get latest financial analysis for an application."""
         query = (
             select(FinancialAnalysis)
@@ -244,20 +223,16 @@ class ProjectMilestoneRepository(BaseRepository[ProjectMilestone]):
 
     async def get_by_application(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[ProjectMilestone]:
+    ) -> list[ProjectMilestone]:
         """Get all milestones for an application."""
-        query = select(ProjectMilestone).where(
-            ProjectMilestone.application_id == application_id
-        )
+        query = select(ProjectMilestone).where(ProjectMilestone.application_id == application_id)
         if not include_inactive:
             query = query.where(ProjectMilestone.is_active == True)
         query = query.order_by(ProjectMilestone.milestone_number)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_completed_milestones(
-        self, application_id: UUID
-    ) -> List[ProjectMilestone]:
+    async def get_completed_milestones(self, application_id: UUID) -> list[ProjectMilestone]:
         """Get completed milestones for an application."""
         query = select(ProjectMilestone).where(
             and_(
@@ -269,25 +244,19 @@ class ProjectMilestoneRepository(BaseRepository[ProjectMilestone]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_pending_milestones(
-        self, application_id: UUID
-    ) -> List[ProjectMilestone]:
+    async def get_pending_milestones(self, application_id: UUID) -> list[ProjectMilestone]:
         """Get pending milestones for an application."""
         query = select(ProjectMilestone).where(
             and_(
                 ProjectMilestone.application_id == application_id,
-                ProjectMilestone.status.in_(
-                    [MilestoneStatus.PENDING, MilestoneStatus.IN_PROGRESS]
-                ),
+                ProjectMilestone.status.in_([MilestoneStatus.PENDING, MilestoneStatus.IN_PROGRESS]),
                 ProjectMilestone.is_active == True,
             )
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_next_milestone(
-        self, application_id: UUID
-    ) -> Optional[ProjectMilestone]:
+    async def get_next_milestone(self, application_id: UUID) -> ProjectMilestone | None:
         """Get next pending milestone for an application."""
         query = (
             select(ProjectMilestone)
@@ -315,7 +284,7 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
 
     async def get_by_number(
         self, application_number: str, organization_id: UUID
-    ) -> Optional[LoanApplication]:
+    ) -> LoanApplication | None:
         """Get application by number."""
         query = select(LoanApplication).where(
             and_(
@@ -327,9 +296,7 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_with_details(
-        self, application_id: UUID
-    ) -> Optional[LoanApplication]:
+    async def get_with_details(self, application_id: UUID) -> LoanApplication | None:
         """Get application with all related data."""
         query = (
             select(LoanApplication)
@@ -356,16 +323,16 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        product_id: Optional[UUID] = None,
-        stage: Optional[ApplicationStage] = None,
-        status: Optional[ApplicationStatus] = None,
-        relationship_manager_id: Optional[UUID] = None,
-        credit_officer_id: Optional[UUID] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> Tuple[List[LoanApplication], int]:
+        search: str | None = None,
+        entity_id: UUID | None = None,
+        product_id: UUID | None = None,
+        stage: ApplicationStage | None = None,
+        status: ApplicationStatus | None = None,
+        relationship_manager_id: UUID | None = None,
+        credit_officer_id: UUID | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> tuple[list[LoanApplication], int]:
         """Get all applications for an organization with filters."""
         base_query = select(LoanApplication).where(
             LoanApplication.organization_id == organization_id
@@ -402,28 +369,27 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
             )
 
         if credit_officer_id:
-            base_query = base_query.where(
-                LoanApplication.credit_officer_id == credit_officer_id
-            )
+            base_query = base_query.where(LoanApplication.credit_officer_id == credit_officer_id)
 
         if from_date:
-            base_query = base_query.where(
-                func.date(LoanApplication.created_at) >= from_date
-            )
+            base_query = base_query.where(func.date(LoanApplication.created_at) >= from_date)
 
         if to_date:
-            base_query = base_query.where(
-                func.date(LoanApplication.created_at) <= to_date
-            )
+            base_query = base_query.where(func.date(LoanApplication.created_at) <= to_date)
 
         # Count total
         count_query = select(func.count()).select_from(base_query.subquery())
         total_result = await self.session.execute(count_query)
         total = total_result.scalar() or 0
 
-        # Get paginated results
+        # Get paginated results — eager-load entity + product so the list
+        # response can surface entity_name + product_name without N+1.
         query = (
-            base_query.order_by(LoanApplication.created_at.desc())
+            base_query.options(
+                selectinload(LoanApplication.entity),
+                selectinload(LoanApplication.product),
+            )
+            .order_by(LoanApplication.created_at.desc())
             .offset(skip)
             .limit(limit)
         )
@@ -434,7 +400,7 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[LoanApplication]:
+    ) -> list[LoanApplication]:
         """Get all applications for an entity."""
         query = select(LoanApplication).where(LoanApplication.entity_id == entity_id)
         if not include_inactive:
@@ -443,9 +409,7 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_pending_applications(
-        self, organization_id: UUID
-    ) -> List[LoanApplication]:
+    async def get_pending_applications(self, organization_id: UUID) -> list[LoanApplication]:
         """Get applications pending action."""
         query = select(LoanApplication).where(
             and_(
@@ -494,9 +458,7 @@ class LoanApplicationRepository(BaseRepository[LoanApplication]):
 
         return f"{prefix}/A{num:05d}"
 
-    async def get_stage_counts(
-        self, organization_id: UUID
-    ) -> dict:
+    async def get_stage_counts(self, organization_id: UUID) -> dict:
         """Get application counts by stage."""
         query = (
             select(

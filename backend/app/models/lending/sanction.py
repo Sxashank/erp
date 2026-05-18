@@ -2,30 +2,48 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Enum, ForeignKey, Integer,
-    Numeric, String, Text, Index, UniqueConstraint
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.lending.enums import (
-    SanctionStatus, ConditionType, ConditionCategory,
-    ConditionComplianceStatus, SecurityCategory, SecurityType,
-    ChargeType, SecurityStatus, InterestType, RateResetFrequency,
-    RepaymentFrequency, RepaymentMode, DayCountConvention
+    ChargeType,
+    ConditionCategory,
+    ConditionComplianceStatus,
+    ConditionType,
+    DayCountConvention,
+    InterestType,
+    RateResetFrequency,
+    RepaymentFrequency,
+    RepaymentMode,
+    SanctionStatus,
+    SecurityCategory,
+    SecurityStatus,
+    SecurityType,
 )
 
-
 if TYPE_CHECKING:
-    from app.models.masters.organization import Organization
-    from app.models.lending.entity import Entity
-    from app.models.lending.product import LoanProduct, InterestRate
     from app.models.lending.application import LoanApplication
+    from app.models.lending.entity import Entity
+    from app.models.lending.product import InterestRate, LoanProduct
+    from app.models.masters.organization import Organization
     from app.models.workflow import WorkflowInstance
 
 
@@ -73,7 +91,7 @@ class LoanSanction(BaseModel):
         index=True,
         comment="Sanction number e.g., 'SMFC/SL/2025/00001'",
     )
-    sanction_letter_number: Mapped[Optional[str]] = mapped_column(
+    sanction_letter_number: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="Sanction letter reference number",
@@ -90,7 +108,7 @@ class LoanSanction(BaseModel):
         nullable=False,
         comment="Sanction validity expiry date",
     )
-    first_disbursement_deadline: Mapped[Optional[date]] = mapped_column(
+    first_disbursement_deadline: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Deadline for first disbursement",
@@ -107,7 +125,7 @@ class LoanSanction(BaseModel):
         nullable=False,
         comment="Originally requested amount",
     )
-    approved_project_cost: Mapped[Optional[Decimal]] = mapped_column(
+    approved_project_cost: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Approved project cost (for project finance)",
@@ -125,7 +143,7 @@ class LoanSanction(BaseModel):
         default=0,
         comment="Moratorium period in months",
     )
-    moratorium_type: Mapped[Optional[str]] = mapped_column(
+    moratorium_type: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="FULL, PRINCIPAL_ONLY, INTEREST_ONLY",
@@ -137,13 +155,13 @@ class LoanSanction(BaseModel):
         nullable=False,
         comment="FIXED or FLOATING",
     )
-    base_rate_id: Mapped[Optional[UUID]] = mapped_column(
+    base_rate_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_interest_rate.id", ondelete="RESTRICT"),
         nullable=True,
         comment="Base rate for floating loans",
     )
-    base_rate_at_sanction: Mapped[Optional[Decimal]] = mapped_column(
+    base_rate_at_sanction: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Base rate at time of sanction",
@@ -159,12 +177,12 @@ class LoanSanction(BaseModel):
         nullable=False,
         comment="Effective interest rate at sanction",
     )
-    rate_reset_frequency: Mapped[Optional[RateResetFrequency]] = mapped_column(
+    rate_reset_frequency: Mapped[RateResetFrequency | None] = mapped_column(
         Enum(RateResetFrequency),
         nullable=True,
         comment="Rate reset frequency for floating",
     )
-    first_rate_reset_date: Mapped[Optional[date]] = mapped_column(
+    first_rate_reset_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="First rate reset date",
@@ -189,7 +207,7 @@ class LoanSanction(BaseModel):
         nullable=False,
         comment="Repayment mode - EMI, STRUCTURED, BULLET, etc.",
     )
-    repayment_start_date: Mapped[Optional[date]] = mapped_column(
+    repayment_start_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Expected repayment start date",
@@ -202,7 +220,7 @@ class LoanSanction(BaseModel):
     )
 
     # Structured repayment (if not EMI)
-    principal_schedule: Mapped[Optional[list]] = mapped_column(
+    principal_schedule: Mapped[list | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="Custom principal repayment schedule",
@@ -262,7 +280,7 @@ class LoanSanction(BaseModel):
         index=True,
         comment="Sanction status",
     )
-    workflow_instance_id: Mapped[Optional[UUID]] = mapped_column(
+    workflow_instance_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("wf_workflow_instance.id", ondelete="SET NULL"),
         nullable=True,
@@ -270,23 +288,23 @@ class LoanSanction(BaseModel):
     )
 
     # Approval details
-    approved_by_id: Mapped[Optional[UUID]] = mapped_column(
+    approved_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Final approver",
     )
-    approved_at: Mapped[Optional[datetime]] = mapped_column(
+    approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Approval timestamp",
     )
-    approval_authority: Mapped[Optional[str]] = mapped_column(
+    approval_authority: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Approval authority (committee, designation)",
     )
-    approval_reference: Mapped[Optional[str]] = mapped_column(
+    approval_reference: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Committee meeting/note reference",
@@ -299,17 +317,17 @@ class LoanSanction(BaseModel):
         default=True,
         comment="Is borrower acceptance required?",
     )
-    acceptance_deadline: Mapped[Optional[date]] = mapped_column(
+    acceptance_deadline: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Deadline for borrower acceptance",
     )
-    accepted_at: Mapped[Optional[datetime]] = mapped_column(
+    accepted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Acceptance timestamp",
     )
-    acceptance_document_path: Mapped[Optional[str]] = mapped_column(
+    acceptance_document_path: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Path to signed acceptance letter",
@@ -322,13 +340,13 @@ class LoanSanction(BaseModel):
         default=False,
         comment="Is this an amendment to original sanction?",
     )
-    original_sanction_id: Mapped[Optional[UUID]] = mapped_column(
+    original_sanction_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_loan_sanction.id", ondelete="SET NULL"),
         nullable=True,
         comment="Original sanction if this is amendment",
     )
-    amendment_reason: Mapped[Optional[str]] = mapped_column(
+    amendment_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Reason for amendment",
@@ -341,33 +359,33 @@ class LoanSanction(BaseModel):
     )
 
     # Internal rating at sanction
-    entity_rating: Mapped[Optional[str]] = mapped_column(
+    entity_rating: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="Entity rating at sanction",
     )
 
     # Special terms
-    special_terms: Mapped[Optional[str]] = mapped_column(
+    special_terms: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Special terms and conditions",
     )
 
     # Documents
-    sanction_letter_path: Mapped[Optional[str]] = mapped_column(
+    sanction_letter_path: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Path to generated sanction letter",
     )
-    agreement_draft_path: Mapped[Optional[str]] = mapped_column(
+    agreement_draft_path: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Path to loan agreement draft",
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -404,13 +422,13 @@ class LoanSanction(BaseModel):
         remote_side="LoanSanction.id",
         lazy="selectin",
     )
-    conditions: Mapped[List["SanctionCondition"]] = relationship(
+    conditions: Mapped[list["SanctionCondition"]] = relationship(
         "SanctionCondition",
         back_populates="sanction",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    securities: Mapped[List["LoanSecurity"]] = relationship(
+    securities: Mapped[list["LoanSecurity"]] = relationship(
         "LoanSecurity",
         back_populates="sanction",
         cascade="all, delete-orphan",
@@ -449,7 +467,7 @@ class SanctionCondition(BaseModel):
         nullable=False,
         comment="Condition sequence number",
     )
-    condition_code: Mapped[Optional[str]] = mapped_column(
+    condition_code: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="Standard condition code if from master",
@@ -475,14 +493,14 @@ class SanctionCondition(BaseModel):
         nullable=False,
         comment="Condition description",
     )
-    detailed_requirement: Mapped[Optional[str]] = mapped_column(
+    detailed_requirement: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Detailed requirement/instructions",
     )
 
     # Timeline
-    due_date: Mapped[Optional[date]] = mapped_column(
+    due_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Due date for compliance",
@@ -493,19 +511,19 @@ class SanctionCondition(BaseModel):
         default=False,
         comment="Is this time-bound?",
     )
-    days_from_disbursement: Mapped[Optional[int]] = mapped_column(
+    days_from_disbursement: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Days from disbursement if relative",
     )
 
     # Frequency (for ongoing conditions)
-    frequency: Mapped[Optional[str]] = mapped_column(
+    frequency: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="Frequency for ongoing conditions - MONTHLY, QUARTERLY, ANNUAL",
     )
-    next_compliance_date: Mapped[Optional[date]] = mapped_column(
+    next_compliance_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Next compliance date for ongoing",
@@ -530,7 +548,7 @@ class SanctionCondition(BaseModel):
         default=True,
         comment="Can condition be waived?",
     )
-    waiver_authority: Mapped[Optional[str]] = mapped_column(
+    waiver_authority: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Authority who can waive",
@@ -544,17 +562,17 @@ class SanctionCondition(BaseModel):
         index=True,
         comment="PENDING, COMPLIED, WAIVED, DEFERRED, NOT_APPLICABLE",
     )
-    compliance_date: Mapped[Optional[date]] = mapped_column(
+    compliance_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of compliance",
     )
-    compliance_remarks: Mapped[Optional[str]] = mapped_column(
+    compliance_remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Compliance remarks",
     )
-    compliance_verified_by: Mapped[Optional[UUID]] = mapped_column(
+    compliance_verified_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
@@ -562,17 +580,17 @@ class SanctionCondition(BaseModel):
     )
 
     # Waiver details
-    waiver_date: Mapped[Optional[date]] = mapped_column(
+    waiver_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Waiver date if waived",
     )
-    waiver_reason: Mapped[Optional[str]] = mapped_column(
+    waiver_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Reason for waiver",
     )
-    waiver_approved_by: Mapped[Optional[UUID]] = mapped_column(
+    waiver_approved_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
@@ -580,17 +598,17 @@ class SanctionCondition(BaseModel):
     )
 
     # Deferral details
-    deferral_date: Mapped[Optional[date]] = mapped_column(
+    deferral_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Deferred to date",
     )
-    deferral_reason: Mapped[Optional[str]] = mapped_column(
+    deferral_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Reason for deferral",
     )
-    deferral_approved_by: Mapped[Optional[UUID]] = mapped_column(
+    deferral_approved_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
@@ -598,12 +616,12 @@ class SanctionCondition(BaseModel):
     )
 
     # Supporting documents
-    required_documents: Mapped[Optional[list]] = mapped_column(
+    required_documents: Mapped[list | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="List of required documents for compliance",
     )
-    uploaded_documents: Mapped[Optional[list]] = mapped_column(
+    uploaded_documents: Mapped[list | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="List of uploaded compliance documents",
@@ -653,7 +671,7 @@ class LoanSecurity(BaseModel):
         nullable=False,
         comment="Security sequence number",
     )
-    security_code: Mapped[Optional[str]] = mapped_column(
+    security_code: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         index=True,
@@ -686,41 +704,41 @@ class LoanSecurity(BaseModel):
         nullable=False,
         comment="Security description",
     )
-    detailed_description: Mapped[Optional[str]] = mapped_column(
+    detailed_description: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Detailed description",
     )
 
     # Property details (for immovable property)
-    property_address: Mapped[Optional[str]] = mapped_column(
+    property_address: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Property address",
     )
-    property_area_sqft: Mapped[Optional[Decimal]] = mapped_column(
+    property_area_sqft: Mapped[Decimal | None] = mapped_column(
         Numeric(15, 2),
         nullable=True,
         comment="Property area in square feet",
     )
-    survey_number: Mapped[Optional[str]] = mapped_column(
+    survey_number: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Survey/Plot number",
     )
-    property_type: Mapped[Optional[str]] = mapped_column(
+    property_type: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Land, Building, Factory, etc.",
     )
 
     # Ownership
-    owner_name: Mapped[Optional[str]] = mapped_column(
+    owner_name: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Owner name(s)",
     )
-    owner_relationship: Mapped[Optional[str]] = mapped_column(
+    owner_relationship: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Relationship with borrower",
@@ -731,7 +749,7 @@ class LoanSecurity(BaseModel):
         default=False,
         comment="Is third party security?",
     )
-    third_party_entity_id: Mapped[Optional[UUID]] = mapped_column(
+    third_party_entity_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_entity.id", ondelete="SET NULL"),
         nullable=True,
@@ -739,17 +757,17 @@ class LoanSecurity(BaseModel):
     )
 
     # Valuation
-    declared_value: Mapped[Optional[Decimal]] = mapped_column(
+    declared_value: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Value declared by borrower",
     )
-    market_value: Mapped[Optional[Decimal]] = mapped_column(
+    market_value: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Current market value",
     )
-    forced_sale_value: Mapped[Optional[Decimal]] = mapped_column(
+    forced_sale_value: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Forced/distress sale value",
@@ -772,27 +790,27 @@ class LoanSecurity(BaseModel):
     )
 
     # Valuation details
-    valuation_date: Mapped[Optional[date]] = mapped_column(
+    valuation_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of valuation",
     )
-    valuer_name: Mapped[Optional[str]] = mapped_column(
+    valuer_name: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Valuer name",
     )
-    valuer_firm: Mapped[Optional[str]] = mapped_column(
+    valuer_firm: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Valuation firm",
     )
-    valuation_report_path: Mapped[Optional[str]] = mapped_column(
+    valuation_report_path: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Path to valuation report",
     )
-    next_valuation_date: Mapped[Optional[date]] = mapped_column(
+    next_valuation_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Next valuation due date",
@@ -805,12 +823,12 @@ class LoanSecurity(BaseModel):
         default=False,
         comment="Has existing charge/encumbrance?",
     )
-    existing_charge_holder: Mapped[Optional[str]] = mapped_column(
+    existing_charge_holder: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Existing charge holder",
     )
-    existing_charge_amount: Mapped[Optional[Decimal]] = mapped_column(
+    existing_charge_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Existing charge amount",
@@ -829,22 +847,22 @@ class LoanSecurity(BaseModel):
         default=True,
         comment="Requires insurance?",
     )
-    insured_value: Mapped[Optional[Decimal]] = mapped_column(
+    insured_value: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Insured value",
     )
-    insurance_policy_number: Mapped[Optional[str]] = mapped_column(
+    insurance_policy_number: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Insurance policy number",
     )
-    insurance_company: Mapped[Optional[str]] = mapped_column(
+    insurance_company: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Insurance company",
     )
-    insurance_expiry: Mapped[Optional[date]] = mapped_column(
+    insurance_expiry: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Insurance expiry date",
@@ -858,26 +876,31 @@ class LoanSecurity(BaseModel):
         index=True,
         comment="PROPOSED, CREATED, REGISTERED, RELEASED, SUBSTITUTED",
     )
+    release_date: Mapped[date | None] = mapped_column(
+        Date,
+        nullable=True,
+        comment="Manual date on which the security/documents were released",
+    )
 
     # Charge creation
-    charge_created_date: Mapped[Optional[date]] = mapped_column(
+    charge_created_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date charge was created",
     )
-    charge_id: Mapped[Optional[str]] = mapped_column(
+    charge_id: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="ROC charge ID",
     )
 
     # CERSAI registration
-    cersai_id: Mapped[Optional[str]] = mapped_column(
+    cersai_id: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="CERSAI registration ID",
     )
-    cersai_registration_date: Mapped[Optional[date]] = mapped_column(
+    cersai_registration_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="CERSAI registration date",
@@ -890,17 +913,17 @@ class LoanSecurity(BaseModel):
         default=False,
         comment="Legal vetting completed?",
     )
-    legal_vetting_date: Mapped[Optional[date]] = mapped_column(
+    legal_vetting_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Legal vetting date",
     )
-    legal_opinion_path: Mapped[Optional[str]] = mapped_column(
+    legal_opinion_path: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Path to legal opinion/title report",
     )
-    legal_remarks: Mapped[Optional[str]] = mapped_column(
+    legal_remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Legal remarks/observations",
@@ -913,31 +936,31 @@ class LoanSecurity(BaseModel):
         default=False,
         comment="Original documents received?",
     )
-    document_list: Mapped[Optional[list]] = mapped_column(
+    document_list: Mapped[list | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="List of documents held",
     )
-    document_location: Mapped[Optional[str]] = mapped_column(
+    document_location: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Physical location of documents",
     )
 
     # Guarantee-specific fields
-    guarantor_entity_id: Mapped[Optional[UUID]] = mapped_column(
+    guarantor_entity_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_entity.id", ondelete="SET NULL"),
         nullable=True,
         comment="Guarantor entity if corporate guarantee",
     )
-    guarantor_contact_id: Mapped[Optional[UUID]] = mapped_column(
+    guarantor_contact_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_entity_contact.id", ondelete="SET NULL"),
         nullable=True,
         comment="Guarantor contact if personal guarantee",
     )
-    guarantee_amount: Mapped[Optional[Decimal]] = mapped_column(
+    guarantee_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Guarantee amount (if limited)",
@@ -950,7 +973,7 @@ class LoanSecurity(BaseModel):
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -976,7 +999,7 @@ class LoanSecurity(BaseModel):
         UniqueConstraint("sanction_id", "security_number", name="uq_loan_security_num"),
         Index("ix_los_loan_security_type", "sanction_id", "security_type"),
         Index("ix_los_loan_security_category", "sanction_id", "security_category"),
-        Index("ix_los_loan_security_status", "sanction_id", "status"),
+        Index("ix_los_loan_security_sanction_status", "sanction_id", "status"),
     )
 
     def __repr__(self) -> str:

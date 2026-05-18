@@ -132,7 +132,7 @@ class LeaseService:
         # Generate payment schedule
         await self._generate_payment_schedule(lease)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(lease)
 
         return lease
@@ -228,7 +228,7 @@ class LeaseService:
         lease.updated_by = updated_by
         increment_version(lease)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(lease)
 
         return lease
@@ -261,7 +261,7 @@ class LeaseService:
         # Create GL entries for initial recognition
         await self._create_initial_recognition_entries(lease)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(lease)
 
         return lease
@@ -309,7 +309,7 @@ class LeaseService:
             )
         )
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(lease)
 
         return lease
@@ -395,7 +395,7 @@ class LeaseService:
         # Regenerate remaining schedule
         await self._regenerate_payment_schedule(lease, data.modification_date)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(lease)
 
         return lease
@@ -456,7 +456,7 @@ class LeaseService:
         # Update current/non-current bifurcation
         await self._update_liability_bifurcation(lease)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
 
         return schedule
@@ -572,7 +572,7 @@ class LeaseService:
             total_interest += schedule.interest_component
             posted_count += 1
 
-        await self.session.commit()
+        await self.session.flush()
 
         return {
             "period_from": period_from.isoformat(),
@@ -654,7 +654,7 @@ class LeaseService:
             total_depreciation += monthly_depreciation
             processed_count += 1
 
-        await self.session.commit()
+        await self.session.flush()
 
         return {
             "depreciation_period": depreciation_period,

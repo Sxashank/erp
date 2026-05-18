@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.ap_ar.purchase_bill_service import PurchaseBillService
 from app.schemas.ap_ar.purchase_bill import (
@@ -108,9 +108,8 @@ def _to_list_response(bill) -> PurchaseBillListResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[PurchaseBillListResponse])
+@router.get("", response_model=PaginatedResponse[PurchaseBillListResponse], response_model_by_alias=True)
 async def list_purchase_bills(
-    organization_id: UUID = Query(..., description="Organization ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
@@ -121,49 +120,47 @@ async def list_purchase_bills(
     to_date: Optional[date] = Query(None, description="To date"),
     search: Optional[str] = Query(None, description="Search in bill number"),
     current_user: User = Depends(RequirePermissions("APAR_BILL_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of purchase bills."""
     service = PurchaseBillService(db)
     skip = (page - 1) * page_size
     bills, total = await service.get_all(
-        organization_id, skip, page_size, include_inactive,
+        current_user.organization_id, skip, page_size, include_inactive,
         status, payment_status, vendor_id, from_date, to_date, search
     )
     items = [_to_list_response(b) for b in bills]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/unpaid/{vendor_id}", response_model=list[PurchaseBillListResponse])
+@router.get("/unpaid/{vendor_id}", response_model=list[PurchaseBillListResponse], response_model_by_alias=True)
 async def list_unpaid_bills(
     vendor_id: UUID,
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_BILL_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get unpaid bills for a vendor (for payment allocation)."""
     service = PurchaseBillService(db)
-    bills = await service.get_unpaid_for_vendor(organization_id, vendor_id)
+    bills = await service.get_unpaid_for_vendor(current_user.organization_id, vendor_id)
     return [_to_list_response(b) for b in bills]
 
 
 @router.get("/generate-number")
 async def generate_bill_number(
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_BILL_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate next bill number."""
     service = PurchaseBillService(db)
-    number = await service.generate_number(organization_id)
+    number = await service.generate_number(current_user.organization_id)
     return {"bill_number": number}
 
 
-@router.post("", response_model=PurchaseBillResponse)
+@router.post("", response_model=PurchaseBillResponse, response_model_by_alias=True)
 async def create_purchase_bill(
     data: PurchaseBillCreate,
     current_user: User = Depends(RequirePermissions("APAR_BILL_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new purchase bill."""
     service = PurchaseBillService(db)
@@ -171,11 +168,11 @@ async def create_purchase_bill(
     return _to_response(bill)
 
 
-@router.get("/{bill_id}", response_model=PurchaseBillResponse)
+@router.get("/{bill_id}", response_model=PurchaseBillResponse, response_model_by_alias=True)
 async def get_purchase_bill(
     bill_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_BILL_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get purchase bill by ID."""
     service = PurchaseBillService(db)
@@ -183,12 +180,12 @@ async def get_purchase_bill(
     return _to_response(bill)
 
 
-@router.put("/{bill_id}", response_model=PurchaseBillResponse)
+@router.put("/{bill_id}", response_model=PurchaseBillResponse, response_model_by_alias=True)
 async def update_purchase_bill(
     bill_id: UUID,
     data: PurchaseBillUpdate,
     current_user: User = Depends(RequirePermissions("APAR_BILL_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a purchase bill."""
     service = PurchaseBillService(db)
@@ -196,11 +193,11 @@ async def update_purchase_bill(
     return _to_response(bill)
 
 
-@router.post("/{bill_id}/submit", response_model=PurchaseBillResponse)
+@router.post("/{bill_id}/submit", response_model=PurchaseBillResponse, response_model_by_alias=True)
 async def submit_purchase_bill(
     bill_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_BILL_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Submit purchase bill for approval."""
     service = PurchaseBillService(db)
@@ -208,11 +205,11 @@ async def submit_purchase_bill(
     return _to_response(bill)
 
 
-@router.post("/{bill_id}/approve", response_model=PurchaseBillResponse)
+@router.post("/{bill_id}/approve", response_model=PurchaseBillResponse, response_model_by_alias=True)
 async def approve_purchase_bill(
     bill_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_BILL_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Approve a purchase bill."""
     service = PurchaseBillService(db)
@@ -225,7 +222,7 @@ async def cancel_purchase_bill(
     bill_id: UUID,
     reason: str = Query(..., description="Cancellation reason"),
     current_user: User = Depends(RequirePermissions("APAR_BILL_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel a purchase bill."""
     service = PurchaseBillService(db)
@@ -237,7 +234,7 @@ async def cancel_purchase_bill(
 async def delete_purchase_bill(
     bill_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_BILL_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a purchase bill."""
     service = PurchaseBillService(db)

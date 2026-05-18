@@ -30,7 +30,7 @@ class TDSSectionService:
             created_by=created_by,
         )
         self.session.add(section)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(section)
         return section
 
@@ -50,7 +50,7 @@ class TDSSectionService:
             setattr(section, field, value)
         section.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(section)
         return section
 
@@ -94,4 +94,4 @@ class TDSSectionService:
         if not section:
             raise NotFoundException("TDS section not found")
         section.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

@@ -5,14 +5,15 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from fastapi import APIRouter, Depends, status, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_db_with_tenant
 from app.api.v1.portal.auth import get_portal_user
 from app.models.portal.enums import PaymentMode, MandateFrequency
 from app.services.portal.payment_service import PortalPaymentService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter(prefix="/payments", tags=["Portal Payments"])
 
@@ -161,13 +162,13 @@ class PaginatedResponse(BaseModel):
 
 @router.post(
     "/initiate",
-    response_model=PaymentInitiateResponse,
+    response_model=PaymentInitiateResponse, response_model_by_alias=True,
     summary="Initiate Payment",
 )
 async def initiate_payment(
     request: PaymentInitiateRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Initiate a payment.
@@ -189,10 +190,7 @@ async def initiate_payment(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return PaymentInitiateResponse(**result)
 
@@ -204,7 +202,7 @@ async def initiate_payment(
 async def payment_callback(
     gateway: str,
     request: Request,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Handle payment gateway callback.
@@ -229,22 +227,22 @@ async def payment_callback(
 
 @router.get(
     "/{request_id}/status",
-    response_model=PaymentStatusResponse,
+    response_model=PaymentStatusResponse, response_model_by_alias=True,
     summary="Get Payment Status",
 )
 async def get_payment_status(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get payment request status."""
     service = PortalPaymentService(db)
     result = await service.get_payment_status(request_id, user.id)
 
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Payment request not found",
+            error_code="PAYMENT_REQUEST_NOT_FOUND",
         )
 
     return PaymentStatusResponse(**result)
@@ -257,7 +255,7 @@ async def get_payment_status(
 
 @router.get(
     "/history",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Payment History",
 )
 async def get_payment_history(
@@ -267,7 +265,7 @@ async def get_payment_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get payment transaction history."""
     service = PortalPaymentService(db)
@@ -296,12 +294,12 @@ async def get_payment_history(
 
 @router.get(
     "/methods",
-    response_model=List[SavedPaymentMethod],
+    response_model=List[SavedPaymentMethod], response_model_by_alias=True,
     summary="Get Saved Payment Methods",
 )
 async def get_saved_methods(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get saved payment methods."""
     service = PortalPaymentService(db)
@@ -312,14 +310,14 @@ async def get_saved_methods(
 
 @router.post(
     "/methods",
-    response_model=SavedPaymentMethod,
+    response_model=SavedPaymentMethod, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Save Payment Method",
 )
 async def save_payment_method(
     request: SavePaymentMethodRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Save a payment method for quick payments."""
     service = PortalPaymentService(db)
@@ -349,7 +347,7 @@ async def save_payment_method(
 async def delete_saved_method(
     method_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a saved payment method."""
     service = PortalPaymentService(db)
@@ -357,10 +355,7 @@ async def delete_saved_method(
     await db.commit()
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment method not found",
-        )
+        raise NotFoundException(detail="Payment method not found", error_code="PAYMENT_METHOD_NOT_FOUND")
 
     return {"message": "Payment method deleted"}
 
@@ -372,14 +367,14 @@ async def delete_saved_method(
 
 @router.post(
     "/mandate/setup",
-    response_model=MandateResponse,
+    response_model=MandateResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Setup Auto-Debit Mandate",
 )
 async def setup_mandate(
     request: MandateSetupRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Setup NACH or UPI Autopay mandate.
@@ -400,13 +395,13 @@ async def setup_mandate(
 
 @router.get(
     "/mandates",
-    response_model=List[dict],
+    response_model=List[dict], response_model_by_alias=True,
     summary="Get Mandates",
 )
 async def get_mandates(
     loan_account_id: Optional[UUID] = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all mandates for the user."""
     service = PortalPaymentService(db)
@@ -420,23 +415,20 @@ async def get_mandates(
 
 @router.get(
     "/mandates/{mandate_id}",
-    response_model=MandateStatusResponse,
+    response_model=MandateStatusResponse, response_model_by_alias=True,
     summary="Get Mandate Status",
 )
 async def get_mandate_status(
     mandate_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get mandate status and details."""
     service = PortalPaymentService(db)
     result = await service.get_mandate_status(mandate_id, user.id)
 
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Mandate not found",
-        )
+        raise NotFoundException(detail="Mandate not found", error_code="MANDATE_NOT_FOUND")
 
     return MandateStatusResponse(**result)
 
@@ -449,7 +441,7 @@ async def cancel_mandate(
     mandate_id: UUID,
     reason: str = "Customer requested",
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel an active mandate."""
     service = PortalPaymentService(db)
@@ -457,9 +449,9 @@ async def cancel_mandate(
     await db.commit()
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Mandate not found or cannot be cancelled",
+            error_code="MANDATE_NOT_FOUND_OR_CANNOT_BE",
         )
 
     return {"message": "Mandate cancelled"}

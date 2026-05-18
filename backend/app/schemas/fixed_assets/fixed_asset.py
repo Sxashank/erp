@@ -7,7 +7,8 @@ from uuid import UUID
 
 from pydantic import Field, field_validator
 
-from app.schemas.base import BaseSchema, AuditSchema
+from app.schemas.base import CamelSchema
+from app.schemas.fixed_assets.common import FixedAssetsAuditSchema, OffsetPaginatedResponse
 from app.core.constants import (
     AssetStatus,
     AssetAcquisitionType,
@@ -18,7 +19,7 @@ from app.core.constants import (
 )
 
 
-class FixedAssetCreate(BaseSchema):
+class FixedAssetCreate(CamelSchema):
     """Schema for creating a fixed asset."""
 
     asset_name: str = Field(..., min_length=1, max_length=200)
@@ -65,7 +66,7 @@ class FixedAssetCreate(BaseSchema):
     is_additional_depreciation_eligible: bool = False
 
 
-class FixedAssetUpdate(BaseSchema):
+class FixedAssetUpdate(CamelSchema):
     """Schema for updating a fixed asset."""
 
     asset_name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -99,7 +100,7 @@ class FixedAssetUpdate(BaseSchema):
     is_additional_depreciation_eligible: Optional[bool] = None
 
 
-class FixedAssetResponse(AuditSchema):
+class FixedAssetResponse(FixedAssetsAuditSchema):
     """Fixed asset response schema."""
 
     id: UUID
@@ -177,7 +178,7 @@ class FixedAssetResponse(AuditSchema):
     depreciation_difference: Optional[Decimal] = None
 
 
-class AssetCapitalizeRequest(BaseSchema):
+class AssetCapitalizeRequest(CamelSchema):
     """Request to capitalize an asset."""
 
     capitalization_date: date
@@ -186,7 +187,7 @@ class AssetCapitalizeRequest(BaseSchema):
     remarks: Optional[str] = Field(None, max_length=500)
 
 
-class AssetDisposeRequest(BaseSchema):
+class AssetDisposeRequest(CamelSchema):
     """Request to dispose an asset."""
 
     disposal_date: date
@@ -197,7 +198,7 @@ class AssetDisposeRequest(BaseSchema):
     buyer_address: Optional[str] = Field(None, max_length=500)
 
 
-class AssetTransferRequest(BaseSchema):
+class AssetTransferRequest(CamelSchema):
     """Request to transfer an asset."""
 
     transfer_date: date
@@ -207,7 +208,7 @@ class AssetTransferRequest(BaseSchema):
     reason: Optional[str] = Field(None, max_length=500)
 
 
-class AssetRevalueRequest(BaseSchema):
+class AssetRevalueRequest(CamelSchema):
     """Request to revalue an asset."""
 
     revaluation_date: date
@@ -219,7 +220,7 @@ class AssetRevalueRequest(BaseSchema):
     reason: Optional[str] = Field(None, max_length=500)
 
 
-class AssetImpairRequest(BaseSchema):
+class AssetImpairRequest(CamelSchema):
     """Request to record impairment on an asset."""
 
     impairment_date: date
@@ -227,7 +228,7 @@ class AssetImpairRequest(BaseSchema):
     reason: Optional[str] = Field(None, max_length=500)
 
 
-class AssetTransferResponse(AuditSchema):
+class AssetTransferResponse(FixedAssetsAuditSchema):
     """Asset transfer response schema."""
 
     id: UUID
@@ -251,7 +252,7 @@ class AssetTransferResponse(AuditSchema):
     remarks: Optional[str] = None
 
 
-class AssetRevaluationResponse(AuditSchema):
+class AssetRevaluationResponse(FixedAssetsAuditSchema):
     """Asset revaluation response schema."""
 
     id: UUID
@@ -269,3 +270,7 @@ class AssetRevaluationResponse(AuditSchema):
     valuation_method: Optional[str] = None
     reason: Optional[str] = None
     voucher_id: Optional[UUID] = None
+
+
+class FixedAssetListResponse(OffsetPaginatedResponse[FixedAssetResponse]):
+    """Paginated fixed-asset response."""

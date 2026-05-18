@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.bi.datasource_service import DataSourceService
 from app.schemas.bi.datasource import (
@@ -60,12 +60,12 @@ def _to_list_response(ds) -> DataSourceListResponse:
     )
 
 
-@router.get("", response_model=List[DataSourceListResponse])
+@router.get("", response_model=List[DataSourceListResponse], response_model_by_alias=True)
 async def list_data_sources(
     organization_id: Optional[UUID] = None,
     include_system: bool = True,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List all data sources."""
     service = DataSourceService(db)
@@ -77,11 +77,11 @@ async def list_data_sources(
     return [_to_list_response(ds) for ds in data_sources]
 
 
-@router.post("", response_model=DataSourceResponse)
+@router.post("", response_model=DataSourceResponse, response_model_by_alias=True)
 async def create_data_source(
     data: DataSourceCreate,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new data source."""
     service = DataSourceService(db)
@@ -90,11 +90,11 @@ async def create_data_source(
     return _to_response(data_source)
 
 
-@router.get("/{data_source_id}", response_model=DataSourceResponse)
+@router.get("/{data_source_id}", response_model=DataSourceResponse, response_model_by_alias=True)
 async def get_data_source(
     data_source_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a data source by ID."""
     service = DataSourceService(db)
@@ -102,12 +102,12 @@ async def get_data_source(
     return _to_response(data_source)
 
 
-@router.put("/{data_source_id}", response_model=DataSourceResponse)
+@router.put("/{data_source_id}", response_model=DataSourceResponse, response_model_by_alias=True)
 async def update_data_source(
     data_source_id: UUID,
     data: DataSourceUpdate,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a data source."""
     service = DataSourceService(db)
@@ -116,11 +116,11 @@ async def update_data_source(
     return _to_response(data_source)
 
 
-@router.delete("/{data_source_id}", response_model=MessageResponse)
+@router.delete("/{data_source_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_data_source(
     data_source_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a data source."""
     service = DataSourceService(db)
@@ -129,12 +129,12 @@ async def delete_data_source(
     return MessageResponse(message="Data source deleted successfully", success=True)
 
 
-@router.post("/{data_source_id}/fetch", response_model=DataSourceFetchResponse)
+@router.post("/{data_source_id}/fetch", response_model=DataSourceFetchResponse, response_model_by_alias=True)
 async def fetch_data(
     data_source_id: UUID,
     request: DataSourceFetchRequest,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Fetch data from a data source."""
     service = DataSourceService(db)
@@ -142,11 +142,11 @@ async def fetch_data(
     return DataSourceFetchResponse(data=data, cached=False)
 
 
-@router.get("/{data_source_id}/preview", response_model=DataSourceFetchResponse)
+@router.get("/{data_source_id}/preview", response_model=DataSourceFetchResponse, response_model_by_alias=True)
 async def preview_data_source(
     data_source_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Preview data from a data source (no parameters)."""
     service = DataSourceService(db)

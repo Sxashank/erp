@@ -1,10 +1,7 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   Plus,
   Search,
-  Filter,
   MoreHorizontal,
   Eye,
   Edit,
@@ -12,13 +9,35 @@ import {
   Check,
   X,
   Send,
-  CreditCard,
   Banknote,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -34,46 +53,40 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { paymentsApi, organizationsApi, vendorsApi, customersApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Payment {
   id: string;
-  payment_number: string;
-  payment_date: string;
-  payment_type: string;
-  party_type: string;
-  party_name: string | null;
-  payment_mode: string;
+  paymentNumber: string;
+  paymentDate: string;
+  paymentType: string;
+  partyType: string;
+  partyName: string | null;
+  paymentMode: string;
   amount: number;
-  net_amount: number;
+  netAmount: number;
   status: string;
-  cheque_status: string | null;
-  is_posted: boolean;
-  created_at: string;
+  chequeStatus: string | null;
+  isPosted: boolean;
+  createdAt: string;
 }
+
+interface OrganizationOption {
+  id: string;
+  name: string;
+}
+
+interface PartyOption {
+  id: string;
+  name: string;
+}
+
+type PaymentListParams = Parameters<typeof paymentsApi.list>[0];
 
 const PAYMENT_TYPES = [
   { value: 'VENDOR_PAYMENT', label: 'Vendor Payment' },
@@ -95,14 +108,13 @@ const PAYMENT_MODES = [
 ];
 
 export function PaymentList() {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
   const [payments, setPayments] = useState<Payment[]>([]);
-  const [organizations, setOrganizations] = useState<any[]>([]);
-  const [vendors, setVendors] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [vendors, setVendors] = useState<PartyOption[]>([]);
+  const [customers, setCustomers] = useState<PartyOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
 
@@ -123,19 +135,7 @@ export function PaymentList() {
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [cancellationReason, setCancellationReason] = useState('');
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrg) {
-      loadPayments();
-      loadVendors();
-      loadCustomers();
-    }
-  }, [selectedOrg, search, statusFilter, paymentTypeFilter, partyTypeFilter, vendorFilter, customerFilter, fromDate, toDate]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ include_inactive: false });
       setOrganizations(response.data.items || []);
@@ -143,35 +143,35 @@ export function PaymentList() {
         setSelectedOrg(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const loadVendors = async () => {
+  const loadVendors = useCallback(async () => {
     if (!selectedOrg) return;
     try {
       const response = await vendorsApi.getActive({ organization_id: selectedOrg });
       setVendors(response.data || []);
     } catch (error) {
-      console.error('Failed to load vendors:', error);
+      logger.error('Failed to load vendors:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     if (!selectedOrg) return;
     try {
       const response = await customersApi.getActive({ organization_id: selectedOrg });
       setCustomers(response.data || []);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      logger.error('Failed to load customers:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const loadPayments = async () => {
+  const loadPayments = useCallback(async () => {
     if (!selectedOrg) return;
     setLoading(true);
     try {
-      const params: any = {
+      const params: PaymentListParams = {
         organization_id: selectedOrg,
         limit: 100,
       };
@@ -188,28 +188,43 @@ export function PaymentList() {
       setPayments(response.data.items || []);
       setTotal(response.data.total || 0);
     } catch (error) {
-      console.error('Failed to load payments:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load payments',
-        variant: 'destructive',
-      });
+      logger.error('Failed to load payments:', error);
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    customerFilter,
+    fromDate,
+    partyTypeFilter,
+    paymentTypeFilter,
+    search,
+    selectedOrg,
+    statusFilter,
+    toDate,
+    toast,
+    vendorFilter,
+  ]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrg) {
+      loadPayments();
+      loadVendors();
+      loadCustomers();
+    }
+  }, [loadCustomers, loadPayments, loadVendors, selectedOrg]);
 
   const handleSubmit = async (payment: Payment) => {
     try {
       await paymentsApi.submit(payment.id);
       toast({ title: 'Success', description: 'Payment submitted for approval' });
       loadPayments();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to submit payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -218,12 +233,8 @@ export function PaymentList() {
       await paymentsApi.approve(payment.id);
       toast({ title: 'Success', description: 'Payment approved and posted' });
       loadPayments();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -236,12 +247,8 @@ export function PaymentList() {
       setCancellationReason('');
       setSelectedPayment(null);
       loadPayments();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to cancel payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -253,12 +260,8 @@ export function PaymentList() {
       setDeleteDialogOpen(false);
       setSelectedPayment(null);
       loadPayments();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -279,14 +282,6 @@ export function PaymentList() {
 
   const getPaymentModeLabel = (mode: string) => {
     return PAYMENT_MODES.find(m => m.value === mode)?.label || mode;
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
   };
 
   return (
@@ -462,28 +457,28 @@ export function PaymentList() {
                           to={`/admin/ap-ar/payments/${payment.id}`}
                           className="text-blue-600 hover:underline"
                         >
-                          {payment.payment_number}
+                          {payment.paymentNumber}
                         </Link>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(payment.payment_date), 'dd MMM yyyy')}
+                        {format(new Date(payment.paymentDate), 'dd MMM yyyy')}
                       </TableCell>
                       <TableCell>
                         <span className="text-sm">
-                          {getPaymentTypeLabel(payment.payment_type)}
+                          {getPaymentTypeLabel(payment.paymentType)}
                         </span>
                       </TableCell>
                       <TableCell>
                         <div className="flex flex-col">
-                          <span>{payment.party_name || '-'}</span>
+                          <span>{payment.partyName || '-'}</span>
                           <span className="text-xs text-muted-foreground">
-                            {payment.party_type}
+                            {payment.partyType}
                           </span>
                         </div>
                       </TableCell>
-                      <TableCell>{getPaymentModeLabel(payment.payment_mode)}</TableCell>
+                      <TableCell>{getPaymentModeLabel(payment.paymentMode)}</TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(payment.net_amount)}
+                        <AmountDisplay amount={payment.netAmount} />
                       </TableCell>
                       <TableCell>{getStatusBadge(payment.status)}</TableCell>
                       <TableCell>
@@ -579,7 +574,7 @@ export function PaymentList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Payment</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete payment {selectedPayment?.payment_number}?
+              Are you sure you want to delete payment {selectedPayment?.paymentNumber}?
               This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -598,7 +593,7 @@ export function PaymentList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Payment</AlertDialogTitle>
             <AlertDialogDescription>
-              Please provide a reason for cancelling payment {selectedPayment?.payment_number}.
+              Please provide a reason for cancelling payment {selectedPayment?.paymentNumber}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">

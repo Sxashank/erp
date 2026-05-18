@@ -4,10 +4,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -31,6 +31,7 @@ from app.schemas.fixed_assets.insurance import (
     PendingClaimsResponse,
 )
 from app.services.fixed_assets.insurance_service import InsuranceService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -138,7 +139,7 @@ def _claim_to_response(claim) -> InsuranceClaimResponse:
 # Policy Endpoints
 # ============================================
 
-@router.get("/policies", response_model=dict)
+@router.get("/policies", response_model=dict, response_model_by_alias=True)
 async def list_policies(
     request: Request,
     organization_id: UUID,
@@ -147,7 +148,7 @@ async def list_policies(
     expiring_within_days: Optional[int] = Query(None, ge=1),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -165,11 +166,11 @@ async def list_policies(
     }
 
 
-@router.get("/policies/{policy_id}", response_model=InsurancePolicyResponse)
+@router.get("/policies/{policy_id}", response_model=InsurancePolicyResponse, response_model_by_alias=True)
 async def get_policy(
     request: Request,
     policy_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -177,18 +178,15 @@ async def get_policy(
     service = InsuranceService(db)
     policy = await service.get_policy(policy_id)
     if not policy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Policy not found",
-        )
+        raise NotFoundException(detail="Policy not found", error_code="POLICY_NOT_FOUND")
     return _policy_to_response(policy)
 
 
-@router.post("/policies", response_model=InsurancePolicyResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/policies", response_model=InsurancePolicyResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_policy(
     request: Request,
     data: InsurancePolicyCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -198,18 +196,15 @@ async def create_policy(
         policy = await service.create_policy(data, created_by=current_user.id)
         return _policy_to_response(policy)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/policies/{policy_id}", response_model=InsurancePolicyResponse)
+@router.put("/policies/{policy_id}", response_model=InsurancePolicyResponse, response_model_by_alias=True)
 async def update_policy(
     request: Request,
     policy_id: UUID,
     data: InsurancePolicyUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -217,18 +212,15 @@ async def update_policy(
     service = InsuranceService(db)
     policy = await service.update_policy(policy_id, data, updated_by=current_user.id)
     if not policy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Policy not found",
-        )
+        raise NotFoundException(detail="Policy not found", error_code="POLICY_NOT_FOUND")
     return _policy_to_response(policy)
 
 
-@router.post("/policies/{policy_id}/activate", response_model=InsurancePolicyResponse)
+@router.post("/policies/{policy_id}/activate", response_model=InsurancePolicyResponse, response_model_by_alias=True)
 async def activate_policy(
     request: Request,
     policy_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -238,18 +230,15 @@ async def activate_policy(
         policy = await service.activate_policy(policy_id, activated_by=current_user.id)
         return _policy_to_response(policy)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/policies/{policy_id}/pay-premium", response_model=InsurancePolicyResponse)
+@router.post("/policies/{policy_id}/pay-premium", response_model=InsurancePolicyResponse, response_model_by_alias=True)
 async def record_premium_payment(
     request: Request,
     policy_id: UUID,
     data: InsurancePremiumPayment,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -261,18 +250,15 @@ async def record_premium_payment(
         )
         return _policy_to_response(policy)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/policies/{policy_id}/renew", response_model=InsurancePolicyResponse)
+@router.post("/policies/{policy_id}/renew", response_model=InsurancePolicyResponse, response_model_by_alias=True)
 async def renew_policy(
     request: Request,
     policy_id: UUID,
     data: InsurancePolicyRenew,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -282,17 +268,14 @@ async def renew_policy(
         policy = await service.renew_policy(policy_id, data, renewed_by=current_user.id)
         return _policy_to_response(policy)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Claim Endpoints
 # ============================================
 
-@router.get("/claims", response_model=dict)
+@router.get("/claims", response_model=dict, response_model_by_alias=True)
 async def list_claims(
     request: Request,
     organization_id: UUID,
@@ -303,7 +286,7 @@ async def list_claims(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -321,11 +304,11 @@ async def list_claims(
     }
 
 
-@router.get("/claims/{claim_id}", response_model=InsuranceClaimResponse)
+@router.get("/claims/{claim_id}", response_model=InsuranceClaimResponse, response_model_by_alias=True)
 async def get_claim(
     request: Request,
     claim_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -333,18 +316,15 @@ async def get_claim(
     service = InsuranceService(db)
     claim = await service.get_claim(claim_id)
     if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Claim not found",
-        )
+        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
     return _claim_to_response(claim)
 
 
-@router.post("/claims", response_model=InsuranceClaimResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/claims", response_model=InsuranceClaimResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_claim(
     request: Request,
     data: InsuranceClaimCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -354,18 +334,15 @@ async def create_claim(
         claim = await service.create_claim(data, created_by=current_user.id)
         return _claim_to_response(claim)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/claims/{claim_id}", response_model=InsuranceClaimResponse)
+@router.put("/claims/{claim_id}", response_model=InsuranceClaimResponse, response_model_by_alias=True)
 async def update_claim(
     request: Request,
     claim_id: UUID,
     data: InsuranceClaimUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -373,18 +350,15 @@ async def update_claim(
     service = InsuranceService(db)
     claim = await service.update_claim(claim_id, data, updated_by=current_user.id)
     if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Claim not found",
-        )
+        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
     return _claim_to_response(claim)
 
 
-@router.post("/claims/{claim_id}/submit", response_model=InsuranceClaimResponse)
+@router.post("/claims/{claim_id}/submit", response_model=InsuranceClaimResponse, response_model_by_alias=True)
 async def submit_claim(
     request: Request,
     claim_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -394,18 +368,15 @@ async def submit_claim(
         claim = await service.submit_claim(claim_id, submitted_by=current_user.id)
         return _claim_to_response(claim)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/claims/{claim_id}/settle", response_model=InsuranceClaimResponse)
+@router.post("/claims/{claim_id}/settle", response_model=InsuranceClaimResponse, response_model_by_alias=True)
 async def settle_claim(
     request: Request,
     claim_id: UUID,
     data: InsuranceClaimSettle,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -415,22 +386,19 @@ async def settle_claim(
         claim = await service.settle_claim(claim_id, data, settled_by=current_user.id)
         return _claim_to_response(claim)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Analytics Endpoints
 # ============================================
 
-@router.get("/summary", response_model=InsuranceSummaryResponse)
+@router.get("/summary", response_model=InsuranceSummaryResponse, response_model_by_alias=True)
 async def get_insurance_summary(
     request: Request,
     organization_id: UUID,
     as_on_date: Optional[date] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -439,12 +407,12 @@ async def get_insurance_summary(
     return await service.get_insurance_summary(organization_id, as_on_date)
 
 
-@router.get("/alerts/expiry", response_model=InsuranceExpiryAlertResponse)
+@router.get("/alerts/expiry", response_model=InsuranceExpiryAlertResponse, response_model_by_alias=True)
 async def get_policy_expiry_alerts(
     request: Request,
     organization_id: UUID,
     days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -461,11 +429,11 @@ async def get_policy_expiry_alerts(
     )
 
 
-@router.get("/alerts/pending-claims", response_model=PendingClaimsResponse)
+@router.get("/alerts/pending-claims", response_model=PendingClaimsResponse, response_model_by_alias=True)
 async def get_pending_claims_alert(
     request: Request,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):

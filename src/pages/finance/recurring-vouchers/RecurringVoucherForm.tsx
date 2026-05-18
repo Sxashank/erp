@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -22,8 +25,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { logger } from "@/lib/logger";
 import {
   organizationsApi,
   voucherTypesApi,
@@ -46,6 +50,7 @@ interface Account {
   id: string;
   code: string;
   name: string;
+  account_type: string;
 }
 
 interface LineItem {
@@ -53,6 +58,31 @@ interface LineItem {
   debit_amount: string;
   credit_amount: string;
   narration: string;
+}
+
+interface RecurringVoucherLineDto {
+  account_id: string;
+  debit_amount: number;
+  credit_amount: number;
+  narration: string | null;
+}
+
+interface RecurringVoucherDetailDto {
+  template_name: string;
+  description: string | null;
+  voucher_type_id: string;
+  frequency: string;
+  day_of_month: number | null;
+  day_of_week: number | null;
+  start_date: string;
+  end_date: string | null;
+  total_occurrences: number | null;
+  auto_post: boolean;
+  auto_approve: boolean;
+  narration_template: string | null;
+  notify_on_generation: boolean;
+  notify_days_before: number | null;
+  lines: RecurringVoucherLineDto[];
 }
 
 const FREQUENCIES = [
@@ -101,24 +131,7 @@ export function RecurringVoucherForm() {
     { account_id: '', debit_amount: '', credit_amount: '', narration: '' },
   ]);
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchVoucherTypes();
-      fetchAccounts();
-    }
-  }, [selectedOrgId]);
-
-  useEffect(() => {
-    if (isEdit && id && selectedOrgId) {
-      fetchRecurringVoucher(id);
-    }
-  }, [id, isEdit, selectedOrgId]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -126,33 +139,37 @@ export function RecurringVoucherForm() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const fetchVoucherTypes = async () => {
+  const fetchVoucherTypes = useCallback(async () => {
     try {
-      const response = await voucherTypesApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await voucherTypesApi.list({
+        organization_id: selectedOrgId,
+        page_size: 100,
+      });
       setVoucherTypes(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch voucher types:', error);
+      logger.error('Failed to fetch voucher types:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
-      const response = await accountsApi.list({ organization_id: selectedOrgId, page_size: 500 });
-      setAccounts(response.data.items.filter((a: any) => a.account_type !== 'GROUP'));
+      const response = await accountsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const accountItems = response.data.items as Account[];
+      setAccounts(accountItems.filter((account) => account.account_type !== 'GROUP'));
     } catch (error) {
-      console.error('Failed to fetch accounts:', error);
+      logger.error('Failed to fetch accounts:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const fetchRecurringVoucher = async (rvId: string) => {
+  const fetchRecurringVoucher = useCallback(async (rvId: string) => {
     try {
       setLoading(true);
       const response = await recurringVouchersApi.get(rvId);
-      const rv = response.data;
+      const rv = response.data as RecurringVoucherDetailDto;
 
       setFormData({
         template_name: rv.template_name,
@@ -172,28 +189,53 @@ export function RecurringVoucherForm() {
       });
 
       setLines(
-        rv.lines.map((line: any) => ({
+        rv.lines.map((line) => ({
           account_id: line.account_id,
           debit_amount: line.debit_amount.toString(),
           credit_amount: line.credit_amount.toString(),
           narration: line.narration || '',
-        }))
+        })),
       );
     } catch (error) {
-      console.error('Failed to fetch recurring voucher:', error);
-      toast({ title: 'Error', description: 'Failed to load recurring voucher', variant: 'destructive' });
+      logger.error('Failed to fetch recurring voucher:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load recurring voucher',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchVoucherTypes();
+      fetchAccounts();
+    }
+  }, [fetchAccounts, fetchVoucherTypes, selectedOrgId]);
+
+  useEffect(() => {
+    if (isEdit && id && selectedOrgId) {
+      fetchRecurringVoucher(id);
+    }
+  }, [fetchRecurringVoucher, id, isEdit, selectedOrgId]);
 
   const handleSubmit = async () => {
     const validLines = lines.filter(
-      (l) => l.account_id && (parseFloat(l.debit_amount) > 0 || parseFloat(l.credit_amount) > 0)
+      (l) => l.account_id && (parseFloat(l.debit_amount) > 0 || parseFloat(l.credit_amount) > 0),
     );
 
     if (validLines.length < 2) {
-      toast({ title: 'Error', description: 'At least 2 line items are required', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'At least 2 line items are required',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -201,12 +243,20 @@ export function RecurringVoucherForm() {
     const totalCredit = validLines.reduce((sum, l) => sum + (parseFloat(l.credit_amount) || 0), 0);
 
     if (Math.abs(totalDebit - totalCredit) > 0.01) {
-      toast({ title: 'Error', description: 'Debit and Credit must be equal', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Debit and Credit must be equal',
+        variant: 'destructive',
+      });
       return;
     }
 
     if (!formData.template_name || !formData.voucher_type_id) {
-      toast({ title: 'Error', description: 'Please fill all required fields', variant: 'destructive' });
+      toast({
+        title: 'Error',
+        description: 'Please fill all required fields',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -248,12 +298,8 @@ export function RecurringVoucherForm() {
       }
 
       navigate('/admin/finance/recurring-vouchers');
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save recurring voucher',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setSubmitting(false);
     }
@@ -278,16 +324,9 @@ export function RecurringVoucherForm() {
   const totalDebit = lines.reduce((sum, l) => sum + (parseFloat(l.debit_amount) || 0), 0);
   const totalCredit = lines.reduce((sum, l) => sum + (parseFloat(l.credit_amount) || 0), 0);
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
@@ -295,23 +334,19 @@ export function RecurringVoucherForm() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/recurring-vouchers')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Recurring Voucher' : 'New Recurring Voucher'}
-          </h1>
-          <p className="text-sm text-slate-500">Set up automated periodic voucher entries</p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Recurring Voucher' : 'New Recurring Voucher'}
+        subtitle="Set up automated periodic voucher entries"
+        breadcrumbs={[
+          { label: 'Recurring Vouchers', to: '/admin/finance/recurring-vouchers' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       {/* Form */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           <Card>
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
@@ -462,7 +497,9 @@ export function RecurringVoucherForm() {
                     min={1}
                     placeholder="Unlimited"
                     value={formData.total_occurrences}
-                    onChange={(e) => setFormData({ ...formData, total_occurrences: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, total_occurrences: e.target.value })
+                    }
                   />
                 </div>
                 <div>
@@ -470,7 +507,9 @@ export function RecurringVoucherForm() {
                   <Input
                     placeholder="{month} {year} Rent"
                     value={formData.narration_template}
-                    onChange={(e) => setFormData({ ...formData, narration_template: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, narration_template: e.target.value })
+                    }
                   />
                 </div>
               </div>
@@ -481,7 +520,7 @@ export function RecurringVoucherForm() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Line Items</CardTitle>
               <Button type="button" variant="outline" size="sm" onClick={addLine}>
-                <Plus className="h-4 w-4 mr-1" /> Add Line
+                <Plus className="mr-1 h-4 w-4" /> Add Line
               </Button>
             </CardHeader>
             <CardContent>
@@ -499,7 +538,10 @@ export function RecurringVoucherForm() {
                   {lines.map((line, idx) => (
                     <TableRow key={idx}>
                       <TableCell>
-                        <Select value={line.account_id} onValueChange={(v) => updateLine(idx, 'account_id', v)}>
+                        <Select
+                          value={line.account_id}
+                          onValueChange={(v) => updateLine(idx, 'account_id', v)}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select account" />
                           </SelectTrigger>
@@ -549,17 +591,23 @@ export function RecurringVoucherForm() {
                 </TableBody>
               </Table>
 
-              <div className="flex justify-end gap-8 mt-4 text-sm">
+              <div className="mt-4 flex justify-end gap-8 text-sm">
                 <span>
-                  Total Debit: <strong className="font-mono">{formatCurrency(totalDebit)}</strong>
+                  Total Debit:{' '}
+                  <strong className="font-mono">
+                    <AmountDisplay amount={totalDebit} />
+                  </strong>
                 </span>
                 <span>
-                  Total Credit: <strong className="font-mono">{formatCurrency(totalCredit)}</strong>
+                  Total Credit:{' '}
+                  <strong className="font-mono">
+                    <AmountDisplay amount={totalCredit} />
+                  </strong>
                 </span>
               </div>
 
               {Math.abs(totalDebit - totalCredit) > 0.01 && (
-                <p className="text-red-500 text-sm mt-2">Debit and Credit must be equal</p>
+                <p className="mt-2 text-sm text-red-500">Debit and Credit must be equal</p>
               )}
             </CardContent>
           </Card>
@@ -576,7 +624,9 @@ export function RecurringVoucherForm() {
                 <Checkbox
                   id="auto_post"
                   checked={formData.auto_post}
-                  onCheckedChange={(checked) => setFormData({ ...formData, auto_post: checked === true })}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, auto_post: checked === true })
+                  }
                 />
                 <Label htmlFor="auto_post" className="cursor-pointer">
                   Auto-Post generated vouchers
@@ -586,7 +636,9 @@ export function RecurringVoucherForm() {
                 <Checkbox
                   id="auto_approve"
                   checked={formData.auto_approve}
-                  onCheckedChange={(checked) => setFormData({ ...formData, auto_approve: checked === true })}
+                  onCheckedChange={(checked) =>
+                    setFormData({ ...formData, auto_approve: checked === true })
+                  }
                   disabled={!formData.auto_post}
                 />
                 <Label htmlFor="auto_approve" className="cursor-pointer">

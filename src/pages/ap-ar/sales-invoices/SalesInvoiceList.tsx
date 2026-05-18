@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -13,10 +11,33 @@ import {
   Send,
   XCircle,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -32,28 +53,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { salesInvoicesApi, organizationsApi, customersApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   code: string;
@@ -80,6 +84,8 @@ interface SalesInvoice {
   e_invoice_status: string | null;
   is_posted: boolean;
 }
+
+type SalesInvoiceListParams = Parameters<typeof salesInvoicesApi.list>[0];
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Draft',
@@ -150,18 +156,7 @@ export function SalesInvoiceList() {
   const [cancelReason, setCancelReason] = useState('');
   const pageSize = 20;
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      loadCustomers();
-      loadInvoices();
-    }
-  }, [selectedOrgId, page, includeInactive, searchQuery, statusFilter, receiptStatusFilter, customerFilter, fromDate, toDate]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page: 1, page_size: 100 });
       const orgs = response.data.items || [];
@@ -170,30 +165,30 @@ export function SalesInvoiceList() {
         setSelectedOrgId(orgs[0].id);
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
       toast({
         title: 'Error',
         description: 'Failed to load organizations',
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await customersApi.getActive({ organization_id: selectedOrgId });
       setCustomers(response.data || []);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      logger.error('Failed to load customers:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadInvoices = async () => {
+  const loadInvoices = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
     try {
-      const params: any = {
+      const params: SalesInvoiceListParams = {
         organization_id: selectedOrgId,
         page,
         page_size: pageSize,
@@ -222,7 +217,7 @@ export function SalesInvoiceList() {
       setTotal(response.data.total || 0);
       setTotalPages(response.data.pages || 1);
     } catch (error) {
-      console.error('Failed to load sales invoices:', error);
+      logger.error('Failed to load sales invoices:', error);
       toast({
         title: 'Error',
         description: 'Failed to load sales invoices',
@@ -231,7 +226,29 @@ export function SalesInvoiceList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    customerFilter,
+    fromDate,
+    includeInactive,
+    page,
+    receiptStatusFilter,
+    searchQuery,
+    selectedOrgId,
+    statusFilter,
+    toDate,
+    toast,
+  ]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      loadCustomers();
+      loadInvoices();
+    }
+  }, [loadCustomers, loadInvoices, selectedOrgId]);
 
   const handleSubmit = async (invoice: SalesInvoice) => {
     try {
@@ -241,12 +258,8 @@ export function SalesInvoiceList() {
         description: 'Sales invoice submitted for approval',
       });
       loadInvoices();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to submit sales invoice',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -258,12 +271,8 @@ export function SalesInvoiceList() {
         description: 'Sales invoice approved successfully',
       });
       loadInvoices();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve sales invoice',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -276,12 +285,8 @@ export function SalesInvoiceList() {
         description: 'Sales invoice cancelled successfully',
       });
       loadInvoices();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to cancel sales invoice',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setCancelDialogOpen(false);
       setInvoiceToCancel(null);
@@ -298,32 +303,12 @@ export function SalesInvoiceList() {
         description: 'Sales invoice deleted successfully',
       });
       loadInvoices();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete sales invoice',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setDeleteDialogOpen(false);
       setInvoiceToDelete(null);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
   };
 
   const isOverdue = (dueDate: string, status: string) => {
@@ -513,20 +498,20 @@ export function SalesInvoiceList() {
                 <TableRow key={invoice.id}>
                   <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
                   <TableCell>{invoice.customer_name || '-'}</TableCell>
-                  <TableCell>{formatDate(invoice.invoice_date)}</TableCell>
+                  <TableCell><DateDisplay date={invoice.invoice_date} /></TableCell>
                   <TableCell>
                     <div className={isOverdue(invoice.due_date, invoice.status) ? 'text-red-600 font-medium' : ''}>
-                      {formatDate(invoice.due_date)}
+                      <DateDisplay date={invoice.due_date} />
                       {isOverdue(invoice.due_date, invoice.status) && (
                         <span className="block text-xs">Overdue</span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(invoice.total_amount)}
+                    <AmountDisplay amount={invoice.total_amount} />
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(invoice.balance_amount)}
+                    <AmountDisplay amount={invoice.balance_amount} />
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -660,7 +645,7 @@ export function SalesInvoiceList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Sales Invoice</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete invoice "{invoiceToDelete?.invoice_number}"? This action
+              Are you sure you want to delete invoice &quot;{invoiceToDelete?.invoice_number}&quot;? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -682,7 +667,7 @@ export function SalesInvoiceList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Sales Invoice</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel invoice "{invoiceToCancel?.invoice_number}"?
+              Are you sure you want to cancel invoice &quot;{invoiceToCancel?.invoice_number}&quot;?
               Please provide a reason for cancellation.
             </AlertDialogDescription>
           </AlertDialogHeader>

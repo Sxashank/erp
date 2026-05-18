@@ -23,8 +23,11 @@ class TestLeaseClassification:
         lease_start = date(2024, 4, 1)
         lease_end = date(2025, 3, 31)
 
-        lease_term_days = (lease_end - lease_start).days
-        lease_term_months = lease_term_days / 30
+        lease_term_months = (
+            (lease_end.year - lease_start.year) * 12
+            + (lease_end.month - lease_start.month)
+            + 1
+        )
 
         is_short_term = lease_term_months <= 12
         assert is_short_term

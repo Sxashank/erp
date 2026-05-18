@@ -33,6 +33,11 @@ class ChallanType(str, enum.Enum):
     FORM_281 = "281"  # TDS on salary and other than salary
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    """Persist enum values exactly as defined in existing PostgreSQL enum types."""
+    return [member.value for member in enum_cls]
+
+
 class TDSChallan(BaseModel):
     """
     TDS Challan for aggregating TDS entries for payment.
@@ -161,7 +166,12 @@ class TDSChallan(BaseModel):
 
     # Payment details
     status: Mapped[ChallanStatus] = mapped_column(
-        SQLEnum(ChallanStatus),
+        SQLEnum(
+            ChallanStatus,
+            name="challan_status",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
         nullable=False,
         default=ChallanStatus.DRAFT,
         index=True,
@@ -220,7 +230,12 @@ class TDSChallan(BaseModel):
 
     # Challan form details
     challan_type: Mapped[ChallanType] = mapped_column(
-        SQLEnum(ChallanType),
+        SQLEnum(
+            ChallanType,
+            name="challan_type",
+            create_type=False,
+            values_callable=_enum_values,
+        ),
         nullable=False,
         default=ChallanType.FORM_281,
     )

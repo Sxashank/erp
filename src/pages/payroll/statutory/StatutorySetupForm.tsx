@@ -2,14 +2,16 @@
  * Statutory Setup Form Page
  */
 
+import { Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -17,10 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import payrollService, { StatutorySetup } from '@/services/payrollService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { StatutorySetup } from '@/services/payrollService';
+import payrollService from '@/services/payrollService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const STATUTORY_TYPES = [
   { value: 'PF', label: 'Provident Fund (PF)' },
@@ -112,7 +115,7 @@ export default function StatutorySetupForm() {
         description: 'Failed to load setup',
         variant: 'destructive',
       });
-      navigate('/payroll/statutory');
+      navigate('/admin/payroll/statutory');
     } finally {
       setLoading(false);
     }
@@ -156,16 +159,14 @@ export default function StatutorySetupForm() {
 
       const payload: Partial<StatutorySetup> = {
         organization_id: formData.organization_id,
-        statutory_type: formData.statutory_type as any,
+        statutory_type: formData.statutory_type as StatutorySetup['statutory_type'],
         employer_contribution_pct: formData.employer_contribution_pct
           ? parseFloat(formData.employer_contribution_pct)
           : undefined,
         employee_contribution_pct: formData.employee_contribution_pct
           ? parseFloat(formData.employee_contribution_pct)
           : undefined,
-        wage_ceiling: formData.wage_ceiling
-          ? parseFloat(formData.wage_ceiling)
-          : undefined,
+        wage_ceiling: formData.wage_ceiling ? parseFloat(formData.wage_ceiling) : undefined,
         admin_charges_pct: formData.admin_charges_pct
           ? parseFloat(formData.admin_charges_pct)
           : undefined,
@@ -187,11 +188,11 @@ export default function StatutorySetupForm() {
         });
       }
 
-      navigate('/payroll/statutory');
-    } catch (error: any) {
+      navigate('/admin/payroll/statutory');
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save setup',
+        description: getErrorMessage(error, 'Failed to save setup'),
         variant: 'destructive',
       });
     } finally {
@@ -202,27 +203,21 @@ export default function StatutorySetupForm() {
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6 max-w-2xl">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/payroll/statutory')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">
-            {isEdit ? 'Edit' : 'Configure'} Statutory Setup
-          </h1>
-          <p className="text-muted-foreground">
-            {isEdit ? 'Update configuration' : 'Set up statutory compliance'}
-          </p>
-        </div>
-      </div>
+    <div className="container mx-auto max-w-2xl space-y-6 py-6">
+      <PageHeader
+        title={`${isEdit ? 'Edit' : 'Configure'} Statutory Setup`}
+        subtitle={isEdit ? 'Update configuration' : 'Set up statutory compliance'}
+        breadcrumbs={[
+          { label: 'Statutory Setup', to: '/admin/payroll/statutory' },
+          { label: isEdit ? 'Edit' : 'Configure' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit}>
         <Card>
@@ -255,9 +250,7 @@ export default function StatutorySetupForm() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="employer_contribution_pct">
-                  Employer Contribution (%)
-                </Label>
+                <Label htmlFor="employer_contribution_pct">Employer Contribution (%)</Label>
                 <Input
                   id="employer_contribution_pct"
                   type="number"
@@ -273,9 +266,7 @@ export default function StatutorySetupForm() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="employee_contribution_pct">
-                  Employee Contribution (%)
-                </Label>
+                <Label htmlFor="employee_contribution_pct">Employee Contribution (%)</Label>
                 <Input
                   id="employee_contribution_pct"
                   type="number"
@@ -299,9 +290,7 @@ export default function StatutorySetupForm() {
                   id="wage_ceiling"
                   type="number"
                   value={formData.wage_ceiling}
-                  onChange={(e) =>
-                    setFormData({ ...formData, wage_ceiling: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, wage_ceiling: e.target.value })}
                   placeholder="e.g., 15000"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -335,9 +324,7 @@ export default function StatutorySetupForm() {
                 id="effective_from"
                 type="date"
                 value={formData.effective_from}
-                onChange={(e) =>
-                  setFormData({ ...formData, effective_from: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, effective_from: e.target.value })}
               />
             </div>
 
@@ -354,11 +341,11 @@ export default function StatutorySetupForm() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="mt-6 flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/payroll/statutory')}
+            onClick={() => navigate('/admin/payroll/statutory')}
           >
             Cancel
           </Button>

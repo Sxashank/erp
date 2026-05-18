@@ -1,9 +1,13 @@
 /**
  * Loan Account API Service
- * API calls for Loan Account management (LMS)
+ * API calls for Loan Account management (LMS).
+ *
+ * The list endpoint emits camelCase via Pydantic CamelSchema on the
+ * backend (`response_model_by_alias=True`) — no client-side mapping.
  */
 
 import api from '../api';
+
 import type {
   LoanAccount,
   RepaymentSchedule,
@@ -11,25 +15,77 @@ import type {
   PaginatedResponse,
 } from '@/types/lending';
 
-const BASE_URL = '/lending/accounts';
+const BASE_URL = '/lending/loan-accounts';
+
+// ============== List item (matches LoanAccountListResponse) ==============
+
+export type LoanAccountStatus =
+  | 'CREATED'
+  | 'ACTIVE'
+  | 'DORMANT'
+  | 'FROZEN'
+  | 'CLOSED'
+  | 'WRITTEN_OFF'
+  | 'RECALLED';
+export type AssetClassification =
+  | 'STANDARD'
+  | 'SMA_0'
+  | 'SMA_1'
+  | 'SMA_2'
+  | 'NPA'
+  | 'SUBSTANDARD'
+  | 'SUB_STANDARD'
+  | 'DOUBTFUL'
+  | 'DOUBTFUL_1'
+  | 'DOUBTFUL_2'
+  | 'DOUBTFUL_3'
+  | 'LOSS';
+
+// Monetary + rate fields are JSON strings on the wire (Pydantic Decimal
+// preserves precision — CLAUDE.md §6.2). Pass them straight to
+// <AmountDisplay> / <PercentageDisplay> (both accept `string`), or coerce
+// once via `Number(...)` for display-only aggregations.
+export interface LoanAccountListItem {
+  id: string;
+  loanAccountNumber: string;
+  entityId: string;
+  entityName: string | null;
+  productId: string;
+  productName: string | null;
+  sanctionedAmount: string;
+  totalDisbursedAmount: string;
+  principalOutstanding: string;
+  totalOutstanding: string;
+  currentInterestRate: string;
+  daysPastDue: number;
+  assetClassification: AssetClassification;
+  status: LoanAccountStatus;
+  accountOpenDate: string;
+  maturityDate: string | null;
+}
 
 // ============== Loan Account CRUD ==============
 
-export async function getLoanAccounts(filters?: LoanAccountFilters): Promise<PaginatedResponse<LoanAccount>> {
+export async function getLoanAccounts(
+  filters?: LoanAccountFilters,
+): Promise<PaginatedResponse<LoanAccountListItem>> {
   const params = new URLSearchParams();
 
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.entity_id) params.append('entity_id', filters.entity_id);
-  if (filters?.product_id) params.append('product_id', filters.product_id);
+  if (filters?.entityId) params.append('entity_id', filters.entityId);
+  if (filters?.productId) params.append('product_id', filters.productId);
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.asset_classification) params.append('asset_classification', filters.asset_classification);
-  if (filters?.branch_id) params.append('branch_id', filters.branch_id);
-  if (filters?.dpd_from !== undefined) params.append('dpd_from', filters.dpd_from.toString());
-  if (filters?.dpd_to !== undefined) params.append('dpd_to', filters.dpd_to.toString());
+  if (filters?.assetClassification) {
+    params.append('asset_classification', filters.assetClassification);
+  }
+  if (filters?.dpdFrom !== undefined) params.append('min_dpd', filters.dpdFrom.toString());
+  if (filters?.dpdTo !== undefined) params.append('max_dpd', filters.dpdTo.toString());
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.page_size) params.append('page_size', filters.page_size.toString());
+  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
 
-  const response = await api.get<PaginatedResponse<LoanAccount>>(`${BASE_URL}?${params.toString()}`);
+  const response = await api.get<PaginatedResponse<LoanAccountListItem>>(
+    `${BASE_URL}?${params.toString()}`,
+  );
   return response.data;
 }
 
@@ -39,11 +95,14 @@ export async function getLoanAccount(accountId: string): Promise<LoanAccount> {
 }
 
 export async function createLoanAccount(sanctionId: string): Promise<LoanAccount> {
-  const response = await api.post<LoanAccount>(BASE_URL, { sanction_id: sanctionId });
+  const response = await api.post<LoanAccount>(BASE_URL, { sanctionId });
   return response.data;
 }
 
-export async function updateLoanAccount(accountId: string, data: Partial<LoanAccount>): Promise<LoanAccount> {
+export async function updateLoanAccount(
+  accountId: string,
+  data: Partial<LoanAccount>,
+): Promise<LoanAccount> {
   const response = await api.put<LoanAccount>(`${BASE_URL}/${accountId}`, data);
   return response.data;
 }
@@ -57,20 +116,23 @@ export async function getRepaymentSchedule(accountId: string): Promise<Repayment
 
 export async function regenerateSchedule(
   accountId: string,
-  data?: { effective_date?: string; reason?: string }
+  data?: { effective_date?: string; reason?: string },
 ): Promise<RepaymentSchedule[]> {
-  const response = await api.post<RepaymentSchedule[]>(`${BASE_URL}/${accountId}/schedule/regenerate`, data);
+  const response = await api.post<RepaymentSchedule[]>(
+    `${BASE_URL}/${accountId}/schedule/regenerate`,
+    data,
+  );
   return response.data;
 }
 
 export async function updateScheduleEntry(
   accountId: string,
   scheduleId: string,
-  data: Partial<RepaymentSchedule>
+  data: Partial<RepaymentSchedule>,
 ): Promise<RepaymentSchedule> {
   const response = await api.put<RepaymentSchedule>(
     `${BASE_URL}/${accountId}/schedule/${scheduleId}`,
-    data
+    data,
   );
   return response.data;
 }
@@ -79,26 +141,31 @@ export async function updateScheduleEntry(
 
 export async function processRateReset(
   accountId: string,
-  data: { new_rate: number; effective_date: string; remarks?: string }
+  data: { new_rate: number; effective_date: string; remarks?: string },
 ): Promise<LoanAccount> {
   const response = await api.post<LoanAccount>(`${BASE_URL}/${accountId}/rate-reset`, data);
   return response.data;
 }
 
-export async function getRateResetHistory(accountId: string): Promise<Array<{
-  reset_id: string;
-  old_rate: number;
-  new_rate: number;
-  effective_date: string;
-  created_at: string;
-}>> {
+export async function getRateResetHistory(accountId: string): Promise<
+  {
+    reset_id: string;
+    old_rate: number;
+    new_rate: number;
+    effective_date: string;
+    created_at: string;
+  }[]
+> {
   const response = await api.get(`${BASE_URL}/${accountId}/rate-reset/history`);
   return response.data;
 }
 
 // ============== Balance & Position ==============
 
-export async function getLoanBalance(accountId: string, asOfDate?: string): Promise<{
+export async function getLoanBalance(
+  accountId: string,
+  asOfDate?: string,
+): Promise<{
   principal_outstanding: number;
   interest_outstanding: number;
   penal_outstanding: number;
@@ -128,7 +195,10 @@ export async function getLoanSummary(accountId: string): Promise<{
 
 // ============== Interest Accrual ==============
 
-export async function runAccrual(accountId: string, data?: { accrual_date?: string }): Promise<{
+export async function runAccrual(
+  accountId: string,
+  data?: { accrual_date?: string },
+): Promise<{
   accrual_id: string;
   accrued_amount: number;
   accrual_date: string;
@@ -137,14 +207,16 @@ export async function runAccrual(accountId: string, data?: { accrual_date?: stri
   return response.data;
 }
 
-export async function getAccrualHistory(accountId: string): Promise<Array<{
-  accrual_id: string;
-  accrual_date: string;
-  principal_balance: number;
-  days: number;
-  rate: number;
-  accrued_amount: number;
-}>> {
+export async function getAccrualHistory(accountId: string): Promise<
+  {
+    accrual_id: string;
+    accrual_date: string;
+    principal_balance: number;
+    days: number;
+    rate: number;
+    accrued_amount: number;
+  }[]
+> {
   const response = await api.get(`${BASE_URL}/${accountId}/accrual/history`);
   return response.data;
 }
@@ -162,15 +234,17 @@ export async function generateDemand(accountId: string): Promise<{
   return response.data;
 }
 
-export async function getDemandHistory(accountId: string): Promise<Array<{
-  demand_id: string;
-  due_date: string;
-  principal_demand: number;
-  interest_demand: number;
-  total_demand: number;
-  paid_amount: number;
-  status: string;
-}>> {
+export async function getDemandHistory(accountId: string): Promise<
+  {
+    demand_id: string;
+    due_date: string;
+    principal_demand: number;
+    interest_demand: number;
+    total_demand: number;
+    paid_amount: number;
+    status: string;
+  }[]
+> {
   const response = await api.get(`${BASE_URL}/${accountId}/demand/history`);
   return response.data;
 }
@@ -180,17 +254,17 @@ export async function getDemandHistory(accountId: string): Promise<Array<{
 export async function getStatementOfAccount(
   accountId: string,
   dateFrom: string,
-  dateTo: string
+  dateTo: string,
 ): Promise<{
   account_details: LoanAccount;
   opening_balance: number;
-  transactions: Array<{
+  transactions: {
     date: string;
     particulars: string;
     debit: number;
     credit: number;
     balance: number;
-  }>;
+  }[];
   closing_balance: number;
 }> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo });
@@ -202,18 +276,24 @@ export async function downloadStatement(
   accountId: string,
   dateFrom: string,
   dateTo: string,
-  format: 'pdf' | 'excel' = 'pdf'
+  format: 'pdf' | 'excel' = 'pdf',
 ): Promise<Blob> {
   const params = new URLSearchParams({ date_from: dateFrom, date_to: dateTo, format });
-  const response = await api.get<Blob>(`${BASE_URL}/${accountId}/statement/download?${params.toString()}`, {
-    responseType: 'blob',
-  });
+  const response = await api.get<Blob>(
+    `${BASE_URL}/${accountId}/statement/download?${params.toString()}`,
+    {
+      responseType: 'blob',
+    },
+  );
   return response.data;
 }
 
 // ============== Closure ==============
 
-export async function getClosureQuote(accountId: string, closureDate?: string): Promise<{
+export async function getClosureQuote(
+  accountId: string,
+  closureDate?: string,
+): Promise<{
   principal_outstanding: number;
   interest_till_date: number;
   penal_outstanding: number;
@@ -229,7 +309,7 @@ export async function getClosureQuote(accountId: string, closureDate?: string): 
 
 export async function initiateClosure(
   accountId: string,
-  data: { closure_type: 'REGULAR' | 'FORECLOSURE'; remarks?: string }
+  data: { closure_type: 'REGULAR' | 'FORECLOSURE'; remarks?: string },
 ): Promise<{ closure_request_id: string }> {
   const response = await api.post(`${BASE_URL}/${accountId}/closure/initiate`, data);
   return response.data;

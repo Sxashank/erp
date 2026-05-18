@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.tds.tds_entry_service import TDSEntryService
 from app.schemas.tds.tds_entry import (
@@ -78,62 +78,59 @@ class ChallanUpdateRequest(BaseModel):
     bsr_code: str
 
 
-@router.get("", response_model=PaginatedResponse[TDSEntryResponse])
+@router.get("", response_model=PaginatedResponse[TDSEntryResponse], response_model_by_alias=True)
 async def list_tds_entries(
-    organization_id: UUID = Query(...),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     challan_status: Optional[TDSChallanStatus] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS entries for an organization."""
     service = TDSEntryService(db)
     skip = (page - 1) * page_size
     entries, total = await service.get_by_organization(
-        organization_id, from_date, to_date, challan_status, skip, page_size
+        current_user.organization_id, from_date, to_date, challan_status, skip, page_size
     )
     items = [_to_response(e) for e in entries]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/pending-challans", response_model=PaginatedResponse[TDSEntryResponse])
+@router.get("/pending-challans", response_model=PaginatedResponse[TDSEntryResponse], response_model_by_alias=True)
 async def list_pending_challans(
-    organization_id: UUID = Query(...),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS entries with pending challan payments."""
     service = TDSEntryService(db)
     skip = (page - 1) * page_size
-    entries, total = await service.get_pending_challans(organization_id, skip, page_size)
+    entries, total = await service.get_pending_challans(current_user.organization_id, skip, page_size)
     items = [_to_response(e) for e in entries]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/quarter/{financial_year}/{quarter}", response_model=List[TDSEntryResponse])
+@router.get("/quarter/{financial_year}/{quarter}", response_model=List[TDSEntryResponse], response_model_by_alias=True)
 async def list_by_quarter(
-    organization_id: UUID = Query(...),
     financial_year: str = "2024-25",
     quarter: str = "Q1",
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS entries for a specific quarter (for return filing)."""
     service = TDSEntryService(db)
-    entries = await service.get_by_quarter(organization_id, financial_year, quarter)
+    entries = await service.get_by_quarter(current_user.organization_id, financial_year, quarter)
     return [_to_response(e) for e in entries]
 
 
-@router.post("/validate-threshold", response_model=ThresholdValidationResponse)
+@router.post("/validate-threshold", response_model=ThresholdValidationResponse, response_model_by_alias=True)
 async def validate_threshold(
     data: ThresholdValidationRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Validate TDS threshold for a transaction.
 
@@ -168,12 +165,12 @@ async def validate_threshold(
     )
 
 
-@router.post("", response_model=TDSEntryResponse)
+@router.post("", response_model=TDSEntryResponse, response_model_by_alias=True)
 async def create_tds_entry(
     data: TDSEntryCreate,
     skip_threshold_check: bool = Query(False, description="Skip threshold validation for manual entries"),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new TDS entry.
 
@@ -185,11 +182,11 @@ async def create_tds_entry(
     return _to_response(entry)
 
 
-@router.get("/{entry_id}", response_model=TDSEntryResponse)
+@router.get("/{entry_id}", response_model=TDSEntryResponse, response_model_by_alias=True)
 async def get_tds_entry(
     entry_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS entry by ID."""
     service = TDSEntryService(db)
@@ -197,12 +194,12 @@ async def get_tds_entry(
     return _to_response(entry)
 
 
-@router.put("/{entry_id}", response_model=TDSEntryResponse)
+@router.put("/{entry_id}", response_model=TDSEntryResponse, response_model_by_alias=True)
 async def update_tds_entry(
     entry_id: UUID,
     data: TDSEntryUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a TDS entry."""
     service = TDSEntryService(db)
@@ -210,12 +207,12 @@ async def update_tds_entry(
     return _to_response(entry)
 
 
-@router.post("/{entry_id}/challan", response_model=TDSEntryResponse)
+@router.post("/{entry_id}/challan", response_model=TDSEntryResponse, response_model_by_alias=True)
 async def update_challan(
     entry_id: UUID,
     data: ChallanUpdateRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update challan details for a TDS entry."""
     service = TDSEntryService(db)
@@ -234,7 +231,7 @@ async def update_challan(
 async def delete_tds_entry(
     entry_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a TDS entry."""
     service = TDSEntryService(db)

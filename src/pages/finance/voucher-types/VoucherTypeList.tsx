@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Edit, FileText, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +31,7 @@ import { voucherTypesApi, organizationsApi } from '@/services/api';
 import type { VoucherType, Organization, PaginatedResponse } from '@/types';
 import { VOUCHER_CLASSES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function VoucherTypeList() {
   const navigate = useNavigate();
   const [voucherTypes, setVoucherTypes] = useState<VoucherType[]>([]);
@@ -39,17 +41,7 @@ export function VoucherTypeList() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 });
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchVoucherTypes();
-    }
-  }, [selectedOrgId, selectedClass]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
@@ -58,15 +50,15 @@ export function VoucherTypeList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchVoucherTypes = async (page = 1) => {
+  const fetchVoucherTypes = useCallback(async (page = 1) => {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Parameters<typeof voucherTypesApi.list>[0] = {
         organization_id: selectedOrgId,
         page,
         page_size: 20,
@@ -80,11 +72,21 @@ export function VoucherTypeList() {
       setVoucherTypes(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch voucher types:', error);
+      logger.error('Failed to fetch voucher types:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedClass, selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchVoucherTypes();
+    }
+  }, [fetchVoucherTypes, selectedOrgId, selectedClass]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this voucher type?')) return;
@@ -92,7 +94,7 @@ export function VoucherTypeList() {
       await voucherTypesApi.delete(id);
       fetchVoucherTypes(pagination.page);
     } catch (error) {
-      console.error('Failed to delete voucher type:', error);
+      logger.error('Failed to delete voucher type:', error);
     }
   };
 
@@ -121,16 +123,17 @@ export function VoucherTypeList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Voucher Types</h1>
-          <p className="text-sm text-slate-500">Manage voucher type configurations</p>
-        </div>
-        <Button onClick={() => navigate('/admin/finance/voucher-types/new')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Voucher Type
-        </Button>
-      </div>
+      <PageHeader
+        title="Voucher Types"
+        subtitle="Manage voucher type configurations"
+        breadcrumbs={[{ label: 'Finance', to: '/admin/finance' }, { label: 'Voucher Types' }]}
+        actions={
+          <Button onClick={() => navigate('/admin/finance/voucher-types/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Voucher Type
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -199,7 +202,9 @@ export function VoucherTypeList() {
                       <TableCell className="font-medium">{vt.code}</TableCell>
                       <TableCell>{vt.name}</TableCell>
                       <TableCell>
-                        <Badge className={`${getClassBadgeClass(vt.voucher_class)} hover:${getClassBadgeClass(vt.voucher_class)}`}>
+                        <Badge
+                          className={`${getClassBadgeClass(vt.voucher_class)} hover:${getClassBadgeClass(vt.voucher_class)}`}
+                        >
                           {vt.voucher_class.replace('_', ' ')}
                         </Badge>
                       </TableCell>
@@ -244,7 +249,9 @@ export function VoucherTypeList() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
                               <DropdownMenuItem
-                                onClick={() => navigate(`/admin/finance/voucher-types/${vt.id}/edit`)}
+                                onClick={() =>
+                                  navigate(`/admin/finance/voucher-types/${vt.id}/edit`)
+                                }
                               >
                                 <Edit className="mr-2 h-4 w-4" />
                                 Edit

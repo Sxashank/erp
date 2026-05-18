@@ -2,8 +2,6 @@
  * Fixed Deposits Dashboard
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Wallet,
   TrendingUp,
@@ -14,10 +12,13 @@ import {
   FileText,
   Calculator,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -26,8 +27,9 @@ import {
   CardDescription,
 } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, { FDSummary, FixedDeposit } from '@/services/fixedDepositService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { FDSummary, FixedDeposit } from '@/services/fixedDepositService';
+import fixedDepositService from '@/services/fixedDepositService';
 
 const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   DRAFT: 'outline',
@@ -51,7 +53,7 @@ export default function FDDashboard() {
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [organizationId]);
 
   const loadData = async () => {
     try {
@@ -286,7 +288,7 @@ export default function FDDashboard() {
                   <div className="text-right">
                     <p className="font-medium">{formatCurrency(fd.maturity_amount)}</p>
                     <p className="text-sm text-muted-foreground">
-                      Due: {new Date(fd.maturity_date).toLocaleDateString()}
+                      Due: <DateDisplay date={fd.maturity_date} />
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

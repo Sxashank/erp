@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Calendar, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -20,6 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface LeaveTypeFormData {
   organization_id: string;
   leave_code: string;
@@ -161,7 +162,7 @@ export function LeaveTypeForm() {
           setValue('organization_id', orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -181,7 +182,7 @@ export function LeaveTypeForm() {
             }
           });
         } catch (error) {
-          console.error('Failed to fetch leave type:', error);
+          logger.error('Failed to fetch leave type:', error);
         } finally {
           setLoading(false);
         }
@@ -200,7 +201,7 @@ export function LeaveTypeForm() {
       }
       navigate('/admin/hris/leave-types');
     } catch (error) {
-      console.error('Failed to save leave type:', error);
+      logger.error('Failed to save leave type:', error);
     } finally {
       setSaving(false);
     }

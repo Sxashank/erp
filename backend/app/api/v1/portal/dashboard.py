@@ -2,14 +2,13 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Header
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_db_with_tenant
 from app.api.v1.portal.auth import get_portal_user
 from app.services.portal.dashboard_service import PortalDashboardService
 
@@ -27,7 +26,7 @@ class DashboardSummary(BaseModel):
     total_outstanding: float
     total_overdue: float
     active_loans: int
-    next_due_date: Optional[str] = None
+    next_due_date: str | None = None
     next_due_amount: float
 
 
@@ -35,9 +34,9 @@ class DashboardResponse(BaseModel):
     """Dashboard response."""
 
     summary: DashboardSummary
-    loans: List[dict]
-    upcoming_dues: List[dict]
-    recent_payments: List[dict]
+    loans: list[dict]
+    upcoming_dues: list[dict]
+    recent_payments: list[dict]
     notifications: dict
     service_requests: dict
 
@@ -66,8 +65,8 @@ class LoanDetails(BaseModel):
     product_type: str
     sanctioned_amount: float
     disbursed_amount: float
-    disbursement_date: Optional[str] = None
-    maturity_date: Optional[str] = None
+    disbursement_date: str | None = None
+    maturity_date: str | None = None
     tenure_months: int
     interest_rate: float
     rate_type: str
@@ -78,7 +77,7 @@ class LoanDetails(BaseModel):
     overdue_amount: float
     emi_amount: float
     emi_date: int
-    next_emi_date: Optional[str] = None
+    next_emi_date: str | None = None
     remaining_emis: int
     status: str
     dpd: int
@@ -95,8 +94,8 @@ class RepaymentScheduleItem(BaseModel):
     opening_balance: float
     closing_balance: float
     status: str
-    paid_amount: Optional[float] = None
-    paid_date: Optional[str] = None
+    paid_amount: float | None = None
+    paid_date: str | None = None
 
 
 class UpcomingDue(BaseModel):
@@ -156,7 +155,7 @@ class ForeclosureQuote(BaseModel):
 class PaginatedResponse(BaseModel):
     """Paginated response."""
 
-    items: List
+    items: list
     total: int
     page: int
     page_size: int
@@ -170,12 +169,12 @@ class PaginatedResponse(BaseModel):
 
 @router.get(
     "",
-    response_model=DashboardResponse,
+    response_model=DashboardResponse, response_model_by_alias=True,
     summary="Get Dashboard",
 )
 async def get_dashboard(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get portal dashboard summary."""
     service = PortalDashboardService(db)
@@ -201,12 +200,12 @@ async def get_dashboard(
 
 @router.get(
     "/loans",
-    response_model=List[LoanSummary],
+    response_model=list[LoanSummary], response_model_by_alias=True,
     summary="Get All Loans",
 )
 async def get_loans(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all loans for the customer."""
     service = PortalDashboardService(db)
@@ -217,13 +216,13 @@ async def get_loans(
 
 @router.get(
     "/loans/{loan_account_id}",
-    response_model=LoanDetails,
+    response_model=LoanDetails, response_model_by_alias=True,
     summary="Get Loan Details",
 )
 async def get_loan_details(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get detailed information for a specific loan."""
     service = PortalDashboardService(db)
@@ -233,23 +232,20 @@ async def get_loan_details(
     )
 
     if not loan:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Loan not found",
-        )
+        raise NotFoundException(detail="Loan not found", error_code="LOAN_NOT_FOUND")
 
     return LoanDetails(**loan)
 
 
 @router.get(
     "/loans/{loan_account_id}/schedule",
-    response_model=List[RepaymentScheduleItem],
+    response_model=list[RepaymentScheduleItem], response_model_by_alias=True,
     summary="Get Repayment Schedule",
 )
 async def get_repayment_schedule(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get EMI repayment schedule for a loan."""
     service = PortalDashboardService(db)
@@ -268,13 +264,13 @@ async def get_repayment_schedule(
 
 @router.get(
     "/upcoming-dues",
-    response_model=List[UpcomingDue],
+    response_model=list[UpcomingDue], response_model_by_alias=True,
     summary="Get Upcoming Dues",
 )
 async def get_upcoming_dues(
     days: int = Query(30, ge=1, le=90),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get upcoming EMI dues across all loans."""
     service = PortalDashboardService(db)
@@ -292,7 +288,7 @@ async def get_upcoming_dues(
 )
 async def get_overdue_summary(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get summary of overdue amounts."""
     service = PortalDashboardService(db)
@@ -308,17 +304,17 @@ async def get_overdue_summary(
 
 @router.get(
     "/loans/{loan_account_id}/payments",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Payment History",
 )
 async def get_payment_history(
     loan_account_id: UUID,
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get payment history for a specific loan."""
     service = PortalDashboardService(db)
@@ -347,15 +343,15 @@ async def get_payment_history(
 
 @router.get(
     "/loans/{loan_account_id}/prepayment-quote",
-    response_model=PrepaymentQuote,
+    response_model=PrepaymentQuote, response_model_by_alias=True,
     summary="Get Prepayment Quote",
 )
 async def get_prepayment_quote(
     loan_account_id: UUID,
     amount: Decimal,
-    prepayment_date: Optional[date] = None,
+    prepayment_date: date | None = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Calculate prepayment quote.
@@ -375,14 +371,14 @@ async def get_prepayment_quote(
 
 @router.get(
     "/loans/{loan_account_id}/foreclosure-quote",
-    response_model=ForeclosureQuote,
+    response_model=ForeclosureQuote, response_model_by_alias=True,
     summary="Get Foreclosure Quote",
 )
 async def get_foreclosure_quote(
     loan_account_id: UUID,
-    foreclosure_date: Optional[date] = None,
+    foreclosure_date: date | None = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Calculate foreclosure quote.
@@ -413,7 +409,7 @@ async def get_account_statement(
     from_date: date,
     to_date: date,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate account statement for a loan."""
     service = PortalDashboardService(db)
@@ -425,3 +421,251 @@ async def get_account_statement(
     )
 
     return statement
+
+
+# =============================================================================
+# Borrower-portal: failed / missed / CSV (WI-5)
+# =============================================================================
+# These routes use the entity-access guard so a borrower cannot see
+# schedules for a loan whose entity they don't own. They are appended
+# here (rather than in a new router) so the FE's existing /loans/{id}
+# URL space stays cohesive.
+
+
+import csv as _csv
+import io as _io
+from datetime import date as _date
+
+from fastapi import status as _http_status
+from fastapi.responses import StreamingResponse as _StreamingResponse
+from sqlalchemy import and_ as _and
+from sqlalchemy import or_ as _or
+from sqlalchemy import select as _select
+
+from app.models.lending.loan_account import (
+    RepaymentSchedule as _RepaymentSchedule,
+)
+from app.models.lending.loan_account import (
+    ScheduleInstallment as _ScheduleInstallment,
+)
+from app.services.portal.entity_access import (
+    assert_loan_access as _assert_loan_access,
+)
+from app.core.exceptions import NotFoundException
+
+
+class _ScheduleAlertItem(BaseModel):
+    """Failed / missed installment line for the borrower's attention surface."""
+
+    installment_number: int
+    due_date: str
+    principal_due: float
+    interest_due: float
+    emi_amount: float
+    days_past_due: int
+    status: str
+    fail_reason: str | None = None
+    last_attempt_date: str | None = None
+
+
+async def _current_schedule(
+    db: AsyncSession,
+    loan_account_id: UUID,
+) -> _RepaymentSchedule | None:
+    stmt = (
+        _select(_RepaymentSchedule)
+        .where(
+            _RepaymentSchedule.loan_account_id == loan_account_id,
+            _RepaymentSchedule.is_current.is_(True),
+            _RepaymentSchedule.deleted_at.is_(None),
+        )
+        .limit(1)
+    )
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
+def _dpd_for(installment: "_ScheduleInstallment") -> int:
+    today = _date.today()
+    if installment.due_date >= today:
+        return 0
+    if (
+        installment.status.value
+        if hasattr(installment.status, "value")
+        else str(installment.status) == "PAID"
+    ):
+        return 0
+    return (today - installment.due_date).days
+
+
+@router.get(
+    "/loans/{loan_account_id}/schedule/failed",
+    response_model=list[_ScheduleAlertItem], response_model_by_alias=True,
+    summary="List failed / bounced installments for the borrower",
+)
+async def get_failed_installments(
+    loan_account_id: UUID,
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+):
+    """Return installments whose status indicates collection failure.
+
+    The platform's :class:`InstallmentStatus` enum does not yet carry
+    ``FAILED`` / ``BOUNCED`` / ``MISSED`` values — those concepts live
+    on receipts / mandate retries. As a first cut we treat
+    "overdue + not paid" as the failed/missed surface and degrade
+    gracefully when the schedule has no installments yet (a draft loan
+    that hasn't been disbursed).
+    """
+    schedule = await _current_schedule(db, await _verified_loan_id(user, loan_account_id, db))
+    if schedule is None:
+        return []
+
+    today = _date.today()
+    stmt = (
+        _select(_ScheduleInstallment)
+        .where(
+            _ScheduleInstallment.schedule_id == schedule.id,
+            _or(
+                _ScheduleInstallment.status == "OVERDUE",
+                _and(
+                    _ScheduleInstallment.due_date < today,
+                    _ScheduleInstallment.status.notin_(["PAID", "WAIVED", "WRITTEN_OFF"]),
+                ),
+            ),
+        )
+        .order_by(_ScheduleInstallment.due_date.asc())
+    )
+    rows = list((await db.execute(stmt)).scalars().all())
+    return [
+        _ScheduleAlertItem(
+            installment_number=r.installment_number,
+            due_date=r.due_date.isoformat(),
+            principal_due=float(r.principal_amount),
+            interest_due=float(r.interest_amount),
+            emi_amount=float(r.emi_amount),
+            days_past_due=_dpd_for(r),
+            status=str(r.status.value if hasattr(r.status, "value") else r.status),
+            fail_reason=None,
+            last_attempt_date=None,
+        )
+        for r in rows
+    ]
+
+
+@router.get(
+    "/loans/{loan_account_id}/schedule/missed",
+    response_model=list[_ScheduleAlertItem], response_model_by_alias=True,
+    summary="List missed installments for the borrower",
+)
+async def get_missed_installments(
+    loan_account_id: UUID,
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+):
+    """Alias surface for "missed" — currently same query as ``/failed``
+    filtered to past-due unpaid lines. Splits once the platform models
+    NACH bounce vs no-show separately.
+    """
+    schedule = await _current_schedule(db, await _verified_loan_id(user, loan_account_id, db))
+    if schedule is None:
+        return []
+
+    today = _date.today()
+    stmt = (
+        _select(_ScheduleInstallment)
+        .where(
+            _ScheduleInstallment.schedule_id == schedule.id,
+            _ScheduleInstallment.due_date < today,
+            _ScheduleInstallment.status.notin_(["PAID", "WAIVED", "WRITTEN_OFF", "OVERDUE"]),
+        )
+        .order_by(_ScheduleInstallment.due_date.asc())
+    )
+    rows = list((await db.execute(stmt)).scalars().all())
+    return [
+        _ScheduleAlertItem(
+            installment_number=r.installment_number,
+            due_date=r.due_date.isoformat(),
+            principal_due=float(r.principal_amount),
+            interest_due=float(r.interest_amount),
+            emi_amount=float(r.emi_amount),
+            days_past_due=_dpd_for(r),
+            status=str(r.status.value if hasattr(r.status, "value") else r.status),
+            fail_reason=None,
+            last_attempt_date=None,
+        )
+        for r in rows
+    ]
+
+
+@router.get(
+    "/loans/{loan_account_id}/schedule.csv",
+    summary="Download the full repayment schedule as CSV",
+)
+async def get_schedule_csv(
+    loan_account_id: UUID,
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+) -> _StreamingResponse:
+    """Stream the full repayment schedule as CSV."""
+    loan = await _assert_loan_access(user, loan_account_id, db)
+    schedule = await _current_schedule(db, loan_account_id)
+    rows: list = []
+    if schedule is not None:
+        stmt = (
+            _select(_ScheduleInstallment)
+            .where(_ScheduleInstallment.schedule_id == schedule.id)
+            .order_by(_ScheduleInstallment.installment_number.asc())
+        )
+        rows = list((await db.execute(stmt)).scalars().all())
+
+    buf = _io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow(
+        [
+            "Installment#",
+            "Due Date",
+            "Principal Due",
+            "Interest Due",
+            "EMI",
+            "Opening Balance",
+            "Closing Balance",
+            "Status",
+            "Paid Amount",
+            "Paid Date",
+        ]
+    )
+    for r in rows:
+        paid_amount = (r.principal_paid or 0) + (r.interest_paid or 0)
+        writer.writerow(
+            [
+                r.installment_number,
+                r.due_date.isoformat() if r.due_date else "",
+                str(r.principal_amount),
+                str(r.interest_amount),
+                str(r.emi_amount),
+                str(r.opening_balance),
+                str(r.closing_balance),
+                str(r.status.value if hasattr(r.status, "value") else r.status),
+                str(paid_amount),
+                r.paid_date.isoformat() if r.paid_date else "",
+            ]
+        )
+
+    filename = f"Schedule-{loan.loan_account_number}.csv"
+    return _StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="text/csv",
+        status_code=_http_status.HTTP_200_OK,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+async def _verified_loan_id(
+    user,
+    loan_account_id: UUID,
+    db: AsyncSession,
+) -> UUID:
+    """Used inside the failed/missed handlers to enforce entity access
+    without rebuilding the loan-account ORM object more than once."""
+    loan = await _assert_loan_access(user, loan_account_id, db)
+    return loan.id

@@ -1,15 +1,18 @@
-import { useEffect, useState } from 'react';
+import { FileText, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, Loader2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { voucherTemplatesApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface TemplateDetail {
   id: string;
   template_name: string;
@@ -17,12 +20,12 @@ interface TemplateDetail {
   total_amount: number;
   default_narration: string | null;
   category: string | null;
-  lines: Array<{
+  lines: {
     account_name: string;
     account_code: string;
     debit_amount: number;
     credit_amount: number;
-  }>;
+  }[];
 }
 
 export function UseVoucherTemplate() {
@@ -38,25 +41,25 @@ export function UseVoucherTemplate() {
   const [narration, setNarration] = useState('');
   const [multiplier, setMultiplier] = useState('1');
 
-  useEffect(() => {
-    if (id) {
-      fetchTemplate(id);
-    }
-  }, [id]);
-
-  const fetchTemplate = async (templateId: string) => {
+  const fetchTemplate = useCallback(async (templateId: string) => {
     try {
       setLoading(true);
       const response = await voucherTemplatesApi.get(templateId);
       setTemplate(response.data);
       setNarration(response.data.default_narration || '');
     } catch (error) {
-      console.error('Failed to fetch template:', error);
+      logger.error('Failed to fetch template:', error);
       toast({ title: 'Error', description: 'Failed to load template', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (id) {
+      fetchTemplate(id);
+    }
+  }, [fetchTemplate, id]);
 
   const handleSubmit = async () => {
     if (!id) return;
@@ -75,12 +78,8 @@ export function UseVoucherTemplate() {
       } else {
         toast({ title: 'Error', description: response.data.message, variant: 'destructive' });
       }
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create voucher',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setSubmitting(false);
     }
@@ -95,7 +94,7 @@ export function UseVoucherTemplate() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
@@ -103,9 +102,13 @@ export function UseVoucherTemplate() {
 
   if (!template) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-slate-500">Template not found</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('/admin/finance/voucher-templates')}>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => navigate('/admin/finance/voucher-templates')}
+        >
           Back to Templates
         </Button>
       </div>
@@ -116,20 +119,18 @@ export function UseVoucherTemplate() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/voucher-templates')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Use Template</h1>
-          <p className="text-sm text-slate-500">Create a voucher from template</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Use Template"
+        subtitle="Create a voucher from template"
+        breadcrumbs={[
+          { label: 'Voucher Templates', to: '/admin/finance/voucher-templates' },
+          { label: 'Use' },
+        ]}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Template Info */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -147,20 +148,21 @@ export function UseVoucherTemplate() {
                   <span className="font-mono">{formatCurrency(template.total_amount)}</span>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-hidden rounded-lg border">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="text-left p-3 font-medium">Account</th>
-                        <th className="text-right p-3 font-medium">Debit</th>
-                        <th className="text-right p-3 font-medium">Credit</th>
+                        <th className="p-3 text-left font-medium">Account</th>
+                        <th className="p-3 text-right font-medium">Debit</th>
+                        <th className="p-3 text-right font-medium">Credit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {template.lines.map((line, idx) => (
                         <tr key={idx} className="border-t">
                           <td className="p-3">
-                            <span className="text-slate-500">{line.account_code}</span> - {line.account_name}
+                            <span className="text-slate-500">{line.account_code}</span> -{' '}
+                            {line.account_name}
                           </td>
                           <td className="p-3 text-right font-mono">
                             {line.debit_amount > 0
@@ -178,8 +180,12 @@ export function UseVoucherTemplate() {
                     <tfoot className="bg-slate-50 font-medium">
                       <tr className="border-t">
                         <td className="p-3">Total</td>
-                        <td className="p-3 text-right font-mono">{formatCurrency(calculatedAmount)}</td>
-                        <td className="p-3 text-right font-mono">{formatCurrency(calculatedAmount)}</td>
+                        <td className="p-3 text-right font-mono">
+                          {formatCurrency(calculatedAmount)}
+                        </td>
+                        <td className="p-3 text-right font-mono">
+                          {formatCurrency(calculatedAmount)}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
@@ -213,7 +219,9 @@ export function UseVoucherTemplate() {
                   onChange={(e) => setNarration(e.target.value)}
                 />
                 {template.default_narration && (
-                  <p className="text-xs text-slate-500 mt-1">Default: {template.default_narration}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Default: {template.default_narration}
+                  </p>
                 )}
               </div>
 
@@ -227,13 +235,13 @@ export function UseVoucherTemplate() {
                   value={multiplier}
                   onChange={(e) => setMultiplier(e.target.value)}
                 />
-                <p className="text-xs text-slate-500 mt-1">Use to scale the template amounts</p>
+                <p className="mt-1 text-xs text-slate-500">Use to scale the template amounts</p>
               </div>
 
-              <div className="pt-4 border-t">
-                <div className="flex justify-between text-sm mb-2">
+              <div className="border-t pt-4">
+                <div className="mb-2 flex justify-between text-sm">
                   <span className="text-slate-500">Final Amount:</span>
-                  <span className="font-bold font-mono">{formatCurrency(calculatedAmount)}</span>
+                  <span className="font-mono font-bold">{formatCurrency(calculatedAmount)}</span>
                 </div>
               </div>
             </CardContent>

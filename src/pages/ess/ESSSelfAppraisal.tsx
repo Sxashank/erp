@@ -1,12 +1,3 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
-import { Progress } from '@/components/ui/progress';
-import { Slider } from '@/components/ui/slider';
-import { Separator } from '@/components/ui/separator';
 import {
   ClipboardCheck,
   Save,
@@ -17,80 +8,48 @@ import {
   AlertCircle,
   TrendingUp,
 } from 'lucide-react';
+import { useState } from 'react';
 
-// Mock data - Appraisal Cycle
-const appraisalCycle = {
-  id: '1',
-  name: 'Annual Appraisal 2024-25',
-  period: 'April 2024 - March 2025',
-  selfAppraisalDeadline: '2025-03-15',
-  status: 'SELF_APPRAISAL',
-  daysRemaining: 58,
-};
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Slider } from '@/components/ui/slider';
+import { Textarea } from '@/components/ui/textarea';
 
-// Mock data - Goals for appraisal
-const goalsForAppraisal = [
-  {
-    id: '1',
-    title: 'Deliver Project Alpha on time',
-    weight: 30,
-    targetDescription: 'Successfully deliver all milestones of Project Alpha within budget and timeline',
-    achievement: 70,
-    selfRating: 4,
-    selfComments: '',
-    evidence: 'Phase 1 & 2 completed on time. Phase 3 in progress.',
-  },
-  {
-    id: '2',
-    title: 'Complete AWS Certification',
-    weight: 20,
-    targetDescription: 'Achieve AWS Solutions Architect Associate certification',
-    achievement: 35,
-    selfRating: 3,
-    selfComments: '',
-    evidence: 'Online course 70% complete. Exam scheduled for Q2.',
-  },
-  {
-    id: '3',
-    title: 'Mentor 2 Junior Developers',
-    weight: 15,
-    targetDescription: 'Provide guidance and mentorship to junior team members',
-    achievement: 40,
-    selfRating: 4,
-    selfComments: '',
-    evidence: 'Weekly 1:1 sessions established. Code review sessions ongoing.',
-  },
-  {
-    id: '4',
-    title: 'Improve Code Quality',
-    weight: 20,
-    targetDescription: 'Achieve 90%+ code coverage and reduce bugs by 30%',
-    achievement: 60,
-    selfRating: 3,
-    selfComments: '',
-    evidence: 'Code coverage improved from 65% to 82%. Bug count reduced by 20%.',
-  },
-  {
-    id: '5',
-    title: 'Client Satisfaction Score',
-    weight: 15,
-    targetDescription: 'Achieve average client satisfaction score of 4.5+',
-    achievement: 85,
-    selfRating: 5,
-    selfComments: '',
-    evidence: 'Current average score: 4.6. Received positive feedback from 3 clients.',
-  },
-];
+interface AppraisalCycle {
+  id: string;
+  name: string;
+  period: string;
+  selfAppraisalDeadline: string;
+  status: string;
+  daysRemaining: number;
+}
 
-// Mock data - Competencies
-const competencies = [
-  { id: '1', name: 'Technical Skills', description: 'Proficiency in required technical skills', selfRating: 4, selfComments: '' },
-  { id: '2', name: 'Problem Solving', description: 'Ability to analyze and solve complex problems', selfRating: 4, selfComments: '' },
-  { id: '3', name: 'Communication', description: 'Effective verbal and written communication', selfRating: 3, selfComments: '' },
-  { id: '4', name: 'Teamwork', description: 'Collaboration and contribution to team success', selfRating: 5, selfComments: '' },
-  { id: '5', name: 'Initiative', description: 'Proactively identifying and acting on opportunities', selfRating: 4, selfComments: '' },
-  { id: '6', name: 'Time Management', description: 'Effectively managing time and meeting deadlines', selfRating: 4, selfComments: '' },
-];
+interface AppraisalGoal {
+  id: string;
+  title: string;
+  weight: number;
+  targetDescription: string;
+  achievement: number;
+  selfRating: number;
+  selfComments: string;
+  evidence?: string;
+}
+
+interface CompetencyRating {
+  id: string;
+  name: string;
+  description: string;
+  selfRating: number;
+  selfComments: string;
+}
+
+const appraisalCycle: AppraisalCycle | null = null;
+const goalsForAppraisal: AppraisalGoal[] = [];
+const competencies: CompetencyRating[] = [];
 
 const ratingLabels = {
   1: 'Needs Significant Improvement',
@@ -139,6 +98,22 @@ export default function ESSSelfAppraisal() {
     if (rating >= 3) return 'text-blue-600';
     return 'text-orange-600';
   };
+
+  if (!appraisalCycle) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Self Appraisal"
+          subtitle="Complete your self assessment"
+        />
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Self-appraisal data is pending ESS performance endpoints. Appraisal cycles, goals, and competency ratings will appear after HRIS performance APIs are exposed to ESS.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

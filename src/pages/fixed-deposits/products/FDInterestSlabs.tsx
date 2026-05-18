@@ -2,11 +2,14 @@
  * FD Interest Slabs Page
  */
 
+import { Plus, Edit, Trash2, Save, X } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Plus, Edit, Trash2, Save, X } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -24,14 +27,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, {
-  FDProduct,
-  FDInterestSlab,
-  FDCustomerCategory,
-} from '@/services/fixedDepositService';
+import type { FDProduct, FDInterestSlab, FDCustomerCategory } from '@/services/fixedDepositService';
+import fixedDepositService from '@/services/fixedDepositService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const CUSTOMER_CATEGORIES: { value: FDCustomerCategory; label: string }[] = [
   { value: 'GENERAL', label: 'General' },
@@ -145,10 +144,10 @@ export default function FDInterestSlabs() {
       }
       resetForm();
       loadProduct(productId);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save interest slab',
+        description: getErrorMessage(error, 'Failed to save interest slab'),
         variant: 'destructive',
       });
     } finally {
@@ -180,30 +179,29 @@ export default function FDInterestSlabs() {
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">Interest Slabs</h1>
-          <p className="text-muted-foreground">
-            {product?.product_code} - {product?.product_name}
-          </p>
-        </div>
-        {!showNewForm && !editingSlabId && (
-          <Button onClick={() => setShowNewForm(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Slab
-          </Button>
-        )}
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Interest Slabs"
+        subtitle={`${product?.product_code} - ${product?.product_name}`}
+        breadcrumbs={[
+          { label: 'FD Products', to: '/admin/fixed-deposits/products' },
+          { label: 'Interest Slabs' },
+        ]}
+        actions={
+          !showNewForm && !editingSlabId ? (
+            <Button onClick={() => setShowNewForm(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Slab
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* Form */}
       {(showNewForm || editingSlabId) && (
@@ -212,7 +210,7 @@ export default function FDInterestSlabs() {
             <CardTitle>{editingSlabId ? 'Edit Interest Slab' : 'New Interest Slab'}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label>Customer Category</Label>
                 <Select
@@ -273,9 +271,7 @@ export default function FDInterestSlabs() {
                 <Input
                   type="date"
                   value={formData.effective_from}
-                  onChange={(e) =>
-                    setFormData({ ...formData, effective_from: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, effective_from: e.target.value })}
                 />
               </div>
               <div className="space-y-2">
@@ -358,7 +354,7 @@ export default function FDInterestSlabs() {
             <TableBody>
               {product?.interest_slabs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={7} className="py-8 text-center">
                     No interest slabs configured
                   </TableCell>
                 </TableRow>
@@ -378,9 +374,7 @@ export default function FDInterestSlabs() {
                           }`
                         : 'Any'}
                     </TableCell>
-                    <TableCell className="font-medium">
-                      {slab.interest_rate.toFixed(2)}%
-                    </TableCell>
+                    <TableCell className="font-medium">{slab.interest_rate.toFixed(2)}%</TableCell>
                     <TableCell>
                       {slab.effective_from}
                       {slab.effective_to && ` to ${slab.effective_to}`}
@@ -392,18 +386,10 @@ export default function FDInterestSlabs() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEdit(slab)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(slab)}>
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(slab.id)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(slab.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>

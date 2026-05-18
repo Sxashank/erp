@@ -1,22 +1,34 @@
-import { useState } from 'react';
+/**
+ * Interest Rate Risk Page
+ *
+ * Data source: GET /lending/treasury/irs/preview (CamelSchema, Decimal-as-string).
+ * Computes RSA / RSL / Gap and projects NII impact under a default set of
+ * rate-shock buckets (±50 / ±100 / ±200 bps). Non-persisting — for the
+ * dashboard view only; the `generate_irs_analysis` POST persists results.
+ */
+
+import { ArrowLeft, Calculator, RefreshCw, TrendingDown, TrendingUp } from 'lucide-react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  TrendingUp,
-  TrendingDown,
-  Calculator,
-  Calendar,
-  Download,
-  RefreshCw,
-  AlertTriangle,
-  ArrowUp,
-  ArrowDown,
-  Info,
-} from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -25,575 +37,254 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { useIrsPreview } from '@/hooks/lending/useIrsPreview';
 
-// Types
-interface RateSensitivityBucket {
-  bucket: string;
-  bucket_label: string;
-  rsa: number; // Rate Sensitive Assets
-  rsl: number; // Rate Sensitive Liabilities
-  gap: number;
-  cumulative_gap: number;
+function formatShockLabel(bps: number): string {
+  const sign = bps > 0 ? '+' : '';
+  return `${sign}${bps} bps`;
 }
-
-interface NIIImpact {
-  shock_bps: number;
-  shock_label: string;
-  nii_impact: number;
-  nii_impact_percent: number;
-  capital_impact_percent: number;
-}
-
-interface IRSAnalysis {
-  analysis_date: string;
-  rate_sensitive_assets: number;
-  rate_sensitive_liabilities: number;
-  rate_sensitivity_gap: number;
-  gap_percent: number;
-  current_nii: number;
-  buckets: RateSensitivityBucket[];
-  nii_impacts: NIIImpact[];
-}
-
-// Mock data
-const irsAnalysis: IRSAnalysis = {
-  analysis_date: '2024-12-31',
-  rate_sensitive_assets: 3500000000,
-  rate_sensitive_liabilities: 3200000000,
-  rate_sensitivity_gap: 300000000,
-  gap_percent: 9.38,
-  current_nii: 450000000,
-  buckets: [
-    {
-      bucket: 'DAYS_1_28',
-      bucket_label: '1-28 Days',
-      rsa: 400000000,
-      rsl: 450000000,
-      gap: -50000000,
-      cumulative_gap: -50000000,
-    },
-    {
-      bucket: 'DAYS_29_3M',
-      bucket_label: '29 Days - 3 Months',
-      rsa: 600000000,
-      rsl: 700000000,
-      gap: -100000000,
-      cumulative_gap: -150000000,
-    },
-    {
-      bucket: 'MONTHS_3_6',
-      bucket_label: '3-6 Months',
-      rsa: 800000000,
-      rsl: 650000000,
-      gap: 150000000,
-      cumulative_gap: 0,
-    },
-    {
-      bucket: 'MONTHS_6_12',
-      bucket_label: '6-12 Months',
-      rsa: 900000000,
-      rsl: 700000000,
-      gap: 200000000,
-      cumulative_gap: 200000000,
-    },
-    {
-      bucket: 'YEARS_1_3',
-      bucket_label: '1-3 Years',
-      rsa: 500000000,
-      rsl: 450000000,
-      gap: 50000000,
-      cumulative_gap: 250000000,
-    },
-    {
-      bucket: 'OVER_3_YEARS',
-      bucket_label: 'Over 3 Years',
-      rsa: 300000000,
-      rsl: 250000000,
-      gap: 50000000,
-      cumulative_gap: 300000000,
-    },
-  ],
-  nii_impacts: [
-    {
-      shock_bps: -100,
-      shock_label: '-100 bps',
-      nii_impact: -30000000,
-      nii_impact_percent: -6.67,
-      capital_impact_percent: -0.5,
-    },
-    {
-      shock_bps: -50,
-      shock_label: '-50 bps',
-      nii_impact: -15000000,
-      nii_impact_percent: -3.33,
-      capital_impact_percent: -0.25,
-    },
-    {
-      shock_bps: 50,
-      shock_label: '+50 bps',
-      nii_impact: 15000000,
-      nii_impact_percent: 3.33,
-      capital_impact_percent: 0.25,
-    },
-    {
-      shock_bps: 100,
-      shock_label: '+100 bps',
-      nii_impact: 30000000,
-      nii_impact_percent: 6.67,
-      capital_impact_percent: 0.5,
-    },
-    {
-      shock_bps: 200,
-      shock_label: '+200 bps',
-      nii_impact: 60000000,
-      nii_impact_percent: 13.33,
-      capital_impact_percent: 1.0,
-    },
-  ],
-};
-
-const portfolioBreakdown = {
-  assets: {
-    floating_rate: 2800000000,
-    fixed_rate: 1500000000,
-    mclr_linked: 1200000000,
-    repo_linked: 600000000,
-    eblr_linked: 400000000,
-  },
-  liabilities: {
-    floating_rate: 2500000000,
-    fixed_rate: 1200000000,
-    cp_cd: 500000000,
-  },
-};
 
 export default function InterestRateRisk() {
   const navigate = useNavigate();
-  const [shockBps, setShockBps] = useState('100');
-  const [analysisDate, setAnalysisDate] = useState('2024-12-31');
+  const { data, isLoading, isError, error, refetch, isFetching } = useIrsPreview();
 
-  const isAssetSensitive = irsAnalysis.rate_sensitivity_gap > 0;
+  // Coerce string-Decimals to Number only at the chart / arithmetic boundary.
+  const rsa = Number(data?.summary.rsa ?? 0);
+  const rsl = Number(data?.summary.rsl ?? 0);
+  const gap = Number(data?.summary.gap ?? 0);
+  const gapToTotalAssetsPct = Number(data?.summary.gapToTotalAssetsPercent ?? 0);
+
+  const shocks = useMemo(
+    () =>
+      (data?.shocks ?? []).map((s) => ({
+        shockBps: s.shockBps,
+        label: formatShockLabel(s.shockBps),
+        niiImpact: Number(s.niiImpact),
+        niiImpactPercent: Number(s.niiImpactPercent),
+      })),
+    [data],
+  );
+
+  const hasData = Boolean(data) && shocks.length > 0;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Interest Rate Risk Analysis</h1>
-          <p className="text-muted-foreground">
-            Rate sensitivity analysis and NII impact assessment
-          </p>
+      <PageHeader
+        title="Interest Rate Risk"
+        subtitle="NII sensitivity to rate shocks and re-pricing gap analysis"
+        breadcrumbs={[
+          { label: 'Treasury', to: '/admin/treasury' },
+          { label: 'ALM', to: '/admin/treasury/alm' },
+          { label: 'Interest Rate Risk' },
+        ]}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate('/admin/treasury/alm')}>
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to ALM
+            </Button>
+            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+          </div>
+        }
+      />
+
+      {isError && (
+        <ErrorState title="Could not load IRS preview" error={error} onRetry={() => refetch()} />
+      )}
+
+      {isLoading ? (
+        <div className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-3">
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-28 w-full" />
+          </div>
+          <Skeleton className="h-80 w-full" />
+          <Skeleton className="h-64 w-full" />
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Run Analysis
-          </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
-        </div>
-      </div>
-
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Rate Sensitive Assets
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(irsAnalysis.rate_sensitive_assets)}
-            </div>
-            <p className="text-xs text-muted-foreground">Repricing within 1 year</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Rate Sensitive Liabilities
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {formatCurrency(irsAnalysis.rate_sensitive_liabilities)}
-            </div>
-            <p className="text-xs text-muted-foreground">Repricing within 1 year</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Rate Sensitivity Gap
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div
-              className={`text-2xl font-bold ${
-                isAssetSensitive ? 'text-green-600' : 'text-red-600'
-              }`}
-            >
-              {formatCurrency(irsAnalysis.rate_sensitivity_gap)}
-            </div>
-            <div className="flex items-center gap-1">
-              {isAssetSensitive ? (
-                <Badge variant="secondary" className="bg-green-100 text-green-800">
-                  Asset Sensitive
-                </Badge>
-              ) : (
-                <Badge variant="secondary" className="bg-red-100 text-red-800">
-                  Liability Sensitive
-                </Badge>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Current NII
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(irsAnalysis.current_nii)}</div>
-            <p className="text-xs text-muted-foreground">Annualized</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Position Interpretation */}
-      <Alert>
-        <Info className="h-4 w-4" />
-        <AlertTitle>Interest Rate Position</AlertTitle>
-        <AlertDescription>
-          {isAssetSensitive ? (
-            <>
-              Your portfolio is <strong>asset sensitive</strong> (RSA &gt; RSL). This means:
-              <ul className="list-disc ml-4 mt-2">
-                <li>Rising rates will increase Net Interest Income (NII)</li>
-                <li>Falling rates will decrease NII</li>
-                <li>Gap represents {irsAnalysis.gap_percent.toFixed(2)}% of rate sensitive liabilities</li>
-              </ul>
-            </>
-          ) : (
-            <>
-              Your portfolio is <strong>liability sensitive</strong> (RSL &gt; RSA). This means:
-              <ul className="list-disc ml-4 mt-2">
-                <li>Rising rates will decrease Net Interest Income (NII)</li>
-                <li>Falling rates will increase NII</li>
-                <li>Gap represents {Math.abs(irsAnalysis.gap_percent).toFixed(2)}% of rate sensitive liabilities</li>
-              </ul>
-            </>
-          )}
-        </AlertDescription>
-      </Alert>
-
-      <Tabs defaultValue="gap" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="gap">Gap Analysis</TabsTrigger>
-          <TabsTrigger value="impact">NII Impact</TabsTrigger>
-          <TabsTrigger value="portfolio">Portfolio Breakdown</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="gap" className="space-y-4">
-          {/* Rate Sensitivity Gap by Bucket */}
+      ) : !hasData ? (
+        !isError && (
           <Card>
-            <CardHeader>
-              <CardTitle>Rate Sensitivity Gap by Repricing Bucket</CardTitle>
-              <CardDescription>
-                Analysis Date: {formatDate(irsAnalysis.analysis_date)}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Repricing Bucket</TableHead>
-                    <TableHead className="text-right">RSA</TableHead>
-                    <TableHead className="text-right">RSL</TableHead>
-                    <TableHead className="text-right">Gap</TableHead>
-                    <TableHead className="text-right">Cumulative Gap</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {irsAnalysis.buckets.map((bucket) => (
-                    <TableRow key={bucket.bucket}>
-                      <TableCell className="font-medium">{bucket.bucket_label}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(bucket.rsa)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(bucket.rsl)}</TableCell>
-                      <TableCell
-                        className={`text-right font-medium ${
-                          bucket.gap < 0 ? 'text-red-600' : 'text-green-600'
-                        }`}
-                      >
-                        {bucket.gap < 0 ? '' : '+'}
-                        {formatCurrency(bucket.gap)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right font-medium ${
-                          bucket.cumulative_gap < 0 ? 'text-red-600' : 'text-green-600'
-                        }`}
-                      >
-                        {bucket.cumulative_gap < 0 ? '' : '+'}
-                        {formatCurrency(bucket.cumulative_gap)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="font-bold bg-muted/50">
-                    <TableCell>Total</TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(irsAnalysis.rate_sensitive_assets)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(irsAnalysis.rate_sensitive_liabilities)}
-                    </TableCell>
-                    <TableCell
-                      className={`text-right ${
-                        irsAnalysis.rate_sensitivity_gap < 0 ? 'text-red-600' : 'text-green-600'
-                      }`}
-                    >
-                      {formatCurrency(irsAnalysis.rate_sensitivity_gap)}
-                    </TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+            <CardContent className="py-12">
+              <EmptyState
+                title="No rate-sensitive exposure to analyse"
+                subtitle="No active floating-rate loans or borrowings were found. IRS analysis becomes meaningful once floating-rate positions exist on the books."
+                icon={Calculator}
+                action={
+                  <Button variant="outline" onClick={() => navigate('/admin/treasury/alm/gap')}>
+                    Open Gap Analysis
+                  </Button>
+                }
+              />
             </CardContent>
           </Card>
-        </TabsContent>
+        )
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Rate-Sensitive Assets
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AmountDisplay amount={rsa} abbreviated className="text-2xl font-bold" />
+                <p className="mt-1 text-xs text-muted-foreground">Active floating-rate loans</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Rate-Sensitive Liabilities
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AmountDisplay amount={rsl} abbreviated className="text-2xl font-bold" />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Floating / MCLR / repo-linked borrowings
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Rate Sensitivity Gap
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AmountDisplay
+                  amount={Math.abs(gap)}
+                  abbreviated
+                  className={`text-2xl font-bold ${gap >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                />
+                <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                  {gap >= 0 ? (
+                    <TrendingUp className="h-3 w-3 text-green-600" />
+                  ) : (
+                    <TrendingDown className="h-3 w-3 text-red-600" />
+                  )}
+                  {gap >= 0 ? 'Asset-sensitive' : 'Liability-sensitive'} (
+                  {gapToTotalAssetsPct.toFixed(2)}% of total assets)
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-        <TabsContent value="impact" className="space-y-4">
-          {/* NII Impact Analysis */}
+          {/* Chart */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calculator className="h-5 w-5" />
-                NII Impact under Rate Shocks
-              </CardTitle>
+              <CardTitle>NII Impact Across Rate Shocks</CardTitle>
               <CardDescription>
-                Estimated impact on Net Interest Income for various rate scenarios
+                Projected change in Net Interest Income per shock bucket as of{' '}
+                <DateDisplay date={data!.asOfDate} format="short" />. Positive bars indicate NII
+                expansion; negative bars indicate NII compression.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={shocks}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+                    <YAxis
+                      tick={{ fontSize: 12 }}
+                      tickFormatter={(v: number) =>
+                        new Intl.NumberFormat('en-IN', {
+                          notation: 'compact',
+                          maximumFractionDigits: 1,
+                        }).format(v)
+                      }
+                    />
+                    <Tooltip
+                      formatter={(value: number | string | (number | string)[] | undefined) => {
+                        const numeric = Array.isArray(value)
+                          ? Number(value[0])
+                          : Number(value ?? 0);
+                        return new Intl.NumberFormat('en-IN', {
+                          style: 'currency',
+                          currency: 'INR',
+                          maximumFractionDigits: 0,
+                        }).format(numeric);
+                      }}
+                    />
+                    <Bar dataKey="niiImpact" name="NII Impact">
+                      {shocks.map((s) => (
+                        <Cell key={s.shockBps} fill={s.niiImpact >= 0 ? '#22c55e' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Table */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Shock Bucket Detail</CardTitle>
+              <CardDescription>
+                Per-bucket projected NII impact in ₹ and as % of RSL.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>Rate Shock</TableHead>
-                    <TableHead className="text-right">NII Impact</TableHead>
-                    <TableHead className="text-right">% of Current NII</TableHead>
-                    <TableHead className="text-right">Capital Impact %</TableHead>
+                    <TableHead className="text-right">NII Impact (₹)</TableHead>
+                    <TableHead className="text-right">NII Impact (%)</TableHead>
                     <TableHead>Direction</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {irsAnalysis.nii_impacts.map((impact) => (
-                    <TableRow key={impact.shock_bps}>
-                      <TableCell className="font-medium">{impact.shock_label}</TableCell>
-                      <TableCell
-                        className={`text-right font-medium ${
-                          impact.nii_impact < 0 ? 'text-red-600' : 'text-green-600'
-                        }`}
-                      >
-                        {impact.nii_impact < 0 ? '' : '+'}
-                        {formatCurrency(impact.nii_impact)}
-                      </TableCell>
-                      <TableCell
-                        className={`text-right ${
-                          impact.nii_impact_percent < 0 ? 'text-red-600' : 'text-green-600'
-                        }`}
-                      >
-                        {impact.nii_impact_percent > 0 ? '+' : ''}
-                        {impact.nii_impact_percent.toFixed(2)}%
-                      </TableCell>
-                      <TableCell
-                        className={`text-right ${
-                          impact.capital_impact_percent < 0 ? 'text-red-600' : 'text-green-600'
-                        }`}
-                      >
-                        {impact.capital_impact_percent > 0 ? '+' : ''}
-                        {impact.capital_impact_percent.toFixed(2)}%
-                      </TableCell>
-                      <TableCell>
-                        {impact.nii_impact < 0 ? (
-                          <div className="flex items-center text-red-600">
-                            <TrendingDown className="h-4 w-4 mr-1" />
-                            Decrease
-                          </div>
-                        ) : (
-                          <div className="flex items-center text-green-600">
-                            <TrendingUp className="h-4 w-4 mr-1" />
-                            Increase
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {shocks.map((s) => {
+                    const isPositive = s.niiImpact >= 0;
+                    return (
+                      <TableRow key={s.shockBps}>
+                        <TableCell className="font-medium">{s.label}</TableCell>
+                        <TableCell
+                          className={`text-right font-medium ${
+                            isPositive ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          <AmountDisplay amount={Math.abs(s.niiImpact)} abbreviated />
+                          {!isPositive ? ' (–)' : ''}
+                        </TableCell>
+                        <TableCell
+                          className={`text-right font-medium ${
+                            isPositive ? 'text-green-600' : 'text-red-600'
+                          }`}
+                        >
+                          {s.niiImpactPercent.toFixed(2)}%
+                        </TableCell>
+                        <TableCell>
+                          <span
+                            className={`inline-flex items-center gap-1 text-sm ${
+                              isPositive ? 'text-green-700' : 'text-red-700'
+                            }`}
+                          >
+                            {isPositive ? (
+                              <TrendingUp className="h-4 w-4" />
+                            ) : (
+                              <TrendingDown className="h-4 w-4" />
+                            )}
+                            {isPositive ? 'NII expansion' : 'NII compression'}
+                          </span>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
-
-          {/* Custom Shock Calculator */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Custom Rate Shock Calculator</CardTitle>
-              <CardDescription>Calculate NII impact for custom rate change</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-end gap-4">
-                <div className="flex-1 max-w-xs">
-                  <Label htmlFor="shockBps">Rate Shock (basis points)</Label>
-                  <Input
-                    id="shockBps"
-                    type="number"
-                    value={shockBps}
-                    onChange={(e) => setShockBps(e.target.value)}
-                    placeholder="e.g., 100 or -50"
-                  />
-                </div>
-                <Button>
-                  <Calculator className="h-4 w-4 mr-2" />
-                  Calculate Impact
-                </Button>
-              </div>
-
-              {shockBps && (
-                <div className="mt-6 grid grid-cols-3 gap-4">
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Rate Change</div>
-                      <div className="text-2xl font-bold">
-                        {Number(shockBps) > 0 ? '+' : ''}
-                        {shockBps} bps
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">Estimated NII Impact</div>
-                      <div
-                        className={`text-2xl font-bold ${
-                          Number(shockBps) * (isAssetSensitive ? 1 : -1) > 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
-                        }`}
-                      >
-                        {formatCurrency(
-                          irsAnalysis.rate_sensitivity_gap * (Number(shockBps) / 10000)
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="text-sm text-muted-foreground">% of Current NII</div>
-                      <div
-                        className={`text-2xl font-bold ${
-                          Number(shockBps) * (isAssetSensitive ? 1 : -1) > 0
-                            ? 'text-green-600'
-                            : 'text-red-600'
-                        }`}
-                      >
-                        {(
-                          (irsAnalysis.rate_sensitivity_gap * (Number(shockBps) / 10000) /
-                            irsAnalysis.current_nii) *
-                          100
-                        ).toFixed(2)}
-                        %
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="portfolio" className="space-y-4">
-          {/* Portfolio Breakdown */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Asset Rate Profile</CardTitle>
-                <CardDescription>Breakdown by rate type</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span>Floating Rate</span>
-                    <span className="font-medium">
-                      {formatCurrency(portfolioBreakdown.assets.floating_rate)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Fixed Rate</span>
-                    <span className="font-medium">
-                      {formatCurrency(portfolioBreakdown.assets.fixed_rate)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-muted-foreground text-sm">
-                    <span className="ml-4">- MCLR Linked</span>
-                    <span>{formatCurrency(portfolioBreakdown.assets.mclr_linked)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-muted-foreground text-sm">
-                    <span className="ml-4">- Repo Linked</span>
-                    <span>{formatCurrency(portfolioBreakdown.assets.repo_linked)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-muted-foreground text-sm">
-                    <span className="ml-4">- EBLR Linked</span>
-                    <span>{formatCurrency(portfolioBreakdown.assets.eblr_linked)}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Liability Rate Profile</CardTitle>
-                <CardDescription>Breakdown by rate type</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span>Floating Rate Borrowings</span>
-                    <span className="font-medium">
-                      {formatCurrency(portfolioBreakdown.liabilities.floating_rate)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Fixed Rate Borrowings</span>
-                    <span className="font-medium">
-                      {formatCurrency(portfolioBreakdown.liabilities.fixed_rate)}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Commercial Paper / CD</span>
-                    <span className="font-medium">
-                      {formatCurrency(portfolioBreakdown.liabilities.cp_cd)}
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-      </Tabs>
+        </>
+      )}
     </div>
   );
 }

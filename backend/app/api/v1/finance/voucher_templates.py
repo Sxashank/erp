@@ -4,11 +4,11 @@ from datetime import datetime
 from uuid import UUID
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions, get_current_user
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.template_service import VoucherTemplateService
 from app.schemas.finance.voucher_template import (
@@ -21,13 +21,14 @@ from app.schemas.finance.voucher_template import (
     TemplateCategory,
     VoucherTemplateStats,
 )
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
 
 @router.get(
     "",
-    response_model=VoucherTemplateListResponse,
+    response_model=VoucherTemplateListResponse, response_model_by_alias=True,
 )
 async def list_voucher_templates(
     organization_id: UUID,
@@ -38,7 +39,7 @@ async def list_voucher_templates(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List voucher templates."""
     service = VoucherTemplateService(db)
@@ -55,12 +56,12 @@ async def list_voucher_templates(
 
 @router.get(
     "/categories",
-    response_model=list[TemplateCategory],
+    response_model=list[TemplateCategory], response_model_by_alias=True,
 )
 async def get_template_categories(
     organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all unique template categories."""
     service = VoucherTemplateService(db)
@@ -69,12 +70,12 @@ async def get_template_categories(
 
 @router.get(
     "/stats",
-    response_model=VoucherTemplateStats,
+    response_model=VoucherTemplateStats, response_model_by_alias=True,
 )
 async def get_template_stats(
     organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get statistics for voucher templates."""
     service = VoucherTemplateService(db)
@@ -83,33 +84,33 @@ async def get_template_stats(
 
 @router.get(
     "/{template_id}",
-    response_model=VoucherTemplateResponse,
+    response_model=VoucherTemplateResponse, response_model_by_alias=True,
 )
 async def get_voucher_template(
     template_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a voucher template by ID."""
     service = VoucherTemplateService(db)
     result = await service.get_with_lines(template_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"Voucher template {template_id} not found",
+            error_code="VOUCHER_TEMPLATE_NOT_FOUND",
         )
     return result
 
 
 @router.post(
     "",
-    response_model=VoucherTemplateResponse,
+    response_model=VoucherTemplateResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_voucher_template(
     data: VoucherTemplateCreate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new voucher template."""
     service = VoucherTemplateService(db)
@@ -118,21 +119,18 @@ async def create_voucher_template(
         await db.commit()
         return await service.get_with_lines(template.id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.put(
     "/{template_id}",
-    response_model=VoucherTemplateResponse,
+    response_model=VoucherTemplateResponse, response_model_by_alias=True,
 )
 async def update_voucher_template(
     template_id: UUID,
     data: VoucherTemplateUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a voucher template."""
     service = VoucherTemplateService(db)
@@ -141,10 +139,7 @@ async def update_voucher_template(
         await db.commit()
         return await service.get_with_lines(template.id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.delete(
@@ -154,27 +149,27 @@ async def update_voucher_template(
 async def delete_voucher_template(
     template_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete (soft) a voucher template."""
     service = VoucherTemplateService(db)
     success = await service.delete(template_id, current_user.id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"Voucher template {template_id} not found",
+            error_code="VOUCHER_TEMPLATE_NOT_FOUND",
         )
     await db.commit()
 
 
 @router.post(
     "/{template_id}/toggle-favorite",
-    response_model=VoucherTemplateResponse,
+    response_model=VoucherTemplateResponse, response_model_by_alias=True,
 )
 async def toggle_template_favorite(
     template_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Toggle favorite status of a template."""
     service = VoucherTemplateService(db)
@@ -183,30 +178,27 @@ async def toggle_template_favorite(
         await db.commit()
         return await service.get_with_lines(template_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{template_id}/use",
-    response_model=UseTemplateResponse,
+    response_model=UseTemplateResponse, response_model_by_alias=True,
 )
 async def use_voucher_template(
     template_id: UUID,
     request: UseTemplateRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a voucher from a template."""
     service = VoucherTemplateService(db)
     try:
         voucher_date = datetime.strptime(request.voucher_date, "%Y-%m-%d").date()
     except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Invalid date format. Use YYYY-MM-DD",
+            error_code="INVALID_DATE_FORMAT_USE_YYYY_MM",
         )
 
     result = await service.use_template(
@@ -223,14 +215,14 @@ async def use_voucher_template(
 
 @router.post(
     "/{template_id}/duplicate",
-    response_model=VoucherTemplateResponse,
+    response_model=VoucherTemplateResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def duplicate_voucher_template(
     template_id: UUID,
     new_name: Optional[str] = Query(None),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Duplicate an existing template."""
     service = VoucherTemplateService(db)
@@ -239,7 +231,4 @@ async def duplicate_voucher_template(
         await db.commit()
         return await service.get_with_lines(template.id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")

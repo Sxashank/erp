@@ -679,7 +679,7 @@ Platform secrets must NEVER enter the tenant settings table; tenant secrets must
 
 ### 8.2 Authorization
 
-- Permissions format: `<resource>.<action>`. Examples: `voucher.post`, `voucher.reverse`, `loan_application.approve`, `disbursement.authorize`, `payroll.run`, `user.role.grant`, `pii.view`.
+- **Canonical permission format: `SCREAMING_SNAKE_CASE`.** Examples: `FIN_VOUCHER_POST`, `FIN_VOUCHER_REVERSE`, `LOS_SANCTION_APPROVE`, `LMS_DISBURSEMENT_APPROVE`, `PAYROLL_RUN`, `USER_ROLE_ASSIGN`, `PII_VIEW`. The authoritative source is `backend/app/core/constants.py::Permissions`. **Lowercase-dot (`foo.bar`) and colon (`foo:bar`) styles are not accepted** — Wave 6 of the Convention Sweep closed 220 historical sites across 18 backend files + 48 frontend sites; alembic migration `zzc30_wave6_permission_screaming_snake` re-seeds + grants the new SCREAMING_SNAKE codes to SUPER_ADMIN. A backend lint gate (`scripts/lint/check_permission_format.py`) is wired into pre-commit and blocks new non-conforming strings in `backend/app/api/v1/**`.
 - `RequirePermissions(*perms, require_all=True)` is the only way to gate an endpoint.
 - Frontend mirrors via `usePermission(perm)`. Sidebar items, action buttons, and protected routes all consult it. Hiding a button because of a permission still requires server-side enforcement — never trust the client.
 - Roles are an abstraction over permissions, not a separate check.
@@ -688,6 +688,7 @@ Platform secrets must NEVER enter the tenant settings table; tenant secrets must
 
 - `slowapi` middleware on `/auth/*`, `/portal/*`, `/vendor-portal/*`, `/ess/*`.
 - Default: 5 req/sec per IP, burst 10. `/auth/login`: 5 req/min per IP + 10 req/hour per account. Hit 429 → exponential back-off.
+- **Disabled in dev/test.** The shared `limiter` in `backend/app/core/rate_limit.py` is constructed with `enabled=False` when `settings.APP_ENV in {"development", "test", "testing", "local"}`. Production (and any other env) enforces the limits. This keeps manual probes, Playwright runs, and `pytest` from tripping the production thresholds.
 - Admin endpoints: per-user 100 req/min default; override per endpoint where justified.
 
 ### 8.4 Maker-checker
@@ -1355,3 +1356,45 @@ See `PRODUCTION_READINESS_REPORT.md` for the honest state, the risk list, and th
 ---
 
 *This file is the contract. If something here is wrong, fix it in the PR that deviates. Otherwise, follow it.*
+
+---
+
+## Appendix C — Convention Sweep (May 2026)
+
+Background: a semantic audit across every non-LOS module found accumulated drift. This appendix is the post-sweep canonical list. Every rule below is enforced by either a lint rule, a pre-commit gate, or a CI check. Adding a new violation must update both this appendix and the relevant gate in the same PR.
+
+**Backend (non-LOS scope)**
+1. **Tenant-scoped DB on every authenticated route.** `Depends(get_db_with_tenant)` only — `Depends(get_db)` on an authenticated route is a defect. Gate: `scripts/lint/check_db_dep.py` runs in pre-commit + CI.
+2. **`organization_id` from `current_user` only.** Never from query / body / path. The platform-admin escape uses `Depends(RequirePermissions("PLATFORM_ADMIN"))` + an explicit audit row.
+3. **Service-owned transactions.** One `async with db.begin():` per user-facing service method. Helpers never call `session.commit()` directly. Gate: `scripts/lint/check_service_commits.py`.
+4. **Idempotency-Key on every financial mutation.** `backend/app/middleware/idempotency.py::MUTATING_RESOURCES` is the allowlist. New financial mutation routes must add their prefix here.
+5. **Domain `audit_log` writes on financial mutations.** Top-8 are mandatory now; long-tail tracked in `.stubs-approved.md`.
+6. **Response schemas inherit `CamelSchema`.** Plain `BaseModel` on a wire-crossing schema is a defect.
+7. **`response_model_by_alias=True` on every route returning a `CamelSchema` response.** Without it, FastAPI emits snake_case despite the alias generator.
+8. **Typed `AppException` for errors.** `raise HTTPException(...)` in `backend/app/api/**` is a defect — use `BadRequestException` / `NotFoundException` / `ConflictException` / `ValidationException` from `app/core/exceptions.py`. The envelope `{error_code, message, correlation_id, details?}` is rendered by the FastAPI handler registered on `AppException` in `backend/app/main.py`. Gate: `scripts/lint/check_http_exception.py` runs in pre-commit + CI.
+9. **`PaginatedResponse[T]` for list endpoints.** Bare `list[Item]` is a defect for any endpoint where the caller might want pagination metadata.
+10. **`Decimal` only for money.** `Numeric(18, 2)` on the model, `Decimal` in the schema, never `float`.
+
+**Frontend (non-LOS scope)**
+1. **No direct axios in pages.** Server state goes through a hook in `src/hooks/<domain>/`. Pages never `import api`.
+2. **No `fetch(...)` in pages.** Same rule, harder violation.
+3. **No `useEffect + useState` for server state.** Use react-query (`useQuery` / `useMutation`).
+4. **`logger.*` only.** `console.log/error/warn/info` in `src/**` is a lint error.
+5. **No `: any` or `as any`.** Use `unknown` + narrow. `@ts-ignore` is banned; `@ts-expect-error` requires a min-10-char reason.
+6. **`<AmountDisplay>` for money.** Inline `.toFixed(2)` is a defect.
+7. **`<DateDisplay>` for dates.** Inline `Date#toLocaleDateString` or `format(d,...)` in JSX is a defect.
+8. **`<StatusPill>` for status badges.** Inline `<Badge bg-green-100 text-green-800>Active</Badge>` is a defect.
+9. **`<DataTable>` over raw `<Table>` / `<table>`.** Migration in progress (TOP-50 list pages closed in Wave 5; long tail tracked in `.stubs-approved.md`).
+10. **Idempotency-Key on every mutating service call.** Generated via `crypto.randomUUID()` in the wrapper.
+11. **`invalidateQueries` on every mutation success.** Pick the correct key.
+12. **Explicit `staleTime` on every `useQuery`.** Defaults: `30_000` for transactional reads, `5 * 60 * 1000` for masters.
+13. **`showErrorToast` on every mutation error.** Surfaces the `{error_code, message, correlation_id}` envelope.
+14. **No mock data, no `setTimeout(resolve,…)` fake submits, no stub `onClick={() => {}}` handlers** in shipped pages.
+15. **No `localStorage` outside `src/stores/`.** Use the Zustand store for cross-tab/cross-page state.
+16. **`<PageHeader>` for every page title.** A bare `<h1>` on a page is a defect.
+
+**Tooling**
+- ESLint flat config at `eslint.config.js` enforces 1, 4, 5, 6, 7, 8 (where possible) and the import / ts-comment rules.
+- Backend pre-commit: ruff + black + targeted lints under `scripts/lint/`.
+- Frontend pre-commit: `lint-staged` + `check-stubs`.
+- CI required checks: `pnpm typecheck`, `pnpm lint --max-warnings=0`, `pnpm exec playwright test`, `cd backend && pytest -q && ruff check . && mypy app`.

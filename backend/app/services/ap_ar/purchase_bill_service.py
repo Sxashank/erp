@@ -1,25 +1,28 @@
 """Purchase Bill service."""
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.ap_ar.purchase_bill import PurchaseBill, PurchaseBillLine, BillStatus, PaymentStatus
-from app.models.common.audit_log import EntityType, AuditAction
+from app.core.constants import GLEntrySourceType, PartyType
+from app.models.ap_ar.purchase_bill import BillStatus, PaymentStatus, PurchaseBill
+from app.models.common.audit_log import AuditAction, EntityType
 from app.models.workflow import WorkflowEntityType, WorkflowInstanceStatus
 from app.repositories.ap_ar.purchase_bill_repo import PurchaseBillRepository
 from app.repositories.ap_ar.vendor_repo import VendorRepository
-from app.repositories.finance.financial_year_repo import FinancialYearRepository, FinancialPeriodRepository
 from app.repositories.finance.account_repo import AccountRepository
+from app.repositories.finance.financial_year_repo import (
+    FinancialPeriodRepository,
+    FinancialYearRepository,
+)
 from app.schemas.ap_ar.purchase_bill import PurchaseBillCreate, PurchaseBillUpdate
 from app.services.common.audit_service import AuditService, model_to_dict
-from app.services.workflow import WorkflowEngine
 from app.services.finance.gl_posting_service import GLPostingService
-from app.core.constants import GLEntrySourceType, PartyType
+from app.services.workflow import WorkflowEngine
 
 
 class PurchaseBillService:
@@ -42,17 +45,25 @@ class PurchaseBillService:
         skip: int = 0,
         limit: int = 50,
         include_inactive: bool = False,
-        status: Optional[str] = None,
-        payment_status: Optional[str] = None,
-        vendor_id: Optional[UUID] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-        search: Optional[str] = None,
-    ) -> Tuple[List[PurchaseBill], int]:
+        status: str | None = None,
+        payment_status: str | None = None,
+        vendor_id: UUID | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        search: str | None = None,
+    ) -> tuple[list[PurchaseBill], int]:
         """Get all purchase bills with filters."""
         return await self.repo.get_all(
-            organization_id, skip, limit, include_inactive,
-            status, payment_status, vendor_id, from_date, to_date, search
+            organization_id,
+            skip,
+            limit,
+            include_inactive,
+            status,
+            payment_status,
+            vendor_id,
+            from_date,
+            to_date,
+            search,
         )
 
     async def get(self, bill_id: UUID) -> PurchaseBill:
@@ -67,7 +78,7 @@ class PurchaseBillService:
 
     async def get_unpaid_for_vendor(
         self, organization_id: UUID, vendor_id: UUID
-    ) -> List[PurchaseBill]:
+    ) -> list[PurchaseBill]:
         """Get unpaid bills for a vendor."""
         return await self.repo.get_unpaid_for_vendor(organization_id, vendor_id)
 
@@ -106,7 +117,15 @@ class PurchaseBillService:
             igst_amount += line.igst_amount
             cess_amount += line.cess_amount
 
-        total_amount = taxable_amount + cgst_amount + sgst_amount + igst_amount + cess_amount - data.tds_amount + data.round_off
+        total_amount = (
+            taxable_amount
+            + cgst_amount
+            + sgst_amount
+            + igst_amount
+            + cess_amount
+            - data.tds_amount
+            + data.round_off
+        )
 
         # Create bill
         bill_data = {
@@ -148,7 +167,7 @@ class PurchaseBillService:
             line_dict["bill_id"] = bill.id
             await self.repo.create_line(line_dict)
 
-        await self.db.commit()
+        await self.db.flush()
         loaded_bill = await self.get(bill.id)
 
         # Audit log: CREATE
@@ -163,9 +182,7 @@ class PurchaseBillService:
 
         return loaded_bill
 
-    async def update(
-        self, bill_id: UUID, data: PurchaseBillUpdate, user_id: UUID
-    ) -> PurchaseBill:
+    async def update(self, bill_id: UUID, data: PurchaseBillUpdate, user_id: UUID) -> PurchaseBill:
         """Update a purchase bill."""
         bill = await self.get(bill_id)
 
@@ -182,7 +199,7 @@ class PurchaseBillService:
         # Update bill fields
         update_data = data.model_dump(exclude_unset=True, exclude={"lines"})
         update_data["updated_by"] = user_id
-        update_data["updated_at"] = datetime.now(timezone.utc)
+        update_data["updated_at"] = datetime.now(UTC)
 
         # If lines are provided, recalculate totals
         if data.lines:
@@ -209,7 +226,15 @@ class PurchaseBillService:
 
             tds_amount = data.tds_amount if data.tds_amount is not None else bill.tds_amount
             round_off = data.round_off if data.round_off is not None else bill.round_off
-            total_amount = taxable_amount + cgst_amount + sgst_amount + igst_amount + cess_amount - tds_amount + round_off
+            total_amount = (
+                taxable_amount
+                + cgst_amount
+                + sgst_amount
+                + igst_amount
+                + cess_amount
+                - tds_amount
+                + round_off
+            )
 
             update_data["subtotal"] = subtotal
             update_data["discount_amount"] = discount_amount
@@ -228,7 +253,7 @@ class PurchaseBillService:
                 await self.repo.create_line(line_dict)
 
         bill = await self.repo.update(bill, update_data)
-        await self.db.commit()
+        await self.db.flush()
         updated_bill = await self.get(bill_id)
 
         # Audit log: UPDATE
@@ -244,7 +269,9 @@ class PurchaseBillService:
 
         # Log line item changes if lines were updated
         if data.lines:
-            new_lines = [model_to_dict(line) for line in updated_bill.lines] if updated_bill.lines else []
+            new_lines = (
+                [model_to_dict(line) for line in updated_bill.lines] if updated_bill.lines else []
+            )
             await self.audit_service.log_line_changes(
                 parent_audit_id=audit_entry.id,
                 entity_type="BILL_LINE",
@@ -297,18 +324,18 @@ class PurchaseBillService:
                 "status": BillStatus.SUBMITTED,
                 "workflow_instance_id": workflow_instance.id,
                 "updated_by": user_id,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             }
         except Exception:
             # If no workflow definition exists, just mark as submitted
             update_data = {
                 "status": BillStatus.SUBMITTED,
                 "updated_by": user_id,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             }
 
         bill = await self.repo.update(bill, update_data)
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: SUBMIT
         await self.audit_service.log_action(
@@ -325,7 +352,14 @@ class PurchaseBillService:
         return bill
 
     async def approve(self, bill_id: UUID, user_id: UUID) -> PurchaseBill:
-        """Approve a bill (legacy method for non-workflow approvals)."""
+        """Approve a bill (legacy method for non-workflow approvals).
+
+        Enforces §8.4 maker-checker: the submitting user cannot approve their
+        own bill. For workflow-routed bills the same guard runs at the task
+        completion site inside `WorkflowEngine`.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         bill = await self.get(bill_id)
 
         if bill.status != BillStatus.SUBMITTED:
@@ -341,20 +375,25 @@ class PurchaseBillService:
                 detail="This bill uses workflow-based approval. Please use the workflow task endpoints.",
             )
 
+        ensure_maker_is_not_checker(
+            maker_user_id=bill.created_by,
+            checker_user_id=user_id,
+        )
+
         # Capture old state
         old_values = model_to_dict(bill)
 
         update_data = {
             "status": BillStatus.APPROVED,
             "updated_by": user_id,
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         bill = await self.repo.update(bill, update_data)
 
         # Auto-post to GL on approval
         await self._post_to_gl(bill, user_id)
 
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: APPROVE
         await self.audit_service.log_action(
@@ -374,7 +413,7 @@ class PurchaseBillService:
         self,
         bill_id: UUID,
         workflow_status: WorkflowInstanceStatus,
-        completed_by: Optional[UUID] = None,
+        completed_by: UUID | None = None,
     ) -> PurchaseBill:
         """Handle workflow completion callback to update bill status."""
         bill = await self.get(bill_id)
@@ -392,9 +431,9 @@ class PurchaseBillService:
             bill.workflow_instance_id = None
 
         bill.updated_by = completed_by
-        bill.updated_at = datetime.now(timezone.utc)
+        bill.updated_at = datetime.now(UTC)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(bill)
 
         # Audit log
@@ -434,10 +473,10 @@ class PurchaseBillService:
             "status": BillStatus.CANCELLED,
             "narration": f"{bill.narration or ''}\nCancelled: {reason}".strip(),
             "updated_by": user_id,
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         bill = await self.repo.update(bill, update_data)
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: CANCEL
         await self.audit_service.log_action(
@@ -470,7 +509,7 @@ class PurchaseBillService:
         bill_number = bill.bill_number
 
         await self.repo.soft_delete(bill, user_id)
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: DELETE
         await self.audit_service.log_delete(
@@ -482,7 +521,7 @@ class PurchaseBillService:
             user_id=user_id,
         )
 
-    async def _post_to_gl(self, bill: PurchaseBill, posted_by: Optional[UUID]) -> None:
+    async def _post_to_gl(self, bill: PurchaseBill, posted_by: UUID | None) -> None:
         """
         Auto-post purchase bill to GL on approval.
 
@@ -523,7 +562,7 @@ class PurchaseBillService:
             )
 
         # Build GL entry lines
-        gl_lines: List[Dict[str, Any]] = []
+        gl_lines: list[dict[str, Any]] = []
 
         # Expense entries from bill lines
         for line in bill.lines:
@@ -535,69 +574,83 @@ class PurchaseBillService:
                         detail=f"Line {line.line_number} does not have an expense account",
                     )
 
-                gl_lines.append({
-                    "account_id": expense_account_id,
-                    "debit_amount": line.taxable_amount,
-                    "credit_amount": Decimal("0"),
-                    "narration": f"Purchase: {line.description}",
-                })
+                gl_lines.append(
+                    {
+                        "account_id": expense_account_id,
+                        "debit_amount": line.taxable_amount,
+                        "credit_amount": Decimal("0"),
+                        "narration": f"Purchase: {line.description}",
+                    }
+                )
 
         # GST Input entries (aggregated at bill level)
         gst_accounts = await self._get_gst_input_accounts(bill.organization_id)
 
         if bill.cgst_amount > 0 and gst_accounts.get("cgst_input"):
-            gl_lines.append({
-                "account_id": gst_accounts["cgst_input"],
-                "debit_amount": bill.cgst_amount,
-                "credit_amount": Decimal("0"),
-                "narration": "CGST Input",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["cgst_input"],
+                    "debit_amount": bill.cgst_amount,
+                    "credit_amount": Decimal("0"),
+                    "narration": "CGST Input",
+                }
+            )
 
         if bill.sgst_amount > 0 and gst_accounts.get("sgst_input"):
-            gl_lines.append({
-                "account_id": gst_accounts["sgst_input"],
-                "debit_amount": bill.sgst_amount,
-                "credit_amount": Decimal("0"),
-                "narration": "SGST Input",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["sgst_input"],
+                    "debit_amount": bill.sgst_amount,
+                    "credit_amount": Decimal("0"),
+                    "narration": "SGST Input",
+                }
+            )
 
         if bill.igst_amount > 0 and gst_accounts.get("igst_input"):
-            gl_lines.append({
-                "account_id": gst_accounts["igst_input"],
-                "debit_amount": bill.igst_amount,
-                "credit_amount": Decimal("0"),
-                "narration": "IGST Input",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["igst_input"],
+                    "debit_amount": bill.igst_amount,
+                    "credit_amount": Decimal("0"),
+                    "narration": "IGST Input",
+                }
+            )
 
         if bill.cess_amount > 0 and gst_accounts.get("cess_input"):
-            gl_lines.append({
-                "account_id": gst_accounts["cess_input"],
-                "debit_amount": bill.cess_amount,
-                "credit_amount": Decimal("0"),
-                "narration": "Cess Input",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["cess_input"],
+                    "debit_amount": bill.cess_amount,
+                    "credit_amount": Decimal("0"),
+                    "narration": "Cess Input",
+                }
+            )
 
         # TDS Payable (if applicable)
         if bill.tds_amount > 0:
             tds_account = await self._get_tds_payable_account(bill.organization_id)
             if tds_account:
-                gl_lines.append({
-                    "account_id": tds_account,
-                    "debit_amount": Decimal("0"),
-                    "credit_amount": bill.tds_amount,
-                    "narration": "TDS Payable",
-                })
+                gl_lines.append(
+                    {
+                        "account_id": tds_account,
+                        "debit_amount": Decimal("0"),
+                        "credit_amount": bill.tds_amount,
+                        "narration": "TDS Payable",
+                    }
+                )
 
         # AP Control (Credit - total payable to vendor)
         # Total payable = Total Amount (already net of TDS)
-        gl_lines.append({
-            "account_id": vendor.control_account_id,
-            "debit_amount": Decimal("0"),
-            "credit_amount": bill.total_amount,
-            "party_type": PartyType.VENDOR,
-            "party_id": bill.vendor_id,
-            "narration": f"Payable to {vendor.name}",
-        })
+        gl_lines.append(
+            {
+                "account_id": vendor.control_account_id,
+                "debit_amount": Decimal("0"),
+                "credit_amount": bill.total_amount,
+                "party_type": PartyType.VENDOR,
+                "party_id": bill.vendor_id,
+                "narration": f"Payable to {vendor.name}",
+            }
+        )
 
         # Post to GL
         narration = f"Purchase Bill: {bill.bill_number}"
@@ -621,7 +674,7 @@ class PurchaseBillService:
         # Mark as posted
         bill.is_posted = True
 
-    async def _get_gst_input_accounts(self, organization_id: UUID) -> Dict[str, Optional[UUID]]:
+    async def _get_gst_input_accounts(self, organization_id: UUID) -> dict[str, UUID | None]:
         """
         Get GST input account IDs for an organization.
         These accounts should be configured in organization settings.
@@ -652,7 +705,7 @@ class PurchaseBillService:
 
         return result
 
-    async def _get_tds_payable_account(self, organization_id: UUID) -> Optional[UUID]:
+    async def _get_tds_payable_account(self, organization_id: UUID) -> UUID | None:
         """
         Get TDS payable account ID for an organization.
         """

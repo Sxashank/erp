@@ -4,8 +4,10 @@
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+
 import { Button } from '@/components/ui/button';
+import { logger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
 
 export interface PrintButtonProps {
   contentId?: string;
@@ -29,7 +31,7 @@ export function PrintButton({
       // Print specific element
       const element = document.getElementById(contentId);
       if (!element) {
-        console.error(`Element with id "${contentId}" not found`);
+        logger.error(`Element with id "${contentId}" not found`);
         return;
       }
 
@@ -107,12 +109,7 @@ export function PrintButton({
       onClick={handlePrint}
       className={cn('gap-2', className)}
     >
-      <svg
-        className="w-4 h-4"
-        fill="none"
-        viewBox="0 0 24 24"
-        stroke="currentColor"
-      >
+      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
         <path
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -169,9 +166,9 @@ export function PrintableContainer({
     <div
       id={id}
       className={cn(
-        'print:block print:p-0 print:m-0 print:shadow-none',
+        'print:m-0 print:block print:p-0 print:shadow-none',
         hideOnScreen && 'hidden print:block',
-        className
+        className,
       )}
     >
       {children}
@@ -182,14 +179,26 @@ export function PrintableContainer({
 /**
  * Element that only appears when printing
  */
-export function PrintOnly({ children, className }: { children: React.ReactNode; className?: string }) {
+export function PrintOnly({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return <div className={cn('hidden print:block', className)}>{children}</div>;
 }
 
 /**
  * Element that is hidden when printing
  */
-export function NoPrint({ children, className }: { children: React.ReactNode; className?: string }) {
+export function NoPrint({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
   return <div className={cn('print:hidden', className)}>{children}</div>;
 }
 
@@ -213,7 +222,7 @@ export function PrintHeader({
     <PrintOnly className={cn('mb-6', className)}>
       <div className="flex items-start justify-between border-b pb-4">
         <div className="flex items-center gap-4">
-          {logo && <div className="w-16 h-16">{logo}</div>}
+          {logo && <div className="h-16 w-16">{logo}</div>}
           <div>
             <h1 className="text-xl font-bold">{title}</h1>
             {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
@@ -222,13 +231,15 @@ export function PrintHeader({
         {showDate && (
           <div className="text-right text-sm text-muted-foreground">
             <p>Generated on</p>
-            <p className="font-medium">{new Date().toLocaleDateString('en-IN', {
-              day: '2-digit',
-              month: 'short',
-              year: 'numeric',
-              hour: '2-digit',
-              minute: '2-digit',
-            })}</p>
+            <p className="font-medium">
+              {new Date().toLocaleDateString('en-IN', {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
           </div>
         )}
       </div>

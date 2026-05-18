@@ -4,10 +4,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -39,6 +39,7 @@ from app.schemas.fixed_assets.maintenance import (
 )
 from app.schemas.base import MessageResponse
 from app.services.fixed_assets.maintenance_service import MaintenanceService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -202,7 +203,7 @@ def _warranty_to_response(warranty) -> AssetWarrantyResponse:
 # AMC Contract Endpoints
 # ============================================
 
-@router.get("/amc", response_model=dict)
+@router.get("/amc", response_model=dict, response_model_by_alias=True)
 async def list_amc_contracts(
     request: Request,
     organization_id: UUID,
@@ -211,7 +212,7 @@ async def list_amc_contracts(
     expiring_within_days: Optional[int] = Query(None, ge=1),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -229,11 +230,11 @@ async def list_amc_contracts(
     }
 
 
-@router.get("/amc/{contract_id}", response_model=AMCContractResponse)
+@router.get("/amc/{contract_id}", response_model=AMCContractResponse, response_model_by_alias=True)
 async def get_amc_contract(
     request: Request,
     contract_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -241,18 +242,15 @@ async def get_amc_contract(
     service = MaintenanceService(db)
     contract = await service.get_amc_contract(contract_id)
     if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+        raise NotFoundException(detail="Contract not found", error_code="CONTRACT_NOT_FOUND")
     return _amc_to_response(contract)
 
 
-@router.post("/amc", response_model=AMCContractResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/amc", response_model=AMCContractResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_amc_contract(
     request: Request,
     data: AMCContractCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -262,18 +260,15 @@ async def create_amc_contract(
         contract = await service.create_amc_contract(data, created_by=current_user.id)
         return _amc_to_response(contract)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/amc/{contract_id}", response_model=AMCContractResponse)
+@router.put("/amc/{contract_id}", response_model=AMCContractResponse, response_model_by_alias=True)
 async def update_amc_contract(
     request: Request,
     contract_id: UUID,
     data: AMCContractUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -281,18 +276,15 @@ async def update_amc_contract(
     service = MaintenanceService(db)
     contract = await service.update_amc_contract(contract_id, data, updated_by=current_user.id)
     if not contract:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Contract not found",
-        )
+        raise NotFoundException(detail="Contract not found", error_code="CONTRACT_NOT_FOUND")
     return _amc_to_response(contract)
 
 
-@router.post("/amc/{contract_id}/activate", response_model=AMCContractResponse)
+@router.post("/amc/{contract_id}/activate", response_model=AMCContractResponse, response_model_by_alias=True)
 async def activate_amc_contract(
     request: Request,
     contract_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -302,18 +294,15 @@ async def activate_amc_contract(
         contract = await service.activate_amc_contract(contract_id, activated_by=current_user.id)
         return _amc_to_response(contract)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/amc/{contract_id}/renew", response_model=AMCContractResponse)
+@router.post("/amc/{contract_id}/renew", response_model=AMCContractResponse, response_model_by_alias=True)
 async def renew_amc_contract(
     request: Request,
     contract_id: UUID,
     data: AMCContractRenew,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -323,17 +312,14 @@ async def renew_amc_contract(
         contract = await service.renew_amc_contract(contract_id, data, renewed_by=current_user.id)
         return _amc_to_response(contract)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Maintenance Request Endpoints
 # ============================================
 
-@router.get("/requests", response_model=dict)
+@router.get("/requests", response_model=dict, response_model_by_alias=True)
 async def list_maintenance_requests(
     request: Request,
     organization_id: UUID,
@@ -345,7 +331,7 @@ async def list_maintenance_requests(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -364,11 +350,11 @@ async def list_maintenance_requests(
     }
 
 
-@router.get("/requests/{request_id}", response_model=MaintenanceRequestResponse)
+@router.get("/requests/{request_id}", response_model=MaintenanceRequestResponse, response_model_by_alias=True)
 async def get_maintenance_request(
     request: Request,
     request_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -376,18 +362,15 @@ async def get_maintenance_request(
     service = MaintenanceService(db)
     maint_request = await service.get_maintenance_request(request_id)
     if not maint_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Request not found",
-        )
+        raise NotFoundException(detail="Request not found", error_code="REQUEST_NOT_FOUND")
     return _request_to_response(maint_request)
 
 
-@router.post("/requests", response_model=MaintenanceRequestResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/requests", response_model=MaintenanceRequestResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_maintenance_request(
     request: Request,
     data: MaintenanceRequestCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -397,18 +380,15 @@ async def create_maintenance_request(
         maint_request = await service.create_maintenance_request(data, created_by=current_user.id)
         return _request_to_response(maint_request)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/requests/{request_id}", response_model=MaintenanceRequestResponse)
+@router.put("/requests/{request_id}", response_model=MaintenanceRequestResponse, response_model_by_alias=True)
 async def update_maintenance_request(
     request: Request,
     request_id: UUID,
     data: MaintenanceRequestUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -416,18 +396,15 @@ async def update_maintenance_request(
     service = MaintenanceService(db)
     maint_request = await service.update_maintenance_request(request_id, data, updated_by=current_user.id)
     if not maint_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Request not found",
-        )
+        raise NotFoundException(detail="Request not found", error_code="REQUEST_NOT_FOUND")
     return _request_to_response(maint_request)
 
 
-@router.post("/requests/{request_id}/start", response_model=MaintenanceRequestResponse)
+@router.post("/requests/{request_id}/start", response_model=MaintenanceRequestResponse, response_model_by_alias=True)
 async def start_maintenance_request(
     request: Request,
     request_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -437,18 +414,15 @@ async def start_maintenance_request(
         maint_request = await service.start_maintenance_request(request_id, started_by=current_user.id)
         return _request_to_response(maint_request)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/requests/{request_id}/complete", response_model=MaintenanceRequestResponse)
+@router.post("/requests/{request_id}/complete", response_model=MaintenanceRequestResponse, response_model_by_alias=True)
 async def complete_maintenance_request(
     request: Request,
     request_id: UUID,
     data: MaintenanceRequestComplete,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -460,17 +434,14 @@ async def complete_maintenance_request(
         )
         return _request_to_response(maint_request)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Maintenance Schedule Endpoints
 # ============================================
 
-@router.get("/schedules", response_model=dict)
+@router.get("/schedules", response_model=dict, response_model_by_alias=True)
 async def list_maintenance_schedules(
     request: Request,
     organization_id: UUID,
@@ -478,7 +449,7 @@ async def list_maintenance_schedules(
     is_active: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -496,11 +467,11 @@ async def list_maintenance_schedules(
     }
 
 
-@router.post("/schedules", response_model=MaintenanceScheduleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/schedules", response_model=MaintenanceScheduleResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_maintenance_schedule(
     request: Request,
     data: MaintenanceScheduleCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -510,17 +481,14 @@ async def create_maintenance_schedule(
         schedule = await service.create_maintenance_schedule(data, created_by=current_user.id)
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/execute", response_model=dict)
+@router.post("/schedules/execute", response_model=dict, response_model_by_alias=True)
 async def execute_scheduled_maintenance(
     request: Request,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -541,7 +509,7 @@ async def execute_scheduled_maintenance(
 # Warranty Endpoints
 # ============================================
 
-@router.get("/warranties", response_model=dict)
+@router.get("/warranties", response_model=dict, response_model_by_alias=True)
 async def list_warranties(
     request: Request,
     organization_id: UUID,
@@ -550,7 +518,7 @@ async def list_warranties(
     is_active: bool = Query(True),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -568,11 +536,11 @@ async def list_warranties(
     }
 
 
-@router.post("/warranties", response_model=AssetWarrantyResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/warranties", response_model=AssetWarrantyResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_warranty(
     request: Request,
     data: AssetWarrantyCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -582,22 +550,19 @@ async def create_warranty(
         warranty = await service.create_warranty(data, created_by=current_user.id)
         return _warranty_to_response(warranty)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Analytics and Alerts Endpoints
 # ============================================
 
-@router.get("/summary", response_model=MaintenanceSummaryResponse)
+@router.get("/summary", response_model=MaintenanceSummaryResponse, response_model_by_alias=True)
 async def get_maintenance_summary(
     request: Request,
     organization_id: UUID,
     as_on_date: Optional[date] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -614,11 +579,11 @@ async def get_maintenance_summary(
     return await service.get_maintenance_summary(organization_id, as_on_date)
 
 
-@router.get("/asset/{asset_id}/history", response_model=AssetMaintenanceHistoryResponse)
+@router.get("/asset/{asset_id}/history", response_model=AssetMaintenanceHistoryResponse, response_model_by_alias=True)
 async def get_asset_maintenance_history(
     request: Request,
     asset_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -630,18 +595,15 @@ async def get_asset_maintenance_history(
     try:
         return await service.get_asset_maintenance_history(asset_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
+        raise NotFoundException(detail=str(e), error_code="NOT_FOUND")
 
 
-@router.get("/alerts/amc-expiry", response_model=AMCExpiryAlertResponse)
+@router.get("/alerts/amc-expiry", response_model=AMCExpiryAlertResponse, response_model_by_alias=True)
 async def get_amc_expiry_alerts(
     request: Request,
     organization_id: UUID,
     days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -658,12 +620,12 @@ async def get_amc_expiry_alerts(
     )
 
 
-@router.get("/alerts/warranty-expiry", response_model=WarrantyExpiryAlertResponse)
+@router.get("/alerts/warranty-expiry", response_model=WarrantyExpiryAlertResponse, response_model_by_alias=True)
 async def get_warranty_expiry_alerts(
     request: Request,
     organization_id: UUID,
     days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):

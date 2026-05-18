@@ -112,7 +112,7 @@ class VendorComplianceService:
         })
 
         document = await self.doc_repo.create(doc_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return document
 
@@ -143,7 +143,7 @@ class VendorComplianceService:
                 update_data["is_expired"] = False
 
         document = await self.doc_repo.update(document, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return document
 
@@ -161,7 +161,7 @@ class VendorComplianceService:
             raise NotFoundException("Document not found")
 
         await self.doc_repo.soft_delete(document_id)
-        await self.session.commit()
+        await self.session.flush()
 
     async def verify_document(
         self,
@@ -179,7 +179,7 @@ class VendorComplianceService:
         document.verified_at = datetime.utcnow()
         document.verification_remarks = data.remarks
 
-        await self.session.commit()
+        await self.session.flush()
 
         # Create notification for vendor
         await self._create_notification(
@@ -295,7 +295,7 @@ class VendorComplianceService:
                 doc.expiry_alert_sent_at = datetime.utcnow()
                 alert_count += 1
 
-        await self.session.commit()
+        await self.session.flush()
         return alert_count
 
     async def update_expiry_status(
@@ -319,7 +319,7 @@ class VendorComplianceService:
                 doc.is_expired = is_expired
                 updated_count += 1
 
-        await self.session.commit()
+        await self.session.flush()
         return updated_count
 
     # Notification methods
@@ -365,7 +365,7 @@ class VendorComplianceService:
         )
         if not notification:
             raise NotFoundException("Notification not found")
-        await self.session.commit()
+        await self.session.flush()
         return notification
 
     async def mark_all_notifications_read(
@@ -375,7 +375,7 @@ class VendorComplianceService:
     ) -> int:
         """Mark all notifications as read."""
         count = await self.notification_repo.mark_all_as_read(vendor_id, read_by_id)
-        await self.session.commit()
+        await self.session.flush()
         return count
 
     # Private helper methods

@@ -2,13 +2,14 @@
 
 from enum import Enum
 
-
 # ============================================================================
 # Entity/Borrower Enums
 # ============================================================================
 
+
 class EntityType(str, Enum):
     """Type of borrower entity."""
+
     CORPORATE = "CORPORATE"
     INDIVIDUAL = "INDIVIDUAL"
     LLP = "LLP"
@@ -21,6 +22,7 @@ class EntityType(str, Enum):
 
 class EntityStatus(str, Enum):
     """Status of borrower entity."""
+
     PROSPECT = "PROSPECT"
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
@@ -30,6 +32,7 @@ class EntityStatus(str, Enum):
 
 class ContactType(str, Enum):
     """Type of entity contact."""
+
     DIRECTOR = "DIRECTOR"
     PROMOTER = "PROMOTER"
     AUTHORIZED_SIGNATORY = "AUTHORIZED_SIGNATORY"
@@ -45,6 +48,7 @@ class ContactType(str, Enum):
 
 class AddressType(str, Enum):
     """Type of address."""
+
     REGISTERED = "REGISTERED"
     CORRESPONDENCE = "CORRESPONDENCE"
     PLANT = "PLANT"
@@ -55,6 +59,7 @@ class AddressType(str, Enum):
 
 class RelationType(str, Enum):
     """Type of entity relationship."""
+
     PARENT = "PARENT"
     SUBSIDIARY = "SUBSIDIARY"
     ASSOCIATE = "ASSOCIATE"
@@ -67,6 +72,7 @@ class RelationType(str, Enum):
 
 class RiskCategory(str, Enum):
     """Risk category for entity."""
+
     LOW = "LOW"
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
@@ -75,6 +81,7 @@ class RiskCategory(str, Enum):
 
 class IndustrySector(str, Enum):
     """Industry sector classification."""
+
     MANUFACTURING = "MANUFACTURING"
     SERVICES = "SERVICES"
     INFRASTRUCTURE = "INFRASTRUCTURE"
@@ -97,8 +104,10 @@ class IndustrySector(str, Enum):
 # KYC Enums
 # ============================================================================
 
+
 class KYCDocCategory(str, Enum):
     """Category of KYC document."""
+
     IDENTITY = "IDENTITY"
     ADDRESS = "ADDRESS"
     FINANCIAL = "FINANCIAL"
@@ -110,6 +119,7 @@ class KYCDocCategory(str, Enum):
 
 class KYCVerificationStatus(str, Enum):
     """Verification status of KYC document."""
+
     PENDING = "PENDING"
     VERIFIED = "VERIFIED"
     REJECTED = "REJECTED"
@@ -119,6 +129,7 @@ class KYCVerificationStatus(str, Enum):
 
 class KYCVerificationMethod(str, Enum):
     """Method of KYC verification."""
+
     MANUAL = "MANUAL"
     API = "API"
     PHYSICAL = "PHYSICAL"
@@ -129,6 +140,7 @@ class KYCVerificationMethod(str, Enum):
 
 class CKYCTransactionType(str, Enum):
     """Type of CKYC transaction."""
+
     SEARCH = "SEARCH"
     DOWNLOAD = "DOWNLOAD"
     UPLOAD = "UPLOAD"
@@ -137,6 +149,7 @@ class CKYCTransactionType(str, Enum):
 
 class BureauType(str, Enum):
     """Credit bureau type."""
+
     CIBIL = "CIBIL"
     EXPERIAN = "EXPERIAN"
     EQUIFAX = "EQUIFAX"
@@ -145,6 +158,7 @@ class BureauType(str, Enum):
 
 class BureauPullStatus(str, Enum):
     """Status of bureau pull."""
+
     INITIATED = "INITIATED"
     SUCCESS = "SUCCESS"
     FAILED = "FAILED"
@@ -156,8 +170,10 @@ class BureauPullStatus(str, Enum):
 # Credit Rating Enums
 # ============================================================================
 
+
 class RatingGrade(str, Enum):
     """Internal credit rating grade."""
+
     AAA = "AAA"
     AA_PLUS = "AA+"
     AA = "AA"
@@ -180,6 +196,7 @@ class RatingGrade(str, Enum):
 
 class RatingType(str, Enum):
     """Type of rating."""
+
     INITIAL = "INITIAL"
     REVIEW = "REVIEW"
     ANNUAL = "ANNUAL"
@@ -188,6 +205,7 @@ class RatingType(str, Enum):
 
 class RatingStatus(str, Enum):
     """Status of rating."""
+
     DRAFT = "DRAFT"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
@@ -196,6 +214,7 @@ class RatingStatus(str, Enum):
 
 class RiskCategoryType(str, Enum):
     """Type of risk category for scoring."""
+
     SPONSOR = "SPONSOR"
     PROJECT = "PROJECT"
     FINANCIAL = "FINANCIAL"
@@ -209,8 +228,10 @@ class RiskCategoryType(str, Enum):
 # Loan Product Enums
 # ============================================================================
 
+
 class ProductCategory(str, Enum):
     """Category of loan product."""
+
     TERM_LOAN = "TERM_LOAN"
     PROJECT_FINANCE = "PROJECT_FINANCE"
     WORKING_CAPITAL = "WORKING_CAPITAL"
@@ -224,12 +245,14 @@ class ProductCategory(str, Enum):
 
 class InterestType(str, Enum):
     """Type of interest."""
+
     FIXED = "FIXED"
     FLOATING = "FLOATING"
 
 
 class RateResetFrequency(str, Enum):
     """Frequency of rate reset for floating loans."""
+
     MONTHLY = "MONTHLY"
     QUARTERLY = "QUARTERLY"
     HALF_YEARLY = "HALF_YEARLY"
@@ -238,6 +261,7 @@ class RateResetFrequency(str, Enum):
 
 class RepaymentFrequency(str, Enum):
     """Frequency of repayment."""
+
     MONTHLY = "MONTHLY"
     QUARTERLY = "QUARTERLY"
     HALF_YEARLY = "HALF_YEARLY"
@@ -247,6 +271,7 @@ class RepaymentFrequency(str, Enum):
 
 class RepaymentMode(str, Enum):
     """Mode of repayment schedule."""
+
     EMI = "EMI"
     STRUCTURED = "STRUCTURED"
     BULLET = "BULLET"
@@ -257,6 +282,7 @@ class RepaymentMode(str, Enum):
 
 class DayCountConvention(str, Enum):
     """Day count convention for interest calculation."""
+
     ACT_365 = "ACT_365"
     ACT_360 = "ACT_360"
     THIRTY_360 = "30_360"
@@ -264,6 +290,7 @@ class DayCountConvention(str, Enum):
 
 class FeeType(str, Enum):
     """Type of fee."""
+
     PROCESSING = "PROCESSING"
     UPFRONT = "UPFRONT"
     COMMITMENT = "COMMITMENT"
@@ -281,6 +308,7 @@ class FeeType(str, Enum):
 
 class FeeCalculationType(str, Enum):
     """Type of fee calculation."""
+
     PERCENTAGE = "PERCENTAGE"
     FLAT = "FLAT"
     SLAB = "SLAB"
@@ -288,6 +316,7 @@ class FeeCalculationType(str, Enum):
 
 class FeeCollectionStage(str, Enum):
     """Stage at which fee is collected."""
+
     APPLICATION = "APPLICATION"
     SANCTION = "SANCTION"
     DISBURSEMENT = "DISBURSEMENT"
@@ -299,8 +328,10 @@ class FeeCollectionStage(str, Enum):
 # Document Checklist Enums
 # ============================================================================
 
+
 class DocumentCategory(str, Enum):
     """Category of document in checklist."""
+
     KYC = "KYC"
     FINANCIAL = "FINANCIAL"
     LEGAL = "LEGAL"
@@ -312,6 +343,7 @@ class DocumentCategory(str, Enum):
 
 class DocumentStage(str, Enum):
     """Stage at which document is required."""
+
     APPLICATION = "APPLICATION"
     APPRAISAL = "APPRAISAL"
     SANCTION = "SANCTION"
@@ -324,8 +356,10 @@ class DocumentStage(str, Enum):
 # Application Enums
 # ============================================================================
 
+
 class ApplicationStage(str, Enum):
     """Stage of loan application."""
+
     LEAD = "LEAD"
     APPLICATION = "APPLICATION"
     APPRAISAL = "APPRAISAL"
@@ -337,6 +371,7 @@ class ApplicationStage(str, Enum):
 
 class ApplicationStatus(str, Enum):
     """Status of loan application."""
+
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
     UNDER_REVIEW = "UNDER_REVIEW"
@@ -350,6 +385,7 @@ class ApplicationStatus(str, Enum):
 
 class AppraisalType(str, Enum):
     """Type of appraisal."""
+
     TECHNICAL = "TECHNICAL"
     FINANCIAL = "FINANCIAL"
     LEGAL = "LEGAL"
@@ -358,6 +394,7 @@ class AppraisalType(str, Enum):
 
 class TechnicalFeasibility(str, Enum):
     """Technical feasibility assessment."""
+
     FEASIBLE = "FEASIBLE"
     CONDITIONAL = "CONDITIONAL"
     NOT_FEASIBLE = "NOT_FEASIBLE"
@@ -365,6 +402,7 @@ class TechnicalFeasibility(str, Enum):
 
 class AppraisalRecommendation(str, Enum):
     """Appraisal recommendation."""
+
     PROCEED = "PROCEED"
     PROCEED_WITH_CONDITIONS = "PROCEED_WITH_CONDITIONS"
     REJECT = "REJECT"
@@ -373,6 +411,7 @@ class AppraisalRecommendation(str, Enum):
 
 class MilestoneStatus(str, Enum):
     """Status of project milestone."""
+
     PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
@@ -384,8 +423,10 @@ class MilestoneStatus(str, Enum):
 # Sanction Enums
 # ============================================================================
 
+
 class SanctionStatus(str, Enum):
     """Status of sanction."""
+
     DRAFT = "DRAFT"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
@@ -398,6 +439,7 @@ class SanctionStatus(str, Enum):
 
 class ConditionType(str, Enum):
     """Type of sanction condition."""
+
     PRE_DISBURSEMENT = "PRE_DISBURSEMENT"
     POST_DISBURSEMENT = "POST_DISBURSEMENT"
     ONGOING = "ONGOING"
@@ -406,6 +448,7 @@ class ConditionType(str, Enum):
 
 class ConditionCategory(str, Enum):
     """Category of sanction condition."""
+
     LEGAL = "LEGAL"
     FINANCIAL = "FINANCIAL"
     SECURITY = "SECURITY"
@@ -416,6 +459,7 @@ class ConditionCategory(str, Enum):
 
 class ConditionComplianceStatus(str, Enum):
     """Compliance status of condition."""
+
     PENDING = "PENDING"
     COMPLIED = "COMPLIED"
     WAIVED = "WAIVED"
@@ -427,8 +471,10 @@ class ConditionComplianceStatus(str, Enum):
 # Security/Collateral Enums
 # ============================================================================
 
+
 class SecurityCategory(str, Enum):
     """Category of security."""
+
     PRIMARY = "PRIMARY"
     COLLATERAL = "COLLATERAL"
     GUARANTEE = "GUARANTEE"
@@ -436,6 +482,7 @@ class SecurityCategory(str, Enum):
 
 class SecurityType(str, Enum):
     """Type of security."""
+
     IMMOVABLE_PROPERTY = "IMMOVABLE_PROPERTY"
     MOVABLE_PROPERTY = "MOVABLE_PROPERTY"
     PLANT_MACHINERY = "PLANT_MACHINERY"
@@ -454,6 +501,7 @@ class SecurityType(str, Enum):
 
 class ChargeType(str, Enum):
     """Type of charge on security."""
+
     FIRST = "FIRST"
     SECOND = "SECOND"
     PARI_PASSU = "PARI_PASSU"
@@ -462,6 +510,7 @@ class ChargeType(str, Enum):
 
 class SecurityStatus(str, Enum):
     """Status of security."""
+
     PROPOSED = "PROPOSED"
     CREATED = "CREATED"
     REGISTERED = "REGISTERED"
@@ -473,8 +522,10 @@ class SecurityStatus(str, Enum):
 # Phase 2: Loan Accounting Enums
 # ============================================================================
 
+
 class LoanAccountStatus(str, Enum):
     """Status of loan account."""
+
     CREATED = "CREATED"
     ACTIVE = "ACTIVE"
     DORMANT = "DORMANT"
@@ -486,6 +537,7 @@ class LoanAccountStatus(str, Enum):
 
 class DisbursementStatus(str, Enum):
     """Status of disbursement."""
+
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     PROCESSED = "PROCESSED"
@@ -497,6 +549,7 @@ class DisbursementStatus(str, Enum):
 
 class DisbursementMode(str, Enum):
     """Mode of disbursement."""
+
     RTGS = "RTGS"
     NEFT = "NEFT"
     IMPS = "IMPS"
@@ -508,6 +561,7 @@ class DisbursementMode(str, Enum):
 
 class ScheduleType(str, Enum):
     """Type of repayment schedule."""
+
     ORIGINAL = "ORIGINAL"
     RESCHEDULED = "RESCHEDULED"
     RESTRUCTURED = "RESTRUCTURED"
@@ -516,6 +570,7 @@ class ScheduleType(str, Enum):
 
 class InstallmentType(str, Enum):
     """Type of installment component."""
+
     PRINCIPAL = "PRINCIPAL"
     INTEREST = "INTEREST"
     EMI = "EMI"
@@ -525,6 +580,7 @@ class InstallmentType(str, Enum):
 
 class InstallmentStatus(str, Enum):
     """Status of installment."""
+
     NOT_DUE = "NOT_DUE"
     DUE = "DUE"
     PARTIALLY_PAID = "PARTIALLY_PAID"
@@ -536,6 +592,7 @@ class InstallmentStatus(str, Enum):
 
 class AccrualCategory(str, Enum):
     """Category of accrual."""
+
     INTEREST = "INTEREST"
     PENAL_INTEREST = "PENAL_INTEREST"
     FEE = "FEE"
@@ -544,6 +601,7 @@ class AccrualCategory(str, Enum):
 
 class AccrualStatus(str, Enum):
     """Status of accrual."""
+
     ACCRUED = "ACCRUED"
     REVERSED = "REVERSED"
     SUSPENDED = "SUSPENDED"
@@ -552,6 +610,7 @@ class AccrualStatus(str, Enum):
 
 class AssetClassification(str, Enum):
     """RBI asset classification."""
+
     STANDARD = "STANDARD"
     SMA_0 = "SMA_0"  # 1-30 days
     SMA_1 = "SMA_1"  # 31-60 days
@@ -566,6 +625,7 @@ class AssetClassification(str, Enum):
 
 class ReceiptType(str, Enum):
     """Type of loan receipt."""
+
     REGULAR = "REGULAR"
     PREPAYMENT = "PREPAYMENT"
     FORECLOSURE = "FORECLOSURE"
@@ -578,6 +638,7 @@ class ReceiptType(str, Enum):
 
 class ReceiptStatus(str, Enum):
     """Status of receipt."""
+
     PENDING = "PENDING"
     ALLOCATED = "ALLOCATED"
     REVERSED = "REVERSED"
@@ -586,6 +647,7 @@ class ReceiptStatus(str, Enum):
 
 class ReceiptMode(str, Enum):
     """Mode of receipt."""
+
     CASH = "CASH"
     CHEQUE = "CHEQUE"
     DD = "DD"
@@ -600,6 +662,7 @@ class ReceiptMode(str, Enum):
 
 class AllocationPriority(str, Enum):
     """Priority for receipt allocation."""
+
     FIFO = "FIFO"  # First In First Out
     LIFO = "LIFO"  # Last In First Out
     PROPORTIONATE = "PROPORTIONATE"
@@ -608,6 +671,7 @@ class AllocationPriority(str, Enum):
 
 class AllocationComponent(str, Enum):
     """Component for receipt allocation."""
+
     CHARGES = "CHARGES"
     PENAL_INTEREST = "PENAL_INTEREST"
     INTEREST = "INTEREST"
@@ -617,6 +681,7 @@ class AllocationComponent(str, Enum):
 
 class AdjustmentType(str, Enum):
     """Type of loan adjustment."""
+
     RATE_CHANGE = "RATE_CHANGE"
     TENURE_CHANGE = "TENURE_CHANGE"
     EMI_CHANGE = "EMI_CHANGE"
@@ -629,6 +694,7 @@ class AdjustmentType(str, Enum):
 
 class WaiverType(str, Enum):
     """Type of waiver."""
+
     INTEREST = "INTEREST"
     PENAL_INTEREST = "PENAL_INTEREST"
     CHARGES = "CHARGES"
@@ -638,6 +704,7 @@ class WaiverType(str, Enum):
 
 class ProvisioningCategory(str, Enum):
     """RBI provisioning category."""
+
     STANDARD = "STANDARD"  # 0.40%
     SUBSTANDARD_SECURED = "SUBSTANDARD_SECURED"  # 15%
     SUBSTANDARD_UNSECURED = "SUBSTANDARD_UNSECURED"  # 25%
@@ -649,6 +716,7 @@ class ProvisioningCategory(str, Enum):
 
 class MandateStatus(str, Enum):
     """Status of NACH/eMandate."""
+
     INITIATED = "INITIATED"
     REGISTERED = "REGISTERED"
     ACTIVE = "ACTIVE"
@@ -660,6 +728,7 @@ class MandateStatus(str, Enum):
 
 class GLEntryType(str, Enum):
     """Type of GL entry for loan accounting."""
+
     DISBURSEMENT = "DISBURSEMENT"
     ACCRUAL = "ACCRUAL"
     RECEIPT = "RECEIPT"
@@ -674,8 +743,10 @@ class GLEntryType(str, Enum):
 # Phase 3: NPA & Collections Enums
 # ============================================================================
 
+
 class CollectionStage(str, Enum):
     """Stage of collection follow-up."""
+
     NORMAL = "NORMAL"
     SOFT_COLLECTION = "SOFT_COLLECTION"  # 1-30 DPD
     HARD_COLLECTION = "HARD_COLLECTION"  # 31-90 DPD
@@ -686,6 +757,7 @@ class CollectionStage(str, Enum):
 
 class FollowUpType(str, Enum):
     """Type of collection follow-up."""
+
     SMS = "SMS"
     EMAIL = "EMAIL"
     PHONE_CALL = "PHONE_CALL"
@@ -697,6 +769,7 @@ class FollowUpType(str, Enum):
 
 class FollowUpStatus(str, Enum):
     """Status of follow-up activity."""
+
     SCHEDULED = "SCHEDULED"
     COMPLETED = "COMPLETED"
     CANCELLED = "CANCELLED"
@@ -707,6 +780,7 @@ class FollowUpStatus(str, Enum):
 
 class FollowUpOutcome(str, Enum):
     """Outcome of collection follow-up."""
+
     CONTACTED = "CONTACTED"
     NOT_CONTACTABLE = "NOT_CONTACTABLE"
     PROMISE_TO_PAY = "PROMISE_TO_PAY"
@@ -719,6 +793,7 @@ class FollowUpOutcome(str, Enum):
 
 class DemandNoticeType(str, Enum):
     """Type of demand notice."""
+
     REMINDER = "REMINDER"
     DEMAND = "DEMAND"
     FINAL_DEMAND = "FINAL_DEMAND"
@@ -729,6 +804,7 @@ class DemandNoticeType(str, Enum):
 
 class NPAStatus(str, Enum):
     """Status of NPA account."""
+
     SMA = "SMA"  # Special Mention Account
     NPA = "NPA"
     UPGRADED = "UPGRADED"  # Back to standard
@@ -739,6 +815,7 @@ class NPAStatus(str, Enum):
 
 class OTSStatus(str, Enum):
     """Status of One-Time Settlement."""
+
     DRAFT = "DRAFT"
     PROPOSED = "PROPOSED"
     NEGOTIATION = "NEGOTIATION"
@@ -755,6 +832,7 @@ class OTSStatus(str, Enum):
 
 class OTSPaymentMode(str, Enum):
     """Payment mode for OTS."""
+
     LUMP_SUM = "LUMP_SUM"
     INSTALLMENTS = "INSTALLMENTS"
     HYBRID = "HYBRID"  # Upfront + installments
@@ -762,6 +840,7 @@ class OTSPaymentMode(str, Enum):
 
 class RestructureType(str, Enum):
     """Type of loan restructuring."""
+
     TENURE_EXTENSION = "TENURE_EXTENSION"
     EMI_REDUCTION = "EMI_REDUCTION"
     MORATORIUM = "MORATORIUM"
@@ -774,6 +853,7 @@ class RestructureType(str, Enum):
 
 class RestructureStatus(str, Enum):
     """Status of restructuring."""
+
     DRAFT = "DRAFT"
     PROPOSED = "PROPOSED"
     PENDING_APPROVAL = "PENDING_APPROVAL"
@@ -785,6 +865,7 @@ class RestructureStatus(str, Enum):
 
 class LegalForumType(str, Enum):
     """Legal forum type."""
+
     DRT = "DRT"  # Debt Recovery Tribunal
     NCLT = "NCLT"  # National Company Law Tribunal
     CIVIL_COURT = "CIVIL_COURT"
@@ -795,6 +876,7 @@ class LegalForumType(str, Enum):
 
 class LegalCaseType(str, Enum):
     """Type of legal case."""
+
     SARFAESI = "SARFAESI"  # Securitisation Act
     DRT_APPLICATION = "DRT_APPLICATION"
     RECOVERY_SUIT = "RECOVERY_SUIT"
@@ -807,6 +889,7 @@ class LegalCaseType(str, Enum):
 
 class LegalCaseStatus(str, Enum):
     """Status of legal case."""
+
     DRAFT = "DRAFT"
     NOTICE_ISSUED = "NOTICE_ISSUED"
     FILED = "FILED"
@@ -823,6 +906,7 @@ class LegalCaseStatus(str, Enum):
 
 class SARFAESIStage(str, Enum):
     """Stages under SARFAESI Act."""
+
     DEMAND_13_2 = "DEMAND_13_2"  # Demand notice
     OBJECTION_PERIOD = "OBJECTION_PERIOD"  # 60 days wait
     POSSESSION_13_4 = "POSSESSION_13_4"  # Possession notice
@@ -835,6 +919,7 @@ class SARFAESIStage(str, Enum):
 
 class AuctionStatus(str, Enum):
     """Status of property auction."""
+
     SCHEDULED = "SCHEDULED"
     PUBLISHED = "PUBLISHED"
     BID_RECEIVED = "BID_RECEIVED"
@@ -846,6 +931,7 @@ class AuctionStatus(str, Enum):
 
 class WriteOffType(str, Enum):
     """Type of write-off."""
+
     TECHNICAL = "TECHNICAL"  # For provisioning
     PRUDENTIAL = "PRUDENTIAL"  # Full write-off
     PARTIAL = "PARTIAL"
@@ -853,6 +939,7 @@ class WriteOffType(str, Enum):
 
 class WriteOffStatus(str, Enum):
     """Status of write-off."""
+
     PROPOSED = "PROPOSED"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
@@ -865,8 +952,10 @@ class WriteOffStatus(str, Enum):
 # Phase 4: Treasury & ALM Enums
 # ============================================================================
 
+
 class LenderType(str, Enum):
     """Type of lender/source of borrowing."""
+
     BANK = "BANK"
     NBFC = "NBFC"
     DFI = "DFI"  # Development Financial Institution
@@ -884,6 +973,7 @@ class LenderType(str, Enum):
 
 class LenderStatus(str, Enum):
     """Status of lender."""
+
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     BLOCKED = "BLOCKED"
@@ -891,6 +981,7 @@ class LenderStatus(str, Enum):
 
 class BorrowingType(str, Enum):
     """Type of borrowing facility."""
+
     TERM_LOAN = "TERM_LOAN"
     WORKING_CAPITAL = "WORKING_CAPITAL"
     CASH_CREDIT = "CASH_CREDIT"
@@ -907,6 +998,7 @@ class BorrowingType(str, Enum):
 
 class BorrowingStatus(str, Enum):
     """Status of borrowing facility."""
+
     PROPOSED = "PROPOSED"
     SANCTIONED = "SANCTIONED"
     DOCUMENTATION = "DOCUMENTATION"
@@ -920,6 +1012,7 @@ class BorrowingStatus(str, Enum):
 
 class BorrowingSecurityType(str, Enum):
     """Security type for borrowing."""
+
     UNSECURED = "UNSECURED"
     HYPOTHECATION = "HYPOTHECATION"
     PLEDGE = "PLEDGE"
@@ -930,6 +1023,7 @@ class BorrowingSecurityType(str, Enum):
 
 class DrawdownStatus(str, Enum):
     """Status of borrowing drawdown/tranche."""
+
     REQUESTED = "REQUESTED"
     APPROVED = "APPROVED"
     DISBURSED = "DISBURSED"
@@ -939,6 +1033,7 @@ class DrawdownStatus(str, Enum):
 
 class BorrowingRateType(str, Enum):
     """Interest rate type for borrowing."""
+
     FIXED = "FIXED"
     FLOATING = "FLOATING"
     MCLR_LINKED = "MCLR_LINKED"
@@ -948,6 +1043,7 @@ class BorrowingRateType(str, Enum):
 
 class BorrowingPaymentType(str, Enum):
     """Type of borrowing payment."""
+
     INTEREST = "INTEREST"
     PRINCIPAL = "PRINCIPAL"
     PREPAYMENT = "PREPAYMENT"
@@ -957,6 +1053,7 @@ class BorrowingPaymentType(str, Enum):
 
 class ALMBucket(str, Enum):
     """RBI ALM time buckets."""
+
     DAY_1 = "DAY_1"
     DAYS_2_7 = "DAYS_2_7"
     DAYS_8_14 = "DAYS_8_14"
@@ -971,6 +1068,7 @@ class ALMBucket(str, Enum):
 
 class ALMCategory(str, Enum):
     """Category for ALM classification."""
+
     ASSET = "ASSET"
     LIABILITY = "LIABILITY"
     OFF_BALANCE_SHEET = "OFF_BALANCE_SHEET"
@@ -978,6 +1076,7 @@ class ALMCategory(str, Enum):
 
 class ALMAssetType(str, Enum):
     """Type of asset for ALM."""
+
     CASH = "CASH"
     BANK_BALANCE = "BANK_BALANCE"
     INVESTMENTS_HTM = "INVESTMENTS_HTM"  # Held to Maturity
@@ -991,6 +1090,7 @@ class ALMAssetType(str, Enum):
 
 class ALMLiabilityType(str, Enum):
     """Type of liability for ALM."""
+
     BORROWINGS_BANK = "BORROWINGS_BANK"
     BORROWINGS_NCD = "BORROWINGS_NCD"
     BORROWINGS_CP = "BORROWINGS_CP"
@@ -1002,6 +1102,7 @@ class ALMLiabilityType(str, Enum):
 
 class IRSShockType(str, Enum):
     """Interest rate sensitivity shock scenarios."""
+
     PARALLEL_UP_100 = "PARALLEL_UP_100"  # +100 bps
     PARALLEL_UP_200 = "PARALLEL_UP_200"  # +200 bps
     PARALLEL_DOWN_100 = "PARALLEL_DOWN_100"  # -100 bps
@@ -1012,6 +1113,7 @@ class IRSShockType(str, Enum):
 
 class ExposureLimitType(str, Enum):
     """Type of exposure limit."""
+
     SINGLE_BORROWER = "SINGLE_BORROWER"
     GROUP_BORROWER = "GROUP_BORROWER"
     SECTOR = "SECTOR"
@@ -1026,6 +1128,7 @@ class ExposureLimitType(str, Enum):
 
 class ExposureStatus(str, Enum):
     """Status of exposure against limit."""
+
     WITHIN_LIMIT = "WITHIN_LIMIT"
     NEAR_LIMIT = "NEAR_LIMIT"  # > 80%
     BREACH = "BREACH"
@@ -1034,6 +1137,7 @@ class ExposureStatus(str, Enum):
 
 class LiquidityRatioType(str, Enum):
     """Type of liquidity ratio."""
+
     LCR = "LCR"  # Liquidity Coverage Ratio
     NSFR = "NSFR"  # Net Stable Funding Ratio
     CUMULATIVE_GAP = "CUMULATIVE_GAP"
@@ -1042,6 +1146,7 @@ class LiquidityRatioType(str, Enum):
 
 class CovenantType(str, Enum):
     """Type of financial covenant."""
+
     CRAR = "CRAR"  # Capital to Risk-Weighted Assets
     NPA_RATIO = "NPA_RATIO"
     PROVISION_COVERAGE = "PROVISION_COVERAGE"
@@ -1053,6 +1158,7 @@ class CovenantType(str, Enum):
 
 class CovenantStatus(str, Enum):
     """Status of covenant compliance."""
+
     COMPLIANT = "COMPLIANT"
     NON_COMPLIANT = "NON_COMPLIANT"
     WAIVER_OBTAINED = "WAIVER_OBTAINED"
@@ -1063,8 +1169,10 @@ class CovenantStatus(str, Enum):
 # Phase 5: NACH/eNACH Integration Enums
 # ============================================================================
 
+
 class NachBatchStatus(str, Enum):
     """Status of NACH batch."""
+
     CREATED = "CREATED"
     VALIDATED = "VALIDATED"
     FILE_GENERATED = "FILE_GENERATED"
@@ -1078,6 +1186,7 @@ class NachBatchStatus(str, Enum):
 
 class NachTransactionStatus(str, Enum):
     """Status of individual NACH transaction."""
+
     PENDING = "PENDING"
     INCLUDED = "INCLUDED"  # Included in batch
     SUBMITTED = "SUBMITTED"
@@ -1090,6 +1199,7 @@ class NachTransactionStatus(str, Enum):
 
 class NachReturnCode(str, Enum):
     """NPCI NACH return codes."""
+
     SUCCESS = "00"  # Transaction successful
     INSUFFICIENT_FUNDS = "01"  # Insufficient funds
     ACCOUNT_CLOSED = "02"  # Account closed
@@ -1111,6 +1221,7 @@ class NachReturnCode(str, Enum):
 
 class NachFileFormat(str, Enum):
     """NACH file format types."""
+
     ACH_DEBIT = "ACH_DEBIT"
     ACH_CREDIT = "ACH_CREDIT"
     MANDATE_REGISTER = "MANDATE_REGISTER"
@@ -1122,8 +1233,10 @@ class NachFileFormat(str, Enum):
 # Phase 6: Account Aggregator Integration Enums
 # ============================================================================
 
+
 class AAProvider(str, Enum):
     """Account Aggregator providers."""
+
     FINVU = "FINVU"
     ONEMONEY = "ONEMONEY"
     SETU = "SETU"
@@ -1134,6 +1247,7 @@ class AAProvider(str, Enum):
 
 class AAConsentStatus(str, Enum):
     """Status of AA consent."""
+
     PENDING = "PENDING"  # Consent request created, waiting for user
     APPROVED = "APPROVED"  # User approved consent
     REJECTED = "REJECTED"  # User rejected consent
@@ -1146,6 +1260,7 @@ class AAConsentStatus(str, Enum):
 
 class AAConsentPurpose(str, Enum):
     """Purpose of AA consent."""
+
     WEALTH_MANAGEMENT = "WEALTH_MANAGEMENT"
     UNDERWRITING = "UNDERWRITING"
     MONITORING = "MONITORING"
@@ -1157,6 +1272,7 @@ class AAConsentPurpose(str, Enum):
 
 class AAConsentMode(str, Enum):
     """Mode of consent - frequency of data fetch."""
+
     VIEW = "VIEW"  # One-time view
     STORE = "STORE"  # Store data
     QUERY = "QUERY"  # Query data
@@ -1165,6 +1281,7 @@ class AAConsentMode(str, Enum):
 
 class AAFetchFrequency(str, Enum):
     """Frequency of data fetch under consent."""
+
     ONETIME = "ONETIME"
     HOURLY = "HOURLY"
     DAILY = "DAILY"
@@ -1176,6 +1293,7 @@ class AAFetchFrequency(str, Enum):
 
 class AAFIType(str, Enum):
     """Financial Information types under AA framework."""
+
     DEPOSIT = "DEPOSIT"
     TERM_DEPOSIT = "TERM_DEPOSIT"
     RECURRING_DEPOSIT = "RECURRING_DEPOSIT"
@@ -1201,6 +1319,7 @@ class AAFIType(str, Enum):
 
 class AAFetchSessionStatus(str, Enum):
     """Status of AA data fetch session."""
+
     INITIATED = "INITIATED"
     PENDING = "PENDING"
     PARTIAL = "PARTIAL"
@@ -1212,6 +1331,7 @@ class AAFetchSessionStatus(str, Enum):
 
 class AADataStatus(str, Enum):
     """Status of fetched AA data."""
+
     RECEIVED = "RECEIVED"
     PROCESSED = "PROCESSED"
     IMPORTED = "IMPORTED"  # Imported into system
@@ -1221,8 +1341,144 @@ class AADataStatus(str, Enum):
 
 class AANotificationType(str, Enum):
     """Type of AA notification/webhook."""
+
     CONSENT_STATUS_UPDATE = "CONSENT_STATUS_UPDATE"
     FI_NOTIFICATION = "FI_NOTIFICATION"
     ACCOUNT_LINKED = "ACCOUNT_LINKED"
     ACCOUNT_UNLINKED = "ACCOUNT_UNLINKED"
     SESSION_STATUS = "SESSION_STATUS"
+
+
+# ============================================================================
+# Treasury Investment Enums
+# ============================================================================
+# Distinct from the ALMAssetType.INVESTMENTS_* bucket values — those are for
+# liability/asset classification in ALM reporting, while these are for the
+# treasury investment portfolio (trs_investment).
+
+
+class InvestmentType(str, Enum):
+    """Type of treasury investment instrument."""
+
+    GSEC = "GSEC"  # Government Securities
+    SDL = "SDL"  # State Development Loan
+    TBILL = "TBILL"  # Treasury Bill
+    CORP_BOND = "CORP_BOND"  # Corporate Bond
+    NCD = "NCD"  # Non-Convertible Debenture
+    CP = "CP"  # Commercial Paper
+    CD = "CD"  # Certificate of Deposit
+    MUTUAL_FUND = "MUTUAL_FUND"
+
+
+class InvestmentCategory(str, Enum):
+    """RBI investment classification category."""
+
+    HTM = "HTM"  # Held to Maturity
+    AFS = "AFS"  # Available for Sale
+    HFT = "HFT"  # Held for Trading
+
+
+class CouponFrequency(str, Enum):
+    """Coupon payment frequency for fixed-income investments."""
+
+    ANNUAL = "ANNUAL"
+    SEMI_ANNUAL = "SEMI_ANNUAL"
+    QUARTERLY = "QUARTERLY"
+    MONTHLY = "MONTHLY"
+    ZERO = "ZERO"  # Zero-coupon (discount instruments like T-Bills)
+
+
+class InvestmentStatus(str, Enum):
+    """Lifecycle status of an investment holding."""
+
+    ACTIVE = "ACTIVE"
+    MATURED = "MATURED"
+    SOLD = "SOLD"
+
+
+# ============================================================================
+# IIF / Subvention (Interest Incentivization Fund — Maritime Development Fund)
+# ============================================================================
+
+
+class IIFLoanType(str, Enum):
+    """Eligible loan types under the IIF subvention scheme.
+
+    Per scheme clause 6.2.iii: term loans (CAPEX) for new shipyards /
+    expansion and working capital for ship-building.
+    """
+
+    TERM_LOAN_CAPEX = "TERM_LOAN_CAPEX"
+    WORKING_CAPITAL = "WORKING_CAPITAL"
+
+
+class ClaimFrequency(str, Enum):
+    """Subvention claim frequency.
+
+    Per scheme clause 9.2.ii, IIF credits to the loan account quarterly
+    even when EMIs are monthly. Half-yearly / annual remain notifiable
+    variants — enum is intentionally permissive.
+    """
+
+    QUARTERLY = "QUARTERLY"
+    HALF_YEARLY = "HALF_YEARLY"
+    YEARLY = "YEARLY"
+
+
+class SubventionEnrollmentStatus(str, Enum):
+    """Lifecycle of a loan-account ↔ subvention-scheme enrollment."""
+
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    ENROLLED = "ENROLLED"
+    REJECTED = "REJECTED"
+    SUSPENDED = "SUSPENDED"
+    TERMINATED = "TERMINATED"
+
+
+class SubventionClaimStatus(str, Enum):
+    """Lifecycle of a single quarterly / period claim."""
+
+    DRAFT = "DRAFT"
+    SUBMITTED = "SUBMITTED"
+    VERIFIED = "VERIFIED"
+    RELEASE_IN_PROGRESS = "RELEASE_IN_PROGRESS"
+    RELEASED = "RELEASED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+
+
+# ============================================================================
+# Approval Checklist (loan-application gating checklist)
+# ============================================================================
+
+
+class ChecklistItemCategory(str, Enum):
+    """Category of a checklist item — drives the FE grouping."""
+
+    DOCUMENT = "DOCUMENT"
+    KYC = "KYC"
+    COMPLIANCE = "COMPLIANCE"
+    COVENANT = "COVENANT"
+    LEGAL = "LEGAL"
+    INSURANCE = "INSURANCE"
+    OTHER = "OTHER"
+
+
+class ChecklistItemStatus(str, Enum):
+    """Per-item completion status on a loan checklist."""
+
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    MET = "MET"
+    WAIVED = "WAIVED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+class ChecklistAppliesTo(str, Enum):
+    """Entity type a checklist template targets.
+
+    Kept as a string column on the template table so future variants
+    (DISBURSEMENT / OTS / RESTRUCTURE) extend without a migration.
+    """
+
+    LOAN_APPLICATION = "LOAN_APPLICATION"

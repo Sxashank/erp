@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Eye,
@@ -7,11 +5,14 @@ import {
   Plus,
   Search,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +37,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface LeaveApplication {
   id: string;
   application_number: string;
@@ -104,7 +106,7 @@ export function LeaveApplicationList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -114,7 +116,7 @@ export function LeaveApplicationList() {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Record<string, unknown> = {
         organization_id: selectedOrgId,
         skip,
         limit: pagination.limit,
@@ -126,7 +128,7 @@ export function LeaveApplicationList() {
       setApplications(response.data.items || []);
       setPagination((prev) => ({ ...prev, skip, total: response.data.total || 0 }));
     } catch (error) {
-      console.error('Failed to fetch leave applications:', error);
+      logger.error('Failed to fetch leave applications:', error);
     } finally {
       setLoading(false);
     }
@@ -241,8 +243,8 @@ export function LeaveApplicationList() {
                         </div>
                       </TableCell>
                       <TableCell>{app.leave_type_name}</TableCell>
-                      <TableCell>{new Date(app.from_date).toLocaleDateString()}</TableCell>
-                      <TableCell>{new Date(app.to_date).toLocaleDateString()}</TableCell>
+                      <TableCell><DateDisplay date={app.from_date} /></TableCell>
+                      <TableCell><DateDisplay date={app.to_date} /></TableCell>
                       <TableCell>
                         {app.working_days}
                         {app.is_half_day && <span className="text-xs text-slate-500 ml-1">({app.half_day_type})</span>}
@@ -252,7 +254,7 @@ export function LeaveApplicationList() {
                           {app.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{new Date(app.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell><DateDisplay date={app.created_at} /></TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

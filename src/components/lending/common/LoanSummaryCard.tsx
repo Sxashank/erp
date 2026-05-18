@@ -3,13 +3,14 @@
  * Loan account quick view card
  */
 
-import { cn } from '@/lib/utils';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AmountDisplay } from './AmountDisplay';
-import { AssetClassificationBadge, LoanAccountStatusBadge } from './StatusBadge';
+import { DateDisplay } from './DateDisplay';
 import { DPDIndicator } from './DPDBadge';
 import { PercentageDisplay } from './PercentageDisplay';
-import { DateDisplay } from './DateDisplay';
+import { AssetClassificationBadge, LoanAccountStatusBadge } from './StatusBadge';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import type { LoanAccount } from '@/types/lending';
 
 export interface LoanSummaryCardProps {

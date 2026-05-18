@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -19,6 +19,7 @@ import {
 import { usersApi, organizationsApi, unitsApi, rolesApi } from '@/services/api';
 import type { UserCreate, UserUpdate, User, Organization, Unit, RoleListItem } from '@/types';
 
+import { logger } from "@/lib/logger";
 const USER_STATUS_OPTIONS = [
   { value: 'ACTIVE', label: 'Active' },
   { value: 'INACTIVE', label: 'Inactive' },
@@ -81,7 +82,7 @@ export function UserForm() {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
@@ -90,7 +91,7 @@ export function UserForm() {
       const response = await unitsApi.list({ organization_id: orgId, page_size: 100 });
       setUnits(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch units:', error);
+      logger.error('Failed to fetch units:', error);
     }
   };
 
@@ -99,7 +100,7 @@ export function UserForm() {
       const response = await rolesApi.list();
       setRoles(response.data);
     } catch (error) {
-      console.error('Failed to fetch roles:', error);
+      logger.error('Failed to fetch roles:', error);
     }
   };
 
@@ -122,7 +123,7 @@ export function UserForm() {
       });
       setSelectedRoles(user.roles.map((r) => r.id));
     } catch (error) {
-      console.error('Failed to fetch user:', error);
+      logger.error('Failed to fetch user:', error);
     } finally {
       setLoading(false);
     }
@@ -144,7 +145,7 @@ export function UserForm() {
       }
       navigate('/admin/users');
     } catch (error) {
-      console.error('Failed to save user:', error);
+      logger.error('Failed to save user:', error);
     } finally {
       setSubmitting(false);
     }

@@ -98,6 +98,24 @@ class EWayBillService:
         # Some states have different thresholds
         return invoice_value > self.EWAY_BILL_THRESHOLD
 
+    @staticmethod
+    def _split_address(address: Optional[str]) -> str:
+        if not address:
+            return ""
+        return address.replace("\n", ", ")[:120]
+
+    @staticmethod
+    def _clean_pincode(value: Optional[str]) -> str:
+        if value and value.isdigit() and len(value) == 6:
+            return value
+        return "999999"
+
+    @staticmethod
+    def _customer_name(customer: Any) -> str:
+        if not customer:
+            return ""
+        return customer.display_name or customer.name
+
     async def generate_eway_bill(
         self,
         organization_id: UUID,
@@ -238,7 +256,7 @@ class EWayBillService:
         finally:
             await client.close()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(eway_bill)
         return eway_bill
 
@@ -303,15 +321,15 @@ class EWayBillService:
             "document_date": invoice.invoice_date.strftime("%d/%m/%Y"),
             "from_gstin": gst_registration.gstin,
             "from_trade_name": gst_registration.trade_name or gst_registration.legal_name,
-            "from_address1": gst_registration.address_line1 or "",
-            "from_place": gst_registration.city or "",
-            "from_pincode": gst_registration.pincode or "000000",
+            "from_address1": self._split_address(gst_registration.address),
+            "from_place": gst_registration.state_name,
+            "from_pincode": self._clean_pincode(gst_registration.pincode),
             "from_state_code": gst_registration.state_code or "",
             "to_gstin": invoice.customer_gstin or "URP",
-            "to_trade_name": customer.trade_name if customer else "",
+            "to_trade_name": self._customer_name(customer),
             "to_address1": customer.billing_address_line1 if customer else "",
             "to_place": customer.billing_city if customer else "",
-            "to_pincode": customer.billing_pincode if customer else "000000",
+            "to_pincode": self._clean_pincode(customer.billing_pincode if customer else None),
             "to_state_code": customer.billing_state_code if customer else "",
             "total_value": float(invoice.taxable_amount),
             "cgst_value": float(invoice.cgst_amount),
@@ -414,7 +432,7 @@ class EWayBillService:
         finally:
             await client.close()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(eway_bill)
         return eway_bill
 
@@ -497,7 +515,7 @@ class EWayBillService:
         finally:
             await client.close()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(eway_bill)
         return eway_bill
 
@@ -578,7 +596,7 @@ class EWayBillService:
         finally:
             await client.close()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(eway_bill)
         return eway_bill
 

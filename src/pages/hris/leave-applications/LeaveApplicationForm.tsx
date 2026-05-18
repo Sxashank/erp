@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Calendar, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +20,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface LeaveApplicationFormData {
   employee_id: string;
   leave_type_id: string;
@@ -115,7 +116,7 @@ export function LeaveApplicationForm() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -133,7 +134,7 @@ export function LeaveApplicationForm() {
         setEmployees(empRes.data.items || []);
         setLeaveTypes(ltRes.data.items || ltRes.data || []);
       } catch (error) {
-        console.error('Failed to fetch data:', error);
+        logger.error('Failed to fetch data:', error);
       }
     };
     fetchEmployeesAndLeaveTypes();
@@ -151,7 +152,7 @@ export function LeaveApplicationForm() {
         const response = await hrisApi.getLeaveBalances(watchEmployeeId, new Date().getFullYear());
         setLeaveBalances(response.data.items || response.data || []);
       } catch (error) {
-        console.error('Failed to fetch leave balances:', error);
+        logger.error('Failed to fetch leave balances:', error);
       }
     };
     fetchLeaveBalances();
@@ -171,7 +172,7 @@ export function LeaveApplicationForm() {
             }
           });
         } catch (error) {
-          console.error('Failed to fetch leave application:', error);
+          logger.error('Failed to fetch leave application:', error);
         } finally {
           setLoading(false);
         }
@@ -190,7 +191,7 @@ export function LeaveApplicationForm() {
       }
       navigate('/admin/hris/leave-applications');
     } catch (error) {
-      console.error('Failed to save leave application:', error);
+      logger.error('Failed to save leave application:', error);
     } finally {
       setSaving(false);
     }

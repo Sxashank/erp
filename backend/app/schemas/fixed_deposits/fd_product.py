@@ -7,7 +7,8 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 from app.models.fixed_deposits.fd_product import (
     FDInterestPayoutFrequency,
@@ -17,7 +18,7 @@ from app.models.fixed_deposits.fd_product import (
 
 
 # Interest Slab Schemas
-class FDInterestSlabBase(BaseModel):
+class FDInterestSlabBase(CamelSchema):
     """Base schema for FD interest slab."""
     customer_category: FDCustomerCategory = FDCustomerCategory.GENERAL
     min_tenure_days: int = Field(..., ge=1)
@@ -35,7 +36,7 @@ class FDInterestSlabCreate(FDInterestSlabBase):
     pass
 
 
-class FDInterestSlabUpdate(BaseModel):
+class FDInterestSlabUpdate(CamelSchema):
     """Schema for updating interest slab."""
     customer_category: Optional[FDCustomerCategory] = None
     min_tenure_days: Optional[int] = Field(None, ge=1)
@@ -50,7 +51,6 @@ class FDInterestSlabUpdate(BaseModel):
 
 class FDInterestSlabResponse(FDInterestSlabBase):
     """Schema for interest slab response."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     product_id: UUID
@@ -58,7 +58,7 @@ class FDInterestSlabResponse(FDInterestSlabBase):
 
 
 # Product Schemas
-class FDProductBase(BaseModel):
+class FDProductBase(CamelSchema):
     """Base schema for FD product."""
     product_code: str = Field(..., min_length=1, max_length=20)
     product_name: str = Field(..., min_length=1, max_length=100)
@@ -100,7 +100,7 @@ class FDProductCreate(FDProductBase):
     interest_slabs: Optional[List[FDInterestSlabCreate]] = None
 
 
-class FDProductUpdate(BaseModel):
+class FDProductUpdate(CamelSchema):
     """Schema for updating FD product."""
     product_code: Optional[str] = Field(None, min_length=1, max_length=20)
     product_name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -138,7 +138,6 @@ class FDProductUpdate(BaseModel):
 
 class FDProductResponse(FDProductBase):
     """Schema for FD product response."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     organization_id: UUID
@@ -146,7 +145,7 @@ class FDProductResponse(FDProductBase):
     created_at: date
 
 
-class FDProductListResponse(BaseModel):
+class FDProductListResponse(CamelSchema):
     """Schema for paginated FD product list."""
     items: List[FDProductResponse]
     total: int

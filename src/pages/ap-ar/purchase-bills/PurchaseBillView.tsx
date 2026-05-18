@@ -1,18 +1,10 @@
-import { useEffect, useState } from 'react';
+import { Loader2, Edit, Send, CheckCircle, XCircle, Printer } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Edit, Send, CheckCircle, XCircle, Printer } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,64 +15,77 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { purchaseBillsApi, vendorsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface BillLine {
   id: string;
-  line_number: number;
+  lineNumber: number;
   description: string;
-  hsn_sac_code: string | null;
+  hsnSacCode: string | null;
   quantity: number;
-  unit_price: number;
-  discount_percent: number;
-  discount_amount: number;
-  taxable_amount: number;
-  cgst_rate: number;
-  cgst_amount: number;
-  sgst_rate: number;
-  sgst_amount: number;
-  igst_rate: number;
-  igst_amount: number;
-  cess_rate: number;
-  cess_amount: number;
-  total_amount: number;
+  unitPrice: number;
+  discountPercent: number;
+  discountAmount: number;
+  taxableAmount: number;
+  cgstRate: number;
+  cgstAmount: number;
+  sgstRate: number;
+  sgstAmount: number;
+  igstRate: number;
+  igstAmount: number;
+  cessRate: number;
+  cessAmount: number;
+  totalAmount: number;
 }
 
 interface PurchaseBill {
   id: string;
-  bill_number: string;
-  vendor_invoice_number: string | null;
-  vendor_invoice_date: string | null;
-  bill_date: string;
-  due_date: string;
-  vendor_id: string;
-  organization_id: string;
-  unit_id: string | null;
+  billNumber: string;
+  vendorInvoiceNumber: string | null;
+  vendorInvoiceDate: string | null;
+  billDate: string;
+  dueDate: string;
+  vendorId: string;
+  organizationId: string;
+  unitId: string | null;
   subtotal: number;
-  discount_amount: number;
-  taxable_amount: number;
-  cgst_amount: number;
-  sgst_amount: number;
-  igst_amount: number;
-  cess_amount: number;
-  tds_amount: number;
-  round_off: number;
-  total_amount: number;
-  balance_amount: number;
-  is_reverse_charge: boolean;
-  supply_type: string | null;
-  vendor_gstin: string | null;
-  place_of_supply: string | null;
+  discountAmount: number;
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+  cessAmount: number;
+  tdsAmount: number;
+  roundOff: number;
+  totalAmount: number;
+  balanceAmount: number;
+  isReverseCharge: boolean;
+  supplyType: string | null;
+  vendorGstin: string | null;
+  placeOfSupply: string | null;
   status: string;
-  payment_status: string;
-  is_posted: boolean;
+  paymentStatus: string;
+  isPosted: boolean;
   narration: string | null;
-  reference_number: string | null;
+  referenceNumber: string | null;
   lines: BillLine[];
-  created_at: string;
-  updated_at: string | null;
+  createdAt: string;
+  updatedAt: string | null;
 }
 
 interface Vendor {
@@ -136,25 +141,19 @@ export function PurchaseBillView() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
-  useEffect(() => {
-    if (id) {
-      loadBill(id);
-    }
-  }, [id]);
-
-  const loadBill = async (billId: string) => {
+  const loadBill = useCallback(async (billId: string) => {
     try {
       setLoading(true);
       const response = await purchaseBillsApi.get(billId);
       setBill(response.data);
 
       // Load vendor details
-      if (response.data.vendor_id) {
-        const vendorResponse = await vendorsApi.get(response.data.vendor_id);
+      if (response.data.vendorId) {
+        const vendorResponse = await vendorsApi.get(response.data.vendorId);
         setVendor(vendorResponse.data);
       }
     } catch (error) {
-      console.error('Failed to load bill:', error);
+      logger.error('Failed to load bill:', error);
       toast({
         title: 'Error',
         description: 'Failed to load purchase bill',
@@ -163,7 +162,13 @@ export function PurchaseBillView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (id) {
+      loadBill(id);
+    }
+  }, [id, loadBill]);
 
   const handleSubmit = async () => {
     if (!bill) return;
@@ -174,12 +179,8 @@ export function PurchaseBillView() {
         description: 'Purchase bill submitted for approval',
       });
       loadBill(bill.id);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to submit purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -192,12 +193,8 @@ export function PurchaseBillView() {
         description: 'Purchase bill approved successfully',
       });
       loadBill(bill.id);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -210,24 +207,12 @@ export function PurchaseBillView() {
         description: 'Purchase bill cancelled successfully',
       });
       loadBill(bill.id);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to cancel purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setCancelDialogOpen(false);
       setCancelReason('');
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
   };
 
   const formatDate = (dateStr: string | null) => {
@@ -240,7 +225,7 @@ export function PurchaseBillView() {
   };
 
   const isIntraState = () => {
-    return bill?.supply_type === 'INTRA_STATE';
+    return bill?.supplyType === 'INTRA_STATE';
   };
 
   if (loading) {
@@ -253,7 +238,7 @@ export function PurchaseBillView() {
 
   if (!bill) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-slate-500">Purchase bill not found</p>
         <Button
           variant="outline"
@@ -268,58 +253,55 @@ export function PurchaseBillView() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/ap-ar/purchase-bills')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">{bill.bill_number}</h1>
-              <Badge variant="secondary" className={statusColors[bill.status]}>
-                {statusLabels[bill.status]}
-              </Badge>
-              <Badge variant="secondary" className={paymentStatusColors[bill.payment_status]}>
-                {paymentStatusLabels[bill.payment_status]}
-              </Badge>
-            </div>
-            <p className="text-sm text-slate-500">
-              Created on {formatDate(bill.created_at)}
-            </p>
+      <PageHeader
+        title={bill.billNumber}
+        subtitle={`Created on ${formatDate(bill.createdAt)}`}
+        breadcrumbs={[
+          { label: 'Purchase Bills', to: '/admin/ap-ar/purchase-bills' },
+          { label: bill.billNumber },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary" className={statusColors[bill.status]}>
+              {statusLabels[bill.status]}
+            </Badge>
+            <Badge variant="secondary" className={paymentStatusColors[bill.paymentStatus]}>
+              {paymentStatusLabels[bill.paymentStatus]}
+            </Badge>
+            {bill.status === 'DRAFT' && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => navigate(`/admin/ap-ar/purchase-bills/${bill.id}/edit`)}
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </Button>
+                <Button onClick={handleSubmit}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit
+                </Button>
+              </>
+            )}
+            {bill.status === 'SUBMITTED' && (
+              <Button onClick={handleApprove}>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Approve
+              </Button>
+            )}
+            {bill.status !== 'CANCELLED' && bill.paymentStatus === 'UNPAID' && (
+              <Button variant="outline" onClick={() => setCancelDialogOpen(true)}>
+                <XCircle className="mr-2 h-4 w-4" />
+                Cancel
+              </Button>
+            )}
+            <Button variant="outline">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </Button>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {bill.status === 'DRAFT' && (
-            <>
-              <Button variant="outline" onClick={() => navigate(`/admin/ap-ar/purchase-bills/${bill.id}/edit`)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-              <Button onClick={handleSubmit}>
-                <Send className="mr-2 h-4 w-4" />
-                Submit
-              </Button>
-            </>
-          )}
-          {bill.status === 'SUBMITTED' && (
-            <Button onClick={handleApprove}>
-              <CheckCircle className="mr-2 h-4 w-4" />
-              Approve
-            </Button>
-          )}
-          {bill.status !== 'CANCELLED' && bill.payment_status === 'UNPAID' && (
-            <Button variant="outline" onClick={() => setCancelDialogOpen(true)}>
-              <XCircle className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-          )}
-          <Button variant="outline">
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       <div className="grid gap-6 md:grid-cols-3">
         {/* Vendor Info */}
@@ -363,28 +345,28 @@ export function PurchaseBillView() {
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-500">Bill Number</span>
-              <span className="font-medium">{bill.bill_number}</span>
+              <span className="font-medium">{bill.billNumber}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Vendor Invoice</span>
-              <span className="font-mono">{bill.vendor_invoice_number || '-'}</span>
+              <span className="font-mono">{bill.vendorInvoiceNumber || '-'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Vendor Invoice Date</span>
-              <span>{formatDate(bill.vendor_invoice_date)}</span>
+              <DateDisplay date={bill.vendorInvoiceDate} />
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Bill Date</span>
-              <span>{formatDate(bill.bill_date)}</span>
+              <DateDisplay date={bill.billDate} />
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Due Date</span>
-              <span>{formatDate(bill.due_date)}</span>
+              <DateDisplay date={bill.dueDate} />
             </div>
-            {bill.reference_number && (
+            {bill.referenceNumber && (
               <div className="flex justify-between">
                 <span className="text-slate-500">Reference</span>
-                <span>{bill.reference_number}</span>
+                <span>{bill.referenceNumber}</span>
               </div>
             )}
           </CardContent>
@@ -398,19 +380,19 @@ export function PurchaseBillView() {
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-500">Supply Type</span>
-              <span>{bill.supply_type === 'INTRA_STATE' ? 'Intra State' : 'Inter State'}</span>
+              <span>{bill.supplyType === 'INTRA_STATE' ? 'Intra State' : 'Inter State'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Place of Supply</span>
-              <span>{bill.place_of_supply || '-'}</span>
+              <span>{bill.placeOfSupply || '-'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Vendor GSTIN</span>
-              <span className="font-mono">{bill.vendor_gstin || '-'}</span>
+              <span className="font-mono">{bill.vendorGstin || '-'}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Reverse Charge</span>
-              <span>{bill.is_reverse_charge ? 'Yes' : 'No'}</span>
+              <span>{bill.isReverseCharge ? 'Yes' : 'No'}</span>
             </div>
           </CardContent>
         </Card>
@@ -446,33 +428,39 @@ export function PurchaseBillView() {
             <TableBody>
               {bill.lines.map((line) => (
                 <TableRow key={line.id}>
-                  <TableCell>{line.line_number}</TableCell>
+                  <TableCell>{line.lineNumber}</TableCell>
                   <TableCell>{line.description}</TableCell>
-                  <TableCell className="font-mono text-sm">{line.hsn_sac_code || '-'}</TableCell>
+                  <TableCell className="font-mono text-sm">{line.hsnSacCode || '-'}</TableCell>
                   <TableCell className="text-right">{line.quantity}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(line.unit_price)}</TableCell>
                   <TableCell className="text-right">
-                    {line.discount_amount > 0 ? formatCurrency(line.discount_amount) : '-'}
+                    <AmountDisplay amount={line.unitPrice} />
                   </TableCell>
-                  <TableCell className="text-right">{formatCurrency(line.taxable_amount)}</TableCell>
+                  <TableCell className="text-right">
+                    {line.discountAmount > 0 ? <AmountDisplay amount={line.discountAmount} /> : '-'}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <AmountDisplay amount={line.taxableAmount} />
+                  </TableCell>
                   {isIntraState() ? (
                     <>
                       <TableCell className="text-right text-sm">
-                        {formatCurrency(line.cgst_amount)}
-                        <span className="text-slate-400 block">@{line.cgst_rate}%</span>
+                        <AmountDisplay amount={line.cgstAmount} />
+                        <span className="block text-slate-400">@{line.cgstRate}%</span>
                       </TableCell>
                       <TableCell className="text-right text-sm">
-                        {formatCurrency(line.sgst_amount)}
-                        <span className="text-slate-400 block">@{line.sgst_rate}%</span>
+                        <AmountDisplay amount={line.sgstAmount} />
+                        <span className="block text-slate-400">@{line.sgstRate}%</span>
                       </TableCell>
                     </>
                   ) : (
                     <TableCell className="text-right text-sm">
-                      {formatCurrency(line.igst_amount)}
-                      <span className="text-slate-400 block">@{line.igst_rate}%</span>
+                      <AmountDisplay amount={line.igstAmount} />
+                      <span className="block text-slate-400">@{line.igstRate}%</span>
                     </TableCell>
                   )}
-                  <TableCell className="text-right font-medium">{formatCurrency(line.total_amount)}</TableCell>
+                  <TableCell className="text-right font-medium">
+                    <AmountDisplay amount={line.totalAmount} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -488,7 +476,7 @@ export function PurchaseBillView() {
               <CardTitle className="text-base">Narration</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-slate-600 whitespace-pre-wrap">{bill.narration}</p>
+              <p className="whitespace-pre-wrap text-sm text-slate-600">{bill.narration}</p>
             </CardContent>
           </Card>
         )}
@@ -500,60 +488,64 @@ export function PurchaseBillView() {
           <CardContent className="space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-600">Subtotal</span>
-              <span>{formatCurrency(bill.subtotal)}</span>
+              <AmountDisplay amount={bill.subtotal} />
             </div>
-            {bill.discount_amount > 0 && (
+            {bill.discountAmount > 0 && (
               <div className="flex justify-between text-green-600">
                 <span>Discount</span>
-                <span>- {formatCurrency(bill.discount_amount)}</span>
+                <span>
+                  - <AmountDisplay amount={bill.discountAmount} />
+                </span>
               </div>
             )}
             <div className="flex justify-between">
               <span className="text-slate-600">Taxable Amount</span>
-              <span>{formatCurrency(bill.taxable_amount)}</span>
+              <AmountDisplay amount={bill.taxableAmount} />
             </div>
             {isIntraState() ? (
               <>
                 <div className="flex justify-between">
                   <span className="text-slate-600">CGST</span>
-                  <span>{formatCurrency(bill.cgst_amount)}</span>
+                  <AmountDisplay amount={bill.cgstAmount} />
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-600">SGST</span>
-                  <span>{formatCurrency(bill.sgst_amount)}</span>
+                  <AmountDisplay amount={bill.sgstAmount} />
                 </div>
               </>
             ) : (
               <div className="flex justify-between">
                 <span className="text-slate-600">IGST</span>
-                <span>{formatCurrency(bill.igst_amount)}</span>
+                <AmountDisplay amount={bill.igstAmount} />
               </div>
             )}
-            {bill.cess_amount > 0 && (
+            {bill.cessAmount > 0 && (
               <div className="flex justify-between">
                 <span className="text-slate-600">Cess</span>
-                <span>{formatCurrency(bill.cess_amount)}</span>
+                <AmountDisplay amount={bill.cessAmount} />
               </div>
             )}
-            {bill.tds_amount > 0 && (
+            {bill.tdsAmount > 0 && (
               <div className="flex justify-between text-orange-600">
                 <span>TDS Deducted</span>
-                <span>- {formatCurrency(bill.tds_amount)}</span>
+                <span>
+                  - <AmountDisplay amount={bill.tdsAmount} />
+                </span>
               </div>
             )}
-            {bill.round_off !== 0 && (
+            {bill.roundOff !== 0 && (
               <div className="flex justify-between">
                 <span className="text-slate-600">Round Off</span>
-                <span>{formatCurrency(bill.round_off)}</span>
+                <AmountDisplay amount={bill.roundOff} />
               </div>
             )}
-            <div className="border-t pt-2 flex justify-between font-bold">
+            <div className="flex justify-between border-t pt-2 font-bold">
               <span>Total Amount</span>
-              <span>{formatCurrency(bill.total_amount)}</span>
+              <AmountDisplay amount={bill.totalAmount} />
             </div>
             <div className="flex justify-between text-blue-600">
               <span>Balance Due</span>
-              <span className="font-bold">{formatCurrency(bill.balance_amount)}</span>
+              <AmountDisplay amount={bill.balanceAmount} className="font-bold" />
             </div>
           </CardContent>
         </Card>
@@ -565,8 +557,8 @@ export function PurchaseBillView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Purchase Bill</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel bill "{bill.bill_number}"?
-              Please provide a reason for cancellation.
+              Are you sure you want to cancel bill &quot;{bill.billNumber}&quot;? Please provide a reason for
+              cancellation.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">

@@ -4,15 +4,16 @@ from datetime import date, time
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.core.constants import ShiftType, HolidayType
+from app.schemas.base import CamelSchema
 
 
 # ============================================
 # Shift Schemas
 # ============================================
-class ShiftBase(BaseModel):
+class ShiftBase(CamelSchema):
     """Base schema for shift."""
     shift_code: str = Field(..., max_length=20)
     shift_name: str = Field(..., max_length=100)
@@ -57,7 +58,7 @@ class ShiftCreate(ShiftBase):
     organization_id: UUID
 
 
-class ShiftUpdate(BaseModel):
+class ShiftUpdate(CamelSchema):
     """Schema for updating shift."""
     shift_name: Optional[str] = None
     shift_type: Optional[ShiftType] = None
@@ -86,14 +87,11 @@ class ShiftResponse(ShiftBase):
     organization_id: UUID
     total_shift_minutes: Optional[int] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Holiday Calendar Schemas
 # ============================================
-class HolidayCalendarBase(BaseModel):
+class HolidayCalendarBase(CamelSchema):
     """Base schema for holiday calendar."""
     year: int
     calendar_name: str = Field("DEFAULT", max_length=100)
@@ -107,7 +105,7 @@ class HolidayCalendarCreate(HolidayCalendarBase):
     organization_id: UUID
 
 
-class HolidayCalendarUpdate(BaseModel):
+class HolidayCalendarUpdate(CamelSchema):
     """Schema for updating holiday calendar."""
     calendar_name: Optional[str] = None
     description: Optional[str] = None
@@ -121,14 +119,11 @@ class HolidayCalendarResponse(HolidayCalendarBase):
     organization_id: UUID
     holidays: Optional[List["HolidayResponse"]] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Holiday Schemas
 # ============================================
-class HolidayBase(BaseModel):
+class HolidayBase(CamelSchema):
     """Base schema for holiday."""
     holiday_date: date
     holiday_name: str = Field(..., max_length=200)
@@ -145,13 +140,13 @@ class HolidayCreate(HolidayBase):
     calendar_id: UUID
 
 
-class HolidayBulkCreate(BaseModel):
+class HolidayBulkCreate(CamelSchema):
     """Schema for bulk creating holidays."""
     calendar_id: UUID
     holidays: List[HolidayBase]
 
 
-class HolidayUpdate(BaseModel):
+class HolidayUpdate(CamelSchema):
     """Schema for updating holiday."""
     holiday_date: Optional[date] = None
     holiday_name: Optional[str] = None
@@ -167,9 +162,6 @@ class HolidayResponse(HolidayBase):
     """Response schema for holiday."""
     id: UUID
     calendar_id: UUID
-
-    class Config:
-        from_attributes = True
 
 
 # Resolve forward reference

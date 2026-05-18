@@ -1,16 +1,16 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  Download,
+  FileText,
+  AlertTriangle,
+  CheckCircle,
+} from 'lucide-react';
+import { useState } from 'react';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -20,15 +20,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Shield,
-  Download,
-  FileText,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-} from 'lucide-react';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {

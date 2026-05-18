@@ -12,7 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.models.hris.employee import Employee
 from app.models.hris.leave import LeaveBalance, LeaveApplication
 from app.models.hris.attendance import Attendance
-from app.models.payroll.payroll import Payslip
+from app.models.payroll.payroll import PayrollBatch, PayrollStatutory, Payslip
 from app.models.ess.ess_user import ESSUser, ProfileUpdateRequest
 from app.models.ess.enums import ProfileUpdateType, ProfileUpdateStatus
 
@@ -22,6 +22,12 @@ class ESSProfileService:
 
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    @staticmethod
+    def payslip_period(payslip: Payslip) -> str:
+        if payslip.batch:
+            return f"{payslip.batch.payroll_year}-{payslip.batch.payroll_month:02d}"
+        return ""
 
     # ==================== Profile ====================
 
@@ -185,19 +191,24 @@ class ESSProfileService:
         offset: int = 0,
     ) -> Tuple[List[Payslip], int]:
         """Get payslips for an employee."""
-        query = select(Payslip).where(
-            Payslip.employee_id == employee_id
+        query = (
+            select(Payslip)
+            .join(PayrollBatch)
+            .options(selectinload(Payslip.batch))
+            .where(Payslip.employee_id == employee_id)
         )
 
         if financial_year:
             # Parse FY like "2024-25"
             start_year = int(financial_year.split("-")[0])
-            start_month = f"{start_year}-04"
-            end_month = f"{start_year + 1}-03"
             query = query.where(
-                and_(
-                    Payslip.pay_period >= start_month,
-                    Payslip.pay_period <= end_month,
+                (
+                    (PayrollBatch.payroll_year == start_year)
+                    & (PayrollBatch.payroll_month >= 4)
+                )
+                | (
+                    (PayrollBatch.payroll_year == start_year + 1)
+                    & (PayrollBatch.payroll_month <= 3)
                 )
             )
 
@@ -207,7 +218,7 @@ class ESSProfileService:
         total = count_result.scalar() or 0
 
         # Apply pagination (most recent first)
-        query = query.order_by(Payslip.pay_period.desc())
+        query = query.order_by(PayrollBatch.payroll_year.desc(), PayrollBatch.payroll_month.desc())
         query = query.offset(offset).limit(limit)
 
         result = await self.session.execute(query)
@@ -219,7 +230,7 @@ class ESSProfileService:
         employee_id: UUID,
     ) -> Optional[Payslip]:
         """Get a specific payslip."""
-        query = select(Payslip).where(
+        query = select(Payslip).options(selectinload(Payslip.batch)).where(
             and_(
                 Payslip.id == payslip_id,
                 Payslip.employee_id == employee_id,
@@ -234,10 +245,12 @@ class ESSProfileService:
         pay_period: str,
     ) -> Optional[Payslip]:
         """Get payslip for a specific period."""
-        query = select(Payslip).where(
+        year, month = (int(part) for part in pay_period.split("-"))
+        query = select(Payslip).join(PayrollBatch).where(
             and_(
                 Payslip.employee_id == employee_id,
-                Payslip.pay_period == pay_period,
+                PayrollBatch.payroll_year == year,
+                PayrollBatch.payroll_month == month,
             )
         )
         result = await self.session.execute(query)
@@ -252,40 +265,65 @@ class ESSProfileService:
         # Determine date range for financial year
         if financial_year:
             start_year = int(financial_year.split("-")[0])
-            start_month = f"{start_year}-04"
-            end_month = f"{start_year + 1}-03"
         else:
             today = date.today()
             if today.month >= 4:
                 start_year = today.year
             else:
                 start_year = today.year - 1
-            start_month = f"{start_year}-04"
-            end_month = f"{start_year + 1}-03"
 
         query = select(
             func.sum(Payslip.gross_salary).label("total_gross"),
             func.sum(Payslip.total_deductions).label("total_deductions"),
             func.sum(Payslip.net_salary).label("total_net"),
-            func.sum(Payslip.tax_deducted).label("total_tax"),
             func.count().label("months_processed"),
-        ).where(
+        ).join(PayrollBatch).where(
             and_(
                 Payslip.employee_id == employee_id,
-                Payslip.pay_period >= start_month,
-                Payslip.pay_period <= end_month,
+                (
+                    (
+                        (PayrollBatch.payroll_year == start_year)
+                        & (PayrollBatch.payroll_month >= 4)
+                    )
+                    | (
+                        (PayrollBatch.payroll_year == start_year + 1)
+                        & (PayrollBatch.payroll_month <= 3)
+                    )
+                ),
             )
         )
 
         result = await self.session.execute(query)
         row = result.one()
 
+        tax_result = await self.session.execute(
+            select(func.sum(PayrollStatutory.employee_amount))
+            .join(Payslip, PayrollStatutory.payslip_id == Payslip.id)
+            .join(PayrollBatch, Payslip.batch_id == PayrollBatch.id)
+            .where(
+                and_(
+                    Payslip.employee_id == employee_id,
+                    PayrollStatutory.statutory_type == "TDS",
+                    (
+                        (
+                            (PayrollBatch.payroll_year == start_year)
+                            & (PayrollBatch.payroll_month >= 4)
+                        )
+                        | (
+                            (PayrollBatch.payroll_year == start_year + 1)
+                            & (PayrollBatch.payroll_month <= 3)
+                        )
+                    ),
+                )
+            )
+        )
+
         return {
             "financial_year": f"{start_year}-{str(start_year + 1)[-2:]}",
             "total_gross": float(row.total_gross or 0),
             "total_deductions": float(row.total_deductions or 0),
             "total_net": float(row.total_net or 0),
-            "total_tax": float(row.total_tax or 0),
+            "total_tax": float(tax_result.scalar() or 0),
             "months_processed": row.months_processed or 0,
         }
 
@@ -469,7 +507,7 @@ class ESSProfileService:
                 for lb in leave_balances
             ],
             "latest_payslip": {
-                "period": latest_payslip.pay_period,
+                "period": self.payslip_period(latest_payslip),
                 "gross": float(latest_payslip.gross_salary),
                 "net": float(latest_payslip.net_salary),
             } if latest_payslip else None,

@@ -2,16 +2,18 @@
  * Vendor Portal Login Page
  */
 
+import { Building2, Mail, Lock, Loader2, ArrowLeft, KeyRound } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Building2, Mail, Lock, Loader2, ArrowLeft, KeyRound } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { vendorAuthApi } from '@/services/vendorApi';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 type LoginStep = 'credentials' | 'otp';
 type LoginMethod = 'password' | 'otp';
@@ -62,7 +64,7 @@ export default function VendorLogin() {
       toast({
         variant: 'destructive',
         title: 'Failed to send OTP',
-        description: err.response?.data?.detail || 'Please try again',
+        description: getErrorMessage(err, 'Please try again'),
       });
     } finally {
       setLoading(false);
@@ -92,7 +94,7 @@ export default function VendorLogin() {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
-        description: err.response?.data?.detail || 'Invalid credentials',
+        description: getErrorMessage(err, 'Invalid credentials'),
       });
     } finally {
       setLoading(false);
@@ -122,7 +124,7 @@ export default function VendorLogin() {
       toast({
         variant: 'destructive',
         title: 'Login Failed',
-        description: err.response?.data?.detail || 'Invalid OTP',
+        description: getErrorMessage(err, 'Invalid OTP'),
       });
     } finally {
       setLoading(false);

@@ -1,12 +1,27 @@
-import { useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Save } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
 
+import {
+  AmountInput,
+  FormSection,
+  FormShell,
+  PageHeader,
+  PercentageInput,
+} from '@/components/common';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -14,657 +29,470 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
-import { fixedAssetsApi, organizationsApi, accountsApi } from '@/services/api';
-import type { Organization, PaginatedResponse } from '@/types';
+import { useAssetCategories, useAssetCategory, useCreateAssetCategory, useUpdateAssetCategory } from '@/hooks/fixed-assets/useAssetCategories';
+import { useFixedAssetAccounts } from '@/hooks/fixed-assets/useMasters';
+import { useToast } from '@/hooks/use-toast';
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import { showErrorToast } from '@/lib/errorToast';
+import {
+  assetCategorySchema,
+  type AssetCategoryInput,
+} from '@/schemas/fixed-assets/assetCategorySchema';
 
-interface AssetCategory {
-  id: string;
-  organization_id: string;
-  category_code: string;
-  category_name: string;
-  description?: string;
-  parent_category_id?: string;
-  asset_type: string;
-  depreciation_method: string;
-  useful_life_years?: number;
-  residual_value_pct?: number;
-  depreciation_rate_slm?: number;
-  depreciation_rate_wdv?: number;
-  it_act_rate?: number;
-  it_act_block?: string;
-  capitalization_threshold?: number;
-  gl_asset_account_id?: string;
-  gl_accum_dep_account_id?: string;
-  gl_dep_expense_account_id?: string;
-  gl_disposal_gain_account_id?: string;
-  gl_disposal_loss_account_id?: string;
-  gl_revaluation_reserve_account_id?: string;
-  gl_impairment_account_id?: string;
-  requires_insurance: boolean;
-  requires_amc: boolean;
-  is_active: boolean;
-}
-
-interface Account {
-  id: string;
-  code: string;
-  name: string;
-}
-
-const ASSET_TYPES = [
+const assetTypeOptions = [
   { value: 'TANGIBLE', label: 'Tangible' },
   { value: 'INTANGIBLE', label: 'Intangible' },
-  { value: 'RIGHT_OF_USE', label: 'Right of Use' },
-];
+  { value: 'RIGHT_OF_USE', label: 'Right of use' },
+] as const;
 
-const DEPRECIATION_METHODS = [
-  { value: 'SLM', label: 'Straight Line Method (SLM)' },
-  { value: 'WDV', label: 'Written Down Value (WDV)' },
-  { value: 'UNIT_OF_PRODUCTION', label: 'Unit of Production' },
-  { value: 'NO_DEPRECIATION', label: 'No Depreciation' },
-];
+const depreciationMethodOptions = [
+  { value: 'SLM', label: 'Straight line method' },
+  { value: 'WDV', label: 'Written down value' },
+  { value: 'UNIT_OF_PRODUCTION', label: 'Unit of production' },
+  { value: 'NO_DEPRECIATION', label: 'No depreciation' },
+] as const;
 
-export function AssetCategoryForm() {
+const defaultValues: AssetCategoryInput = {
+  categoryCode: '',
+  categoryName: '',
+  description: '',
+  parentCategoryId: '',
+  assetType: 'TANGIBLE',
+  depreciationMethod: 'SLM',
+  usefulLifeYears: 5,
+  residualValuePct: 5,
+  depreciationRateSlm: 0,
+  depreciationRateWdv: 0,
+  itActBlock: '',
+  capitalizationThreshold: 5000,
+  glAssetAccountId: '',
+  glAccumDepAccountId: '',
+  glDepExpenseAccountId: '',
+  glDisposalGainAccountId: '',
+  glDisposalLossAccountId: '',
+  glRevaluationReserveAccountId: '',
+  glImpairmentAccountId: '',
+  requiresInsurance: false,
+  requiresAmc: false,
+};
+
+export function AssetCategoryForm(): JSX.Element {
+  const organizationId = useRequiredActiveOrganizationId();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const isEdit = !!id;
+  const { toast } = useToast();
+  const isEdit = Boolean(id);
 
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [parentCategories, setParentCategories] = useState<AssetCategory[]>([]);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const categoryQuery = useAssetCategory(id);
+  const categoriesQuery = useAssetCategories(organizationId);
+  const accountsQuery = useFixedAssetAccounts(organizationId);
+  const createMutation = useCreateAssetCategory();
+  const updateMutation = useUpdateAssetCategory(id ?? '');
 
-  const [formData, setFormData] = useState({
-    organization_id: '',
-    category_code: '',
-    category_name: '',
-    description: '',
-    parent_category_id: '',
-    asset_type: 'TANGIBLE',
-    depreciation_method: 'SLM',
-    useful_life_years: '',
-    residual_value_pct: '',
-    depreciation_rate_slm: '',
-    depreciation_rate_wdv: '',
-    it_act_rate: '',
-    it_act_block: '',
-    capitalization_threshold: '',
-    gl_asset_account_id: '',
-    gl_accum_dep_account_id: '',
-    gl_dep_expense_account_id: '',
-    gl_disposal_gain_account_id: '',
-    gl_disposal_loss_account_id: '',
-    gl_revaluation_reserve_account_id: '',
-    gl_impairment_account_id: '',
-    requires_insurance: false,
-    requires_amc: false,
+  const form = useForm<AssetCategoryInput>({
+    resolver: zodResolver(assetCategorySchema),
+    defaultValues,
   });
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
+    if (!categoryQuery.data) return;
+    form.reset({
+      categoryCode: categoryQuery.data.categoryCode,
+      categoryName: categoryQuery.data.categoryName,
+      description: categoryQuery.data.description ?? '',
+      parentCategoryId: categoryQuery.data.parentCategoryId ?? '',
+      assetType: categoryQuery.data.assetType,
+      depreciationMethod: categoryQuery.data.depreciationMethod,
+      usefulLifeYears: categoryQuery.data.usefulLifeYears,
+      residualValuePct: Number(categoryQuery.data.residualValuePct),
+      depreciationRateSlm: Number(categoryQuery.data.depreciationRateSlm),
+      depreciationRateWdv: Number(categoryQuery.data.depreciationRateWdv),
+      itActRate: categoryQuery.data.itActRate ? Number(categoryQuery.data.itActRate) : undefined,
+      itActBlock: categoryQuery.data.itActBlock ?? '',
+      capitalizationThreshold: Number(categoryQuery.data.capitalizationThreshold),
+      glAssetAccountId: categoryQuery.data.glAssetAccountId ?? '',
+      glAccumDepAccountId: categoryQuery.data.glAccumDepAccountId ?? '',
+      glDepExpenseAccountId: categoryQuery.data.glDepExpenseAccountId ?? '',
+      glDisposalGainAccountId: categoryQuery.data.glDisposalGainAccountId ?? '',
+      glDisposalLossAccountId: categoryQuery.data.glDisposalLossAccountId ?? '',
+      glRevaluationReserveAccountId: categoryQuery.data.glRevaluationReserveAccountId ?? '',
+      glImpairmentAccountId: categoryQuery.data.glImpairmentAccountId ?? '',
+      requiresInsurance: categoryQuery.data.requiresInsurance,
+      requiresAmc: categoryQuery.data.requiresAmc,
+    });
+  }, [categoryQuery.data, form]);
 
-  useEffect(() => {
-    if (formData.organization_id) {
-      fetchParentCategories();
-      fetchAccounts();
-    }
-  }, [formData.organization_id]);
+  const parentCategoryOptions = useMemo(
+    () =>
+      (categoriesQuery.data?.items ?? []).filter((category) => category.id !== id),
+    [categoriesQuery.data?.items, id],
+  );
 
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchCategory();
-    }
-  }, [id]);
+  async function onSubmit(values: AssetCategoryInput) {
+    const payload = {
+      organizationId,
+      categoryCode: values.categoryCode,
+      categoryName: values.categoryName,
+      description: values.description || null,
+      parentCategoryId: values.parentCategoryId || null,
+      assetType: values.assetType,
+      depreciationMethod: values.depreciationMethod,
+      usefulLifeYears: values.usefulLifeYears,
+      residualValuePct: values.residualValuePct,
+      depreciationRateSlm: values.depreciationRateSlm,
+      depreciationRateWdv: values.depreciationRateWdv,
+      itActRate: values.itActRate ?? null,
+      itActBlock: values.itActBlock || null,
+      capitalizationThreshold: values.capitalizationThreshold,
+      glAssetAccountId: values.glAssetAccountId || null,
+      glAccumDepAccountId: values.glAccumDepAccountId || null,
+      glDepExpenseAccountId: values.glDepExpenseAccountId || null,
+      glDisposalGainAccountId: values.glDisposalGainAccountId || null,
+      glDisposalLossAccountId: values.glDisposalLossAccountId || null,
+      glRevaluationReserveAccountId: values.glRevaluationReserveAccountId || null,
+      glImpairmentAccountId: values.glImpairmentAccountId || null,
+      requiresInsurance: values.requiresInsurance,
+      requiresAmc: values.requiresAmc,
+    };
 
-  const fetchOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
-      const data: PaginatedResponse<Organization> = response.data;
-      setOrganizations(data.items);
-      if (!isEdit && data.items.length > 0) {
-        setFormData((prev) => ({ ...prev, organization_id: data.items[0].id }));
-      }
-    } catch (error) {
-      console.error('Failed to fetch organizations:', error);
-    }
-  };
-
-  const fetchParentCategories = async () => {
-    try {
-      const response = await fixedAssetsApi.listCategories({
-        organization_id: formData.organization_id,
-        limit: 500,
-      });
-      setParentCategories(response.data.items || []);
-    } catch (error) {
-      console.error('Failed to fetch parent categories:', error);
-    }
-  };
-
-  const fetchAccounts = async () => {
-    try {
-      const response = await accountsApi.list({
-        organization_id: formData.organization_id,
-        page_size: 500,
-      });
-      setAccounts(response.data.items || []);
-    } catch (error) {
-      console.error('Failed to fetch accounts:', error);
-    }
-  };
-
-  const fetchCategory = async () => {
-    try {
-      setLoading(true);
-      const response = await fixedAssetsApi.getCategory(id!);
-      const category = response.data;
-      setFormData({
-        organization_id: category.organization_id,
-        category_code: category.category_code,
-        category_name: category.category_name,
-        description: category.description || '',
-        parent_category_id: category.parent_category_id || '',
-        asset_type: category.asset_type,
-        depreciation_method: category.depreciation_method,
-        useful_life_years: category.useful_life_years?.toString() || '',
-        residual_value_pct: category.residual_value_pct?.toString() || '',
-        depreciation_rate_slm: category.depreciation_rate_slm?.toString() || '',
-        depreciation_rate_wdv: category.depreciation_rate_wdv?.toString() || '',
-        it_act_rate: category.it_act_rate?.toString() || '',
-        it_act_block: category.it_act_block || '',
-        capitalization_threshold: category.capitalization_threshold?.toString() || '',
-        gl_asset_account_id: category.gl_asset_account_id || '',
-        gl_accum_dep_account_id: category.gl_accum_dep_account_id || '',
-        gl_dep_expense_account_id: category.gl_dep_expense_account_id || '',
-        gl_disposal_gain_account_id: category.gl_disposal_gain_account_id || '',
-        gl_disposal_loss_account_id: category.gl_disposal_loss_account_id || '',
-        gl_revaluation_reserve_account_id: category.gl_revaluation_reserve_account_id || '',
-        gl_impairment_account_id: category.gl_impairment_account_id || '',
-        requires_insurance: category.requires_insurance,
-        requires_amc: category.requires_amc,
-      });
-    } catch (error) {
-      console.error('Failed to fetch category:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      setSaving(true);
-      const payload = {
-        ...formData,
-        parent_category_id: formData.parent_category_id || null,
-        useful_life_years: formData.useful_life_years ? parseInt(formData.useful_life_years) : null,
-        residual_value_pct: formData.residual_value_pct ? parseFloat(formData.residual_value_pct) : null,
-        depreciation_rate_slm: formData.depreciation_rate_slm ? parseFloat(formData.depreciation_rate_slm) : null,
-        depreciation_rate_wdv: formData.depreciation_rate_wdv ? parseFloat(formData.depreciation_rate_wdv) : null,
-        it_act_rate: formData.it_act_rate ? parseFloat(formData.it_act_rate) : null,
-        it_act_block: formData.it_act_block || null,
-        capitalization_threshold: formData.capitalization_threshold ? parseFloat(formData.capitalization_threshold) : null,
-        gl_asset_account_id: formData.gl_asset_account_id || null,
-        gl_accum_dep_account_id: formData.gl_accum_dep_account_id || null,
-        gl_dep_expense_account_id: formData.gl_dep_expense_account_id || null,
-        gl_disposal_gain_account_id: formData.gl_disposal_gain_account_id || null,
-        gl_disposal_loss_account_id: formData.gl_disposal_loss_account_id || null,
-        gl_revaluation_reserve_account_id: formData.gl_revaluation_reserve_account_id || null,
-        gl_impairment_account_id: formData.gl_impairment_account_id || null,
-      };
-
       if (isEdit) {
-        await fixedAssetsApi.updateCategory(id!, payload);
+        await updateMutation.mutateAsync(payload);
+        toast({ title: 'Asset category updated' });
       } else {
-        await fixedAssetsApi.createCategory(payload);
+        await createMutation.mutateAsync(payload);
+        toast({ title: 'Asset category created' });
       }
       navigate('/admin/fixed-assets/categories');
     } catch (error) {
-      console.error('Failed to save category:', error);
-    } finally {
-      setSaving(false);
+      showErrorToast(error, toast);
     }
-  };
+  }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <p className="text-sm text-slate-500">Loading...</p>
-      </div>
-    );
+  const isLoading = categoryQuery.isLoading || categoriesQuery.isLoading || accountsQuery.isLoading;
+
+  if (isLoading && isEdit) {
+    return <Skeleton className="h-[520px] w-full" />;
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title={isEdit ? 'Edit Asset Category' : 'New Asset Category'}
-        subtitle={
-          isEdit ? 'Update asset category details' : 'Create a new asset category'
-        }
+        subtitle="Set depreciation defaults, capitalization threshold, and GL mapping for this category."
         breadcrumbs={[
+          { label: 'Fixed Assets' },
           { label: 'Asset Categories', to: '/admin/fixed-assets/categories' },
           { label: isEdit ? 'Edit' : 'New' },
         ]}
       />
 
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Basic Information */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Basic Information</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="organization_id">Organization</Label>
-                <Select
-                  value={formData.organization_id}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, organization_id: value }))}
-                  disabled={isEdit}
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <FormShell
+            footer={
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate('/admin/fixed-assets/categories')}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select organization" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {organizations.map((org) => (
-                      <SelectItem key={org.id} value={org.id}>
-                        {org.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="category_code">Category Code</Label>
-                  <Input
-                    id="category_code"
-                    value={formData.category_code}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, category_code: e.target.value }))}
-                    placeholder="e.g., FA-COMP"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="category_name">Category Name</Label>
-                  <Input
-                    id="category_name"
-                    value={formData.category_name}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, category_name: e.target.value }))}
-                    placeholder="e.g., Computer Equipment"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-                  placeholder="Optional description"
-                  rows={2}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="parent_category_id">Parent Category</Label>
-                <Select
-                  value={formData.parent_category_id}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, parent_category_id: value }))}
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={form.formState.isSubmitting}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select parent (optional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">No Parent</SelectItem>
-                    {parentCategories
-                      .filter((cat) => cat.id !== id)
-                      .map((cat) => (
-                        <SelectItem key={cat.id} value={cat.id}>
-                          {cat.category_code} - {cat.category_name}
-                        </SelectItem>
-                      ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="asset_type">Asset Type</Label>
-                  <Select
-                    value={formData.asset_type}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, asset_type: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {ASSET_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="capitalization_threshold">Capitalization Threshold</Label>
-                  <Input
-                    id="capitalization_threshold"
-                    type="number"
-                    step="0.01"
-                    value={formData.capitalization_threshold}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, capitalization_threshold: e.target.value }))}
-                    placeholder="Minimum value"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-6">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="requires_insurance"
-                    checked={formData.requires_insurance}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({ ...prev, requires_insurance: checked as boolean }))
-                    }
-                  />
-                  <Label htmlFor="requires_insurance" className="text-sm font-normal">
-                    Requires Insurance
-                  </Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="requires_amc"
-                    checked={formData.requires_amc}
-                    onCheckedChange={(checked) =>
-                      setFormData((prev) => ({ ...prev, requires_amc: checked as boolean }))
-                    }
-                  />
-                  <Label htmlFor="requires_amc" className="text-sm font-normal">
-                    Requires AMC
-                  </Label>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Depreciation Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Depreciation Settings</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="depreciation_method">Depreciation Method</Label>
-                <Select
-                  value={formData.depreciation_method}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, depreciation_method: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEPRECIATION_METHODS.map((method) => (
-                      <SelectItem key={method.value} value={method.value}>
-                        {method.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="useful_life_years">Useful Life (Years)</Label>
-                  <Input
-                    id="useful_life_years"
-                    type="number"
-                    value={formData.useful_life_years}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, useful_life_years: e.target.value }))}
-                    placeholder="e.g., 5"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="residual_value_pct">Residual Value (%)</Label>
-                  <Input
-                    id="residual_value_pct"
-                    type="number"
-                    step="0.01"
-                    value={formData.residual_value_pct}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, residual_value_pct: e.target.value }))}
-                    placeholder="e.g., 5"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="depreciation_rate_slm">SLM Rate (%)</Label>
-                  <Input
-                    id="depreciation_rate_slm"
-                    type="number"
-                    step="0.01"
-                    value={formData.depreciation_rate_slm}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, depreciation_rate_slm: e.target.value }))}
-                    placeholder="e.g., 20"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="depreciation_rate_wdv">WDV Rate (%)</Label>
-                  <Input
-                    id="depreciation_rate_wdv"
-                    type="number"
-                    step="0.01"
-                    value={formData.depreciation_rate_wdv}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, depreciation_rate_wdv: e.target.value }))}
-                    placeholder="e.g., 40"
-                  />
-                </div>
-              </div>
-
-              <Separator />
-
-              <p className="text-sm font-medium text-slate-700">Income Tax Act Settings</p>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="it_act_rate">IT Act Rate (%)</Label>
-                  <Input
-                    id="it_act_rate"
-                    type="number"
-                    step="0.01"
-                    value={formData.it_act_rate}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, it_act_rate: e.target.value }))}
-                    placeholder="e.g., 15"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="it_act_block">IT Act Block</Label>
-                  <Input
-                    id="it_act_block"
-                    value={formData.it_act_block}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, it_act_block: e.target.value }))}
-                    placeholder="e.g., Block III"
-                  />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* GL Account Mapping */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle>GL Account Mapping</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="space-y-2">
-                  <Label htmlFor="gl_asset_account_id">Asset Account</Label>
-                  <Select
-                    value={formData.gl_asset_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_asset_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="gl_accum_dep_account_id">Accumulated Depreciation</Label>
-                  <Select
-                    value={formData.gl_accum_dep_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_accum_dep_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="gl_dep_expense_account_id">Depreciation Expense</Label>
-                  <Select
-                    value={formData.gl_dep_expense_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_dep_expense_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="gl_disposal_gain_account_id">Disposal Gain</Label>
-                  <Select
-                    value={formData.gl_disposal_gain_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_disposal_gain_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="gl_disposal_loss_account_id">Disposal Loss</Label>
-                  <Select
-                    value={formData.gl_disposal_loss_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_disposal_loss_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="gl_revaluation_reserve_account_id">Revaluation Reserve</Label>
-                  <Select
-                    value={formData.gl_revaluation_reserve_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_revaluation_reserve_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="gl_impairment_account_id">Impairment Loss</Label>
-                  <Select
-                    value={formData.gl_impairment_account_id}
-                    onValueChange={(value) => setFormData((prev) => ({ ...prev, gl_impairment_account_id: value }))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {accounts.map((acc) => (
-                        <SelectItem key={acc.id} value={acc.id}>
-                          {acc.code} - {acc.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="flex justify-end gap-4 mt-6">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate('/admin/fixed-assets/categories')}
+                  <Save className="mr-2 h-4 w-4" />
+                  {form.formState.isSubmitting ? 'Saving…' : 'Save category'}
+                </Button>
+              </>
+            }
           >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={saving}>
-            <Save className="mr-2 h-4 w-4" />
-            {saving ? 'Saving...' : isEdit ? 'Update Category' : 'Create Category'}
-          </Button>
-        </div>
-      </form>
+            <FormSection
+              title="Basic Information"
+              description="Define how this asset category appears in the register."
+            >
+              <FormField
+                control={form.control}
+                name="categoryCode"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category code</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="categoryName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category name</FormLabel>
+                    <FormControl>
+                      <Input {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="parentCategoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Parent category</FormLabel>
+                    <Select value={field.value || 'ROOT'} onValueChange={(value) => field.onChange(value === 'ROOT' ? '' : value)}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Root category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="ROOT">Root category</SelectItem>
+                        {parentCategoryOptions.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.categoryCode} · {category.categoryName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="assetType"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Asset type</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {assetTypeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} rows={3} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="Depreciation Policy"
+              description="These defaults apply when assets are created in this category."
+            >
+              <FormField
+                control={form.control}
+                name="depreciationMethod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Method</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {depreciationMethodOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="usefulLifeYears"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Useful life (years)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={field.value ?? ''}
+                        onChange={(event) => {
+                          const nextValue = event.target.value;
+                          field.onChange(nextValue === '' ? undefined : Number(nextValue));
+                        }}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="residualValuePct"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Residual value</FormLabel>
+                    <FormControl>
+                      <PercentageInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="depreciationRateSlm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>SLM rate</FormLabel>
+                    <FormControl>
+                      <PercentageInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="depreciationRateWdv"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>WDV rate</FormLabel>
+                    <FormControl>
+                      <PercentageInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="capitalizationThreshold"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Capitalization threshold</FormLabel>
+                    <FormControl>
+                      <AmountInput value={field.value} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+
+            <FormSection
+              title="GL Mapping"
+              description="Pick the ledger accounts that receive capitalization, depreciation, disposal, and impairment postings."
+            >
+              {[
+                ['glAssetAccountId', 'Asset account'],
+                ['glAccumDepAccountId', 'Accumulated depreciation'],
+                ['glDepExpenseAccountId', 'Depreciation expense'],
+                ['glDisposalGainAccountId', 'Disposal gain'],
+                ['glDisposalLossAccountId', 'Disposal loss'],
+                ['glRevaluationReserveAccountId', 'Revaluation reserve'],
+                ['glImpairmentAccountId', 'Impairment expense'],
+              ].map(([name, label]) => (
+                <FormField
+                  key={name}
+                  control={form.control}
+                  name={name as keyof AssetCategoryInput}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>{label}</FormLabel>
+                      <Select
+                        value={(field.value as string) || 'NONE'}
+                        onValueChange={(value) => field.onChange(value === 'NONE' ? '' : value)}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Not mapped" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="NONE">Not mapped</SelectItem>
+                          {(accountsQuery.data ?? []).map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.code ? `${account.code} · ` : ''}
+                              {account.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ))}
+            </FormSection>
+
+            <FormSection
+              title="Operational Flags"
+              description="Enable mandatory supporting cover if this category requires insurance or AMC."
+            >
+              <FormField
+                control={form.control}
+                name="requiresInsurance"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-3 space-y-0 rounded-lg border p-4">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <div>
+                      <FormLabel>Requires insurance</FormLabel>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="requiresAmc"
+                render={({ field }) => (
+                  <FormItem className="flex items-center gap-3 space-y-0 rounded-lg border p-4">
+                    <FormControl>
+                      <Checkbox checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                    <div>
+                      <FormLabel>Requires AMC</FormLabel>
+                    </div>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+          </FormShell>
+        </form>
+      </Form>
     </div>
   );
 }

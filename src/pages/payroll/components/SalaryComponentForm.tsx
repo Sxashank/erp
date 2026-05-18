@@ -2,15 +2,16 @@
  * Salary Component Form Page
  */
 
+import { Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -18,10 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import payrollService, { SalaryComponent } from '@/services/payrollService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import payrollService, { SalaryComponent } from '@/services/payrollService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const COMPONENT_TYPES = [
   { value: 'EARNING', label: 'Earning' },
@@ -107,7 +109,7 @@ export default function SalaryComponentForm() {
         description: 'Failed to load component',
         variant: 'destructive',
       });
-      navigate('/payroll/components');
+      navigate('/admin/payroll/components');
     } finally {
       setLoading(false);
     }
@@ -128,7 +130,7 @@ export default function SalaryComponentForm() {
     try {
       setSaving(true);
 
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         ...formData,
         percentage_value: formData.percentage_value
           ? parseFloat(formData.percentage_value)
@@ -151,11 +153,11 @@ export default function SalaryComponentForm() {
         });
       }
 
-      navigate('/payroll/components');
-    } catch (error: any) {
+      navigate('/admin/payroll/components');
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save component',
+        description: getErrorMessage(error, 'Failed to save component'),
         variant: 'destructive',
       });
     } finally {
@@ -166,30 +168,24 @@ export default function SalaryComponentForm() {
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/payroll/components')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">
-            {isEdit ? 'Edit' : 'New'} Salary Component
-          </h1>
-          <p className="text-muted-foreground">
-            {isEdit ? 'Update component details' : 'Create a new salary component'}
-          </p>
-        </div>
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title={`${isEdit ? 'Edit' : 'New'} Salary Component`}
+        subtitle={isEdit ? 'Update component details' : 'Create a new salary component'}
+        breadcrumbs={[
+          { label: 'Salary Components', to: '/admin/payroll/components' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
@@ -232,9 +228,7 @@ export default function SalaryComponentForm() {
                 <Input
                   id="component_name"
                   value={formData.component_name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, component_name: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, component_name: e.target.value })}
                   placeholder="e.g., Basic Salary, House Rent Allowance"
                 />
               </div>
@@ -244,9 +238,7 @@ export default function SalaryComponentForm() {
                   <Label htmlFor="component_type">Type *</Label>
                   <Select
                     value={formData.component_type}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, component_type: value })
-                    }
+                    onValueChange={(value) => setFormData({ ...formData, component_type: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -264,9 +256,7 @@ export default function SalaryComponentForm() {
                   <Label htmlFor="category">Category *</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) =>
-                      setFormData({ ...formData, category: value })
-                    }
+                    onValueChange={(value) => setFormData({ ...formData, category: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -293,9 +283,7 @@ export default function SalaryComponentForm() {
                 <Label htmlFor="calculation_type">Calculation Type *</Label>
                 <Select
                   value={formData.calculation_type}
-                  onValueChange={(value) =>
-                    setFormData({ ...formData, calculation_type: value })
-                  }
+                  onValueChange={(value) => setFormData({ ...formData, calculation_type: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -317,9 +305,7 @@ export default function SalaryComponentForm() {
                     <Input
                       id="percentage_of"
                       value={formData.percentage_of}
-                      onChange={(e) =>
-                        setFormData({ ...formData, percentage_of: e.target.value })
-                      }
+                      onChange={(e) => setFormData({ ...formData, percentage_of: e.target.value })}
                       placeholder="e.g., BASIC, GROSS"
                     />
                   </div>
@@ -348,9 +334,7 @@ export default function SalaryComponentForm() {
                   <Textarea
                     id="formula"
                     value={formData.formula}
-                    onChange={(e) =>
-                      setFormData({ ...formData, formula: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, formula: e.target.value })}
                     placeholder="Enter calculation formula"
                     rows={3}
                   />
@@ -440,11 +424,11 @@ export default function SalaryComponentForm() {
           </Card>
         </div>
 
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="mt-6 flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/payroll/components')}
+            onClick={() => navigate('/admin/payroll/components')}
           >
             Cancel
           </Button>

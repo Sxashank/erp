@@ -1,274 +1,306 @@
 """SQLAlchemy models."""
 
-from app.models.base import BaseModel, AuditMixin, SoftDeleteMixin
-
-# Core system models
-from app.models.core.integration_config import (
-    IntegrationConfig,
-    IntegrationLog,
-    IntegrationType,
-    IntegrationProvider,
-    HealthStatus,
+from app.models.ap_ar.bank_reconciliation import (
+    BankReconciliation,
+    BankReconciliationStatus,
+    BankStatement,
+    BankStatementMatch,
+    ReconciliationStatus,
+    StatementTransactionType,
 )
-
-# Common models (audit trail)
-from app.models.common.audit_log import AuditLog, AuditAction, EntityType
-from app.models.common.line_item_history import LineItemHistory, LineItemAction, LineItemEntityType
-
-# Notification models
-from app.models.notification import (
-    NotificationChannel,
-    NotificationPriority,
-    NotificationStatus,
-    NotificationCategory,
-    NotificationTemplateType,
-    Notification,
-    NotificationPreference,
-    NotificationLog,
-    SysNotificationTemplate,
-    NotificationTemplateVariable,
+from app.models.ap_ar.customer import Customer, CustomerType
+from app.models.ap_ar.payment import (
+    ChequeStatus,
+    DocumentType,
+    PartyType,
+    Payment,
+    PaymentAllocation,
+    PaymentMode,
+    PaymentType,
 )
-
-# Auth models
-from app.models.auth.user import User
-from app.models.auth.role import Role, Permission, UserRole, RolePermission
-from app.models.auth.session import UserSession
-
-# Master models
-from app.models.masters.organization import Organization
-from app.models.masters.unit import Unit
-from app.models.masters.department import Department
-from app.models.masters.designation import Designation
-
-# Finance models
-from app.models.finance.financial_year import FinancialYear, FinancialPeriod
-from app.models.finance.account_group import AccountGroup
-from app.models.finance.account import Account
-from app.models.finance.voucher_type import VoucherType
-from app.models.finance.voucher import Voucher, VoucherLine
-
-# GST models
-from app.models.gst.gst_rate import GSTRate
-from app.models.gst.hsn_sac import HSNSAC
-from app.models.gst.gst_registration import GSTRegistration
-
-# TDS models
-from app.models.tds.tds_section import TDSSection
-from app.models.tds.tds_entry import TDSEntry
+from app.models.ap_ar.payment import (
+    PaymentStatus as PmtStatus,
+)
 
 # AP/AR models
 from app.models.ap_ar.payment_terms import PaymentTerms
-from app.models.ap_ar.vendor import Vendor, VendorType, GSTRegistrationType, PaymentModePreference, BalanceType
-from app.models.ap_ar.customer import Customer, CustomerType
-from app.models.ap_ar.purchase_bill import PurchaseBill, PurchaseBillLine, BillStatus, PaymentStatus, SupplyType
+from app.models.ap_ar.purchase_bill import (
+    BillStatus,
+    PaymentStatus,
+    PurchaseBill,
+    PurchaseBillLine,
+    SupplyType,
+)
 from app.models.ap_ar.sales_invoice import (
+    EInvoiceStatus,
+    InvoiceStatus,
+    InvoiceSupplyType,
+    ReceiptStatus,
     SalesInvoice,
     SalesInvoiceLine,
-    InvoiceStatus,
-    ReceiptStatus,
-    InvoiceSupplyType,
-    EInvoiceStatus,
 )
-from app.models.ap_ar.payment import (
-    Payment,
-    PaymentAllocation,
-    PaymentType,
-    PartyType,
-    PaymentMode,
-    PaymentStatus as PmtStatus,
-    ChequeStatus,
-    DocumentType,
+from app.models.ap_ar.vendor import (
+    BalanceType,
+    GSTRegistrationType,
+    PaymentModePreference,
+    Vendor,
+    VendorType,
 )
-from app.models.ap_ar.bank_reconciliation import (
-    BankStatement,
-    BankStatementMatch,
-    BankReconciliation,
-    StatementTransactionType,
-    ReconciliationStatus,
-    BankReconciliationStatus,
-)
+from app.models.auth.role import Permission, Role, RolePermission, UserRole
+from app.models.auth.session import UserSession
 
-# Fixed Assets models
-from app.models.fixed_assets.asset_category import AssetCategory
-from app.models.fixed_assets.fixed_asset import FixedAsset
-from app.models.fixed_assets.depreciation import Depreciation, DepreciationRun
-from app.models.fixed_assets.asset_transfer import AssetTransfer
-from app.models.fixed_assets.asset_revaluation import AssetRevaluation
+# Auth models
+from app.models.auth.user import User
+from app.models.base import AuditMixin, BaseModel, SoftDeleteMixin
 
-# HRIS models
-from app.models.hris.employee import (
-    Employee,
-    EmployeeDocument,
-    EmployeeFamily,
-    EmployeeBankAccount,
-    EmployeeEducation,
-    EmployeeExperience,
-    EmployeeStatutory,
-    EmployeeLifecycleEvent,
-)
-from app.models.hris.shift import Shift, HolidayCalendar, Holiday
-from app.models.hris.leave import LeaveType, LeaveBalance, LeaveApplication, LeaveEncashment
-from app.models.hris.attendance import (
-    AttendancePunch,
-    Attendance,
-    AttendanceRegularization,
-    MonthlyAttendanceSummary,
-)
-
-# Payroll models
-from app.models.payroll.salary_component import (
-    SalaryComponent,
-    SalaryStructure,
-    SalaryStructureComponent,
-    EmployeeSalary,
-    EmployeeSalaryComponent,
-)
-from app.models.payroll.payroll import (
-    StatutorySetup,
-    PayrollBatch,
-    Payslip,
-    PayslipComponent,
-    PayrollStatutory,
-)
-
-# Workflow models
-from app.models.workflow import (
-    WorkflowEntityType,
-    WorkflowStepType,
-    ApprovalMode,
-    ApproverType,
-    EscalationType,
-    WorkflowInstanceStatus,
-    TaskStatus,
-    StepAction,
-    WorkflowAction,
-    WorkflowDefinition,
-    WorkflowStep,
-    ApprovalRule,
-    EscalationRule,
-    NotificationTemplate,
-    WorkflowInstance,
-    WorkflowTask,
-    WorkflowHistory,
-)
-
-# Legal models
-from app.models.legal import (
-    # Enums
-    NoticeType,
-    NoticeStatus,
-    DeliveryMode,
-    DeliveryStatus,
-    DocumentCategory as LegalDocumentCategory,
-    ExpenseCategoryType,
-    ExpenseStatus,
-    RecoveryType,
-    FeeStructureType,
-    AdvocateRole,
-    SpecializationType,
-    CourtType,
-    AlertPriority,
+# BI/Analytics models
+from app.models.bi import (
+    APIMethod,
+    BIModule,
+    ChartDefinition,
+    ChartRoleAccess,
+    ChartType,
+    Dashboard,
+    DashboardRoleAccess,
+    DashboardWidget,
     # Models
-    LawFirm,
-    Advocate,
-    AdvocateSpecialization,
-    AdvocateAssignment,
-    AdvocatePerformance,
-    NoticeTemplate,
-    LegalNotice,
-    NoticeDelivery,
-    NoticeResponse,
-    LegalDocumentType,
-    LegalDocument,
-    DocumentVersion,
-    DocumentChecklist,
-    ExpenseCategory as LegalExpenseCategory,
-    LegalExpense,
-    ExpenseRecovery,
-    AdvocateFee,
-    StatutoryPeriod,
-    PeriodTracking,
-    LimitationAlert,
-    Court,
-    CourtBench,
-    CourtFeeSlab,
+    DataSource,
+    DataSourceType,
+    # Enums
+    WidgetType,
+)
+
+# Common models (audit trail)
+from app.models.common.audit_log import AuditAction, AuditLog, EntityType
+from app.models.common.line_item_history import LineItemAction, LineItemEntityType, LineItemHistory
+
+# Core system models
+from app.models.core.integration_config import (
+    HealthStatus,
+    IntegrationConfig,
+    IntegrationLog,
+    IntegrationProvider,
+    IntegrationType,
 )
 
 # DMS models
 from app.models.dms import (
-    # Enums
-    DocumentStatus,
-    DocumentAccessLevel,
     # Models
     DMSDocument,
-    DMSDocumentVersion,
     DMSDocumentAccess,
     DMSDocumentHistory,
+    DMSDocumentTag,
+    DMSDocumentVersion,
     DMSFolder,
     DMSFolderAccess,
     DMSTag,
-    DMSDocumentTag,
+    DocumentAccessLevel,
+    # Enums
+    DocumentStatus,
+)
+from app.models.finance.account import Account
+from app.models.finance.account_group import AccountGroup
+
+# Finance models
+from app.models.finance.financial_year import FinancialPeriod, FinancialYear
+from app.models.finance.voucher import Voucher, VoucherLine
+from app.models.finance.voucher_type import VoucherType
+
+# Fixed Assets models
+from app.models.fixed_assets.asset_category import AssetCategory
+from app.models.fixed_assets.asset_revaluation import AssetRevaluation
+from app.models.fixed_assets.asset_transfer import AssetTransfer
+from app.models.fixed_assets.depreciation import Depreciation, DepreciationRun
+from app.models.fixed_assets.fixed_asset import FixedAsset
+
+# GST models
+from app.models.gst.gst_rate import GSTRate
+from app.models.gst.gst_registration import GSTRegistration
+from app.models.gst.hsn_sac import HSNSAC
+from app.models.hris.attendance import (
+    Attendance,
+    AttendancePunch,
+    AttendanceRegularization,
+    MonthlyAttendanceSummary,
 )
 
-# BI/Analytics models
-from app.models.bi import (
-    # Enums
-    WidgetType,
-    ChartType,
-    BIModule,
-    DataSourceType,
-    APIMethod,
+# HRIS models
+from app.models.hris.employee import (
+    Employee,
+    EmployeeBankAccount,
+    EmployeeDocument,
+    EmployeeEducation,
+    EmployeeExperience,
+    EmployeeFamily,
+    EmployeeLifecycleEvent,
+    EmployeeStatutory,
+)
+from app.models.hris.leave import LeaveApplication, LeaveBalance, LeaveEncashment, LeaveType
+from app.models.hris.shift import Holiday, HolidayCalendar, Shift
+
+# Legal models
+from app.models.legal import (
+    Advocate,
+    AdvocateAssignment,
+    AdvocateFee,
+    AdvocatePerformance,
+    AdvocateRole,
+    AdvocateSpecialization,
+    AlertPriority,
+    Court,
+    CourtBench,
+    CourtFeeSlab,
+    CourtType,
+    DeliveryMode,
+    DeliveryStatus,
+    DocumentChecklist,
+    DocumentVersion,
+    ExpenseCategoryType,
+    ExpenseRecovery,
+    ExpenseStatus,
+    FeeStructureType,
     # Models
-    DataSource,
-    ChartDefinition,
-    ChartRoleAccess,
-    Dashboard,
-    DashboardWidget,
-    DashboardRoleAccess,
+    LawFirm,
+    LegalDocument,
+    LegalDocumentType,
+    LegalExpense,
+    LegalNotice,
+    LimitationAlert,
+    NoticeDelivery,
+    NoticeResponse,
+    NoticeStatus,
+    NoticeTemplate,
+    # Enums
+    NoticeType,
+    PeriodTracking,
+    RecoveryType,
+    SpecializationType,
+    StatutoryPeriod,
+)
+from app.models.legal import (
+    DocumentCategory as LegalDocumentCategory,
+)
+from app.models.legal import (
+    ExpenseCategory as LegalExpenseCategory,
+)
+
+# Lending models referenced by cross-module Legal relationships. Importing
+# these before the Legal package keeps SQLAlchemy's class registry complete
+# even when a non-lending route, such as DMS document detail, is the first
+# endpoint to configure mappers in a fresh worker.
+from app.models.lending.collections import LegalCase
+from app.models.masters.department import Department
+from app.models.masters.designation import Designation
+
+# Master models
+from app.models.masters.organization import Organization
+from app.models.masters.unit import Unit
+
+# Notification models
+from app.models.notification import (
+    Notification,
+    NotificationCategory,
+    NotificationChannel,
+    NotificationLog,
+    NotificationPreference,
+    NotificationPriority,
+    NotificationStatus,
+    NotificationTemplateType,
+    NotificationTemplateVariable,
+    SysNotificationTemplate,
+)
+from app.models.reports import ReportRun, ReportSchedule
+from app.models.payroll.payroll import (
+    PayrollBatch,
+    PayrollStatutory,
+    Payslip,
+    PayslipComponent,
+    StatutorySetup,
+)
+
+# Payroll models
+from app.models.payroll.salary_component import (
+    EmployeeSalary,
+    EmployeeSalaryComponent,
+    SalaryComponent,
+    SalaryStructure,
+    SalaryStructureComponent,
 )
 
 # Portal models
 from app.models.portal import (
-    # Enums
-    PortalUserStatus,
-    DeviceType,
-    OTPPurpose,
     ConsentType,
+    DeviceType,
+    DocumentRequestStatus,
+    KYCStatus,
+    KYCType,
+    MandateFrequency,
+    MandateStatus,
     NotificationChannel,
     NotificationPriority,
-    TicketStatus,
-    TicketPriority,
-    TicketCategory,
-    PaymentMode as PortalPaymentMode,
-    PaymentStatus as PortalPaymentStatus,
-    MandateStatus,
-    MandateFrequency,
-    PortalDocumentType,
-    DocumentRequestStatus,
-    KYCType,
-    KYCStatus,
-    ServiceRequestType,
-    ServiceRequestStatus,
-    # Models
-    PortalUser,
-    PortalSession,
-    PortalDevice,
-    PortalOTP,
-    PortalConsent,
-    PortalNotification,
-    PortalMessage,
-    PortalTicket,
+    OTPPurpose,
+    PortalActorRole,
     PortalAnnouncement,
-    PortalPaymentRequest,
-    PortalPaymentTransaction,
-    PortalSavedPaymentMethod,
     PortalAutoDebitMandate,
+    PortalConsent,
+    PortalDevice,
     PortalDocument,
     PortalDocumentRequest,
+    PortalDocumentType,
     PortalKYCVerification,
+    PortalMessage,
+    PortalNotification,
+    PortalOTP,
+    PortalPaymentRequest,
+    PortalPaymentTransaction,
+    PortalRegistrationStatus,
+    PortalSavedPaymentMethod,
     PortalServiceRequest,
     PortalServiceRequestDocument,
     PortalServiceRequestHistory,
+    PortalSession,
+    PortalTicket,
+    # Models
+    PortalUser,
+    PortalUserEntity,
+    # Enums
+    PortalUserStatus,
+    ServiceRequestStatus,
+    ServiceRequestType,
+    TicketCategory,
+    TicketPriority,
+    TicketStatus,
+)
+from app.models.portal import (
+    PaymentMode as PortalPaymentMode,
+)
+from app.models.portal import (
+    PaymentStatus as PortalPaymentStatus,
+)
+from app.models.tds.tds_entry import TDSEntry
+
+# TDS models
+from app.models.tds.tds_section import TDSSection
+
+# Workflow models
+from app.models.workflow import (
+    ApprovalMode,
+    ApprovalRule,
+    ApproverType,
+    EscalationRule,
+    EscalationType,
+    NotificationTemplate,
+    StepAction,
+    TaskStatus,
+    WorkflowAction,
+    WorkflowDefinition,
+    WorkflowEntityType,
+    WorkflowHistory,
+    WorkflowInstance,
+    WorkflowInstanceStatus,
+    WorkflowStep,
+    WorkflowStepType,
+    WorkflowTask,
 )
 
 __all__ = [
@@ -407,6 +439,8 @@ __all__ = [
     "WorkflowInstance",
     "WorkflowTask",
     "WorkflowHistory",
+    # Cross-module lending models
+    "LegalCase",
     # Legal Enums
     "NoticeType",
     "NoticeStatus",
@@ -447,6 +481,8 @@ __all__ = [
     "CourtFeeSlab",
     # Portal Enums
     "PortalUserStatus",
+    "PortalRegistrationStatus",
+    "PortalActorRole",
     "DeviceType",
     "OTPPurpose",
     "ConsentType",
@@ -471,6 +507,7 @@ __all__ = [
     "PortalDevice",
     "PortalOTP",
     "PortalConsent",
+    "PortalUserEntity",
     "PortalNotification",
     "PortalMessage",
     "PortalTicket",

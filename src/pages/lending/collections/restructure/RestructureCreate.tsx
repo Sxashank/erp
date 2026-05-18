@@ -1,12 +1,15 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Save, Calculator, AlertTriangle } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, Save, Calculator, AlertTriangle } from 'lucide-react';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -16,6 +19,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -23,12 +27,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const restructureSchema = z.object({
   loanAccountId: z.string().min(1, 'Loan account is required'),
@@ -78,42 +79,32 @@ const restructureSchema = z.object({
 
 type RestructureFormValues = z.infer<typeof restructureSchema>;
 
-// Mock loan accounts for selection
-const mockLoanAccounts = [
-  {
-    id: '1',
-    accountNumber: 'SMFC/TL/CHN/2023/L00034',
-    entityName: 'Southern Motors Corp',
-    principalOutstanding: 130250000,
-    interestOutstanding: 5250000,
-    interestRate: 12.5,
-    tenureMonths: 60,
-    emiAmount: 2950000,
-    maturityDate: '2028-06-15',
-    dpd: 45,
-    classification: 'SMA-1',
-  },
-  {
-    id: '2',
-    accountNumber: 'SMFC/WC/KOL/2022/L00067',
-    entityName: 'Eastern Trading Co',
-    principalOutstanding: 45000000,
-    interestOutstanding: 1800000,
-    interestRate: 13.0,
-    tenureMonths: 48,
-    emiAmount: 1250000,
-    maturityDate: '2026-12-10',
-    dpd: 75,
-    classification: 'SMA-2',
-  },
-];
+// Loan accounts eligible for restructure load from the BE once the
+// "eligible loan accounts" endpoint is wired (DPD ≥ 60, status ≠ CLOSED,
+// no in-flight restructure). For now the picker is empty until that
+// endpoint lands; the user can still enter the account by number.
+const mockLoanAccounts: {
+  id: string;
+  accountNumber: string;
+  entityName: string;
+  principalOutstanding: number;
+  interestOutstanding: number;
+  interestRate: number;
+  tenureMonths: number;
+  emiAmount: number;
+  maturityDate: string;
+  dpd: number;
+  classification: string;
+}[] = [];
 
 export default function RestructureCreate() {
   const navigate = useNavigate();
-  const [selectedLoan, setSelectedLoan] = useState<typeof mockLoanAccounts[0] | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<(typeof mockLoanAccounts)[0] | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<RestructureFormValues>({
+    // RHF resolver type mismatch when schema has `.default(...)` fields and
+     // schema field types are computed (e.g. `coerce.number`).
     resolver: zodResolver(restructureSchema) as any,
     defaultValues: {
       proposalDate: new Date().toISOString().split('T')[0],
@@ -152,8 +143,7 @@ export default function RestructureCreate() {
       logger.debug('Restructure data:', data);
       // API call would go here
       navigate('/admin/lending/collections/restructure');
-    } catch (error) {
-      console.error('Error creating restructure:', error);
+    } catch {
     } finally {
       setIsSubmitting(false);
     }
@@ -166,18 +156,14 @@ export default function RestructureCreate() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold">New Restructure Proposal</h1>
-          <p className="text-muted-foreground">
-            Create a loan restructuring proposal
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="New Restructure Proposal"
+        subtitle="Create a loan restructuring proposal"
+        breadcrumbs={[
+          { label: 'Restructures', to: '/admin/lending/collections/restructure' },
+          { label: 'New' },
+        ]}
+      />
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -185,9 +171,7 @@ export default function RestructureCreate() {
           <Card>
             <CardHeader>
               <CardTitle>Select Loan Account</CardTitle>
-              <CardDescription>
-                Choose the loan account for restructuring
-              </CardDescription>
+              <CardDescription>Choose the loan account for restructuring</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <FormField
@@ -196,7 +180,13 @@ export default function RestructureCreate() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Loan Account</FormLabel>
-                    <Select onValueChange={(value) => { field.onChange(value); handleLoanSelect(value); }} value={field.value}>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value);
+                        handleLoanSelect(value);
+                      }}
+                      value={field.value}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select a loan account" />
@@ -219,14 +209,20 @@ export default function RestructureCreate() {
                 <Alert>
                   <AlertTriangle className="h-4 w-4" />
                   <AlertDescription>
-                    <div className="grid grid-cols-4 gap-4 mt-2">
+                    <div className="mt-2 grid grid-cols-4 gap-4">
                       <div>
                         <span className="text-xs text-muted-foreground">Principal O/S</span>
-                        <AmountDisplay amount={selectedLoan.principalOutstanding} className="font-semibold" />
+                        <AmountDisplay
+                          amount={selectedLoan.principalOutstanding}
+                          className="font-semibold"
+                        />
                       </div>
                       <div>
                         <span className="text-xs text-muted-foreground">Interest O/S</span>
-                        <AmountDisplay amount={selectedLoan.interestOutstanding} className="font-semibold" />
+                        <AmountDisplay
+                          amount={selectedLoan.interestOutstanding}
+                          className="font-semibold"
+                        />
                       </div>
                       <div>
                         <span className="text-xs text-muted-foreground">DPD</span>
@@ -234,7 +230,9 @@ export default function RestructureCreate() {
                       </div>
                       <div>
                         <span className="text-xs text-muted-foreground">Classification</span>
-                        <p className="font-semibold text-yellow-600">{selectedLoan.classification}</p>
+                        <p className="font-semibold text-yellow-600">
+                          {selectedLoan.classification}
+                        </p>
                       </div>
                     </div>
                   </AlertDescription>
@@ -428,27 +426,34 @@ export default function RestructureCreate() {
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-4 gap-4">
-                  <div className="text-center p-4 bg-background rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Rate Change</p>
-                    <p className={`text-xl font-bold ${rateChange < 0 ? 'text-green-600' : rateChange > 0 ? 'text-red-600' : ''}`}>
-                      {rateChange > 0 ? '+' : ''}{rateChange.toFixed(2)}%
+                  <div className="rounded-lg bg-background p-4 text-center">
+                    <p className="mb-1 text-xs text-muted-foreground">Rate Change</p>
+                    <p
+                      className={`text-xl font-bold ${rateChange < 0 ? 'text-green-600' : rateChange > 0 ? 'text-red-600' : ''}`}
+                    >
+                      {rateChange > 0 ? '+' : ''}
+                      {rateChange.toFixed(2)}%
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-background rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Tenure Change</p>
+                  <div className="rounded-lg bg-background p-4 text-center">
+                    <p className="mb-1 text-xs text-muted-foreground">Tenure Change</p>
                     <p className={`text-xl font-bold ${tenureChange > 0 ? 'text-yellow-600' : ''}`}>
-                      {tenureChange > 0 ? '+' : ''}{tenureChange} months
+                      {tenureChange > 0 ? '+' : ''}
+                      {tenureChange} months
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-background rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Moratorium</p>
+                  <div className="rounded-lg bg-background p-4 text-center">
+                    <p className="mb-1 text-xs text-muted-foreground">Moratorium</p>
                     <p className="text-xl font-bold">
                       {watchedValues.moratoriumMonths || 0} months
                     </p>
                   </div>
-                  <div className="text-center p-4 bg-background rounded-lg">
-                    <p className="text-xs text-muted-foreground mb-1">Total Waiver</p>
-                    <AmountDisplay amount={totalWaiver} className="text-xl font-bold text-red-600" />
+                  <div className="rounded-lg bg-background p-4 text-center">
+                    <p className="mb-1 text-xs text-muted-foreground">Total Waiver</p>
+                    <AmountDisplay
+                      amount={totalWaiver}
+                      className="text-xl font-bold text-red-600"
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -459,9 +464,7 @@ export default function RestructureCreate() {
           <Card>
             <CardHeader>
               <CardTitle>Moratorium Details</CardTitle>
-              <CardDescription>
-                Configure moratorium/payment holiday if applicable
-              </CardDescription>
+              <CardDescription>Configure moratorium/payment holiday if applicable</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
@@ -587,10 +590,7 @@ export default function RestructureCreate() {
                   render={({ field }) => (
                     <FormItem>
                       <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -610,10 +610,7 @@ export default function RestructureCreate() {
                   render={({ field }) => (
                     <FormItem>
                       <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Switch checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -687,10 +684,7 @@ export default function RestructureCreate() {
                   <FormItem>
                     <FormLabel>Additional Remarks</FormLabel>
                     <FormControl>
-                      <Textarea
-                        placeholder="Any additional notes or remarks..."
-                        {...field}
-                      />
+                      <Textarea placeholder="Any additional notes or remarks..." {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -701,11 +695,7 @@ export default function RestructureCreate() {
 
           {/* Actions */}
           <div className="flex justify-end gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(-1)}
-            >
+            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting}>

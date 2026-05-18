@@ -177,7 +177,7 @@ class CreditService:
             credit_pull.error_code = "PULL_FAILED"
             credit_pull.error_message = str(e)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(credit_pull)
 
         return credit_pull

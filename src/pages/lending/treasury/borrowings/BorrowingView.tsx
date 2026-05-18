@@ -1,33 +1,25 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   Edit,
   Loader2,
-  Calendar,
   DollarSign,
   Clock,
-  Building2,
   AlertTriangle,
   Plus,
   Receipt,
-  FileText,
   RefreshCw,
   Download,
 } from 'lucide-react';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Progress } from '@/components/ui/progress';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -39,85 +31,25 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-import { treasuryApi } from '@/services/lending/treasuryApi';
+import { Progress } from '@/components/ui/progress';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import {
+  useBorrowing,
+  useBorrowingPayments,
+  useBorrowingSchedule,
+  useBorrowingTranches,
+  useRecordBorrowingPayment,
+  useRecordDrawdown,
+} from '@/hooks/lending/useBorrowings';
 import { useToast } from '@/hooks/use-toast';
-
-interface BorrowingDetail {
-  borrowing_id: string;
-  borrowing_number: string;
-  lender_id: string;
-  lender_name: string;
-  lender_type: string;
-  facility_type: string;
-  facility_name: string;
-  sanctioned_amount: number;
-  drawn_amount: number;
-  outstanding_principal: number;
-  outstanding_interest: number;
-  total_outstanding: number;
-  available_limit: number;
-  interest_type: string;
-  base_rate_type: string;
-  base_rate_value: number;
-  spread_bps: number;
-  effective_rate: number;
-  sanction_date: string;
-  first_drawdown_date: string;
-  maturity_date: string;
-  tenure_months: number;
-  repayment_frequency: string;
-  status: string;
-  security_type: string;
-  security_description: string;
-  remarks: string;
-  created_at: string;
-  updated_at: string;
-}
-
-interface Tranche {
-  tranche_id: string;
-  tranche_number: number;
-  request_date: string;
-  requested_amount: number;
-  approved_amount: number;
-  disbursed_amount: number;
-  drawdown_date: string;
-  approval_date: string;
-  disbursement_date: string;
-  status: string;
-  remarks: string;
-}
-
-interface ScheduleItem {
-  schedule_id: string;
-  installment_number: number;
-  due_date: string;
-  principal_due: number;
-  interest_due: number;
-  total_due: number;
-  principal_paid: number;
-  interest_paid: number;
-  total_paid: number;
-  opening_balance: number;
-  closing_balance: number;
-  status: string;
-}
-
-interface Payment {
-  payment_id: string;
-  payment_date: string;
-  value_date: string;
-  payment_type: string;
-  principal_amount: number;
-  interest_amount: number;
-  total_amount: number;
-  reference: string;
-  status: string;
-  remarks: string;
-}
 
 const statusColors: Record<string, string> = {
   ACTIVE: 'bg-green-100 text-green-700',
@@ -137,122 +69,39 @@ export default function BorrowingView() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [borrowing, setBorrowing] = useState<BorrowingDetail | null>(null);
-  const [tranches, setTranches] = useState<Tranche[]>([]);
-  const [schedule, setSchedule] = useState<ScheduleItem[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
+  const {
+    data: borrowing,
+    isLoading: isBorrowingLoading,
+    isError: isBorrowingError,
+    error: borrowingError,
+    refetch: refetchBorrowing,
+  } = useBorrowing(id);
+  const { data: tranches = [], refetch: refetchTranches } = useBorrowingTranches(id);
+  const { data: schedule = [], refetch: refetchSchedule } = useBorrowingSchedule(id);
+  const { data: payments = [], refetch: refetchPayments } = useBorrowingPayments(id);
+  const drawdownMutation = useRecordDrawdown();
+  const paymentMutation = useRecordBorrowingPayment();
   const [showDrawdownDialog, setShowDrawdownDialog] = useState(false);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [drawdownAmount, setDrawdownAmount] = useState('');
   const [paymentAmount, setPaymentAmount] = useState('');
-  const [savingDrawdown, setSavingDrawdown] = useState(false);
-  const [savingPayment, setSavingPayment] = useState(false);
 
-  const fetchBorrowing = useCallback(async () => {
-    if (!id) return;
-    setLoading(true);
-    try {
-      const data = await treasuryApi.getBorrowing(id);
-      setBorrowing(data as unknown as BorrowingDetail);
-
-      // Fetch tranches
-      try {
-        const tranchesData = await treasuryApi.getTranches(id);
-        setTranches((tranchesData as any) || []);
-      } catch {
-        setTranches([]);
-      }
-
-      // Fetch schedule
-      try {
-        const scheduleData = await treasuryApi.getBorrowingSchedule(id);
-        setSchedule((scheduleData as any) || []);
-      } catch {
-        setSchedule([]);
-      }
-
-      // Fetch payments
-      try {
-        const paymentsData = await treasuryApi.getRepaymentHistory(id);
-        setPayments((paymentsData as any) || []);
-      } catch {
-        setPayments([]);
-      }
-    } catch (error) {
-      console.error('Failed to fetch borrowing:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load borrowing details',
-      });
-      // Use mock data for demonstration
-      setBorrowing({
-        borrowing_id: id,
-        borrowing_number: 'BOR/HDFC/2024/001',
-        lender_id: '1',
-        lender_name: 'HDFC Bank Ltd',
-        lender_type: 'BANK',
-        facility_type: 'TERM_LOAN',
-        facility_name: 'Term Loan Facility',
-        sanctioned_amount: 1000000000,
-        drawn_amount: 850000000,
-        outstanding_principal: 850000000,
-        outstanding_interest: 6562500,
-        total_outstanding: 856562500,
-        available_limit: 150000000,
-        interest_type: 'FLOATING',
-        base_rate_type: 'MCLR',
-        base_rate_value: 8.50,
-        spread_bps: 75,
-        effective_rate: 9.25,
-        sanction_date: '2024-01-15',
-        first_drawdown_date: '2024-02-01',
-        maturity_date: '2029-01-15',
-        tenure_months: 60,
-        repayment_frequency: 'QUARTERLY',
-        status: 'ACTIVE',
-        security_type: 'SECURED',
-        security_description: 'First charge on receivables, personal guarantee of promoters',
-        remarks: 'Facility for working capital requirements',
-        created_at: '2024-01-15',
-        updated_at: '2025-01-15',
-      });
-
-      setTranches([
-        { tranche_id: '1', tranche_number: 1, request_date: '2024-01-28', requested_amount: 500000000, approved_amount: 500000000, disbursed_amount: 500000000, drawdown_date: '2024-02-01', approval_date: '2024-02-02', disbursement_date: '2024-02-05', status: 'DISBURSED', remarks: 'Initial drawdown' },
-        { tranche_id: '2', tranche_number: 2, request_date: '2024-06-10', requested_amount: 350000000, approved_amount: 350000000, disbursed_amount: 350000000, drawdown_date: '2024-06-15', approval_date: '2024-06-16', disbursement_date: '2024-06-20', status: 'DISBURSED', remarks: 'Second tranche' },
-      ]);
-
-      setSchedule([
-        { schedule_id: '1', installment_number: 1, due_date: '2024-05-15', principal_due: 50000000, interest_due: 7812500, total_due: 57812500, principal_paid: 50000000, interest_paid: 7812500, total_paid: 57812500, opening_balance: 500000000, closing_balance: 450000000, status: 'PAID' },
-        { schedule_id: '2', installment_number: 2, due_date: '2024-08-15', principal_due: 50000000, interest_due: 7031250, total_due: 57031250, principal_paid: 50000000, interest_paid: 7031250, total_paid: 57031250, opening_balance: 800000000, closing_balance: 750000000, status: 'PAID' },
-        { schedule_id: '3', installment_number: 3, due_date: '2024-11-15', principal_due: 50000000, interest_due: 6718750, total_due: 56718750, principal_paid: 50000000, interest_paid: 6718750, total_paid: 56718750, opening_balance: 750000000, closing_balance: 700000000, status: 'PAID' },
-        { schedule_id: '4', installment_number: 4, due_date: '2025-02-15', principal_due: 50000000, interest_due: 6562500, total_due: 56562500, principal_paid: 0, interest_paid: 0, total_paid: 0, opening_balance: 700000000, closing_balance: 650000000, status: 'PENDING' },
-        { schedule_id: '5', installment_number: 5, due_date: '2025-05-15', principal_due: 50000000, interest_due: 5812500, total_due: 55812500, principal_paid: 0, interest_paid: 0, total_paid: 0, opening_balance: 650000000, closing_balance: 600000000, status: 'PENDING' },
-      ]);
-
-      setPayments([
-        { payment_id: '1', payment_date: '2024-05-15', value_date: '2024-05-15', payment_type: 'SCHEDULED', principal_amount: 50000000, interest_amount: 7812500, total_amount: 57812500, reference: 'NEFT/2024/001', status: 'COMPLETED', remarks: '' },
-        { payment_id: '2', payment_date: '2024-08-15', value_date: '2024-08-15', payment_type: 'SCHEDULED', principal_amount: 50000000, interest_amount: 7031250, total_amount: 57031250, reference: 'NEFT/2024/002', status: 'COMPLETED', remarks: '' },
-        { payment_id: '3', payment_date: '2024-11-15', value_date: '2024-11-15', payment_type: 'SCHEDULED', principal_amount: 50000000, interest_amount: 6718750, total_amount: 56718750, reference: 'NEFT/2024/003', status: 'COMPLETED', remarks: '' },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, [id, toast]);
-
-  useEffect(() => {
-    fetchBorrowing();
-  }, [fetchBorrowing]);
+  const refetchAll = async () => {
+    await Promise.all([
+      refetchBorrowing(),
+      refetchTranches(),
+      refetchSchedule(),
+      refetchPayments(),
+    ]);
+  };
 
   const handleDrawdown = async () => {
     if (!id || !drawdownAmount) return;
-    setSavingDrawdown(true);
     try {
-      await treasuryApi.recordDrawdown(id, {
+      await drawdownMutation.mutateAsync({
+        borrowingId: id,
         amount: Number(drawdownAmount),
-        drawdown_date: new Date().toISOString().split('T')[0],
+        drawdownDate: new Date().toISOString().split('T')[0],
         remarks: 'Drawdown request',
       });
       toast({
@@ -261,27 +110,24 @@ export default function BorrowingView() {
       });
       setShowDrawdownDialog(false);
       setDrawdownAmount('');
-      fetchBorrowing();
-    } catch (error) {
-      console.error('Failed to create drawdown:', error);
+      await refetchAll();
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Error',
         description: 'Failed to submit drawdown request',
       });
-    } finally {
-      setSavingDrawdown(false);
     }
   };
 
   const handlePayment = async () => {
     if (!id || !paymentAmount) return;
-    setSavingPayment(true);
     try {
-      await treasuryApi.recordRepayment(id, {
-        payment_date: new Date().toISOString().split('T')[0],
-        principal_amount: Number(paymentAmount),
-        interest_amount: 0,
+      await paymentMutation.mutateAsync({
+        borrowingId: id,
+        paymentDate: new Date().toISOString().split('T')[0],
+        principalAmount: Number(paymentAmount),
+        interestAmount: 0,
         remarks: 'Manual payment',
       });
       toast({
@@ -290,31 +136,38 @@ export default function BorrowingView() {
       });
       setShowPaymentDialog(false);
       setPaymentAmount('');
-      fetchBorrowing();
-    } catch (error) {
-      console.error('Failed to record payment:', error);
+      await refetchAll();
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Error',
         description: 'Failed to record payment',
       });
-    } finally {
-      setSavingPayment(false);
     }
   };
 
-  if (loading) {
+  if (isBorrowingLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  if (isBorrowingError) {
+    return (
+      <ErrorState
+        title="Could not load borrowing details"
+        error={borrowingError}
+        onRetry={() => void refetchBorrowing()}
+      />
+    );
+  }
+
   if (!borrowing) {
     return (
-      <div className="flex flex-col items-center justify-center h-64">
-        <AlertTriangle className="h-12 w-12 text-muted-foreground mb-4" />
+      <div className="flex h-64 flex-col items-center justify-center">
+        <AlertTriangle className="mb-4 h-12 w-12 text-muted-foreground" />
         <p className="text-muted-foreground">Borrowing not found</p>
         <Button variant="outline" className="mt-4" onClick={() => navigate(-1)}>
           Go Back
@@ -323,43 +176,41 @@ export default function BorrowingView() {
     );
   }
 
-  const utilizationPercent = (borrowing.drawn_amount / borrowing.sanctioned_amount) * 100;
-  const nextScheduleItem = schedule.find((s) => s.status === 'PENDING');
+  const sanctionedAmount = Number(borrowing.sanctionedAmount);
+  const drawnAmount = Number(borrowing.drawnAmount);
+  const outstandingPrincipal = Number(borrowing.principalOutstanding);
+  const availableAmount = Number(borrowing.availableAmount);
+  const utilizationPercent = sanctionedAmount > 0 ? (drawnAmount / sanctionedAmount) * 100 : 0;
+  const nextScheduleItem = schedule.find((s) => s.status === 'DUE' || s.status === 'PENDING');
+  const lenderName = borrowing.lenderName ?? borrowing.lenderCode ?? 'Funding source';
+  const borrowingTypeLabel = borrowing.borrowingType.replace(/_/g, ' ');
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-semibold">{borrowing.borrowing_number}</h1>
-              <Badge className={statusColors[borrowing.status] || ''}>
-                {borrowing.status}
-              </Badge>
-            </div>
-            <p className="text-muted-foreground">
-              {borrowing.facility_type.replace('_', ' ')} from {borrowing.lender_name}
-            </p>
+      <PageHeader
+        title={borrowing.borrowingNumber}
+        subtitle={`${borrowingTypeLabel} from ${lenderName}`}
+        breadcrumbs={[
+          { label: 'Borrowings', to: '/admin/treasury/borrowings' },
+          { label: borrowing.borrowingNumber },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge className={statusColors[borrowing.status] || ''}>{borrowing.status}</Badge>
+            <Button variant="outline" onClick={() => void refetchAll()}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/admin/treasury/borrowings/${id}/edit`)}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchBorrowing}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => navigate(`/admin/lending/treasury/borrowings/${id}/edit`)}
-          >
-            <Edit className="mr-2 h-4 w-4" />
-            Edit
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -369,7 +220,11 @@ export default function BorrowingView() {
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={borrowing.sanctioned_amount} abbreviated className="text-2xl font-bold" />
+            <AmountDisplay
+              amount={borrowing.sanctionedAmount}
+              abbreviated
+              className="text-2xl font-bold"
+            />
           </CardContent>
         </Card>
 
@@ -379,11 +234,11 @@ export default function BorrowingView() {
           </CardHeader>
           <CardContent>
             <AmountDisplay
-              amount={borrowing.total_outstanding}
+              amount={outstandingPrincipal}
               abbreviated
               className="text-2xl font-bold text-amber-600"
             />
-            <div className="flex items-center gap-2 mt-1">
+            <div className="mt-1 flex items-center gap-2">
               <Progress value={utilizationPercent} className="h-2" />
               <span className="text-xs text-muted-foreground">
                 <PercentageDisplay value={utilizationPercent} />
@@ -398,11 +253,11 @@ export default function BorrowingView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              <PercentageDisplay value={borrowing.effective_rate} /> p.a.
+              <PercentageDisplay value={borrowing.effectiveRate} /> p.a.
             </div>
             <p className="text-xs text-muted-foreground">
-              {borrowing.interest_type === 'FLOATING'
-                ? `${borrowing.base_rate_type} + ${borrowing.spread_bps} bps`
+              {borrowing.rateType === 'FLOATING'
+                ? `${borrowing.baseRateName} + ${borrowing.spreadBps} bps`
                 : 'Fixed Rate'}
             </p>
           </CardContent>
@@ -417,12 +272,12 @@ export default function BorrowingView() {
             {nextScheduleItem ? (
               <>
                 <AmountDisplay
-                  amount={nextScheduleItem.total_due}
+                  amount={nextScheduleItem.totalDue}
                   abbreviated
                   className="text-2xl font-bold text-red-600"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Due on <DateDisplay date={nextScheduleItem.due_date} />
+                  Due on <DateDisplay date={nextScheduleItem.dueDate} />
                 </p>
               </>
             ) : (
@@ -452,32 +307,34 @@ export default function BorrowingView() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Lender</p>
-                    <p className="font-medium">{borrowing.lender_name}</p>
-                    <p className="text-xs text-muted-foreground">{borrowing.lender_type}</p>
+                    <p className="font-medium">{lenderName}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Facility Type</p>
-                    <p className="font-medium">{borrowing.facility_type.replace('_', ' ')}</p>
+                    <p className="font-medium">{borrowingTypeLabel}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Sanction Date</p>
                     <p className="font-medium">
-                      <DateDisplay date={borrowing.sanction_date} />
+                      <DateDisplay date={borrowing.sanctionDate} />
                     </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Maturity Date</p>
                     <p className="font-medium">
-                      <DateDisplay date={borrowing.maturity_date} />
+                      <DateDisplay date={borrowing.maturityDate} />
                     </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Tenure</p>
-                    <p className="font-medium">{borrowing.tenure_months} months</p>
+                    <p className="font-medium">{borrowing.tenureMonths} months</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Repayment Frequency</p>
-                    <p className="font-medium">{borrowing.repayment_frequency}</p>
+                    <p className="font-medium">
+                      {borrowing.principalPaymentFrequency} principal /{' '}
+                      {borrowing.interestPaymentFrequency} interest
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -491,26 +348,27 @@ export default function BorrowingView() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Rate Type</p>
-                    <p className="font-medium">{borrowing.interest_type}</p>
+                    <p className="font-medium">{borrowing.rateType}</p>
                   </div>
-                  {borrowing.interest_type === 'FLOATING' && (
+                  {borrowing.rateType === 'FLOATING' && (
                     <>
                       <div>
                         <p className="text-muted-foreground">Base Rate</p>
                         <p className="font-medium">
-                          {borrowing.base_rate_type}: <PercentageDisplay value={borrowing.base_rate_value} />
+                          {borrowing.baseRateName}:{' '}
+                          <PercentageDisplay value={borrowing.baseRateValue} />
                         </p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Spread</p>
-                        <p className="font-medium">{borrowing.spread_bps} bps</p>
+                        <p className="font-medium">{borrowing.spreadBps} bps</p>
                       </div>
                     </>
                   )}
                   <div>
                     <p className="text-muted-foreground">Effective Rate</p>
-                    <p className="font-medium text-lg">
-                      <PercentageDisplay value={borrowing.effective_rate} /> p.a.
+                    <p className="text-lg font-medium">
+                      <PercentageDisplay value={borrowing.effectiveRate} /> p.a.
                     </p>
                   </div>
                 </div>
@@ -525,27 +383,51 @@ export default function BorrowingView() {
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">Sanctioned</p>
-                    <AmountDisplay amount={borrowing.sanctioned_amount} abbreviated className="font-medium" />
+                    <AmountDisplay
+                      amount={borrowing.sanctionedAmount}
+                      abbreviated
+                      className="font-medium"
+                    />
                   </div>
                   <div>
                     <p className="text-muted-foreground">Drawn</p>
-                    <AmountDisplay amount={borrowing.drawn_amount} abbreviated className="font-medium" />
+                    <AmountDisplay
+                      amount={borrowing.drawnAmount}
+                      abbreviated
+                      className="font-medium"
+                    />
                   </div>
                   <div>
                     <p className="text-muted-foreground">Outstanding Principal</p>
-                    <AmountDisplay amount={borrowing.outstanding_principal} abbreviated className="font-medium" />
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Outstanding Interest</p>
-                    <AmountDisplay amount={borrowing.outstanding_interest} abbreviated className="font-medium" />
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Total Outstanding</p>
-                    <AmountDisplay amount={borrowing.total_outstanding} abbreviated className="font-medium text-lg text-amber-600" />
+                    <AmountDisplay
+                      amount={borrowing.principalOutstanding}
+                      abbreviated
+                      className="font-medium"
+                    />
                   </div>
                   <div>
                     <p className="text-muted-foreground">Available Limit</p>
-                    <AmountDisplay amount={borrowing.available_limit} abbreviated className="font-medium text-green-600" />
+                    <AmountDisplay
+                      amount={borrowing.availableAmount}
+                      abbreviated
+                      className="font-medium text-green-600"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Total Outstanding</p>
+                    <AmountDisplay
+                      amount={outstandingPrincipal}
+                      abbreviated
+                      className="text-lg font-medium text-amber-600"
+                    />
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Undrawn Amount</p>
+                    <AmountDisplay
+                      amount={availableAmount}
+                      abbreviated
+                      className="font-medium text-green-600"
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -559,12 +441,12 @@ export default function BorrowingView() {
                 <div className="text-sm">
                   <div className="mb-2">
                     <p className="text-muted-foreground">Security Type</p>
-                    <p className="font-medium">{borrowing.security_type}</p>
+                    <p className="font-medium">{borrowing.securityType}</p>
                   </div>
-                  {borrowing.security_description && (
+                  {borrowing.securityDescription && (
                     <div>
                       <p className="text-muted-foreground">Description</p>
-                      <p className="font-medium">{borrowing.security_description}</p>
+                      <p className="font-medium">{borrowing.securityDescription}</p>
                     </div>
                   )}
                 </div>
@@ -583,7 +465,7 @@ export default function BorrowingView() {
               </div>
               <Dialog open={showDrawdownDialog} onOpenChange={setShowDrawdownDialog}>
                 <DialogTrigger asChild>
-                  <Button disabled={borrowing.available_limit <= 0}>
+                  <Button disabled={availableAmount <= 0}>
                     <Plus className="mr-2 h-4 w-4" />
                     Request Drawdown
                   </Button>
@@ -592,8 +474,7 @@ export default function BorrowingView() {
                   <DialogHeader>
                     <DialogTitle>Request Drawdown</DialogTitle>
                     <DialogDescription>
-                      Available limit:{' '}
-                      <AmountDisplay amount={borrowing.available_limit} abbreviated />
+                      Available limit: <AmountDisplay amount={availableAmount} abbreviated />
                     </DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
@@ -604,7 +485,7 @@ export default function BorrowingView() {
                         placeholder="Enter amount"
                         value={drawdownAmount}
                         onChange={(e) => setDrawdownAmount(e.target.value)}
-                        max={borrowing.available_limit}
+                        max={availableAmount}
                       />
                     </div>
                   </div>
@@ -612,8 +493,13 @@ export default function BorrowingView() {
                     <Button variant="outline" onClick={() => setShowDrawdownDialog(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handleDrawdown} disabled={savingDrawdown || !drawdownAmount}>
-                      {savingDrawdown && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button
+                      onClick={handleDrawdown}
+                      disabled={drawdownMutation.isPending || !drawdownAmount}
+                    >
+                      {drawdownMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
                       Submit Request
                     </Button>
                   </DialogFooter>
@@ -636,29 +522,29 @@ export default function BorrowingView() {
                 <TableBody>
                   {tranches.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                         No tranches found
                       </TableCell>
                     </TableRow>
                   ) : (
                     tranches.map((tranche) => (
-                      <TableRow key={tranche.tranche_id}>
-                        <TableCell className="font-medium">#{tranche.tranche_number}</TableCell>
+                      <TableRow key={tranche.trancheId}>
+                        <TableCell className="font-medium">#{tranche.trancheNumber}</TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={tranche.requested_amount} abbreviated />
+                          <AmountDisplay amount={tranche.requestedAmount} abbreviated />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={tranche.approved_amount} abbreviated />
+                          <AmountDisplay amount={tranche.approvedAmount} abbreviated />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={tranche.disbursed_amount} abbreviated />
+                          <AmountDisplay amount={tranche.disbursedAmount} abbreviated />
                         </TableCell>
                         <TableCell>
-                          <DateDisplay date={tranche.request_date} />
+                          <DateDisplay date={tranche.requestDate} />
                         </TableCell>
                         <TableCell>
-                          {tranche.disbursement_date ? (
-                            <DateDisplay date={tranche.disbursement_date} />
+                          {tranche.disbursementDate ? (
+                            <DateDisplay date={tranche.disbursementDate} />
                           ) : (
                             '-'
                           )}
@@ -707,36 +593,34 @@ export default function BorrowingView() {
                 <TableBody>
                   {schedule.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                         No schedule generated
                       </TableCell>
                     </TableRow>
                   ) : (
                     schedule.map((item) => (
-                      <TableRow key={item.schedule_id}>
-                        <TableCell className="font-medium">{item.installment_number}</TableCell>
+                      <TableRow key={item.scheduleId}>
+                        <TableCell className="font-medium">{item.installmentNumber}</TableCell>
                         <TableCell>
-                          <DateDisplay date={item.due_date} />
+                          <DateDisplay date={item.dueDate} />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={item.principal_due} abbreviated />
+                          <AmountDisplay amount={item.principalDue} abbreviated />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={item.interest_due} abbreviated />
+                          <AmountDisplay amount={item.interestDue} abbreviated />
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          <AmountDisplay amount={item.total_due} abbreviated />
+                          <AmountDisplay amount={item.totalDue} abbreviated />
                         </TableCell>
                         <TableCell className="text-right text-green-600">
-                          <AmountDisplay amount={item.total_paid} abbreviated />
+                          <AmountDisplay amount={item.totalPaid} abbreviated />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={item.closing_balance} abbreviated />
+                          <AmountDisplay amount={item.closingBalance} abbreviated />
                         </TableCell>
                         <TableCell>
-                          <Badge className={statusColors[item.status] || ''}>
-                            {item.status}
-                          </Badge>
+                          <Badge className={statusColors[item.status] || ''}>{item.status}</Badge>
                         </TableCell>
                       </TableRow>
                     ))
@@ -784,8 +668,13 @@ export default function BorrowingView() {
                     <Button variant="outline" onClick={() => setShowPaymentDialog(false)}>
                       Cancel
                     </Button>
-                    <Button onClick={handlePayment} disabled={savingPayment || !paymentAmount}>
-                      {savingPayment && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Button
+                      onClick={handlePayment}
+                      disabled={paymentMutation.isPending || !paymentAmount}
+                    >
+                      {paymentMutation.isPending && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
                       Record Payment
                     </Button>
                   </DialogFooter>
@@ -808,34 +697,38 @@ export default function BorrowingView() {
                 <TableBody>
                   {payments.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
                         No payments recorded
                       </TableCell>
                     </TableRow>
                   ) : (
-                    payments.map((payment) => (
-                      <TableRow key={payment.payment_id}>
-                        <TableCell>
-                          <DateDisplay date={payment.payment_date} />
-                        </TableCell>
-                        <TableCell>{payment.payment_type}</TableCell>
-                        <TableCell className="text-right">
-                          <AmountDisplay amount={payment.principal_amount} abbreviated />
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <AmountDisplay amount={payment.interest_amount} abbreviated />
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          <AmountDisplay amount={payment.total_amount} abbreviated />
-                        </TableCell>
-                        <TableCell className="font-mono text-sm">{payment.reference}</TableCell>
-                        <TableCell>
-                          <Badge className={statusColors[payment.status] || ''}>
-                            {payment.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))
+                    payments.map((payment) => {
+                      const paymentStatus = payment.status ?? 'RECORDED';
+                      const paymentReference = payment.utrNumber ?? payment.bankReference ?? '-';
+                      return (
+                        <TableRow key={payment.paymentId}>
+                          <TableCell>
+                            <DateDisplay date={payment.paymentDate} />
+                          </TableCell>
+                          <TableCell>{payment.paymentType}</TableCell>
+                          <TableCell className="text-right">
+                            <AmountDisplay amount={payment.principalAmount} abbreviated />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <AmountDisplay amount={payment.interestAmount} abbreviated />
+                          </TableCell>
+                          <TableCell className="text-right font-medium">
+                            <AmountDisplay amount={payment.totalAmount} abbreviated />
+                          </TableCell>
+                          <TableCell className="font-mono text-sm">{paymentReference}</TableCell>
+                          <TableCell>
+                            <Badge className={statusColors[paymentStatus] || ''}>
+                              {paymentStatus}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
                   )}
                 </TableBody>
               </Table>

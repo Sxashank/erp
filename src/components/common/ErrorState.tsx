@@ -3,9 +3,9 @@
  */
 
 import { AlertTriangle, RefreshCw } from 'lucide-react';
-import type { AxiosError } from 'axios';
 
 import { Button } from '@/components/ui/button';
+import { getCorrelationId, getErrorCode, getErrorMessage } from '@/lib/errorMessage';
 import { cn } from '@/lib/utils';
 
 export interface ErrorStateProps {
@@ -16,27 +16,11 @@ export interface ErrorStateProps {
 }
 
 function describe(error: unknown): { message: string; code?: string; correlationId?: string } {
-  if (!error) return { message: 'Something went wrong.' };
-  const ax = error as AxiosError<{
-    error_code?: string;
-    message?: string;
-    detail?: string;
-    correlation_id?: string;
-  }>;
-  if (ax.isAxiosError) {
-    const data = ax.response?.data;
-    return {
-      message:
-        data?.message ||
-        data?.detail ||
-        ax.message ||
-        `HTTP ${ax.response?.status ?? '—'}`,
-      code: data?.error_code,
-      correlationId: data?.correlation_id,
-    };
-  }
-  if (error instanceof Error) return { message: error.message };
-  return { message: 'Something went wrong.' };
+  return {
+    message: getErrorMessage(error),
+    code: getErrorCode(error),
+    correlationId: getCorrelationId(error),
+  };
 }
 
 export function ErrorState({

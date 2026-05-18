@@ -29,6 +29,7 @@ import csv
 import io
 from datetime import date
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter(prefix="/bulk", tags=["FA Bulk Operations"])
 
 # Threshold for background processing
@@ -44,14 +45,14 @@ class BackgroundJobResponse(BaseModel):
 
 
 def get_bulk_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> BulkOperationsService:
     """Get bulk operations service instance."""
     return BulkOperationsService(session)
 
 
 def get_job_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> JobService:
     """Get job service instance."""
     return JobService(session)
@@ -59,7 +60,7 @@ def get_job_service(
 
 @router.post(
     "/import",
-    response_model=BulkAssetImportResponse,
+    response_model=BulkAssetImportResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Bulk import assets",
 )
@@ -84,14 +85,14 @@ async def bulk_import_assets(
 
 @router.post(
     "/import/async",
-    response_model=BackgroundJobResponse,
+    response_model=BackgroundJobResponse, response_model_by_alias=True,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Bulk import assets (background)",
 )
 async def bulk_import_assets_async(
     data: BulkAssetImportRequest,
     background_tasks: BackgroundTasks,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
     job_service: Annotated[JobService, Depends(get_job_service)],
     # current_user: Annotated[User, Depends(get_current_user)],
 ) -> BackgroundJobResponse:
@@ -128,7 +129,7 @@ async def bulk_import_assets_async(
 
 @router.put(
     "/update",
-    response_model=BulkAssetUpdateResponse,
+    response_model=BulkAssetUpdateResponse, response_model_by_alias=True,
     summary="Bulk update assets",
 )
 async def bulk_update_assets(
@@ -150,7 +151,7 @@ async def bulk_update_assets(
 
 @router.post(
     "/transfer",
-    response_model=BulkTransferResponse,
+    response_model=BulkTransferResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Bulk transfer assets",
 )
@@ -174,14 +175,14 @@ async def bulk_transfer_assets(
 
 @router.post(
     "/transfer/async",
-    response_model=BackgroundJobResponse,
+    response_model=BackgroundJobResponse, response_model_by_alias=True,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Bulk transfer assets (background)",
 )
 async def bulk_transfer_assets_async(
     data: BulkTransferRequest,
     background_tasks: BackgroundTasks,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
     job_service: Annotated[JobService, Depends(get_job_service)],
     # current_user: Annotated[User, Depends(get_current_user)],
 ) -> BackgroundJobResponse:
@@ -216,7 +217,7 @@ async def bulk_transfer_assets_async(
 
 @router.post(
     "/dispose",
-    response_model=BulkDisposeResponse,
+    response_model=BulkDisposeResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Bulk dispose assets",
 )
@@ -240,14 +241,14 @@ async def bulk_dispose_assets(
 
 @router.post(
     "/dispose/async",
-    response_model=BackgroundJobResponse,
+    response_model=BackgroundJobResponse, response_model_by_alias=True,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Bulk dispose assets (background)",
 )
 async def bulk_dispose_assets_async(
     data: BulkDisposeRequest,
     background_tasks: BackgroundTasks,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
     job_service: Annotated[JobService, Depends(get_job_service)],
     # current_user: Annotated[User, Depends(get_current_user)],
 ) -> BackgroundJobResponse:
@@ -339,14 +340,14 @@ async def export_assets(
 
 @router.post(
     "/export/async",
-    response_model=BackgroundJobResponse,
+    response_model=BackgroundJobResponse, response_model_by_alias=True,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Export assets (background)",
 )
 async def export_assets_async(
     organization_id: UUID,
     background_tasks: BackgroundTasks,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
     job_service: Annotated[JobService, Depends(get_job_service)],
     category_id: UUID = Query(None, description="Filter by category"),
     status_filter: str = Query(None, description="Filter by status"),
@@ -389,7 +390,7 @@ async def export_assets_async(
 
 @router.post(
     "/validate-import",
-    response_model=BulkAssetImportResponse,
+    response_model=BulkAssetImportResponse, response_model_by_alias=True,
     summary="Validate bulk import data",
 )
 async def validate_bulk_import(

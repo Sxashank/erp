@@ -5,13 +5,14 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.services.ess.reimbursement_service import ESSReimbursementService
 from app.models.ess.enums import ClaimType, ClaimStatus
+from app.core.exceptions import BadRequestException, NotFoundException
 
 
 router = APIRouter(prefix="/reimbursements", tags=["ESS Reimbursements"])
@@ -135,7 +136,7 @@ class ClaimSummaryResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.get("/categories", response_model=List[ReimbursementCategoryResponse])
+@router.get("/categories", response_model=List[ReimbursementCategoryResponse], response_model_by_alias=True)
 async def get_categories(
     organization_id: UUID,  # From authenticated user
     session: AsyncSession = Depends(get_session),
@@ -160,7 +161,7 @@ async def get_categories(
     ]
 
 
-@router.post("", response_model=ClaimResponse)
+@router.post("", response_model=ClaimResponse, response_model_by_alias=True)
 async def create_claim(
     request: ClaimCreate,
     organization_id: UUID,  # From authenticated user
@@ -209,7 +210,7 @@ async def create_claim(
     )
 
 
-@router.get("", response_model=List[ClaimResponse])
+@router.get("", response_model=List[ClaimResponse], response_model_by_alias=True)
 async def get_claims(
     employee_id: UUID,  # From authenticated user
     status: Optional[ClaimStatus] = None,
@@ -253,7 +254,7 @@ async def get_claims(
     ]
 
 
-@router.get("/summary", response_model=ClaimSummaryResponse)
+@router.get("/summary", response_model=ClaimSummaryResponse, response_model_by_alias=True)
 async def get_claim_summary(
     employee_id: UUID,  # From authenticated user
     financial_year: Optional[str] = None,
@@ -265,7 +266,7 @@ async def get_claim_summary(
     return ClaimSummaryResponse(**summary)
 
 
-@router.get("/{claim_id}", response_model=ClaimDetailResponse)
+@router.get("/{claim_id}", response_model=ClaimDetailResponse, response_model_by_alias=True)
 async def get_claim_detail(
     claim_id: UUID,
     session: AsyncSession = Depends(get_session),
@@ -275,10 +276,7 @@ async def get_claim_detail(
     claim = await service.get_claim_by_id(claim_id, include_items=True)
 
     if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Claim not found",
-        )
+        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
 
     return ClaimDetailResponse(
         id=str(claim.id),
@@ -322,7 +320,7 @@ async def get_claim_detail(
     )
 
 
-@router.patch("/{claim_id}", response_model=ClaimResponse)
+@router.patch("/{claim_id}", response_model=ClaimResponse, response_model_by_alias=True)
 async def update_claim(
     claim_id: UUID,
     request: ClaimUpdate,
@@ -337,16 +335,10 @@ async def update_claim(
             **request.model_dump(exclude_unset=True)
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Claim not found",
-        )
+        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
 
     await session.commit()
 
@@ -367,7 +359,7 @@ async def update_claim(
     )
 
 
-@router.post("/{claim_id}/submit", response_model=ClaimResponse)
+@router.post("/{claim_id}/submit", response_model=ClaimResponse, response_model_by_alias=True)
 async def submit_claim(
     claim_id: UUID,
     session: AsyncSession = Depends(get_session),
@@ -378,16 +370,10 @@ async def submit_claim(
     try:
         claim = await service.submit_claim(claim_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Claim not found",
-        )
+        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
 
     await session.commit()
 
@@ -420,16 +406,10 @@ async def cancel_claim(
     try:
         claim = await service.cancel_claim(claim_id, reason)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not claim:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Claim not found",
-        )
+        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
 
     await session.commit()
 
@@ -438,7 +418,7 @@ async def cancel_claim(
 
 # ==================== Line Items ====================
 
-@router.post("/{claim_id}/items", response_model=ClaimLineItemResponse)
+@router.post("/{claim_id}/items", response_model=ClaimLineItemResponse, response_model_by_alias=True)
 async def add_line_item(
     claim_id: UUID,
     request: ClaimLineItemCreate,
@@ -453,10 +433,7 @@ async def add_line_item(
             **request.model_dump()
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
@@ -486,16 +463,10 @@ async def remove_line_item(
     try:
         success = await service.remove_line_item(claim_id, item_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Line item not found",
-        )
+        raise NotFoundException(detail="Line item not found", error_code="LINE_ITEM_NOT_FOUND")
 
     await session.commit()
 

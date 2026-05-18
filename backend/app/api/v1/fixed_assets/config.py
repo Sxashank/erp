@@ -15,11 +15,12 @@ from app.schemas.fixed_assets.fa_config import (
 )
 from app.services.fixed_assets.fa_config_service import FAConfigurationService
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter(prefix="/config", tags=["FA Configuration"])
 
 
 def get_fa_config_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> FAConfigurationService:
     """Get FA configuration service instance."""
     return FAConfigurationService(session)
@@ -27,7 +28,7 @@ def get_fa_config_service(
 
 @router.get(
     "/{organization_id}",
-    response_model=FAConfigurationResponse,
+    response_model=FAConfigurationResponse, response_model_by_alias=True,
     summary="Get FA configuration for organization",
 )
 async def get_configuration(
@@ -49,7 +50,7 @@ async def get_configuration(
 
 @router.get(
     "/{organization_id}/default",
-    response_model=FAConfigurationResponse,
+    response_model=FAConfigurationResponse, response_model_by_alias=True,
     summary="Get or create default FA configuration",
 )
 async def get_or_create_default_configuration(
@@ -72,7 +73,7 @@ async def get_or_create_default_configuration(
 
 @router.post(
     "",
-    response_model=FAConfigurationResponse,
+    response_model=FAConfigurationResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create FA configuration",
 )
@@ -95,7 +96,7 @@ async def create_configuration(
 
 @router.put(
     "/{organization_id}",
-    response_model=FAConfigurationResponse,
+    response_model=FAConfigurationResponse, response_model_by_alias=True,
     summary="Update FA configuration",
 )
 async def update_configuration(

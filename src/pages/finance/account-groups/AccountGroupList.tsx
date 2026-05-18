@@ -1,7 +1,16 @@
-import { useEffect, useState } from 'react';
+import {
+  ChevronDown,
+  ChevronRight,
+  Edit,
+  FolderTree,
+  MoreHorizontal,
+  Plus,
+  Trash2,
+} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Edit, FolderTree, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,9 +36,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { accountGroupsApi, organizationsApi } from '@/services/api';
-import type { AccountGroup, AccountGroupTreeNode, Organization, PaginatedResponse } from '@/types';
-import { ACCOUNT_NATURES } from '@/types';
+import type { AccountGroupTreeNode, Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 interface TreeRowProps {
   node: AccountGroupTreeNode;
   level: number;
@@ -42,7 +51,6 @@ interface TreeRowProps {
 function TreeRow({ node, level, expandedNodes, toggleNode, onEdit, onDelete }: TreeRowProps) {
   const isExpanded = expandedNodes.has(node.id);
   const hasChildren = node.children && node.children.length > 0;
-  const navigate = useNavigate();
 
   const getNatureBadgeClass = (nature: string) => {
     switch (nature) {
@@ -69,7 +77,7 @@ function TreeRow({ node, level, expandedNodes, toggleNode, onEdit, onDelete }: T
             {hasChildren ? (
               <button
                 onClick={() => toggleNode(node.id)}
-                className="mr-2 p-1 hover:bg-slate-100 rounded"
+                className="mr-2 rounded p-1 hover:bg-slate-100"
               >
                 {isExpanded ? (
                   <ChevronDown className="h-4 w-4" />
@@ -78,14 +86,16 @@ function TreeRow({ node, level, expandedNodes, toggleNode, onEdit, onDelete }: T
                 )}
               </button>
             ) : (
-              <span className="w-6 mr-2" />
+              <span className="mr-2 w-6" />
             )}
             <span className="font-medium">{node.code}</span>
           </div>
         </TableCell>
         <TableCell>{node.name}</TableCell>
         <TableCell>
-          <Badge className={`${getNatureBadgeClass(node.nature)} hover:${getNatureBadgeClass(node.nature)}`}>
+          <Badge
+            className={`${getNatureBadgeClass(node.nature)} hover:${getNatureBadgeClass(node.nature)}`}
+          >
             {node.nature}
           </Badge>
         </TableCell>
@@ -106,10 +116,7 @@ function TreeRow({ node, level, expandedNodes, toggleNode, onEdit, onDelete }: T
                   <Edit className="mr-2 h-4 w-4" />
                   Edit
                 </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => onDelete(node.id)}
-                  className="text-red-600"
-                >
+                <DropdownMenuItem onClick={() => onDelete(node.id)} className="text-red-600">
                   <Trash2 className="mr-2 h-4 w-4" />
                   Delete
                 </DropdownMenuItem>
@@ -143,17 +150,7 @@ export function AccountGroupList() {
   const [loading, setLoading] = useState(true);
   const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchAccountGroups();
-    }
-  }, [selectedOrgId]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
@@ -162,11 +159,11 @@ export function AccountGroupList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchAccountGroups = async () => {
+  const fetchAccountGroups = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
@@ -176,11 +173,21 @@ export function AccountGroupList() {
       const rootIds = new Set<string>(response.data.map((node: AccountGroupTreeNode) => node.id));
       setExpandedNodes(rootIds);
     } catch (error) {
-      console.error('Failed to fetch account groups:', error);
+      logger.error('Failed to fetch account groups:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchAccountGroups();
+    }
+  }, [fetchAccountGroups, selectedOrgId]);
 
   const toggleNode = (id: string) => {
     setExpandedNodes((prev) => {
@@ -218,7 +225,7 @@ export function AccountGroupList() {
       await accountGroupsApi.delete(id);
       fetchAccountGroups();
     } catch (error) {
-      console.error('Failed to delete account group:', error);
+      logger.error('Failed to delete account group:', error);
     }
   };
 
@@ -228,16 +235,17 @@ export function AccountGroupList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Account Groups</h1>
-          <p className="text-sm text-slate-500">Manage chart of accounts hierarchy</p>
-        </div>
-        <Button onClick={() => navigate('/admin/finance/account-groups/new')}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Account Group
-        </Button>
-      </div>
+      <PageHeader
+        title="Account Groups"
+        subtitle="Manage chart of accounts hierarchy"
+        breadcrumbs={[{ label: 'Finance', to: '/admin/finance' }, { label: 'Account Groups' }]}
+        actions={
+          <Button onClick={() => navigate('/admin/finance/account-groups/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Account Group
+          </Button>
+        }
+      />
 
       <Card>
         <CardHeader>

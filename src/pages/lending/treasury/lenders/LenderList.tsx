@@ -1,10 +1,28 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, MoreHorizontal, Eye, Edit, Building2, Loader2 } from 'lucide-react';
-import { treasuryApi } from '@/services/lending/treasuryApi';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -13,93 +31,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-
-interface LenderDisplay {
-  id: string;
-  lenderCode: string;
-  lenderName: string;
-  lenderType: 'BANK' | 'DFI' | 'MF' | 'NCD' | 'CP' | 'SECURITIZATION' | 'SUBORDINATED_DEBT' | 'OTHER';
-  sanctionedLimit: number;
-  utilizedAmount: number;
-  availableLimit: number;
-  avgRate: number;
-  status: 'ACTIVE' | 'INACTIVE' | 'EXPIRED';
-  activeFacilities: number;
-  contactPerson: string;
-}
-
-// Mock data (fallback when API unavailable)
-const mockLenders: LenderDisplay[] = [
-  {
-    id: '1',
-    lenderCode: 'HDFC-BNK',
-    lenderName: 'HDFC Bank Ltd',
-    lenderType: 'BANK',
-    sanctionedLimit: 2000000000,
-    utilizedAmount: 1500000000,
-    availableLimit: 500000000,
-    avgRate: 9.25,
-    status: 'ACTIVE',
-    activeFacilities: 3,
-    contactPerson: 'Mr. Rajesh Sharma',
-  },
-  {
-    id: '2',
-    lenderCode: 'SIDBI',
-    lenderName: 'SIDBI',
-    lenderType: 'DFI',
-    sanctionedLimit: 500000000,
-    utilizedAmount: 350000000,
-    availableLimit: 150000000,
-    avgRate: 8.75,
-    status: 'ACTIVE',
-    activeFacilities: 2,
-    contactPerson: 'Ms. Priya Agarwal',
-  },
-  {
-    id: '3',
-    lenderCode: 'ICICI-BNK',
-    lenderName: 'ICICI Bank Ltd',
-    lenderType: 'BANK',
-    sanctionedLimit: 1000000000,
-    utilizedAmount: 800000000,
-    availableLimit: 200000000,
-    avgRate: 9.50,
-    status: 'ACTIVE',
-    activeFacilities: 2,
-    contactPerson: 'Mr. Amit Patel',
-  },
-  {
-    id: '4',
-    lenderCode: 'NCD-2024',
-    lenderName: 'NCD Series 2024',
-    lenderType: 'NCD',
-    sanctionedLimit: 300000000,
-    utilizedAmount: 300000000,
-    availableLimit: 0,
-    avgRate: 10.50,
-    status: 'ACTIVE',
-    activeFacilities: 1,
-    contactPerson: 'M/s Trustee Services',
-  },
-];
+import { useLenders, type LenderFilters } from '@/hooks/lending/useLenders';
+import type { LenderListItem } from '@/types/lending';
 
 const lenderTypeLabels: Record<string, { label: string; color: string }> = {
   BANK: { label: 'Bank', color: 'bg-blue-100 text-blue-700' },
@@ -116,58 +49,25 @@ export default function LenderList() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<string>('ALL');
-  const [loading, setLoading] = useState(true);
-  const [lenders, setLenders] = useState<LenderDisplay[]>([]);
 
-  // Fetch lenders from API
-  useEffect(() => {
-    async function fetchLenders() {
-      setLoading(true);
-      try {
-        const response = await treasuryApi.getLenders({
-          search: searchQuery || undefined,
-          lender_type: typeFilter !== 'ALL' ? typeFilter : undefined,
-        });
+  const filters: LenderFilters = {
+    pageSize: 100,
+    ...(typeFilter !== 'ALL' && { lenderType: typeFilter }),
+  };
+  const { data, isLoading: loading, isError, error, refetch } = useLenders(filters);
 
-        // Map API response to display format
-        const mappedLenders: LenderDisplay[] = response.items.map((lender: any) => ({
-          id: lender.lender_id,
-          lenderCode: lender.lender_code || lender.lender_id.slice(0, 8).toUpperCase(),
-          lenderName: lender.lender_name,
-          lenderType: lender.lender_type,
-          sanctionedLimit: lender.total_sanctioned || 0,
-          utilizedAmount: lender.total_outstanding || 0,
-          availableLimit: (lender.total_sanctioned || 0) - (lender.total_outstanding || 0),
-          avgRate: lender.weighted_avg_rate || 0,
-          status: lender.status || 'ACTIVE',
-          activeFacilities: lender.active_facilities || 0,
-          contactPerson: lender.contact_person || '',
-        }));
-
-        setLenders(mappedLenders);
-      } catch (error) {
-        console.error('Failed to fetch lenders, using mock data:', error);
-        // Fallback to mock data
-        setLenders(mockLenders);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchLenders();
-  }, [searchQuery, typeFilter]);
-
-  const filteredLenders = lenders.filter((lender) => {
-    const matchesSearch =
-      lender.lenderName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      lender.lenderCode.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesType = typeFilter === 'ALL' || lender.lenderType === typeFilter;
-    return matchesSearch && matchesType;
+  // Client-side search-as-you-type — BE doesn't filter by name on this endpoint.
+  const allLenders: LenderListItem[] = data?.items ?? [];
+  const lenders = allLenders.filter((l) => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase();
+    return l.lenderName.toLowerCase().includes(q) || l.lenderCode.toLowerCase().includes(q);
   });
 
-  const totalSanctioned = lenders.reduce((sum, l) => sum + l.sanctionedLimit, 0);
-  const totalUtilized = lenders.reduce((sum, l) => sum + l.utilizedAmount, 0);
-  const totalAvailable = lenders.reduce((sum, l) => sum + l.availableLimit, 0);
+  // Wire amounts are strings (Decimal precision); coerce once for display-only sums.
+  const totalSanctioned = lenders.reduce((sum, l) => sum + Number(l.totalSanctionLimit ?? 0), 0);
+  const totalAvailable = lenders.reduce((sum, l) => sum + Number(l.availableLimit ?? 0), 0);
+  const totalUtilized = totalSanctioned - totalAvailable;
 
   return (
     <div className="space-y-6">
@@ -214,7 +114,11 @@ export default function LenderList() {
             <CardTitle className="text-sm font-medium">Total Utilized</CardTitle>
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={totalUtilized} abbreviated className="text-2xl font-bold text-amber-600" />
+            <AmountDisplay
+              amount={totalUtilized}
+              abbreviated
+              className="text-2xl font-bold text-amber-600"
+            />
             <p className="text-xs text-muted-foreground">
               <PercentageDisplay value={(totalUtilized / totalSanctioned) * 100} /> utilization
             </p>
@@ -225,7 +129,11 @@ export default function LenderList() {
             <CardTitle className="text-sm font-medium">Available Limit</CardTitle>
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={totalAvailable} abbreviated className="text-2xl font-bold text-green-600" />
+            <AmountDisplay
+              amount={totalAvailable}
+              abbreviated
+              className="text-2xl font-bold text-green-600"
+            />
             <p className="text-xs text-muted-foreground">Undrawn facilities</p>
           </CardContent>
         </Card>
@@ -283,16 +191,36 @@ export default function LenderList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredLenders.length === 0 ? (
+              {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    No lenders found matching your criteria
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                    Loading lenders...
+                  </TableCell>
+                </TableRow>
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="py-8">
+                    <ErrorState
+                      title="Could not load lenders"
+                      error={error}
+                      onRetry={() => refetch()}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : lenders.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                    No lenders found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredLenders.map((lender) => {
-                  const typeConfig = lenderTypeLabels[lender.lenderType];
-                  const utilizationPercent = (lender.utilizedAmount / lender.sanctionedLimit) * 100;
+                lenders.map((lender) => {
+                  const typeConfig = lenderTypeLabels[lender.lenderType] ?? lenderTypeLabels.OTHER;
+                  const sanctioned = Number(lender.totalSanctionLimit ?? 0);
+                  const available = Number(lender.availableLimit ?? 0);
+                  const utilized = sanctioned - available;
+                  const utilizationPercent = sanctioned > 0 ? (utilized / sanctioned) * 100 : 0;
                   return (
                     <TableRow
                       key={lender.id}
@@ -302,9 +230,12 @@ export default function LenderList() {
                       <TableCell className="font-mono text-sm">{lender.lenderCode}</TableCell>
                       <TableCell>
                         <div className="font-medium">{lender.lenderName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {lender.activeFacilities} active facilities
-                        </div>
+                        {lender.externalRating && (
+                          <div className="text-xs text-muted-foreground">
+                            Rating: {lender.externalRating}
+                            {lender.ratingAgency ? ` (${lender.ratingAgency})` : ''}
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={typeConfig.color}>
@@ -312,20 +243,18 @@ export default function LenderList() {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <AmountDisplay amount={lender.sanctionedLimit} abbreviated />
+                        <AmountDisplay amount={sanctioned} abbreviated />
                       </TableCell>
                       <TableCell className="text-right">
-                        <AmountDisplay amount={lender.utilizedAmount} abbreviated />
+                        <AmountDisplay amount={utilized} abbreviated />
                         <div className="text-xs text-muted-foreground">
                           <PercentageDisplay value={utilizationPercent} />
                         </div>
                       </TableCell>
                       <TableCell className="text-right">
-                        <AmountDisplay amount={lender.availableLimit} abbreviated />
+                        <AmountDisplay amount={available} abbreviated />
                       </TableCell>
-                      <TableCell className="text-right">
-                        <PercentageDisplay value={lender.avgRate} /> p.a.
-                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">—</TableCell>
                       <TableCell>
                         <Badge
                           variant={lender.status === 'ACTIVE' ? 'default' : 'secondary'}

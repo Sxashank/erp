@@ -3,26 +3,29 @@
  */
 
 import api from './api';
-import {
+
+import type {
   Notification,
   NotificationListResponse,
   NotificationCreate,
   NotificationPreference,
   NotificationPreferenceUpdate,
-  NotificationLog,
   NotificationTemplate,
   NotificationTemplateCreate,
   NotificationTemplateUpdate,
+  NotificationLogListResponse,
   NotificationTemplateListResponse,
   TemplatePreviewRequest,
   TemplatePreviewResponse,
   SendNotificationRequest,
   BulkNotificationRequest,
+  NotificationChannel,
   NotificationCategory,
+  NotificationStatus,
   NotificationTemplateType,
 } from '@/types/notification';
-
 const BASE_URL = '/notifications';
+const COLLECTION_URL = `${BASE_URL}/`;
 
 // Notification endpoints
 export const notificationApi = {
@@ -33,13 +36,24 @@ export const notificationApi = {
     page?: number;
     page_size?: number;
   }): Promise<NotificationListResponse> => {
-    const response = await api.get<NotificationListResponse>(BASE_URL, { params });
+    const response = await api.get<NotificationListResponse>(COLLECTION_URL, { params });
     return response.data;
   },
 
   // Get unread count
   getUnreadCount: async (): Promise<{ unread_count: number }> => {
     const response = await api.get<{ unread_count: number }>(`${BASE_URL}/unread-count`);
+    return response.data;
+  },
+
+  getLogs: async (params?: {
+    notificationId?: string;
+    channel?: NotificationChannel;
+    status?: NotificationStatus;
+    page?: number;
+    pageSize?: number;
+  }): Promise<NotificationLogListResponse> => {
+    const response = await api.get<NotificationLogListResponse>(`${BASE_URL}/logs`, { params });
     return response.data;
   },
 
@@ -51,7 +65,7 @@ export const notificationApi = {
 
   // Create notification
   createNotification: async (data: NotificationCreate): Promise<Notification> => {
-    const response = await api.post<Notification>(BASE_URL, data);
+    const response = await api.post<Notification>(COLLECTION_URL, data);
     return response.data;
   },
 
@@ -157,8 +171,8 @@ export const templateApi = {
   },
 
   // Add template variable
-  addTemplateVariable: async (templateId: string, data: any): Promise<any> => {
-    const response = await api.post<any>(`${BASE_URL}/templates/${templateId}/variables`, data);
+  addTemplateVariable: async (templateId: string, data: Record<string, unknown>): Promise<unknown> => {
+    const response = await api.post<unknown>(`${BASE_URL}/templates/${templateId}/variables`, data);
     return response.data;
   },
 

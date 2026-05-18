@@ -1,15 +1,8 @@
+import { Building2, CreditCard, Loader2, MoreHorizontal, Plus, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Building2,
-  CreditCard,
-  Loader2,
-  MoreHorizontal,
-  Plus,
-  Star,
-} from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +23,7 @@ import {
 import { organizationsApi } from '@/services/api';
 import type { Organization, OrganizationBankAccount } from '@/types';
 
+import { logger } from "@/lib/logger";
 const ACCOUNT_TYPE_LABELS: Record<string, string> = {
   CURRENT: 'Current Account',
   SAVINGS: 'Savings Account',
@@ -63,7 +57,7 @@ export function OrganizationBankAccountList() {
       setOrganization(orgRes.data);
       setBankAccounts(bankRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -75,7 +69,7 @@ export function OrganizationBankAccountList() {
       await organizationsApi.setPrimaryBankAccount(orgId, id);
       fetchData();
     } catch (error) {
-      console.error('Failed to set primary:', error);
+      logger.error('Failed to set primary:', error);
     }
   };
 
@@ -85,7 +79,7 @@ export function OrganizationBankAccountList() {
       await organizationsApi.deleteBankAccount(orgId, id);
       fetchData();
     } catch (error) {
-      console.error('Failed to delete:', error);
+      logger.error('Failed to delete:', error);
     }
   };
 
@@ -99,23 +93,21 @@ export function OrganizationBankAccountList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/organizations')}>
-            <ArrowLeft className="h-5 w-5" />
+      <PageHeader
+        title="Bank Accounts"
+        subtitle={`Manage bank accounts for ${organization?.name}`}
+        breadcrumbs={[
+          { label: 'Organizations', to: '/admin/organizations' },
+          { label: organization?.name ?? '...', to: `/admin/organizations/${orgId}` },
+          { label: 'Bank Accounts' },
+        ]}
+        actions={
+          <Button onClick={() => navigate(`/admin/organizations/${orgId}/bank-accounts/new`)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Bank Account
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Bank Accounts</h1>
-            <p className="text-sm text-slate-500">
-              Manage bank accounts for {organization?.name}
-            </p>
-          </div>
-        </div>
-        <Button onClick={() => navigate(`/admin/organizations/${orgId}/bank-accounts/new`)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Bank Account
-        </Button>
-      </div>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -198,7 +190,9 @@ export function OrganizationBankAccountList() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             onClick={() =>
-                              navigate(`/admin/organizations/${orgId}/bank-accounts/${account.id}/edit`)
+                              navigate(
+                                `/admin/organizations/${orgId}/bank-accounts/${account.id}/edit`,
+                              )
                             }
                           >
                             Edit

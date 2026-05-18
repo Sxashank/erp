@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { login, logout, refreshTokens } from './auth';
+
 import { useAuthStore } from '@/stores/authStore';
 import { useOrganizationStore } from '@/stores/organizationStore';
 

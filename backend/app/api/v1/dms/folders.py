@@ -4,10 +4,10 @@ import logging
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.dms import DocumentAccessLevel
 from app.services.dms import FolderService
@@ -21,16 +21,17 @@ from app.schemas.dms.folder import (
     FolderAccessResponse,
     FolderListResponse,
 )
+from app.core.exceptions import BadRequestException, NotFoundException
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/folders", tags=["DMS Folders"])
 
 
-@router.post("", response_model=FolderResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=FolderResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_folder(
     data: FolderCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new folder."""
@@ -59,13 +60,13 @@ async def create_folder(
     return folder
 
 
-@router.get("", response_model=List[FolderResponse])
+@router.get("", response_model=List[FolderResponse], response_model_by_alias=True)
 async def list_folders(
     parent_id: Optional[UUID] = Query(None),
     folder_type: Optional[str] = Query(None),
     entity_type: Optional[str] = Query(None),
     entity_id: Optional[UUID] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List folders with filters."""
@@ -80,11 +81,11 @@ async def list_folders(
     return folders
 
 
-@router.get("/tree", response_model=List[FolderTreeResponse])
+@router.get("/tree", response_model=List[FolderTreeResponse], response_model_by_alias=True)
 async def get_folder_tree(
     root_folder_id: Optional[UUID] = Query(None),
     max_depth: int = Query(10, ge=1, le=20),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get folder tree structure."""
@@ -97,28 +98,25 @@ async def get_folder_tree(
     return tree
 
 
-@router.get("/{folder_id}", response_model=FolderResponse)
+@router.get("/{folder_id}", response_model=FolderResponse, response_model_by_alias=True)
 async def get_folder(
     folder_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific folder."""
     service = FolderService(db)
     folder = await service.get_folder(folder_id)
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Folder not found",
-        )
+        raise NotFoundException(detail="Folder not found", error_code="FOLDER_NOT_FOUND")
     return folder
 
 
-@router.patch("/{folder_id}", response_model=FolderResponse)
+@router.patch("/{folder_id}", response_model=FolderResponse, response_model_by_alias=True)
 async def update_folder(
     folder_id: UUID,
     data: FolderUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update folder metadata."""
@@ -142,18 +140,15 @@ async def update_folder(
         updated_by=current_user.id,
     )
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Folder not found",
-        )
+        raise NotFoundException(detail="Folder not found", error_code="FOLDER_NOT_FOUND")
     return folder
 
 
-@router.post("/{folder_id}/move", response_model=FolderResponse)
+@router.post("/{folder_id}/move", response_model=FolderResponse, response_model_by_alias=True)
 async def move_folder(
     folder_id: UUID,
     data: FolderMoveRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Move folder to a new parent."""
@@ -164,9 +159,9 @@ async def move_folder(
         updated_by=current_user.id,
     )
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Cannot move folder to specified location",
+            error_code="CANNOT_MOVE_FOLDER_TO_SPECIFIED_LOCATION",
         )
     return folder
 
@@ -175,7 +170,7 @@ async def move_folder(
 async def delete_folder(
     folder_id: UUID,
     recursive: bool = Query(False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a folder."""
@@ -186,17 +181,14 @@ async def delete_folder(
         recursive=recursive,
     )
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Folder not found",
-        )
+        raise NotFoundException(detail="Folder not found", error_code="FOLDER_NOT_FOUND")
 
 
-@router.post("/{folder_id}/access", response_model=FolderAccessResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/{folder_id}/access", response_model=FolderAccessResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def grant_folder_access(
     folder_id: UUID,
     data: FolderAccessCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Grant access to a folder."""
@@ -222,7 +214,7 @@ async def revoke_folder_access(
     folder_id: UUID,
     user_id: Optional[UUID] = Query(None),
     role_id: Optional[UUID] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Revoke access from a folder."""
@@ -233,10 +225,7 @@ async def revoke_folder_access(
         role_id=role_id,
     )
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Access record not found",
-        )
+        raise NotFoundException(detail="Access record not found", error_code="ACCESS_RECORD_NOT_FOUND")
 
 
 @router.get("/{folder_id}/documents")
@@ -244,7 +233,7 @@ async def get_folder_documents(
     folder_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get documents in a folder."""
@@ -265,10 +254,10 @@ async def get_folder_documents(
     }
 
 
-@router.get("/{folder_id}/children", response_model=List[FolderResponse])
+@router.get("/{folder_id}/children", response_model=List[FolderResponse], response_model_by_alias=True)
 async def get_folder_children(
     folder_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get child folders of a folder."""

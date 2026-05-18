@@ -2,15 +2,16 @@
  * Data Source Edit Page
  */
 
+import { Loader2, Save, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save, Eye } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -25,10 +26,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biDataSourceApi } from '@/services/biApi';
-import { DataSource, DataSourceType, APIMethod } from '@/types/bi';
+import type { DataSource, DataSourceType, APIMethod } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 interface FormData {
   code: string;
   name: string;
@@ -111,7 +115,7 @@ export function DataSourceEdit() {
       setValue('response_transform', JSON.stringify(ds.response_transform || {}, null, 2));
       setValue('cache_ttl_seconds', ds.cache_ttl_seconds || 0);
     } catch (error) {
-      console.error('Error fetching data source:', error);
+      logger.error('Error fetching data source:', error);
       toast({
         title: 'Error',
         description: 'Failed to load data source',
@@ -191,11 +195,11 @@ export function DataSourceEdit() {
       });
 
       navigate('/admin/bi/data-sources');
-    } catch (error: any) {
-      console.error('Error updating data source:', error);
+    } catch (error: unknown) {
+      logger.error('Error updating data source:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to update data source',
+        description: getErrorMessage(error, 'Failed to update data source'),
         variant: 'destructive',
       });
     } finally {
@@ -213,7 +217,7 @@ export function DataSourceEdit() {
       const response = await biDataSourceApi.preview(id);
       setPreviewData(response.data);
     } catch (error) {
-      console.error('Error fetching preview:', error);
+      logger.error('Error fetching preview:', error);
       toast({
         title: 'Error',
         description: 'Failed to fetch data preview',
@@ -227,7 +231,7 @@ export function DataSourceEdit() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -235,7 +239,7 @@ export function DataSourceEdit() {
 
   if (!dataSource) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-muted-foreground">Data source not found</p>
         <Button
           variant="outline"
@@ -250,25 +254,20 @@ export function DataSourceEdit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/admin/bi/data-sources')}
-          >
-            <ArrowLeft className="h-4 w-4" />
+      <PageHeader
+        title="Edit Data Source"
+        subtitle={dataSource.code}
+        breadcrumbs={[
+          { label: 'Data Sources', to: '/admin/bi/data-sources' },
+          { label: dataSource.code },
+        ]}
+        actions={
+          <Button variant="outline" onClick={handlePreview}>
+            <Eye className="mr-2 h-4 w-4" />
+            Preview Data
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Edit Data Source</h1>
-            <p className="text-muted-foreground">{dataSource.code}</p>
-          </div>
-        </div>
-        <Button variant="outline" onClick={handlePreview}>
-          <Eye className="h-4 w-4 mr-2" />
-          Preview Data
-        </Button>
-      </div>
+        }
+      />
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-2 gap-6">
@@ -290,30 +289,19 @@ export function DataSourceEdit() {
                       },
                     })}
                   />
-                  {errors.code && (
-                    <p className="text-sm text-red-500">{errors.code.message}</p>
-                  )}
+                  {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="name">Name *</Label>
-                  <Input
-                    id="name"
-                    {...register('name', { required: 'Name is required' })}
-                  />
-                  {errors.name && (
-                    <p className="text-sm text-red-500">{errors.name.message}</p>
-                  )}
+                  <Input id="name" {...register('name', { required: 'Name is required' })} />
+                  {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  rows={2}
-                  {...register('description')}
-                />
+                <Textarea id="description" rows={2} {...register('description')} />
               </div>
 
               <div className="space-y-2">
@@ -363,7 +351,8 @@ export function DataSourceEdit() {
                     <Input
                       placeholder="/api/v1/reports/revenue"
                       {...register('api_endpoint', {
-                        required: sourceType === 'API_ENDPOINT' ? 'API endpoint is required' : false,
+                        required:
+                          sourceType === 'API_ENDPOINT' ? 'API endpoint is required' : false,
                       })}
                     />
                     {errors.api_endpoint && (
@@ -454,7 +443,7 @@ export function DataSourceEdit() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="mt-6 flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
@@ -463,8 +452,8 @@ export function DataSourceEdit() {
             Cancel
           </Button>
           <Button type="submit" disabled={submitting}>
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            <Save className="h-4 w-4 mr-2" />
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Save className="mr-2 h-4 w-4" />
             Save Changes
           </Button>
         </div>
@@ -475,9 +464,7 @@ export function DataSourceEdit() {
         <SheetContent className="sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>Data Preview</SheetTitle>
-            <SheetDescription>
-              Preview data from this data source
-            </SheetDescription>
+            <SheetDescription>Preview data from this data source</SheetDescription>
           </SheetHeader>
 
           <div className="py-6">
@@ -489,23 +476,23 @@ export function DataSourceEdit() {
               <div className="space-y-4">
                 {previewData.data && Array.isArray(previewData.data) ? (
                   <div className="max-h-96 overflow-auto">
-                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
+                    <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-xs">
                       {JSON.stringify(previewData.data.slice(0, 10), null, 2)}
                     </pre>
                     {previewData.data.length > 10 && (
-                      <p className="text-sm text-muted-foreground mt-2">
+                      <p className="mt-2 text-sm text-muted-foreground">
                         Showing first 10 of {previewData.data.length} records
                       </p>
                     )}
                   </div>
                 ) : (
-                  <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto max-h-96">
+                  <pre className="max-h-96 overflow-x-auto rounded-lg bg-muted p-4 text-xs">
                     {JSON.stringify(previewData, null, 2)}
                   </pre>
                 )}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="py-8 text-center text-muted-foreground">
                 No data available or error fetching data
               </div>
             )}

@@ -90,7 +90,7 @@ class VendorRegistrationService:
         reg_data["status"] = RegistrationStatus.DRAFT
 
         registration = await self.reg_repo.create(reg_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return registration
 
@@ -119,7 +119,7 @@ class VendorRegistrationService:
             update_data["additional_info_responded_at"] = datetime.utcnow()
 
         registration = await self.reg_repo.update(registration, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return registration
 
@@ -168,7 +168,7 @@ class VendorRegistrationService:
         registration.terms_accepted_at = datetime.utcnow()
         registration.terms_version = terms_version
 
-        await self.session.commit()
+        await self.session.flush()
 
         return registration
 
@@ -205,7 +205,7 @@ class VendorRegistrationService:
         registration.vendor_id = vendor.id
         registration.portal_user_id = portal_user.id
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send welcome email to vendor
 
@@ -234,7 +234,7 @@ class VendorRegistrationService:
         registration.rejection_reason = reason
         registration.rejection_category = category
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send rejection email to vendor
 
@@ -261,7 +261,7 @@ class VendorRegistrationService:
         registration.additional_info_requested_at = datetime.utcnow()
         registration.additional_info_request = request
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send email to vendor requesting additional info
 
@@ -329,7 +329,7 @@ class VendorRegistrationService:
         }
 
         document = await self.doc_repo.create(doc_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return document
 

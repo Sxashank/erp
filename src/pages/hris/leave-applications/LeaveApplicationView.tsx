@@ -1,16 +1,9 @@
+import { ArrowLeft, Calendar, Check, Clock, FileText, Phone, User, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Calendar,
-  Check,
-  Clock,
-  FileText,
-  Phone,
-  User,
-  X,
-} from 'lucide-react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -18,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { hrisApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface LeaveApplication {
   id: string;
   application_number: string;
@@ -85,7 +79,7 @@ export function LeaveApplicationView() {
         const response = await hrisApi.getLeaveApplication(id);
         setApplication(response.data);
       } catch (error) {
-        console.error('Failed to fetch leave application:', error);
+        logger.error('Failed to fetch leave application:', error);
       } finally {
         setLoading(false);
       }
@@ -103,7 +97,7 @@ export function LeaveApplicationView() {
       setShowApprovalForm(false);
       setRemarks('');
     } catch (error) {
-      console.error('Failed to approve application:', error);
+      logger.error('Failed to approve application:', error);
     } finally {
       setActionLoading(false);
     }
@@ -119,7 +113,7 @@ export function LeaveApplicationView() {
       setShowRejectionForm(false);
       setRemarks('');
     } catch (error) {
-      console.error('Failed to reject application:', error);
+      logger.error('Failed to reject application:', error);
     } finally {
       setActionLoading(false);
     }
@@ -136,7 +130,7 @@ export function LeaveApplicationView() {
       const response = await hrisApi.getLeaveApplication(id);
       setApplication(response.data);
     } catch (error) {
-      console.error('Failed to cancel application:', error);
+      logger.error('Failed to cancel application:', error);
     } finally {
       setActionLoading(false);
     }
@@ -163,25 +157,21 @@ export function LeaveApplicationView() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/hris/leave-applications')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Leave Application</h1>
-            <p className="text-sm text-slate-500">{application.application_number}</p>
-          </div>
-        </div>
-        <Badge className={getStatusBadgeColor(application.status)}>
-          {application.status}
-        </Badge>
-      </div>
+      <PageHeader
+        title="Leave Application"
+        subtitle={application.application_number}
+        breadcrumbs={[
+          { label: 'Leave Applications', to: '/admin/hris/leave-applications' },
+          { label: application.application_number },
+        ]}
+        actions={
+          <Badge className={getStatusBadgeColor(application.status)}>{application.status}</Badge>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Employee Info */}
           <Card>
             <CardHeader>
@@ -233,23 +223,27 @@ export function LeaveApplicationView() {
                   <p className="font-medium">
                     {application.working_days} day(s)
                     {application.is_half_day && (
-                      <span className="text-slate-500 ml-1">({application.half_day_type})</span>
+                      <span className="ml-1 text-slate-500">({application.half_day_type})</span>
                     )}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">From Date</p>
-                  <p className="font-medium">{new Date(application.from_date).toLocaleDateString()}</p>
+                  <p className="font-medium">
+                    <DateDisplay date={application.from_date} />
+                  </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">To Date</p>
-                  <p className="font-medium">{new Date(application.to_date).toLocaleDateString()}</p>
+                  <p className="font-medium">
+                    <DateDisplay date={application.to_date} />
+                  </p>
                 </div>
               </div>
 
               <div>
                 <p className="text-sm text-slate-500">Reason</p>
-                <p className="font-medium mt-1">{application.reason}</p>
+                <p className="mt-1 font-medium">{application.reason}</p>
               </div>
 
               {(application.contact_number || application.contact_address) && (
@@ -310,10 +304,13 @@ export function LeaveApplicationView() {
                       <Button onClick={handleApprove} disabled={actionLoading}>
                         {actionLoading ? 'Processing...' : 'Confirm Approval'}
                       </Button>
-                      <Button variant="outline" onClick={() => {
-                        setShowApprovalForm(false);
-                        setRemarks('');
-                      }}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowApprovalForm(false);
+                          setRemarks('');
+                        }}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -333,13 +330,20 @@ export function LeaveApplicationView() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="destructive" onClick={handleReject} disabled={actionLoading || !remarks}>
+                      <Button
+                        variant="destructive"
+                        onClick={handleReject}
+                        disabled={actionLoading || !remarks}
+                      >
                         {actionLoading ? 'Processing...' : 'Confirm Rejection'}
                       </Button>
-                      <Button variant="outline" onClick={() => {
-                        setShowRejectionForm(false);
-                        setRemarks('');
-                      }}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowRejectionForm(false);
+                          setRemarks('');
+                        }}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -350,7 +354,9 @@ export function LeaveApplicationView() {
           )}
 
           {/* Status/Approval Info */}
-          {(application.status === 'APPROVED' || application.status === 'REJECTED' || application.status === 'CANCELLED') && (
+          {(application.status === 'APPROVED' ||
+            application.status === 'REJECTED' ||
+            application.status === 'CANCELLED') && (
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -365,14 +371,12 @@ export function LeaveApplicationView() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Approved On</span>
-                      <span className="font-medium">
-                        {application.approved_at ? new Date(application.approved_at).toLocaleDateString() : '-'}
-                      </span>
+                      <DateDisplay date={application.approved_at} className="font-medium" />
                     </div>
                     {application.approver_remarks && (
                       <div>
                         <p className="text-sm text-slate-500">Remarks</p>
-                        <p className="font-medium mt-1">{application.approver_remarks}</p>
+                        <p className="mt-1 font-medium">{application.approver_remarks}</p>
                       </div>
                     )}
                   </div>
@@ -382,14 +386,12 @@ export function LeaveApplicationView() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Rejected On</span>
-                      <span className="font-medium">
-                        {application.rejected_at ? new Date(application.rejected_at).toLocaleDateString() : '-'}
-                      </span>
+                      <DateDisplay date={application.rejected_at} className="font-medium" />
                     </div>
                     {application.rejection_reason && (
                       <div>
                         <p className="text-sm text-slate-500">Reason</p>
-                        <p className="font-medium mt-1">{application.rejection_reason}</p>
+                        <p className="mt-1 font-medium">{application.rejection_reason}</p>
                       </div>
                     )}
                   </div>
@@ -399,14 +401,12 @@ export function LeaveApplicationView() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Cancelled On</span>
-                      <span className="font-medium">
-                        {application.cancelled_at ? new Date(application.cancelled_at).toLocaleDateString() : '-'}
-                      </span>
+                      <DateDisplay date={application.cancelled_at} className="font-medium" />
                     </div>
                     {application.cancellation_reason && (
                       <div>
                         <p className="text-sm text-slate-500">Reason</p>
-                        <p className="font-medium mt-1">{application.cancellation_reason}</p>
+                        <p className="mt-1 font-medium">{application.cancellation_reason}</p>
                       </div>
                     )}
                   </div>
@@ -431,7 +431,7 @@ export function LeaveApplicationView() {
                 <div className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <div className="h-2 w-2 rounded-full bg-green-500" />
-                    <div className="w-px h-full bg-slate-200" />
+                    <div className="h-full w-px bg-slate-200" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">Applied</p>
@@ -444,18 +444,25 @@ export function LeaveApplicationView() {
                 {application.status !== 'PENDING' && (
                   <div className="flex gap-3">
                     <div className="flex flex-col items-center">
-                      <div className={`h-2 w-2 rounded-full ${
-                        application.status === 'APPROVED' ? 'bg-green-500' :
-                        application.status === 'REJECTED' ? 'bg-red-500' :
-                        'bg-slate-400'
-                      }`} />
+                      <div
+                        className={`h-2 w-2 rounded-full ${
+                          application.status === 'APPROVED'
+                            ? 'bg-green-500'
+                            : application.status === 'REJECTED'
+                              ? 'bg-red-500'
+                              : 'bg-slate-400'
+                        }`}
+                      />
                     </div>
                     <div>
                       <p className="text-sm font-medium">{application.status}</p>
                       <p className="text-xs text-slate-500">
-                        {application.approved_at && new Date(application.approved_at).toLocaleString()}
-                        {application.rejected_at && new Date(application.rejected_at).toLocaleString()}
-                        {application.cancelled_at && new Date(application.cancelled_at).toLocaleString()}
+                        {application.approved_at &&
+                          new Date(application.approved_at).toLocaleString()}
+                        {application.rejected_at &&
+                          new Date(application.rejected_at).toLocaleString()}
+                        {application.cancelled_at &&
+                          new Date(application.cancelled_at).toLocaleString()}
                       </p>
                     </div>
                   </div>

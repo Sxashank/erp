@@ -2,8 +2,6 @@
  * Vendor Portal Layout Component
  */
 
-import { useState, useEffect } from 'react';
-import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
   FileText,
@@ -19,9 +17,12 @@ import {
   ChevronDown,
   Building2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
+import { Link, Outlet, useNavigate, useLocation } from 'react-router-dom';
+
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +35,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorComplianceApi } from '@/services/vendorApi';
 import type { VendorUser } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 const navigation = [
   { name: 'Dashboard', href: '/vendor/dashboard', icon: LayoutDashboard },
   { name: 'Purchase Orders', href: '/vendor/purchase-orders', icon: ShoppingCart },
@@ -78,7 +80,7 @@ export default function VendorLayout() {
         const response = await vendorComplianceApi.getUnreadCount();
         setUnreadCount(response.data.unread_count);
       } catch (error) {
-        console.error('Failed to fetch notifications:', error);
+        logger.error('Failed to fetch notifications:', error);
       }
     };
 
@@ -256,10 +258,16 @@ export default function VendorLayout() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row justify-between items-center text-sm text-gray-500">
             <p>&copy; {new Date().getFullYear()} TalentFino ERP. All rights reserved.</p>
-            <div className="flex space-x-4 mt-2 sm:mt-0">
-              <a href="#" className="hover:text-gray-700">Help</a>
-              <a href="#" className="hover:text-gray-700">Privacy</a>
-              <a href="#" className="hover:text-gray-700">Terms</a>
+            <div className="mt-2 flex space-x-4 sm:mt-0">
+              <button type="button" className="hover:text-gray-700">
+                Help
+              </button>
+              <button type="button" className="hover:text-gray-700">
+                Privacy
+              </button>
+              <button type="button" className="hover:text-gray-700">
+                Terms
+              </button>
             </div>
           </div>
         </div>

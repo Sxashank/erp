@@ -1,25 +1,23 @@
 """Loan Sanction repositories for the lending module."""
 
 from datetime import date
-from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, and_, func, or_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.lending.sanction import (
-    LoanSanction,
-    SanctionCondition,
-    LoanSecurity,
-)
 from app.models.lending.enums import (
-    SanctionStatus,
-    ConditionType,
-    ConditionCategory,
     ConditionComplianceStatus,
+    ConditionType,
+    SanctionStatus,
     SecurityCategory,
     SecurityStatus,
+)
+from app.models.lending.sanction import (
+    LoanSanction,
+    LoanSecurity,
+    SanctionCondition,
 )
 from app.repositories.base import BaseRepository
 
@@ -32,22 +30,18 @@ class SanctionConditionRepository(BaseRepository[SanctionCondition]):
 
     async def get_by_sanction(
         self, sanction_id: UUID, include_inactive: bool = False
-    ) -> List[SanctionCondition]:
+    ) -> list[SanctionCondition]:
         """Get all conditions for a sanction."""
-        query = select(SanctionCondition).where(
-            SanctionCondition.sanction_id == sanction_id
-        )
+        query = select(SanctionCondition).where(SanctionCondition.sanction_id == sanction_id)
         if not include_inactive:
             query = query.where(SanctionCondition.is_active == True)
-        query = query.order_by(
-            SanctionCondition.condition_type, SanctionCondition.sequence
-        )
+        query = query.order_by(SanctionCondition.condition_type, SanctionCondition.sequence)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def get_by_type(
         self, sanction_id: UUID, condition_type: ConditionType
-    ) -> List[SanctionCondition]:
+    ) -> list[SanctionCondition]:
         """Get conditions of a specific type."""
         query = select(SanctionCondition).where(
             and_(
@@ -61,8 +55,8 @@ class SanctionConditionRepository(BaseRepository[SanctionCondition]):
         return list(result.scalars().all())
 
     async def get_pending_conditions(
-        self, sanction_id: UUID, condition_type: Optional[ConditionType] = None
-    ) -> List[SanctionCondition]:
+        self, sanction_id: UUID, condition_type: ConditionType | None = None
+    ) -> list[SanctionCondition]:
         """Get pending conditions for a sanction."""
         query = select(SanctionCondition).where(
             and_(
@@ -77,8 +71,8 @@ class SanctionConditionRepository(BaseRepository[SanctionCondition]):
         return list(result.scalars().all())
 
     async def get_mandatory_pending(
-        self, sanction_id: UUID, condition_type: Optional[ConditionType] = None
-    ) -> List[SanctionCondition]:
+        self, sanction_id: UUID, condition_type: ConditionType | None = None
+    ) -> list[SanctionCondition]:
         """Get mandatory pending conditions."""
         query = select(SanctionCondition).where(
             and_(
@@ -93,9 +87,7 @@ class SanctionConditionRepository(BaseRepository[SanctionCondition]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def check_pre_disbursement_complied(
-        self, sanction_id: UUID
-    ) -> bool:
+    async def check_pre_disbursement_complied(self, sanction_id: UUID) -> bool:
         """Check if all mandatory pre-disbursement conditions are complied."""
         query = select(func.count(SanctionCondition.id)).where(
             and_(
@@ -111,8 +103,8 @@ class SanctionConditionRepository(BaseRepository[SanctionCondition]):
         return pending_count == 0
 
     async def get_overdue_conditions(
-        self, sanction_id: UUID, as_of_date: Optional[date] = None
-    ) -> List[SanctionCondition]:
+        self, sanction_id: UUID, as_of_date: date | None = None
+    ) -> list[SanctionCondition]:
         """Get overdue conditions."""
         if as_of_date is None:
             as_of_date = date.today()
@@ -137,7 +129,7 @@ class LoanSecurityRepository(BaseRepository[LoanSecurity]):
 
     async def get_by_sanction(
         self, sanction_id: UUID, include_inactive: bool = False
-    ) -> List[LoanSecurity]:
+    ) -> list[LoanSecurity]:
         """Get all securities for a sanction."""
         query = select(LoanSecurity).where(LoanSecurity.sanction_id == sanction_id)
         if not include_inactive:
@@ -147,7 +139,7 @@ class LoanSecurityRepository(BaseRepository[LoanSecurity]):
 
     async def get_by_category(
         self, sanction_id: UUID, security_category: SecurityCategory
-    ) -> List[LoanSecurity]:
+    ) -> list[LoanSecurity]:
         """Get securities by category."""
         query = select(LoanSecurity).where(
             and_(
@@ -159,9 +151,7 @@ class LoanSecurityRepository(BaseRepository[LoanSecurity]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_registered_securities(
-        self, sanction_id: UUID
-    ) -> List[LoanSecurity]:
+    async def get_registered_securities(self, sanction_id: UUID) -> list[LoanSecurity]:
         """Get securities that are registered."""
         query = select(LoanSecurity).where(
             and_(
@@ -173,9 +163,7 @@ class LoanSecurityRepository(BaseRepository[LoanSecurity]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_total_security_value(
-        self, sanction_id: UUID
-    ) -> float:
+    async def get_total_security_value(self, sanction_id: UUID) -> float:
         """Get total security value for a sanction."""
         query = select(func.sum(LoanSecurity.market_value)).where(
             and_(
@@ -186,9 +174,7 @@ class LoanSecurityRepository(BaseRepository[LoanSecurity]):
         result = await self.session.execute(query)
         return float(result.scalar() or 0)
 
-    async def get_total_forced_sale_value(
-        self, sanction_id: UUID
-    ) -> float:
+    async def get_total_forced_sale_value(self, sanction_id: UUID) -> float:
         """Get total forced sale value for a sanction."""
         query = select(func.sum(LoanSecurity.forced_sale_value)).where(
             and_(
@@ -201,7 +187,7 @@ class LoanSecurityRepository(BaseRepository[LoanSecurity]):
 
     async def get_expiring_insurance(
         self, sanction_id: UUID, days_ahead: int = 30
-    ) -> List[LoanSecurity]:
+    ) -> list[LoanSecurity]:
         """Get securities with insurance expiring soon."""
         from datetime import timedelta
 
@@ -227,7 +213,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
 
     async def get_by_number(
         self, sanction_number: str, organization_id: UUID
-    ) -> Optional[LoanSanction]:
+    ) -> LoanSanction | None:
         """Get sanction by number."""
         query = select(LoanSanction).where(
             and_(
@@ -239,9 +225,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_application(
-        self, application_id: UUID
-    ) -> Optional[LoanSanction]:
+    async def get_by_application(self, application_id: UUID) -> LoanSanction | None:
         """Get sanction for an application."""
         query = select(LoanSanction).where(
             and_(
@@ -252,9 +236,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_with_details(
-        self, sanction_id: UUID
-    ) -> Optional[LoanSanction]:
+    async def get_with_details(self, sanction_id: UUID) -> LoanSanction | None:
         """Get sanction with conditions and securities."""
         query = (
             select(LoanSanction)
@@ -278,15 +260,21 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        status: Optional[SanctionStatus] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> Tuple[List[LoanSanction], int]:
+        search: str | None = None,
+        entity_id: UUID | None = None,
+        status: SanctionStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> tuple[list[LoanSanction], int]:
         """Get all sanctions for an organization with filters."""
-        base_query = select(LoanSanction).where(
-            LoanSanction.organization_id == organization_id
+        base_query = (
+            select(LoanSanction)
+            .where(LoanSanction.organization_id == organization_id)
+            .options(
+                selectinload(LoanSanction.entity),
+                selectinload(LoanSanction.product),
+                selectinload(LoanSanction.application),
+            )
         )
 
         if not include_inactive:
@@ -294,9 +282,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
 
         if search:
             search_term = f"%{search}%"
-            base_query = base_query.where(
-                LoanSanction.sanction_number.ilike(search_term)
-            )
+            base_query = base_query.where(LoanSanction.sanction_number.ilike(search_term))
 
         if entity_id:
             base_query = base_query.where(LoanSanction.entity_id == entity_id)
@@ -316,11 +302,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
         total = total_result.scalar() or 0
 
         # Get paginated results
-        query = (
-            base_query.order_by(LoanSanction.sanction_date.desc())
-            .offset(skip)
-            .limit(limit)
-        )
+        query = base_query.order_by(LoanSanction.sanction_date.desc()).offset(skip).limit(limit)
         result = await self.session.execute(query)
         items = list(result.scalars().all())
 
@@ -328,25 +310,29 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[LoanSanction]:
+    ) -> list[LoanSanction]:
         """Get all sanctions for an entity."""
-        query = select(LoanSanction).where(LoanSanction.entity_id == entity_id)
+        query = (
+            select(LoanSanction)
+            .where(LoanSanction.entity_id == entity_id)
+            .options(
+                selectinload(LoanSanction.entity),
+                selectinload(LoanSanction.product),
+                selectinload(LoanSanction.application),
+            )
+        )
         if not include_inactive:
             query = query.where(LoanSanction.is_active == True)
         query = query.order_by(LoanSanction.sanction_date.desc())
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_active_sanctions(
-        self, entity_id: UUID
-    ) -> List[LoanSanction]:
+    async def get_active_sanctions(self, entity_id: UUID) -> list[LoanSanction]:
         """Get active sanctions for an entity."""
         query = select(LoanSanction).where(
             and_(
                 LoanSanction.entity_id == entity_id,
-                LoanSanction.status.in_(
-                    [SanctionStatus.ACTIVE, SanctionStatus.ACCEPTED]
-                ),
+                LoanSanction.status.in_([SanctionStatus.ACTIVE, SanctionStatus.ACCEPTED]),
                 LoanSanction.is_active == True,
             )
         )
@@ -355,7 +341,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
 
     async def get_expiring_sanctions(
         self, organization_id: UUID, days_ahead: int = 30
-    ) -> List[LoanSanction]:
+    ) -> list[LoanSanction]:
         """Get sanctions expiring soon."""
         from datetime import timedelta
 
@@ -372,9 +358,7 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_pending_acceptance(
-        self, organization_id: UUID
-    ) -> List[LoanSanction]:
+    async def get_pending_acceptance(self, organization_id: UUID) -> list[LoanSanction]:
         """Get sanctions pending borrower acceptance."""
         query = select(LoanSanction).where(
             and_(
@@ -420,8 +404,8 @@ class LoanSanctionRepository(BaseRepository[LoanSanction]):
     async def get_total_sanctioned_amount(
         self,
         organization_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> float:
         """Get total sanctioned amount for an organization."""
         query = select(func.sum(LoanSanction.sanctioned_amount)).where(

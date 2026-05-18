@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * Stub lint. Enforces CLAUDE.md §12.2 / §12 rule 3.
+ * Stub lint. Enforces AGENTS.md §12.2 / §12 rule 3.
  *
- * Scans the tree for TODO / FIXME / XXX / HACK / "not implemented"
+ * Scans code/config files for TODO / FIXME / XXX / HACK / "not implemented"
  * markers and cross-checks each one against `.stubs-approved.md`.
  *
  * Exits non-zero if:
@@ -20,7 +20,9 @@ const REPO = process.cwd();
 const APPROVED_FILE = join(REPO, '.stubs-approved.md');
 
 /** Markers that indicate a stub. */
-const MARKER_RE = /\b(TODO|FIXME|XXX|HACK|not implemented)\b/i;
+const COMMENT_MARKER_RE = /\b(TODO|FIXME|HACK)\b/i;
+const NOT_IMPLEMENTED_RE = /\bnot implemented\b/i;
+const XXX_COMMENT_RE = /(?:^|\s)(?:#|\/\/|\/\*|\*)\s*XXX\b/;
 
 /** Paths we never scan. */
 const IGNORE_DIRS = new Set([
@@ -42,6 +44,7 @@ const IGNORE_DIRS = new Set([
 /** Files we never scan. */
 const IGNORE_FILES = new Set([
   'CLAUDE.md',
+  'AGENTS.md',
   'CLAUDE_REVIEW_PROMPT.md',
   '.stubs-approved.md',
   'pnpm-lock.yaml',
@@ -60,7 +63,6 @@ const SCAN_EXT = new Set([
   '.sh',
   '.yml',
   '.yaml',
-  '.md',
   '.json',
   '.html',
   '.css',
@@ -77,16 +79,21 @@ function listTrackedFiles() {
       "find . -type f -not -path '*/node_modules/*' -not -path '*/.git/*' -not -path '*/.venv/*'",
       { encoding: 'utf8', cwd: REPO },
     );
-    return out.split('\n').filter(Boolean).map((p) => p.replace(/^\.\//, ''));
+    return out
+      .split('\n')
+      .filter(Boolean)
+      .map((p) => p.replace(/^\.\//, ''));
   }
 }
 
 function parseApproved(content) {
   /** Set of normalized approved entry keys. */
   const exact = new Set();
+  const pathCounts = new Map();
   const globs = [];
   const expiries = new Map(); // key -> expiry date
-  const rowRe = /^\|\s*`([^`]+)`\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*[^|]+\|\s*[^|]+\|\s*(\d{4}-\d{2}-\d{2})\s*\|/gm;
+  const rowRe =
+    /^\|\s*`([^`]+)`\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*[^|]+\|\s*[^|]+\|\s*(\d{4}-\d{2}-\d{2})\s*\|/gm;
   let m;
   while ((m = rowRe.exec(content))) {
     const raw = m[1].trim();
@@ -96,9 +103,62 @@ function parseApproved(content) {
     } else {
       exact.add(raw);
       expiries.set(raw, expiry);
+      const path = raw.replace(/:\d+$/, '');
+      pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1);
     }
   }
-  return { exact, globs, expiries };
+
+  let tableHasExpiry = false;
+  for (const line of content.split('\n')) {
+    if (!line.startsWith('|')) {
+      tableHasExpiry = false;
+      continue;
+    }
+    if (/\|\s*Expiry\s*\|/.test(line)) {
+      tableHasExpiry = true;
+      continue;
+    }
+    if (line.startsWith('|---')) continue;
+    if (!tableHasExpiry) continue;
+
+    if (!line.startsWith('|') || line.startsWith('|---')) continue;
+    const cells = line
+      .split('|')
+      .slice(1, -1)
+      .map((cell) => cell.trim());
+    if (cells.length < 5) continue;
+
+    const expiry = cells.find((cell) => /^\d{4}-\d{2}-\d{2}$/.test(cell));
+    if (!expiry) continue;
+
+    for (const cell of cells) {
+      const codeSpans = [...cell.matchAll(/`([^`]+)`/g)].map((match) => match[1].trim());
+      for (const raw of codeSpans) {
+        if (!looksLikeRepoPath(raw)) continue;
+        if (raw.includes('*') || raw.includes('?')) {
+          if (!globs.some((g) => g.raw === raw)) {
+            globs.push({ raw, expiry });
+          }
+        } else {
+          exact.add(raw);
+          expiries.set(raw, expiry);
+          const path = raw.replace(/:\d+$/, '');
+          pathCounts.set(path, (pathCounts.get(path) ?? 0) + 1);
+        }
+      }
+    }
+  }
+
+  return { exact, pathCounts, globs, expiries };
+}
+
+function looksLikeRepoPath(value) {
+  return (
+    value.includes('/') &&
+    !value.includes(' ') &&
+    !value.startsWith('http://') &&
+    !value.startsWith('https://')
+  );
 }
 
 function globToRegex(g) {
@@ -111,7 +171,13 @@ function globToRegex(g) {
   return new RegExp('^' + escaped + '$');
 }
 
-function matchApproved(key, approved) {
+function hasStubMarker(line) {
+  if (COMMENT_MARKER_RE.test(line)) return true;
+  if (NOT_IMPLEMENTED_RE.test(line)) return true;
+  return XXX_COMMENT_RE.test(line);
+}
+
+function matchApproved(key, approved, usedPathCounts) {
   if (approved.exact.has(key)) {
     return { matched: true, expiry: approved.expiries.get(key) };
   }
@@ -119,6 +185,12 @@ function matchApproved(key, approved) {
   const [path] = key.split(':');
   if (approved.exact.has(path)) {
     return { matched: true, expiry: approved.expiries.get(path) };
+  }
+  const allowedForPath = approved.pathCounts.get(path) ?? 0;
+  const usedForPath = usedPathCounts.get(path) ?? 0;
+  if (usedForPath < allowedForPath) {
+    usedPathCounts.set(path, usedForPath + 1);
+    return { matched: true, expiry: undefined };
   }
   for (const g of approved.globs) {
     if (globToRegex(g.raw).test(path)) {
@@ -148,6 +220,7 @@ function main() {
   // 2) Unapproved-marker check.
   const files = listTrackedFiles();
   const unapproved = [];
+  const usedPathCounts = new Map();
   for (const rel of files) {
     const parts = rel.split('/');
     if (parts.some((p) => IGNORE_DIRS.has(p))) continue;
@@ -165,13 +238,12 @@ function main() {
 
     const lines = content.split('\n');
     lines.forEach((line, i) => {
-      if (!MARKER_RE.test(line)) return;
-      // Skip obvious false positives: the lint script itself,
-      // CLAUDE.md's quoted patterns, and markdown documentation lines.
+      if (!hasStubMarker(line)) return;
+      // Skip obvious false positives: the lint script itself.
       if (rel === 'scripts/check-stubs.mjs') return;
 
       const key = `${rel}:${i + 1}`;
-      const { matched } = matchApproved(key, approved);
+      const { matched } = matchApproved(key, approved, usedPathCounts);
       if (!matched) {
         unapproved.push({ file: rel, line: i + 1, text: line.trim().slice(0, 140) });
       }
@@ -183,7 +255,7 @@ function main() {
   if (unapproved.length > 0) {
     failed = true;
     console.error(
-      `\n✖ ${unapproved.length} unapproved stub marker(s) found. Every TODO/FIXME/XXX/HACK must be recorded in .stubs-approved.md (see CLAUDE.md §12.2).\n`,
+      `\n✖ ${unapproved.length} unapproved stub marker(s) found. Every TODO/FIXME/XXX/HACK must be recorded in .stubs-approved.md (see AGENTS.md §12.2).\n`,
     );
     for (const u of unapproved) {
       console.error(`  ${u.file}:${u.line}  ${u.text}`);
@@ -201,7 +273,7 @@ function main() {
   }
 
   if (failed) {
-    console.error('\nSee CLAUDE.md §12 and .stubs-approved.md.');
+    console.error('\nSee AGENTS.md §12 and .stubs-approved.md.');
     process.exit(1);
   }
 

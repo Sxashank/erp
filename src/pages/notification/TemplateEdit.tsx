@@ -2,19 +2,16 @@
  * Edit Notification Template Page
  */
 
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { ArrowLeft, Save, Eye, Plus, X } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { useParams, useNavigate } from 'react-router-dom';
+import { z } from 'zod';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -22,13 +19,7 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
   FormControl,
@@ -38,11 +29,21 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { templateApi } from '@/services/notificationApi';
-import { NotificationTemplate, NotificationChannel } from '@/types/notification';
+import type { NotificationTemplate, NotificationChannel } from '@/types/notification';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const formSchema = z.object({
   name: z.string().min(1, 'Name is required').max(255),
@@ -164,13 +165,13 @@ export default function TemplateEdit() {
       await templateApi.updateTemplate(id!, {
         ...data,
         variables: variables.length > 0 ? variables : undefined,
-      } as any);
+      } as unknown as Parameters<typeof templateApi.updateTemplate>[1]);
       toast({ title: 'Template updated successfully' });
       navigate('/admin/notifications/templates');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to update template',
+        description: getErrorMessage(error, 'Failed to update template'),
         variant: 'destructive',
       });
     } finally {

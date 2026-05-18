@@ -1,13 +1,20 @@
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
+import { useForm } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { z } from 'zod';
+
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
 import { WizardContainer } from '@/components/lending/wizard/WizardContainer';
 import { WizardStep } from '@/components/lending/wizard/WizardStep';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,7 +22,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -24,13 +30,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { AmountInput } from '@/components/lending/common/AmountInput';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const disbursementSchema = z.object({
   sanctionId: z.string().min(1, 'Sanction is required'),
@@ -46,35 +46,35 @@ const disbursementSchema = z.object({
 
 type DisbursementFormData = z.infer<typeof disbursementSchema>;
 
-// Mock data
+// Sanction context is keyed off `?sanctionId=` in the URL. The wizard
+// loads with empty defaults until the BE endpoint that prefills the
+// sanction snapshot (remaining amount, conditions, milestones, beneficiary
+// bank accounts) is wired. For now, the user enters everything manually.
 const mockSanction = {
-  id: '1',
-  sanctionNumber: 'SMFC/SAN/2025/00001',
-  entityName: 'ABC Industries Private Limited',
-  sanctionedAmount: 250000000,
-  disbursedAmount: 50000000,
-  remainingAmount: 200000000,
-  conditions: [
-    { id: 'C1', condition: 'Creation of mortgage on primary security', status: 'COMPLETED' },
-    { id: 'C2', condition: 'Submission of insurance policy', status: 'COMPLETED' },
-    { id: 'C3', condition: 'Equity infusion of 20%', status: 'PENDING' },
-    { id: 'C4', condition: 'Board resolution', status: 'COMPLETED' },
-  ],
-  milestones: [
-    { id: 'M1', milestone: 'Land acquisition', amount: 50000000, status: 'COMPLETED' },
-    { id: 'M2', milestone: 'Civil construction - Phase 1', amount: 75000000, status: 'PENDING' },
-    { id: 'M3', milestone: 'Plant & machinery', amount: 100000000, status: 'PENDING' },
-    { id: 'M4', milestone: 'Civil construction - Phase 2', amount: 25000000, status: 'PENDING' },
-  ],
-  bankAccounts: [
-    { id: 'BA1', bankName: 'HDFC Bank', accountNumber: 'xxxx1234', ifsc: 'HDFC0001234', isPrimary: true },
-    { id: 'BA2', bankName: 'ICICI Bank', accountNumber: 'xxxx5678', ifsc: 'ICIC0005678', isPrimary: false },
-  ],
+  id: '',
+  sanctionNumber: '',
+  entityName: '',
+  sanctionedAmount: 0,
+  disbursedAmount: 0,
+  remainingAmount: 0,
+  conditions: [] as { id: string; condition: string; status: string }[],
+  milestones: [] as { id: string; milestone: string; amount: number; status: string }[],
+  bankAccounts: [] as {
+    id: string;
+    bankName: string;
+    accountNumber: string;
+    ifsc: string;
+    isPrimary: boolean;
+  }[],
 };
 
 const steps = [
   { id: 'sanction', title: 'Select Sanction', description: 'Choose sanction for disbursement' },
-  { id: 'conditions', title: 'Verify Conditions', description: 'Verify pre-disbursement conditions' },
+  {
+    id: 'conditions',
+    title: 'Verify Conditions',
+    description: 'Verify pre-disbursement conditions',
+  },
   { id: 'amount', title: 'Disbursement Amount', description: 'Enter amount and milestone' },
   { id: 'payment', title: 'Payment Details', description: 'Select payment mode and account' },
   { id: 'review', title: 'Review & Submit', description: 'Review and submit request' },
@@ -98,11 +98,14 @@ export default function DisbursementWizard() {
     },
   });
 
-  const { watch, setValue, handleSubmit, formState: { errors } } = form;
+  const {
+    watch,
+    setValue,
+    handleSubmit,
+    formState: { errors },
+  } = form;
 
-  const selectedMilestone = mockSanction.milestones.find(
-    (m) => m.id === watch('milestoneId')
-  );
+  const selectedMilestone = mockSanction.milestones.find((m) => m.id === watch('milestoneId'));
 
   const onSubmit = async (data: DisbursementFormData) => {
     logger.debug('Disbursement data:', data);
@@ -138,7 +141,9 @@ export default function DisbursementWizard() {
         <Card>
           <CardHeader>
             <CardTitle>Sanction Details</CardTitle>
-            <CardDescription>Disbursement for sanction {mockSanction.sanctionNumber}</CardDescription>
+            <CardDescription>
+              Disbursement for sanction {mockSanction.sanctionNumber}
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
@@ -175,15 +180,15 @@ export default function DisbursementWizard() {
 
             <div>
               <Label className="text-muted-foreground">Utilization</Label>
-              <div className="mt-2 h-3 bg-gray-200 rounded-full overflow-hidden">
+              <div className="mt-2 h-3 overflow-hidden rounded-full bg-gray-200">
                 <div
-                  className="h-full bg-blue-500 rounded-full"
+                  className="h-full rounded-full bg-blue-500"
                   style={{
                     width: `${(mockSanction.disbursedAmount / mockSanction.sanctionedAmount) * 100}%`,
                   }}
                 />
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 <PercentageDisplay
                   value={(mockSanction.disbursedAmount / mockSanction.sanctionedAmount) * 100}
                 />{' '}
@@ -228,7 +233,7 @@ export default function DisbursementWizard() {
                           } else {
                             setValue(
                               'conditionsVerified',
-                              current.filter((id) => id !== cond.id)
+                              current.filter((id) => id !== cond.id),
                             );
                           }
                         }}
@@ -238,9 +243,7 @@ export default function DisbursementWizard() {
                     <TableCell>
                       <Badge
                         variant={cond.status === 'COMPLETED' ? 'default' : 'secondary'}
-                        className={
-                          cond.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : ''
-                        }
+                        className={cond.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : ''}
                       >
                         {cond.status}
                       </Badge>
@@ -250,9 +253,7 @@ export default function DisbursementWizard() {
               </TableBody>
             </Table>
             {errors.conditionsVerified && (
-              <p className="text-sm text-destructive mt-2">
-                {errors.conditionsVerified.message}
-              </p>
+              <p className="mt-2 text-sm text-destructive">{errors.conditionsVerified.message}</p>
             )}
           </CardContent>
         </Card>
@@ -286,7 +287,8 @@ export default function DisbursementWizard() {
                     .filter((m) => m.status === 'PENDING')
                     .map((milestone) => (
                       <SelectItem key={milestone.id} value={milestone.id}>
-                        {milestone.milestone} - <AmountDisplay amount={milestone.amount} abbreviated />
+                        {milestone.milestone} -{' '}
+                        <AmountDisplay amount={milestone.amount} abbreviated />
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -304,20 +306,15 @@ export default function DisbursementWizard() {
                 Maximum available:{' '}
                 <AmountDisplay amount={mockSanction.remainingAmount} abbreviated />
               </p>
-              {errors.amount && (
-                <p className="text-sm text-destructive">{errors.amount.message}</p>
-              )}
+              {errors.amount && <p className="text-sm text-destructive">{errors.amount.message}</p>}
             </div>
 
             {selectedMilestone && (
-              <div className="p-4 bg-muted rounded-lg">
+              <div className="rounded-lg bg-muted p-4">
                 <h4 className="font-medium">Selected Milestone</h4>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {selectedMilestone.milestone}
-                </p>
-                <p className="text-sm mt-1">
-                  Budgeted Amount:{' '}
-                  <AmountDisplay amount={selectedMilestone.amount} showFull />
+                <p className="mt-1 text-sm text-muted-foreground">{selectedMilestone.milestone}</p>
+                <p className="mt-1 text-sm">
+                  Budgeted Amount: <AmountDisplay amount={selectedMilestone.amount} showFull />
                 </p>
               </div>
             )}
@@ -359,7 +356,7 @@ export default function DisbursementWizard() {
                 {mockSanction.bankAccounts.map((account) => (
                   <div
                     key={account.id}
-                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    className={`cursor-pointer rounded-lg border p-4 transition-colors ${
                       watch('bankAccountId') === account.id
                         ? 'border-primary bg-primary/5'
                         : 'hover:border-primary/50'
@@ -373,9 +370,7 @@ export default function DisbursementWizard() {
                           A/c: {account.accountNumber} | IFSC: {account.ifsc}
                         </p>
                       </div>
-                      {account.isPrimary && (
-                        <Badge variant="outline">Primary</Badge>
-                      )}
+                      {account.isPrimary && <Badge variant="outline">Primary</Badge>}
                     </div>
                   </div>
                 ))}
@@ -444,7 +439,7 @@ export default function DisbursementWizard() {
               <Label className="text-muted-foreground">Beneficiary Account</Label>
               {(() => {
                 const account = mockSanction.bankAccounts.find(
-                  (a) => a.id === watch('bankAccountId')
+                  (a) => a.id === watch('bankAccountId'),
                 );
                 return account ? (
                   <p className="font-medium">
@@ -457,8 +452,8 @@ export default function DisbursementWizard() {
             <div>
               <Label className="text-muted-foreground">Conditions Verified</Label>
               <p className="font-medium">
-                {watch('conditionsVerified')?.length || 0} of{' '}
-                {mockSanction.conditions.length} conditions
+                {watch('conditionsVerified')?.length || 0} of {mockSanction.conditions.length}{' '}
+                conditions
               </p>
             </div>
 
@@ -469,11 +464,10 @@ export default function DisbursementWizard() {
               </div>
             )}
 
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
               <p className="text-sm text-yellow-800">
-                By submitting this request, you confirm that all pre-disbursement conditions
-                have been verified and the disbursement is in accordance with the sanction
-                terms.
+                By submitting this request, you confirm that all pre-disbursement conditions have
+                been verified and the disbursement is in accordance with the sanction terms.
               </p>
             </div>
           </CardContent>

@@ -64,7 +64,7 @@ class VendorProfileService:
         update_data["updated_at"] = datetime.utcnow()
 
         vendor = await self.vendor_repo.update(vendor, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return vendor
 
@@ -106,7 +106,7 @@ class VendorProfileService:
         vendor.bank_account_number = data.account_number
         vendor.bank_ifsc_code = data.ifsc_code
 
-        await self.session.commit()
+        await self.session.flush()
 
         return {
             "id": vendor_id,
@@ -138,7 +138,7 @@ class VendorProfileService:
         if "ifsc_code" in update_data:
             vendor.bank_ifsc_code = update_data["ifsc_code"]
 
-        await self.session.commit()
+        await self.session.flush()
 
         return {
             "id": vendor_id,
@@ -190,7 +190,7 @@ class VendorProfileService:
         }
 
         user = await self.user_repo.create(user_data)
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send invitation email to user
 
@@ -212,7 +212,7 @@ class VendorProfileService:
 
         update_data = data.model_dump(exclude_unset=True)
         user = await self.user_repo.update(user, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return user
 
@@ -235,7 +235,7 @@ class VendorProfileService:
         user.status = VendorPortalUserStatus.DEACTIVATED
         user.deactivated_at = datetime.utcnow()
 
-        await self.session.commit()
+        await self.session.flush()
 
     async def get_portal_users(
         self,
@@ -276,7 +276,7 @@ class VendorProfileService:
         })
 
         user = await self.user_repo.create(user_data)
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send invitation email
 
@@ -298,7 +298,7 @@ class VendorProfileService:
 
         update_data = data.model_dump(exclude_unset=True)
         user = await self.user_repo.update(user, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return user
 
@@ -318,7 +318,7 @@ class VendorProfileService:
 
         perm_data = permissions.model_dump()
         user = await self.user_repo.update(user, perm_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return user
 
@@ -339,7 +339,7 @@ class VendorProfileService:
         user.status = VendorPortalUserStatus.ACTIVE
         user.activated_at = datetime.utcnow()
 
-        await self.session.commit()
+        await self.session.flush()
 
         return user
 
@@ -364,7 +364,7 @@ class VendorProfileService:
         user.deactivated_at = datetime.utcnow()
         user.deactivation_reason = reason
 
-        await self.session.commit()
+        await self.session.flush()
 
         return user
 
@@ -391,6 +391,6 @@ class VendorProfileService:
 
         user.is_primary_contact = True
 
-        await self.session.commit()
+        await self.session.flush()
 
         return user

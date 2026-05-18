@@ -1,10 +1,5 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import {
-  ArrowLeft,
   Target,
   Save,
   Send,
@@ -16,12 +11,16 @@ import {
   TrendingUp,
   AlertCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
+import { z } from 'zod';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Slider } from '@/components/ui/slider';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -31,20 +30,25 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Progress } from '@/components/ui/progress';
+import { Slider } from '@/components/ui/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
 import { formatDate } from '@/lib/utils';
 
-import { logger } from '@/lib/logger';
 const selfAppraisalSchema = z.object({
-  goals: z.array(z.object({
-    goal_id: z.string(),
-    self_rating: z.number().min(1).max(5),
-    self_progress: z.number().min(0).max(100),
-    self_comments: z.string().min(20, 'Please provide detailed comments'),
-    achievements: z.string().optional(),
-    challenges: z.string().optional(),
-  })),
+  goals: z.array(
+    z.object({
+      goal_id: z.string(),
+      self_rating: z.number().min(1).max(5),
+      self_progress: z.number().min(0).max(100),
+      self_comments: z.string().min(20, 'Please provide detailed comments'),
+      achievements: z.string().optional(),
+      challenges: z.string().optional(),
+    }),
+  ),
   overall_summary: z.string().min(50, 'Summary must be at least 50 characters'),
   key_achievements: z.string().min(30, 'Please list your key achievements'),
   areas_of_improvement: z.string().min(20, 'Please identify areas for improvement'),
@@ -65,73 +69,23 @@ interface Goal {
   key_results: string;
 }
 
-// Mock data
-const cycleInfo = {
-  id: 'cycle-001',
-  name: 'Annual Performance Review 2024-25',
-  self_appraisal_deadline: '2025-01-31',
-};
+interface CycleInfo {
+  id: string;
+  name: string;
+  self_appraisal_deadline: string;
+}
 
-const employeeInfo = {
-  id: 'emp-001',
-  name: 'Rahul Sharma',
-  code: 'EMP001',
-  department: 'Engineering',
-  designation: 'Senior Developer',
-};
+interface EmployeeInfo {
+  id: string;
+  name: string;
+  code: string;
+  department: string;
+  designation: string;
+}
 
-const goals: Goal[] = [
-  {
-    id: '1',
-    title: 'Deliver Project Alpha on time',
-    description: 'Lead and deliver the Project Alpha microservices migration',
-    category: 'BUSINESS',
-    weightage: 30,
-    target_date: '2024-09-30',
-    progress: 85,
-    key_results: '1. Complete API migration by Q2\n2. Achieve 99.9% uptime\n3. Zero P1 bugs in production',
-  },
-  {
-    id: '2',
-    title: 'Improve code quality metrics',
-    description: 'Improve overall code coverage and reduce technical debt',
-    category: 'FUNCTIONAL',
-    weightage: 25,
-    target_date: '2025-03-31',
-    progress: 70,
-    key_results: '1. Achieve 80% code coverage\n2. Reduce SonarQube issues by 50%',
-  },
-  {
-    id: '3',
-    title: 'Mentor junior developers',
-    description: 'Mentor and upskill 2 junior developers in the team',
-    category: 'BEHAVIORAL',
-    weightage: 20,
-    target_date: '2025-03-31',
-    progress: 60,
-    key_results: '1. Conduct weekly 1:1 sessions\n2. Assign stretch projects',
-  },
-  {
-    id: '4',
-    title: 'AWS Certification',
-    description: 'Obtain AWS Solutions Architect Associate certification',
-    category: 'DEVELOPMENT',
-    weightage: 15,
-    target_date: '2024-12-31',
-    progress: 100,
-    key_results: '1. Complete AWS training\n2. Pass certification exam',
-  },
-  {
-    id: '5',
-    title: 'Process Improvement',
-    description: 'Identify and implement at least 2 process improvements',
-    category: 'FUNCTIONAL',
-    weightage: 10,
-    target_date: '2025-03-31',
-    progress: 50,
-    key_results: '1. Document improvement proposals\n2. Get approval and implement',
-  },
-];
+const getCycleInfo = (): CycleInfo | null => null;
+const getEmployeeInfo = (): EmployeeInfo | null => null;
+const goals: Goal[] = [];
 
 const getCategoryColor = (category: string) => {
   const colors: Record<string, string> = {
@@ -162,11 +116,34 @@ const renderStars = (rating: number, onChange?: (value: number) => void) => {
 export default function SelfAppraisal() {
   const navigate = useNavigate();
   const { cycleId } = useParams();
-  const [goalAppraisals, setGoalAppraisals] = useState<Record<string, { rating: number; progress: number; comments: string; achievements: string; challenges: string }>>(
-    goals.reduce((acc, goal) => ({
-      ...acc,
-      [goal.id]: { rating: 0, progress: goal.progress, comments: '', achievements: '', challenges: '' },
-    }), {})
+  const { toast } = useToast();
+  const cycleInfo = getCycleInfo();
+  const employeeInfo = getEmployeeInfo();
+  const [goalAppraisals, setGoalAppraisals] = useState<
+    Record<
+      string,
+      {
+        rating: number;
+        progress: number;
+        comments: string;
+        achievements: string;
+        challenges: string;
+      }
+    >
+  >(
+    goals.reduce(
+      (acc, goal) => ({
+        ...acc,
+        [goal.id]: {
+          rating: 0,
+          progress: goal.progress,
+          comments: '',
+          achievements: '',
+          challenges: '',
+        },
+      }),
+      {},
+    ),
   );
   const [overallData, setOverallData] = useState({
     summary: '',
@@ -176,22 +153,50 @@ export default function SelfAppraisal() {
     aspirations: '',
   });
 
+  if (!cycleInfo || !employeeInfo) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Self Appraisal"
+          subtitle={cycleId ? `Cycle ${cycleId}` : 'Cycle details unavailable'}
+          breadcrumbs={[
+            { label: 'Appraisal Cycles', to: '/admin/hris/performance/cycles' },
+            { label: 'Self Appraisal' },
+          ]}
+        />
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Self appraisal data is pending backend HRIS performance endpoints.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const handleSaveDraft = () => {
     logger.debug('Saving draft...', { goalAppraisals, overallData });
-    alert('Draft saved successfully');
+    toast({ title: 'Draft saved successfully' });
   };
 
   const handleSubmit = () => {
     // Validate all goals have ratings and comments
     const incompleteGoals = goals.filter(
-      (g) => !goalAppraisals[g.id]?.rating || !goalAppraisals[g.id]?.comments
+      (g) => !goalAppraisals[g.id]?.rating || !goalAppraisals[g.id]?.comments,
     );
     if (incompleteGoals.length > 0) {
-      alert('Please complete ratings and comments for all goals');
+      toast({
+        title: 'Goal appraisal incomplete',
+        description: 'Please complete ratings and comments for all goals.',
+        variant: 'destructive',
+      });
       return;
     }
     if (!overallData.summary || !overallData.achievements || !overallData.improvements) {
-      alert('Please complete all required fields in the Overall Assessment section');
+      toast({
+        title: 'Overall assessment incomplete',
+        description: 'Please complete all required fields in the Overall Assessment section.',
+        variant: 'destructive',
+      });
       return;
     }
     logger.debug('Submitting...', { goalAppraisals, overallData });
@@ -213,31 +218,29 @@ export default function SelfAppraisal() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/hris/performance/cycles')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Self Appraisal</h1>
-            <p className="text-muted-foreground">{cycleInfo.name}</p>
+      <PageHeader
+        title="Self Appraisal"
+        subtitle={cycleInfo.name}
+        breadcrumbs={[
+          { label: 'Appraisal Cycles', to: '/admin/hris/performance/cycles' },
+          { label: 'Self Appraisal' },
+        ]}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleSaveDraft}>
+              <Save className="mr-2 h-4 w-4" />
+              Save Draft
+            </Button>
+            <Button onClick={handleSubmit}>
+              <Send className="mr-2 h-4 w-4" />
+              Submit Appraisal
+            </Button>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handleSaveDraft}>
-            <Save className="h-4 w-4 mr-2" />
-            Save Draft
-          </Button>
-          <Button onClick={handleSubmit}>
-            <Send className="h-4 w-4 mr-2" />
-            Submit Appraisal
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Summary Info */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Employee</div>
@@ -284,16 +287,17 @@ export default function SelfAppraisal() {
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Self Assessment Guidelines</AlertTitle>
             <AlertDescription>
-              Rate your performance against each goal objectively. Provide specific examples and evidence to support your ratings.
+              Rate your performance against each goal objectively. Provide specific examples and
+              evidence to support your ratings.
             </AlertDescription>
           </Alert>
 
           {goals.map((goal) => (
             <Card key={goal.id}>
               <CardContent className="pt-6">
-                <div className="flex items-start justify-between mb-4">
+                <div className="mb-4 flex items-start justify-between">
                   <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
+                    <div className="mb-1 flex items-center gap-2">
                       <h3 className="font-semibold">{goal.title}</h3>
                       <Badge variant="secondary" className={getCategoryColor(goal.category)}>
                         {goal.category}
@@ -304,17 +308,17 @@ export default function SelfAppraisal() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   {/* Left: Progress & Rating */}
                   <div className="space-y-4">
                     <div>
                       <label className="text-sm font-medium">Self Rating</label>
-                      <div className="flex items-center gap-4 mt-2">
+                      <div className="mt-2 flex items-center gap-4">
                         {renderStars(goalAppraisals[goal.id]?.rating || 0, (value) =>
                           setGoalAppraisals({
                             ...goalAppraisals,
                             [goal.id]: { ...goalAppraisals[goal.id], rating: value },
-                          })
+                          }),
                         )}
                         <span className="text-sm text-muted-foreground">
                           {goalAppraisals[goal.id]?.rating || 0}/5
@@ -324,7 +328,7 @@ export default function SelfAppraisal() {
 
                     <div>
                       <label className="text-sm font-medium">Progress Update</label>
-                      <div className="flex items-center gap-4 mt-2">
+                      <div className="mt-2 flex items-center gap-4">
                         <Slider
                           value={[goalAppraisals[goal.id]?.progress || goal.progress]}
                           max={100}
@@ -343,13 +347,13 @@ export default function SelfAppraisal() {
                       </div>
                       <Progress
                         value={goalAppraisals[goal.id]?.progress || goal.progress}
-                        className="h-2 mt-2"
+                        className="mt-2 h-2"
                       />
                     </div>
 
-                    <div className="p-3 bg-muted rounded-lg">
-                      <p className="text-xs font-medium text-muted-foreground mb-1">Key Results</p>
-                      <p className="text-sm whitespace-pre-line">{goal.key_results}</p>
+                    <div className="rounded-lg bg-muted p-3">
+                      <p className="mb-1 text-xs font-medium text-muted-foreground">Key Results</p>
+                      <p className="whitespace-pre-line text-sm">{goal.key_results}</p>
                     </div>
                   </div>
 
@@ -429,7 +433,7 @@ export default function SelfAppraisal() {
               </div>
 
               <div>
-                <label className="text-sm font-medium flex items-center gap-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
                   <Award className="h-4 w-4" />
                   Key Achievements *
                 </label>
@@ -442,7 +446,7 @@ export default function SelfAppraisal() {
               </div>
 
               <div>
-                <label className="text-sm font-medium flex items-center gap-2">
+                <label className="flex items-center gap-2 text-sm font-medium">
                   <TrendingUp className="h-4 w-4" />
                   Areas for Improvement *
                 </label>
@@ -454,7 +458,7 @@ export default function SelfAppraisal() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div>
                   <label className="text-sm font-medium">Training & Development Needs</label>
                   <Textarea
@@ -471,7 +475,9 @@ export default function SelfAppraisal() {
                     placeholder="Share your career goals and aspirations..."
                     className="mt-2"
                     value={overallData.aspirations}
-                    onChange={(e) => setOverallData({ ...overallData, aspirations: e.target.value })}
+                    onChange={(e) =>
+                      setOverallData({ ...overallData, aspirations: e.target.value })
+                    }
                   />
                 </div>
               </div>

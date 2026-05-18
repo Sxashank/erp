@@ -5,11 +5,11 @@ import re
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.dms import DMSTag, DMSDocumentTag
 from app.schemas.dms.tag import (
@@ -19,6 +19,7 @@ from app.schemas.dms.tag import (
     TagListResponse,
     TagDocumentsRequest,
 )
+from app.core.exceptions import BadRequestException, NotFoundException
 
 logger = logging.getLogger(__name__)
 
@@ -33,10 +34,10 @@ def slugify(text: str) -> str:
     return text
 
 
-@router.post("", response_model=TagResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=TagResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_tag(
     data: TagCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new tag."""
@@ -49,9 +50,9 @@ async def create_tag(
         )
     )
     if result.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Tag with this name already exists",
+            error_code="TAG_WITH_THIS_NAME_ALREADY_EXISTS",
         )
 
     tag = DMSTag(
@@ -72,13 +73,13 @@ async def create_tag(
     return tag
 
 
-@router.get("", response_model=TagListResponse)
+@router.get("", response_model=TagListResponse, response_model_by_alias=True)
 async def list_tags(
     category: Optional[str] = Query(None),
     search: Optional[str] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List tags with filters."""
@@ -113,7 +114,7 @@ async def list_tags(
 
 @router.get("/categories")
 async def list_tag_categories(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get list of tag categories."""
@@ -131,10 +132,10 @@ async def list_tag_categories(
     return categories
 
 
-@router.get("/{tag_id}", response_model=TagResponse)
+@router.get("/{tag_id}", response_model=TagResponse, response_model_by_alias=True)
 async def get_tag(
     tag_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific tag."""
@@ -146,18 +147,15 @@ async def get_tag(
     )
     tag = result.scalar_one_or_none()
     if not tag:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tag not found",
-        )
+        raise NotFoundException(detail="Tag not found", error_code="TAG_NOT_FOUND")
     return tag
 
 
-@router.patch("/{tag_id}", response_model=TagResponse)
+@router.patch("/{tag_id}", response_model=TagResponse, response_model_by_alias=True)
 async def update_tag(
     tag_id: UUID,
     data: TagUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update a tag."""
@@ -169,10 +167,7 @@ async def update_tag(
     )
     tag = result.scalar_one_or_none()
     if not tag:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tag not found",
-        )
+        raise NotFoundException(detail="Tag not found", error_code="TAG_NOT_FOUND")
 
     if data.name is not None:
         # Check for duplicate name
@@ -185,9 +180,9 @@ async def update_tag(
             )
         )
         if dup_result.scalar_one_or_none():
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestException(
                 detail="Tag with this name already exists",
+                error_code="TAG_WITH_THIS_NAME_ALREADY_EXISTS",
             )
         tag.name = data.name
         tag.slug = slugify(data.name)
@@ -212,7 +207,7 @@ async def update_tag(
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_tag(
     tag_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a tag."""
@@ -224,10 +219,7 @@ async def delete_tag(
     )
     tag = result.scalar_one_or_none()
     if not tag:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Tag not found",
-        )
+        raise NotFoundException(detail="Tag not found", error_code="TAG_NOT_FOUND")
 
     # Soft delete
     tag.soft_delete(current_user.id)
@@ -239,7 +231,7 @@ async def get_tag_documents(
     tag_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get documents with a specific tag."""
@@ -291,7 +283,7 @@ async def get_tag_documents(
 @router.post("/bulk-tag")
 async def bulk_tag_documents(
     data: TagDocumentsRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add multiple tags to multiple documents."""

@@ -115,17 +115,14 @@ async def test_balance_across_many_lines(service: GLPostingService) -> None:
 @pytest.mark.asyncio
 async def test_both_zero_lines_rejected(service: GLPostingService) -> None:
     """Lines that sum to zero debit AND zero credit are technically
-    'balanced' but meaningless. The current service currently allows this;
-    it SHOULD reject. Marked as a Stage 4 remediation pending approval."""
+    'balanced' but meaningless. The GL service must reject them before any
+    account lookup or voucher creation."""
     lines = [
         {"account_id": uuid4(), "debit_amount": Decimal("0"), "credit_amount": Decimal("0")},
     ]
     service.account_repo.get = AsyncMock(return_value=None)
 
-    # Current behaviour: passes the balance check and reaches account lookup.
-    from app.core.exceptions import NotFoundException
-
-    with pytest.raises(NotFoundException):
+    with pytest.raises(BadRequestException, match="Zero-value"):
         await service.post_from_source(**_kwargs(lines=lines))
 
 

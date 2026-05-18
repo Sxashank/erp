@@ -3,13 +3,13 @@
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.workflow import (
     WorkflowDefinition,
@@ -30,25 +30,25 @@ from app.schemas.workflow import (
     EscalationRuleCreate,
 )
 from app.schemas.base import PaginatedResponse, MessageResponse
+from app.core.exceptions import ConflictException, NotFoundException
 
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[WorkflowDefinitionResponse])
+@router.get("", response_model=PaginatedResponse[WorkflowDefinitionResponse], response_model_by_alias=True)
 async def list_workflow_definitions(
-    organization_id: UUID = Query(...),
     entity_type: Optional[WorkflowEntityType] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of workflow definitions."""
     query = (
         select(WorkflowDefinition)
         .where(
             and_(
-                WorkflowDefinition.organization_id == organization_id,
+                WorkflowDefinition.organization_id == current_user.organization_id,
                 WorkflowDefinition.is_active == True,
             )
         )
@@ -60,7 +60,7 @@ async def list_workflow_definitions(
     # Count total
     count_query = select(WorkflowDefinition.id).where(
         and_(
-            WorkflowDefinition.organization_id == organization_id,
+            WorkflowDefinition.organization_id == current_user.organization_id,
             WorkflowDefinition.is_active == True,
         )
     )
@@ -105,27 +105,29 @@ async def list_workflow_definitions(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=WorkflowDefinitionWithStepsResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=WorkflowDefinitionWithStepsResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_workflow_definition(
     data: WorkflowDefinitionCreate,
     current_user: User = Depends(RequirePermissions("WORKFLOW_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new workflow definition with steps."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     # Check for duplicate code
     existing = await db.execute(
         select(WorkflowDefinition).where(
             and_(
-                WorkflowDefinition.organization_id == data.organization_id,
+                WorkflowDefinition.organization_id == current_user.organization_id,
                 WorkflowDefinition.code == data.code,
                 WorkflowDefinition.is_active == True,
             )
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ConflictException(
             detail=f"Workflow with code '{data.code}' already exists",
+            error_code="WORKFLOW_WITH_CODE_ALREADY_EXISTS",
         )
 
     # If setting as default, unset other defaults for this entity type
@@ -134,7 +136,7 @@ async def create_workflow_definition(
             select(WorkflowDefinition)
             .where(
                 and_(
-                    WorkflowDefinition.organization_id == data.organization_id,
+                    WorkflowDefinition.organization_id == current_user.organization_id,
                     WorkflowDefinition.entity_type == data.entity_type,
                     WorkflowDefinition.is_default == True,
                 )
@@ -144,7 +146,7 @@ async def create_workflow_definition(
         result = await db.execute(
             select(WorkflowDefinition).where(
                 and_(
-                    WorkflowDefinition.organization_id == data.organization_id,
+                    WorkflowDefinition.organization_id == current_user.organization_id,
                     WorkflowDefinition.entity_type == data.entity_type,
                     WorkflowDefinition.is_default == True,
                 )
@@ -155,7 +157,7 @@ async def create_workflow_definition(
 
     # Create definition
     definition = WorkflowDefinition(
-        organization_id=data.organization_id,
+        organization_id=current_user.organization_id,
         name=data.name,
         code=data.code,
         description=data.description,
@@ -234,11 +236,11 @@ async def create_workflow_definition(
     return await get_workflow_definition(definition.id, current_user, db)
 
 
-@router.get("/{definition_id}", response_model=WorkflowDefinitionWithStepsResponse)
+@router.get("/{definition_id}", response_model=WorkflowDefinitionWithStepsResponse, response_model_by_alias=True)
 async def get_workflow_definition(
     definition_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a workflow definition with all steps."""
     query = (
@@ -259,20 +261,20 @@ async def get_workflow_definition(
     definition = result.scalar_one_or_none()
 
     if not definition:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Workflow definition not found",
+            error_code="WORKFLOW_DEFINITION_NOT_FOUND",
         )
 
     return _definition_to_response(definition)
 
 
-@router.put("/{definition_id}", response_model=WorkflowDefinitionResponse)
+@router.put("/{definition_id}", response_model=WorkflowDefinitionResponse, response_model_by_alias=True)
 async def update_workflow_definition(
     definition_id: UUID,
     data: WorkflowDefinitionUpdate,
     current_user: User = Depends(RequirePermissions("WORKFLOW_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a workflow definition."""
     query = select(WorkflowDefinition).where(
@@ -285,9 +287,9 @@ async def update_workflow_definition(
     definition = result.scalar_one_or_none()
 
     if not definition:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Workflow definition not found",
+            error_code="WORKFLOW_DEFINITION_NOT_FOUND",
         )
 
     # Handle default flag
@@ -336,11 +338,11 @@ async def update_workflow_definition(
     )
 
 
-@router.delete("/{definition_id}", response_model=MessageResponse)
+@router.delete("/{definition_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_workflow_definition(
     definition_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Soft delete a workflow definition."""
     query = select(WorkflowDefinition).where(
@@ -353,9 +355,9 @@ async def delete_workflow_definition(
     definition = result.scalar_one_or_none()
 
     if not definition:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Workflow definition not found",
+            error_code="WORKFLOW_DEFINITION_NOT_FOUND",
         )
 
     definition.soft_delete(current_user.id)
@@ -364,11 +366,11 @@ async def delete_workflow_definition(
     return MessageResponse(message="Workflow definition deleted successfully")
 
 
-@router.post("/{definition_id}/set-default", response_model=WorkflowDefinitionResponse)
+@router.post("/{definition_id}/set-default", response_model=WorkflowDefinitionResponse, response_model_by_alias=True)
 async def set_default_workflow(
     definition_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Set a workflow as the default for its entity type."""
     query = select(WorkflowDefinition).where(
@@ -381,9 +383,9 @@ async def set_default_workflow(
     definition = result.scalar_one_or_none()
 
     if not definition:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Workflow definition not found",
+            error_code="WORKFLOW_DEFINITION_NOT_FOUND",
         )
 
     # Unset other defaults

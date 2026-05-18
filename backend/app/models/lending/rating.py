@@ -242,7 +242,6 @@ class RiskParameter(BaseModel):
 
     __table_args__ = (
         UniqueConstraint("category_id", "code", name="uq_risk_param_category_code"),
-        Index("ix_los_risk_parameter_code", "code"),
     )
 
     def calculate_score(self, value: any) -> int:

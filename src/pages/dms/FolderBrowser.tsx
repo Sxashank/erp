@@ -3,8 +3,6 @@
  * Browse and manage folders and documents in a hierarchical structure
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Folder,
   FolderPlus,
@@ -23,13 +21,21 @@ import {
   FileImage,
   FileSpreadsheet,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Breadcrumb,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@/components/ui/breadcrumb';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -45,14 +51,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from '@/components/ui/breadcrumb';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -60,12 +60,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { folderApi, documentApi } from '@/services/dmsApi';
 import type { DMSFolder, DMSDocument, FolderCreate } from '@/types/dms';
 import { formatFileSize, ACCESS_LEVELS } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
 export default function FolderBrowser() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -125,7 +127,7 @@ export default function FolderBrowser() {
         setBreadcrumbs([]);
       }
     } catch (error) {
-      console.error('Failed to fetch folder data:', error);
+      logger.error('Failed to fetch folder data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load folder contents',
@@ -254,7 +256,7 @@ export default function FolderBrowser() {
     return (
       <div className="space-y-6 p-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-32" />
           ))}
@@ -267,11 +269,7 @@ export default function FolderBrowser() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Folder Browser"
-        subtitle={
-          breadcrumbs.length === 0
-            ? 'Root'
-            : breadcrumbs.map((f) => f.name).join(' / ')
-        }
+        subtitle={breadcrumbs.length === 0 ? 'Root' : breadcrumbs.map((f) => f.name).join(' / ')}
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="icon" onClick={() => setViewMode('grid')}>
@@ -281,15 +279,23 @@ export default function FolderBrowser() {
               <List className={`h-4 w-4 ${viewMode === 'list' ? 'text-primary' : ''}`} />
             </Button>
             <Button variant="outline" onClick={fetchData}>
-              <RefreshCw className="h-4 w-4 mr-2" />
+              <RefreshCw className="mr-2 h-4 w-4" />
               Refresh
             </Button>
             <Button variant="outline" onClick={() => setShowCreateDialog(true)}>
-              <FolderPlus className="h-4 w-4 mr-2" />
+              <FolderPlus className="mr-2 h-4 w-4" />
               New Folder
             </Button>
-            <Button onClick={() => navigate(`/admin/dms/upload${currentFolderId ? `?folder=${currentFolderId}` : ''}`)}>
-              <Upload className="h-4 w-4 mr-2" />
+            <Button
+              onClick={() =>
+                navigate(
+                  currentFolderId
+                    ? `/admin/dms/upload?folder=${currentFolderId}`
+                    : '/admin/dms/upload',
+                )
+              }
+            >
+              <Upload className="mr-2 h-4 w-4" />
               Upload
             </Button>
           </div>
@@ -301,7 +307,7 @@ export default function FolderBrowser() {
         <BreadcrumbList>
           <BreadcrumbItem>
             <BreadcrumbLink
-              className="cursor-pointer flex items-center gap-1"
+              className="flex cursor-pointer items-center gap-1"
               onClick={() => navigateToFolder()}
             >
               <Home className="h-4 w-4" />
@@ -330,8 +336,11 @@ export default function FolderBrowser() {
 
       {/* Back button for subfolders */}
       {currentFolderId && (
-        <Button variant="ghost" onClick={() => navigateToFolder(currentFolder?.parent_id || undefined)}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
+        <Button
+          variant="ghost"
+          onClick={() => navigateToFolder(currentFolder?.parent_id || undefined)}
+        >
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
       )}
@@ -340,18 +349,26 @@ export default function FolderBrowser() {
       {folders.length === 0 && documents.length === 0 ? (
         <Card className="p-12">
           <div className="text-center">
-            <Folder className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-            <h3 className="text-lg font-semibold mb-2">This folder is empty</h3>
-            <p className="text-muted-foreground mb-4">
+            <Folder className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+            <h3 className="mb-2 text-lg font-semibold">This folder is empty</h3>
+            <p className="mb-4 text-muted-foreground">
               Create a new folder or upload documents to get started
             </p>
             <div className="flex justify-center gap-2">
               <Button variant="outline" onClick={() => setShowCreateDialog(true)}>
-                <FolderPlus className="h-4 w-4 mr-2" />
+                <FolderPlus className="mr-2 h-4 w-4" />
                 New Folder
               </Button>
-              <Button onClick={() => navigate(`/admin/dms/upload${currentFolderId ? `?folder=${currentFolderId}` : ''}`)}>
-                <Upload className="h-4 w-4 mr-2" />
+              <Button
+                onClick={() =>
+                  navigate(
+                    currentFolderId
+                      ? `/admin/dms/upload?folder=${currentFolderId}`
+                      : '/admin/dms/upload',
+                  )
+                }
+              >
+                <Upload className="mr-2 h-4 w-4" />
                 Upload Document
               </Button>
             </div>
@@ -362,21 +379,21 @@ export default function FolderBrowser() {
           {/* Folders Grid */}
           {folders.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Folders</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <h3 className="mb-3 text-sm font-medium text-muted-foreground">Folders</h3>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
                 {folders.map((folder) => (
                   <Card
                     key={folder.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow group"
+                    className="group cursor-pointer transition-shadow hover:shadow-md"
                     onClick={() => navigateToFolder(folder.id)}
                   >
-                    <CardContent className="p-4 text-center relative">
+                    <CardContent className="relative p-4 text-center">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="absolute right-1 top-1 h-6 w-6 opacity-0 transition-opacity group-hover:opacity-100"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </Button>
@@ -389,7 +406,7 @@ export default function FolderBrowser() {
                               setShowEditDialog(true);
                             }}
                           >
-                            <Pencil className="h-4 w-4 mr-2" />
+                            <Pencil className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -400,16 +417,16 @@ export default function FolderBrowser() {
                               setDeletingFolder(folder);
                             }}
                           >
-                            <Trash2 className="h-4 w-4 mr-2" />
+                            <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                       <Folder
-                        className="h-12 w-12 mx-auto mb-2"
+                        className="mx-auto mb-2 h-12 w-12"
                         style={{ color: folder.color || '#3b82f6' }}
                       />
-                      <p className="font-medium truncate">{folder.name}</p>
+                      <p className="truncate font-medium">{folder.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {folder.document_count} documents
                       </p>
@@ -423,17 +440,17 @@ export default function FolderBrowser() {
           {/* Documents Grid */}
           {documents.length > 0 && (
             <div>
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Documents</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <h3 className="mb-3 text-sm font-medium text-muted-foreground">Documents</h3>
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
                 {documents.map((doc) => (
                   <Card
                     key={doc.id}
-                    className="cursor-pointer hover:shadow-md transition-shadow"
+                    className="cursor-pointer transition-shadow hover:shadow-md"
                     onClick={() => navigate(`/admin/dms/documents/${doc.id}`)}
                   >
                     <CardContent className="p-4 text-center">
                       {getDocIcon(doc)}
-                      <p className="font-medium truncate mt-2">{doc.name}</p>
+                      <p className="mt-2 truncate font-medium">{doc.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {formatFileSize(doc.file_size)}
                       </p>
@@ -450,7 +467,7 @@ export default function FolderBrowser() {
           {folders.map((folder) => (
             <div
               key={folder.id}
-              className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+              className="flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors hover:bg-accent"
               onClick={() => navigateToFolder(folder.id)}
             >
               <Folder className="h-8 w-8" style={{ color: folder.color || '#3b82f6' }} />
@@ -475,7 +492,7 @@ export default function FolderBrowser() {
                       setShowEditDialog(true);
                     }}
                   >
-                    <Pencil className="h-4 w-4 mr-2" />
+                    <Pencil className="mr-2 h-4 w-4" />
                     Edit
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
@@ -486,7 +503,7 @@ export default function FolderBrowser() {
                       setDeletingFolder(folder);
                     }}
                   >
-                    <Trash2 className="h-4 w-4 mr-2" />
+                    <Trash2 className="mr-2 h-4 w-4" />
                     Delete
                   </DropdownMenuItem>
                 </DropdownMenuContent>
@@ -498,14 +515,15 @@ export default function FolderBrowser() {
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center gap-4 p-4 border rounded-lg cursor-pointer hover:bg-accent transition-colors"
+              className="flex cursor-pointer items-center gap-4 rounded-lg border p-4 transition-colors hover:bg-accent"
               onClick={() => navigate(`/admin/dms/documents/${doc.id}`)}
             >
               {getDocIcon(doc)}
               <div className="flex-1">
                 <p className="font-medium">{doc.name}</p>
                 <p className="text-sm text-muted-foreground">
-                  {formatFileSize(doc.file_size)} • {doc.file_extension?.toUpperCase()} • v{doc.current_version}
+                  {formatFileSize(doc.file_size)} • {doc.file_extension?.toUpperCase()} • v
+                  {doc.current_version}
                 </p>
               </div>
               <Badge variant="outline">{doc.status}</Badge>
@@ -519,18 +537,14 @@ export default function FolderBrowser() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Folder</DialogTitle>
-            <DialogDescription>
-              Create a new folder to organize your documents
-            </DialogDescription>
+            <DialogDescription>Create a new folder to organize your documents</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Folder Name *</Label>
               <Input
                 value={newFolderData.name}
-                onChange={(e) =>
-                  setNewFolderData({ ...newFolderData, name: e.target.value })
-                }
+                onChange={(e) => setNewFolderData({ ...newFolderData, name: e.target.value })}
                 placeholder="Enter folder name"
               />
             </div>
@@ -570,9 +584,7 @@ export default function FolderBrowser() {
               <Input
                 type="color"
                 value={newFolderData.color || '#3b82f6'}
-                onChange={(e) =>
-                  setNewFolderData({ ...newFolderData, color: e.target.value })
-                }
+                onChange={(e) => setNewFolderData({ ...newFolderData, color: e.target.value })}
                 className="h-10 w-20"
               />
             </div>
@@ -600,9 +612,7 @@ export default function FolderBrowser() {
                 <Label>Folder Name</Label>
                 <Input
                   value={editingFolder.name}
-                  onChange={(e) =>
-                    setEditingFolder({ ...editingFolder, name: e.target.value })
-                  }
+                  onChange={(e) => setEditingFolder({ ...editingFolder, name: e.target.value })}
                 />
               </div>
               <div>
@@ -620,9 +630,7 @@ export default function FolderBrowser() {
                 <Input
                   type="color"
                   value={editingFolder.color || '#3b82f6'}
-                  onChange={(e) =>
-                    setEditingFolder({ ...editingFolder, color: e.target.value })
-                  }
+                  onChange={(e) => setEditingFolder({ ...editingFolder, color: e.target.value })}
                   className="h-10 w-20"
                 />
               </div>
@@ -643,8 +651,8 @@ export default function FolderBrowser() {
           <DialogHeader>
             <DialogTitle>Delete Folder</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete "{deletingFolder?.name}"? This will also delete
-              all documents and subfolders inside it. This action cannot be undone.
+              Are you sure you want to delete "{deletingFolder?.name}"? This will also delete all
+              documents and subfolders inside it. This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

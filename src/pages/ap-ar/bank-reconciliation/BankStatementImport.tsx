@@ -1,20 +1,22 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   AlertCircle,
   ArrowLeft,
-  Check,
   CheckCircle,
   FileSpreadsheet,
   RefreshCw,
   Upload,
-  X,
   XCircle,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -32,12 +34,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+import { logger } from "@/lib/logger";
 interface ParsedRow {
   transaction_date: string;
   value_date: string | null;
@@ -61,7 +63,7 @@ export function BankStatementImport() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const organizationId = localStorage.getItem('organization_id') || '';
+  const organizationId = useActiveOrganizationId() || '';
 
   // State
   const [step, setStep] = useState(1);
@@ -90,6 +92,7 @@ export function BankStatementImport() {
   // Fetch bank accounts
   useEffect(() => {
     const fetchBankAccounts = async () => {
+      if (!organizationId) return;
       try {
         const response = await accountsApi.list({
           organization_id: organizationId,
@@ -98,7 +101,7 @@ export function BankStatementImport() {
         });
         setBankAccounts(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch bank accounts:', error);
+        logger.error('Failed to fetch bank accounts:', error);
       }
     };
     fetchBankAccounts();
@@ -140,12 +143,8 @@ export function BankStatementImport() {
       const rows = response.data.map((row: ParsedRow) => ({ ...row, selected: true }));
       setParsedRows(rows);
       setStep(2);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to parse file',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
@@ -182,12 +181,8 @@ export function BankStatementImport() {
 
       setImportResult(response.data);
       setStep(3);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to import statements',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setImporting(false);
     }
@@ -195,9 +190,7 @@ export function BankStatementImport() {
 
   const toggleRowSelection = (index: number) => {
     setParsedRows((prev) =>
-      prev.map((row, i) =>
-        i === index ? { ...row, selected: !row.selected } : row
-      )
+      prev.map((row, i) => (i === index ? { ...row, selected: !row.selected } : row)),
     );
   };
 
@@ -205,50 +198,50 @@ export function BankStatementImport() {
     setParsedRows((prev) => prev.map((row) => ({ ...row, selected })));
   };
 
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
   const selectedCount = parsedRows.filter((r) => r.selected).length;
   const allSelected = parsedRows.length > 0 && selectedCount === parsedRows.length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Import Bank Statement</h1>
-          <p className="text-sm text-slate-500">
-            Upload and import bank statement from CSV file
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Import Bank Statement"
+        subtitle="Upload and import bank statement from CSV file"
+        breadcrumbs={[
+          { label: 'Bank Reconciliation', to: '/admin/ap-ar/bank-reconciliation' },
+          { label: 'Import' },
+        ]}
+      />
 
       {/* Steps */}
       <div className="flex items-center justify-center gap-4">
-        <div className={`flex items-center gap-2 ${step >= 1 ? 'text-blue-600' : 'text-slate-400'}`}>
-          <div className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}>
+        <div
+          className={`flex items-center gap-2 ${step >= 1 ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <div
+            className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 1 ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}
+          >
             1
           </div>
           <span className="font-medium">Upload</span>
         </div>
         <div className={`h-px w-16 ${step >= 2 ? 'bg-blue-600' : 'bg-slate-200'}`} />
-        <div className={`flex items-center gap-2 ${step >= 2 ? 'text-blue-600' : 'text-slate-400'}`}>
-          <div className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}>
+        <div
+          className={`flex items-center gap-2 ${step >= 2 ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <div
+            className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 2 ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}
+          >
             2
           </div>
           <span className="font-medium">Preview</span>
         </div>
         <div className={`h-px w-16 ${step >= 3 ? 'bg-blue-600' : 'bg-slate-200'}`} />
-        <div className={`flex items-center gap-2 ${step >= 3 ? 'text-blue-600' : 'text-slate-400'}`}>
-          <div className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}>
+        <div
+          className={`flex items-center gap-2 ${step >= 3 ? 'text-blue-600' : 'text-slate-400'}`}
+        >
+          <div
+            className={`flex h-8 w-8 items-center justify-center rounded-full ${step >= 3 ? 'bg-blue-600 text-white' : 'bg-slate-200'}`}
+          >
             3
           </div>
           <span className="font-medium">Complete</span>
@@ -260,9 +253,7 @@ export function BankStatementImport() {
         <Card>
           <CardHeader>
             <CardTitle>Upload Bank Statement</CardTitle>
-            <CardDescription>
-              Select a bank account and upload a CSV file
-            </CardDescription>
+            <CardDescription>Select a bank account and upload a CSV file</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="grid gap-4 md:grid-cols-2">
@@ -442,19 +433,15 @@ export function BankStatementImport() {
                           : '-'}
                       </TableCell>
                       <TableCell>{row.reference_number || '-'}</TableCell>
-                      <TableCell className="max-w-xs truncate">
-                        {row.description || '-'}
-                      </TableCell>
+                      <TableCell className="max-w-xs truncate">{row.description || '-'}</TableCell>
                       <TableCell className="text-right text-red-600">
-                        {row.debit_amount > 0 ? formatAmount(row.debit_amount) : '-'}
+                        {row.debit_amount > 0 ? <AmountDisplay amount={row.debit_amount} /> : '-'}
                       </TableCell>
                       <TableCell className="text-right text-green-600">
-                        {row.credit_amount > 0 ? formatAmount(row.credit_amount) : '-'}
+                        {row.credit_amount > 0 ? <AmountDisplay amount={row.credit_amount} /> : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {row.running_balance !== null
-                          ? formatAmount(row.running_balance)
-                          : '-'}
+                        {row.running_balance !== null ? <AmountDisplay amount={row.running_balance} /> : '-'}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -498,9 +485,7 @@ export function BankStatementImport() {
                   <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold text-green-600">
-                    {importResult.success_count}
-                  </p>
+                  <p className="text-2xl font-bold text-green-600">{importResult.success_count}</p>
                   <p className="text-sm text-slate-500">Imported successfully</p>
                 </div>
               </div>
@@ -510,9 +495,7 @@ export function BankStatementImport() {
                     <XCircle className="h-8 w-8 text-red-600" />
                   </div>
                   <div>
-                    <p className="text-2xl font-bold text-red-600">
-                      {importResult.error_count}
-                    </p>
+                    <p className="text-2xl font-bold text-red-600">{importResult.error_count}</p>
                     <p className="text-sm text-slate-500">Errors</p>
                   </div>
                 </div>
@@ -534,12 +517,15 @@ export function BankStatementImport() {
             )}
 
             <div className="flex justify-end gap-4">
-              <Button variant="outline" onClick={() => {
-                setStep(1);
-                setFile(null);
-                setParsedRows([]);
-                setImportResult(null);
-              }}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setStep(1);
+                  setFile(null);
+                  setParsedRows([]);
+                  setImportResult(null);
+                }}
+              >
                 Import More
               </Button>
               <Button onClick={() => navigate('/admin/ap-ar/bank-reconciliation')}>

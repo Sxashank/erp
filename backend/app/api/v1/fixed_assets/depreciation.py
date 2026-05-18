@@ -3,10 +3,10 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -19,6 +19,7 @@ from app.schemas.fixed_assets.depreciation import (
 )
 from app.schemas.base import MessageResponse
 from app.services.fixed_assets.depreciation_service import DepreciationService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -86,13 +87,13 @@ def _dep_to_response(dep) -> DepreciationResponse:
     )
 
 
-@router.get("/runs", response_model=dict)
+@router.get("/runs", response_model=dict, response_model_by_alias=True)
 async def list_depreciation_runs(
     request: Request,
     organization_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -108,11 +109,11 @@ async def list_depreciation_runs(
     }
 
 
-@router.get("/runs/{run_id}", response_model=DepreciationRunResponse)
+@router.get("/runs/{run_id}", response_model=DepreciationRunResponse, response_model_by_alias=True)
 async def get_depreciation_run(
     request: Request,
     run_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -120,18 +121,18 @@ async def get_depreciation_run(
     service = DepreciationService(db)
     run = await service.get_run(run_id)
     if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Depreciation run not found",
+            error_code="DEPRECIATION_RUN_NOT_FOUND",
         )
     return _run_to_response(run)
 
 
-@router.post("/run", response_model=DepreciationRunResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/run", response_model=DepreciationRunResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def run_depreciation(
     request: Request,
     data: DepreciationRunCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
 ):
@@ -141,17 +142,14 @@ async def run_depreciation(
         run = await service.run_depreciation(data, run_by=current_user.id)
         return _run_to_response(run)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/runs/{run_id}/post", response_model=DepreciationRunResponse)
+@router.post("/runs/{run_id}/post", response_model=DepreciationRunResponse, response_model_by_alias=True)
 async def post_depreciation_run(
     request: Request,
     run_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
 ):
@@ -161,19 +159,16 @@ async def post_depreciation_run(
         run = await service.post_depreciation_run(run_id, posted_by=current_user.id)
         return _run_to_response(run)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/runs/{run_id}/entries", response_model=dict)
+@router.get("/runs/{run_id}/entries", response_model=dict, response_model_by_alias=True)
 async def get_run_entries(
     request: Request,
     run_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -181,9 +176,9 @@ async def get_run_entries(
     service = DepreciationService(db)
     run = await service.get_run(run_id)
     if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Depreciation run not found",
+            error_code="DEPRECIATION_RUN_NOT_FOUND",
         )
 
     entries = run.entries[skip:skip + limit] if run.entries else []
@@ -197,13 +192,13 @@ async def get_run_entries(
     }
 
 
-@router.get("/history/{asset_id}", response_model=dict)
+@router.get("/history/{asset_id}", response_model=dict, response_model_by_alias=True)
 async def get_asset_depreciation_history(
     request: Request,
     asset_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -219,12 +214,12 @@ async def get_asset_depreciation_history(
     }
 
 
-@router.get("/schedule/{asset_id}", response_model=DepreciationScheduleResponse)
+@router.get("/schedule/{asset_id}", response_model=DepreciationScheduleResponse, response_model_by_alias=True)
 async def get_depreciation_schedule(
     request: Request,
     asset_id: UUID,
     periods: int = Query(60, ge=1, le=120),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -234,18 +229,15 @@ async def get_depreciation_schedule(
         schedule = await service.generate_depreciation_schedule(asset_id, periods)
         return schedule
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/{depreciation_id}/reverse", response_model=DepreciationResponse)
+@router.post("/{depreciation_id}/reverse", response_model=DepreciationResponse, response_model_by_alias=True)
 async def reverse_depreciation(
     request: Request,
     depreciation_id: UUID,
     data: DepreciationReverseRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_REVERSE])),
 ):
@@ -257,7 +249,4 @@ async def reverse_depreciation(
         )
         return _dep_to_response(reversal)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")

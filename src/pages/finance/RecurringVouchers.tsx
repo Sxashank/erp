@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   ChevronRight,
@@ -13,11 +11,15 @@ import {
   RefreshCw,
   X,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,8 +43,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { organizationsApi, recurringVouchersApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -80,6 +84,12 @@ interface UpcomingVoucher {
   days_until_due: number;
 }
 
+interface ProcessDueResult {
+  success: boolean;
+}
+
+type RecurringVoucherListParams = Parameters<typeof recurringVouchersApi.list>[0];
+
 const FREQUENCIES = [
   { value: 'DAILY', label: 'Daily' },
   { value: 'WEEKLY', label: 'Weekly' },
@@ -111,17 +121,7 @@ export function RecurringVouchers() {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterFrequency, setFilterFrequency] = useState<string>('');
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchData();
-    }
-  }, [selectedOrgId, filterStatus, filterFrequency]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -129,14 +129,14 @@ export function RecurringVouchers() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params: any = { organization_id: selectedOrgId, page_size: 50 };
+      const params: RecurringVoucherListParams = { organization_id: selectedOrgId, page_size: 50 };
       if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
       if (filterFrequency && filterFrequency !== 'ALL') params.frequency = filterFrequency;
 
@@ -150,19 +150,29 @@ export function RecurringVouchers() {
       setStats(statsRes.data);
       setUpcoming(upcomingRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [filterFrequency, filterStatus, selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchData();
+    }
+  }, [fetchData, selectedOrgId]);
 
   const handlePause = async (id: string) => {
     try {
       await recurringVouchersApi.pause(id);
       toast({ title: 'Success', description: 'Recurring voucher paused' });
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to pause', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -171,8 +181,8 @@ export function RecurringVouchers() {
       await recurringVouchersApi.resume(id);
       toast({ title: 'Success', description: 'Recurring voucher resumed' });
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to resume', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -182,8 +192,8 @@ export function RecurringVouchers() {
       await recurringVouchersApi.cancel(id);
       toast({ title: 'Success', description: 'Recurring voucher cancelled' });
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to cancel', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -191,23 +201,16 @@ export function RecurringVouchers() {
     try {
       setLoading(true);
       const response = await recurringVouchersApi.processDue(selectedOrgId);
-      const results = response.data;
-      const successCount = results.filter((r: any) => r.success).length;
+      const results = response.data as ProcessDueResult[];
+      const successCount = results.filter((result) => result.success).length;
       toast({ title: 'Processing Complete', description: `${successCount} of ${results.length} vouchers generated successfully` });
       fetchData();
-    } catch (error: any) {
-      toast({ title: 'Error', description: error.response?.data?.detail || 'Failed to process due vouchers', variant: 'destructive' });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
 
   const getStatusBadge = (status: string) => {
     const s = STATUSES.find((st) => st.value === status);
@@ -298,9 +301,10 @@ export function RecurringVouchers() {
           <CardContent>
             <div className="flex flex-wrap gap-2">
               {upcoming.map((v) => (
-                <div
+                <button
+                  type="button"
                   key={v.id}
-                  className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2 hover:bg-slate-100 cursor-pointer"
+                  className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2 hover:bg-slate-100 text-left"
                   onClick={() => navigate(`/admin/finance/recurring-vouchers/${v.id}/generate`)}
                 >
                   <div>
@@ -309,9 +313,11 @@ export function RecurringVouchers() {
                       {v.days_until_due === 0 ? 'Today' : `In ${v.days_until_due} days`}
                     </p>
                   </div>
-                  <Badge variant="outline">{formatCurrency(v.total_amount)}</Badge>
+                  <Badge variant="outline">
+                    <AmountDisplay amount={v.total_amount} />
+                  </Badge>
                   <ChevronRight className="h-4 w-4 text-slate-400" />
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>
@@ -381,9 +387,11 @@ export function RecurringVouchers() {
                     <TableCell className="font-medium">{rv.template_name}</TableCell>
                     <TableCell>{rv.voucher_type_name}</TableCell>
                     <TableCell>{getFrequencyLabel(rv.frequency)}</TableCell>
-                    <TableCell className="text-right font-mono">{formatCurrency(rv.total_amount)}</TableCell>
+                    <TableCell className="text-right font-mono">
+                      <AmountDisplay amount={rv.total_amount} />
+                    </TableCell>
                     <TableCell>
-                      {rv.next_run_date ? new Date(rv.next_run_date).toLocaleDateString('en-IN') : '-'}
+                      <DateDisplay date={rv.next_run_date} />
                     </TableCell>
                     <TableCell>
                       {rv.total_occurrences

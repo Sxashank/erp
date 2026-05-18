@@ -2,35 +2,34 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field
 
 from app.models.ap_ar.bank_reconciliation import (
-    StatementTransactionType,
-    ReconciliationStatus,
     BankReconciliationStatus,
+    ReconciliationStatus,
+    StatementTransactionType,
 )
-
+from app.schemas.base import CamelSchema
 
 # ============ Bank Statement Schemas ============
 
 
-class BankStatementBase(BaseModel):
+class BankStatementBase(CamelSchema):
     """Base schema for bank statement."""
 
     transaction_date: date
     value_date: date
-    reference_number: Optional[str] = Field(None, max_length=100)
-    description: Optional[str] = None
+    reference_number: str | None = Field(None, max_length=100)
+    description: str | None = None
     transaction_type: StatementTransactionType
     debit_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     credit_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
-    running_balance: Optional[Decimal] = None
-    cheque_number: Optional[str] = Field(None, max_length=20)
-    utr_number: Optional[str] = Field(None, max_length=50)
-    bank_transaction_id: Optional[str] = Field(None, max_length=100)
+    running_balance: Decimal | None = None
+    cheque_number: str | None = Field(None, max_length=20)
+    utr_number: str | None = Field(None, max_length=50)
+    bank_transaction_id: str | None = Field(None, max_length=100)
 
 
 class BankStatementCreate(BankStatementBase):
@@ -40,21 +39,21 @@ class BankStatementCreate(BankStatementBase):
     organization_id: UUID
 
 
-class BankStatementImportRow(BaseModel):
+class BankStatementImportRow(CamelSchema):
     """Schema for a single row in bank statement import."""
 
     transaction_date: date
-    value_date: Optional[date] = None
-    reference_number: Optional[str] = None
-    description: Optional[str] = None
+    value_date: date | None = None
+    reference_number: str | None = None
+    description: str | None = None
     debit_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     credit_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
-    running_balance: Optional[Decimal] = None
-    cheque_number: Optional[str] = None
-    utr_number: Optional[str] = None
+    running_balance: Decimal | None = None
+    cheque_number: str | None = None
+    utr_number: str | None = None
 
 
-class BankStatementImport(BaseModel):
+class BankStatementImport(CamelSchema):
     """Schema for importing bank statement."""
 
     bank_account_id: UUID
@@ -70,41 +69,35 @@ class BankStatementResponse(BankStatementBase):
     organization_id: UUID
     reconciliation_status: ReconciliationStatus
     reconciled_amount: Decimal
-    reconciled_voucher_id: Optional[UUID]
-    reconciled_at: Optional[datetime]
-    import_batch_id: Optional[UUID]
-    bank_account_name: Optional[str] = None
+    reconciled_voucher_id: UUID | None
+    reconciled_at: datetime | None
+    import_batch_id: UUID | None
+    bank_account_name: str | None = None
     unreconciled_amount: Decimal
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class BankStatementListResponse(BaseModel):
+class BankStatementListResponse(CamelSchema):
     """List response schema for bank statement."""
 
     id: UUID
     transaction_date: date
     value_date: date
-    reference_number: Optional[str]
-    description: Optional[str]
+    reference_number: str | None
+    description: str | None
     transaction_type: StatementTransactionType
     debit_amount: Decimal
     credit_amount: Decimal
-    running_balance: Optional[Decimal]
+    running_balance: Decimal | None
     reconciliation_status: ReconciliationStatus
     reconciled_amount: Decimal
     unreconciled_amount: Decimal
-
-    class Config:
-        from_attributes = True
 
 
 # ============ Bank Statement Match Schemas ============
 
 
-class BankStatementMatchCreate(BaseModel):
+class BankStatementMatchCreate(CamelSchema):
     """Schema for creating a match."""
 
     statement_id: UUID
@@ -113,7 +106,7 @@ class BankStatementMatchCreate(BaseModel):
     match_type: str = Field(default="MANUAL", max_length=20)
 
 
-class BankStatementMatchResponse(BaseModel):
+class BankStatementMatchResponse(CamelSchema):
     """Response schema for match."""
 
     id: UUID
@@ -122,17 +115,32 @@ class BankStatementMatchResponse(BaseModel):
     matched_amount: Decimal
     match_date: date
     match_type: str
-    voucher_number: Optional[str] = None
-    voucher_date: Optional[date] = None
+    voucher_number: str | None = None
+    voucher_date: date | None = None
 
-    class Config:
-        from_attributes = True
+
+class AutoMatchSettings(CamelSchema):
+    """Settings used for an auto-match run."""
+
+    date_tolerance: int
+    match_by_reference: bool
+    match_by_cheque: bool
+    match_by_utr: bool
+    match_by_amount_only: bool
+
+
+class AutoMatchResponse(CamelSchema):
+    """Auto-match result."""
+
+    matched_count: int
+    messages: list[str]
+    settings: AutoMatchSettings
 
 
 # ============ Bank Reconciliation Schemas ============
 
 
-class BankReconciliationBase(BaseModel):
+class BankReconciliationBase(CamelSchema):
     """Base schema for bank reconciliation."""
 
     reconciliation_date: date
@@ -146,7 +154,7 @@ class BankReconciliationBase(BaseModel):
     bank_charges: Decimal = Field(default=Decimal("0.00"))
     bank_interest: Decimal = Field(default=Decimal("0.00"))
     other_adjustments: Decimal = Field(default=Decimal("0.00"))
-    notes: Optional[str] = None
+    notes: str | None = None
 
 
 class BankReconciliationCreate(BankReconciliationBase):
@@ -156,17 +164,17 @@ class BankReconciliationCreate(BankReconciliationBase):
     organization_id: UUID
 
 
-class BankReconciliationUpdate(BaseModel):
+class BankReconciliationUpdate(CamelSchema):
     """Schema for updating bank reconciliation."""
 
-    statement_opening_balance: Optional[Decimal] = None
-    statement_closing_balance: Optional[Decimal] = None
-    deposits_in_transit: Optional[Decimal] = None
-    outstanding_cheques: Optional[Decimal] = None
-    bank_charges: Optional[Decimal] = None
-    bank_interest: Optional[Decimal] = None
-    other_adjustments: Optional[Decimal] = None
-    notes: Optional[str] = None
+    statement_opening_balance: Decimal | None = None
+    statement_closing_balance: Decimal | None = None
+    deposits_in_transit: Decimal | None = None
+    outstanding_cheques: Decimal | None = None
+    bank_charges: Decimal | None = None
+    bank_interest: Decimal | None = None
+    other_adjustments: Decimal | None = None
+    notes: str | None = None
 
 
 class BankReconciliationResponse(BankReconciliationBase):
@@ -178,30 +186,27 @@ class BankReconciliationResponse(BankReconciliationBase):
     reconciled_balance: Decimal
     difference: Decimal
     status: BankReconciliationStatus
-    completed_at: Optional[datetime]
-    bank_account_name: Optional[str] = None
+    completed_at: datetime | None
+    bank_account_name: str | None = None
     created_at: datetime
-    updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
+    updated_at: datetime | None
 
 
 # ============ BRS Report Schemas ============
 
 
-class BRSReportItem(BaseModel):
+class BRSReportItem(CamelSchema):
     """Individual item in BRS report."""
 
     id: UUID
     date: date
     reference: str
-    description: Optional[str]
+    description: str | None
     amount: Decimal
     item_type: str  # DEPOSIT_IN_TRANSIT, OUTSTANDING_CHEQUE, BANK_CHARGE, etc.
 
 
-class BRSReportResponse(BaseModel):
+class BRSReportResponse(CamelSchema):
     """Bank Reconciliation Statement report response."""
 
     bank_account_id: UUID
@@ -232,44 +237,35 @@ class BRSReportResponse(BaseModel):
     reconciled_balance: Decimal
     difference: Decimal
 
-    class Config:
-        from_attributes = True
-
 
 # ============ Unreconciled Items Schemas ============
 
 
-class UnreconciledBookEntry(BaseModel):
+class UnreconciledBookEntry(CamelSchema):
     """Unreconciled entry from books."""
 
     voucher_id: UUID
     voucher_number: str
     voucher_date: date
-    narration: Optional[str]
+    narration: str | None
     debit_amount: Decimal
     credit_amount: Decimal
     entry_type: str  # PAYMENT, RECEIPT, JOURNAL
 
-    class Config:
-        from_attributes = True
 
-
-class UnreconciledStatementEntry(BaseModel):
+class UnreconciledStatementEntry(CamelSchema):
     """Unreconciled entry from bank statement."""
 
     statement_id: UUID
     transaction_date: date
-    reference_number: Optional[str]
-    description: Optional[str]
+    reference_number: str | None
+    description: str | None
     debit_amount: Decimal
     credit_amount: Decimal
     unreconciled_amount: Decimal
 
-    class Config:
-        from_attributes = True
 
-
-class ReconciliationWorkspaceResponse(BaseModel):
+class ReconciliationWorkspaceResponse(CamelSchema):
     """Response for reconciliation workspace."""
 
     bank_account_id: UUID
@@ -286,6 +282,3 @@ class ReconciliationWorkspaceResponse(BaseModel):
     total_unreconciled_bank_debits: Decimal
     total_unreconciled_book_credits: Decimal
     total_unreconciled_book_debits: Decimal
-
-    class Config:
-        from_attributes = True

@@ -3,19 +3,18 @@
 import asyncio
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+# Import all models to ensure they're registered with Base.metadata
+# This imports all models including Legal and Portal modules
+import app.models  # noqa: F401
 from alembic import context
 
 # Import settings and models
 from app.config import settings
 from app.database import Base
-
-# Import all models to ensure they're registered with Base.metadata
-# This imports all models including Legal and Portal modules
-import app.models  # noqa: F401
 
 # Alembic Config object
 config = context.config
@@ -47,6 +46,13 @@ def run_migrations_offline() -> None:
 
 def do_run_migrations(connection: Connection) -> None:
     """Run migrations with the given connection."""
+    # Alembic's default `version_num VARCHAR(32)` is too short for this
+    # repository's descriptive revision identifiers (for example
+    # `zza2_add_scheme_portal_dms_linkage`). Widen it before running any
+    # migration so fresh and existing databases can advance safely.
+    connection.execute(
+        text("ALTER TABLE IF EXISTS alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)")
+    )
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
@@ -64,7 +70,7 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
     )
 
-    async with connectable.connect() as connection:
+    async with connectable.begin() as connection:
         await connection.run_sync(do_run_migrations)
 
     await connectable.dispose()

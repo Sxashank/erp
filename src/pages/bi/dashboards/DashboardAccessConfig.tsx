@@ -3,37 +3,11 @@
  * Configure which roles can view/edit the dashboard
  */
 
+import { Loader2, Plus, Save, Trash2, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, Save, Trash2, Users } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
-import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetFooter,
-} from '@/components/ui/sheet';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,11 +19,41 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { biDashboardApi, biDashboardAccessApi } from '@/services/biApi';
 import { rolesApi } from '@/services/api';
-import { Dashboard, DashboardRoleAccess, DashboardRoleAccessCreate } from '@/types/bi';
+import { biDashboardApi, biDashboardAccessApi } from '@/services/biApi';
+import type { Dashboard, DashboardRoleAccess, DashboardRoleAccessCreate } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 interface Role {
   id: string;
   name: string;
@@ -93,7 +97,7 @@ export function DashboardAccessConfig() {
       setAccessList(accessRes.data);
 
       const rolesRes = await rolesApi.list();
-      const roleList = Array.isArray(rolesRes.data) ? rolesRes.data : rolesRes.data.items ?? [];
+      const roleList = Array.isArray(rolesRes.data) ? rolesRes.data : (rolesRes.data.items ?? []);
       setRoles(
         roleList.map((r: { id: string; code: string; name: string }) => ({
           id: r.id,
@@ -102,7 +106,7 @@ export function DashboardAccessConfig() {
         })),
       );
     } catch (error) {
-      console.error('Error fetching data:', error);
+      logger.error('Error fetching data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load dashboard access configuration',
@@ -152,11 +156,11 @@ export function DashboardAccessConfig() {
         landing_order: 0,
       });
       fetchData();
-    } catch (error: any) {
-      console.error('Error adding access:', error);
+    } catch (error: unknown) {
+      logger.error('Error adding access:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to add role access',
+        description: getErrorMessage(error, 'Failed to add role access'),
         variant: 'destructive',
       });
     } finally {
@@ -167,7 +171,7 @@ export function DashboardAccessConfig() {
   const handleUpdateAccess = async (
     accessId: string,
     field: keyof DashboardRoleAccess,
-    value: boolean | number
+    value: boolean | number,
   ) => {
     if (!id) return;
 
@@ -179,16 +183,14 @@ export function DashboardAccessConfig() {
         [field]: value,
       });
 
-      setAccessList((prev) =>
-        prev.map((a) => (a.id === accessId ? { ...a, [field]: value } : a))
-      );
+      setAccessList((prev) => prev.map((a) => (a.id === accessId ? { ...a, [field]: value } : a)));
 
       toast({
         title: 'Success',
         description: 'Access updated successfully',
       });
     } catch (error) {
-      console.error('Error updating access:', error);
+      logger.error('Error updating access:', error);
       toast({
         title: 'Error',
         description: 'Failed to update access',
@@ -210,7 +212,7 @@ export function DashboardAccessConfig() {
       });
       fetchData();
     } catch (error) {
-      console.error('Error deleting access:', error);
+      logger.error('Error deleting access:', error);
       toast({
         title: 'Error',
         description: 'Failed to remove role access',
@@ -234,7 +236,7 @@ export function DashboardAccessConfig() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -242,13 +244,9 @@ export function DashboardAccessConfig() {
 
   if (!dashboard) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-muted-foreground">Dashboard not found</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => navigate('/admin/bi/dashboards')}
-        >
+        <Button variant="outline" className="mt-4" onClick={() => navigate('/admin/bi/dashboards')}>
           Back to Dashboards
         </Button>
       </div>
@@ -257,27 +255,21 @@ export function DashboardAccessConfig() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(`/admin/bi/dashboards/${id}/edit`)}
-          >
-            <ArrowLeft className="h-4 w-4" />
+      <PageHeader
+        title="Access Configuration"
+        subtitle={`Configure role access for "${dashboard.name}"`}
+        breadcrumbs={[
+          { label: 'Dashboards', to: '/admin/bi/dashboards' },
+          { label: dashboard.name, to: `/admin/bi/dashboards/${id}/edit` },
+          { label: 'Access' },
+        ]}
+        actions={
+          <Button onClick={() => setAddDrawerOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Role Access
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Access Configuration</h1>
-            <p className="text-muted-foreground">
-              Configure role access for "{dashboard.name}"
-            </p>
-          </div>
-        </div>
-        <Button onClick={() => setAddDrawerOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Add Role Access
-        </Button>
-      </div>
+        }
+      />
 
       <Card>
         <CardHeader>
@@ -286,13 +278,14 @@ export function DashboardAccessConfig() {
             Role Access
           </CardTitle>
           <CardDescription>
-            Define which roles can view or edit this dashboard, and whether it appears on their landing page.
+            Define which roles can view or edit this dashboard, and whether it appears on their
+            landing page.
           </CardDescription>
         </CardHeader>
         <CardContent>
           {accessList.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <div className="py-8 text-center text-muted-foreground">
+              <Users className="mx-auto mb-4 h-12 w-12 opacity-50" />
               <p>No role access configured.</p>
               <p className="text-sm">
                 {dashboard.is_public
@@ -318,9 +311,7 @@ export function DashboardAccessConfig() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {getRoleName(access.role_id)}
-                        {access.can_edit && (
-                          <Badge variant="secondary">Editor</Badge>
-                        )}
+                        {access.can_edit && <Badge variant="secondary">Editor</Badge>}
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
@@ -351,24 +342,20 @@ export function DashboardAccessConfig() {
                       <Input
                         type="number"
                         min={0}
-                        className="w-20 mx-auto text-center"
+                        className="mx-auto w-20 text-center"
                         value={access.landing_order}
                         onChange={(e) =>
                           handleUpdateAccess(
                             access.id,
                             'landing_order',
-                            parseInt(e.target.value) || 0
+                            parseInt(e.target.value) || 0,
                           )
                         }
                         disabled={!access.show_on_landing}
                       />
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setDeleteId(access.id)}
-                      >
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(access.id)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </TableCell>
@@ -381,7 +368,7 @@ export function DashboardAccessConfig() {
       </Card>
 
       {dashboard.is_public && (
-        <Card className="border-blue-200 bg-blue-50 dark:bg-blue-950 dark:border-blue-800">
+        <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
           <CardContent className="pt-6">
             <p className="text-sm text-blue-700 dark:text-blue-300">
               <strong>Note:</strong> This dashboard is marked as public, so all users can view it
@@ -397,9 +384,7 @@ export function DashboardAccessConfig() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Add Role Access</SheetTitle>
-            <SheetDescription>
-              Grant a role access to this dashboard
-            </SheetDescription>
+            <SheetDescription>Grant a role access to this dashboard</SheetDescription>
           </SheetHeader>
 
           <div className="space-y-6 py-6">
@@ -407,9 +392,7 @@ export function DashboardAccessConfig() {
               <Label>Role *</Label>
               <Select
                 value={newAccess.role_id || ''}
-                onValueChange={(value) =>
-                  setNewAccess((prev) => ({ ...prev, role_id: value }))
-                }
+                onValueChange={(value) => setNewAccess((prev) => ({ ...prev, role_id: value }))}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a role" />
@@ -488,26 +471,18 @@ export function DashboardAccessConfig() {
                     }))
                   }
                 />
-                <p className="text-sm text-muted-foreground">
-                  Lower numbers appear first
-                </p>
+                <p className="text-sm text-muted-foreground">Lower numbers appear first</p>
               </div>
             )}
           </div>
 
           <SheetFooter>
-            <Button
-              variant="outline"
-              onClick={() => setAddDrawerOpen(false)}
-            >
+            <Button variant="outline" onClick={() => setAddDrawerOpen(false)}>
               Cancel
             </Button>
-            <Button
-              onClick={handleAddAccess}
-              disabled={saving || !newAccess.role_id}
-            >
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              <Save className="h-4 w-4 mr-2" />
+            <Button onClick={handleAddAccess} disabled={saving || !newAccess.role_id}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              <Save className="mr-2 h-4 w-4" />
               Add Access
             </Button>
           </SheetFooter>
@@ -520,8 +495,8 @@ export function DashboardAccessConfig() {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Role Access</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to remove this role's access to the dashboard?
-              Users with this role will no longer be able to view or edit the dashboard.
+              Are you sure you want to remove this role's access to the dashboard? Users with this
+              role will no longer be able to view or edit the dashboard.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -531,7 +506,7 @@ export function DashboardAccessConfig() {
               disabled={deleting}
               className="bg-red-600 hover:bg-red-700"
             >
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Remove Access
             </AlertDialogAction>
           </AlertDialogFooter>

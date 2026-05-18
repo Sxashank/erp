@@ -1,7 +1,4 @@
-import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  ArrowLeft,
   Upload,
   Download,
   FileSpreadsheet,
@@ -10,10 +7,14 @@ import {
   AlertTriangle,
   RefreshCw,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Table,
@@ -23,17 +24,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import {
+  useImportBulkReceipts,
+  type BulkReceiptItem,
+  type BulkReceiptResponse,
+} from '@/hooks/lending/useReceipts';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { formatCurrency } from '@/lib/utils';
 
 interface UploadedReceipt {
   row: number;
-  loan_account: string;
+  loanAccount: string;
   entity: string;
-  receipt_date: string;
+  receiptDate: string;
   amount: number;
   mode: string;
-  instrument_number?: string;
+  instrumentNumber?: string;
   status: 'valid' | 'invalid' | 'duplicate' | 'warning';
   errors: string[];
   warnings: string[];
@@ -41,13 +48,15 @@ interface UploadedReceipt {
 
 export default function BulkReceiptUpload() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [parsedData, setParsedData] = useState<UploadedReceipt[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [serverResult, setServerResult] = useState<BulkReceiptResponse | null>(null);
+  const importBulk = useImportBulkReceipts();
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -67,79 +76,46 @@ export default function BulkReceiptUpload() {
       setUploadProgress(i);
     }
 
-    // Mock parsed data
-    const mockData: UploadedReceipt[] = [
-      {
-        row: 2,
-        loan_account: 'SMFC/LA/2024/00125',
-        entity: 'ABC Trading Co.',
-        receipt_date: '2025-01-15',
-        amount: 450000,
-        mode: 'NEFT',
-        instrument_number: 'UTR123456789',
-        status: 'valid',
-        errors: [],
-        warnings: [],
-      },
-      {
-        row: 3,
-        loan_account: 'SMFC/LA/2024/00089',
-        entity: 'XYZ Industries',
-        receipt_date: '2025-01-15',
-        amount: 750000,
-        mode: 'RTGS',
-        instrument_number: 'UTR987654321',
-        status: 'valid',
-        errors: [],
-        warnings: [],
-      },
-      {
-        row: 4,
-        loan_account: 'SMFC/LA/2024/00156',
-        entity: 'Metro Logistics',
-        receipt_date: '2025-01-14',
-        amount: 320000,
-        mode: 'CHEQUE',
-        instrument_number: 'CHQ456789',
-        status: 'warning',
-        errors: [],
-        warnings: ['Post-dated cheque'],
-      },
-      {
-        row: 5,
-        loan_account: 'INVALID/ACCOUNT',
-        entity: 'Unknown Entity',
-        receipt_date: '2025-01-14',
-        amount: 150000,
-        mode: 'CASH',
-        status: 'invalid',
-        errors: ['Loan account not found'],
-        warnings: [],
-      },
-      {
-        row: 6,
-        loan_account: 'SMFC/LA/2024/00125',
-        entity: 'ABC Trading Co.',
-        receipt_date: '2025-01-15',
-        amount: 450000,
-        mode: 'NEFT',
-        instrument_number: 'UTR123456789',
-        status: 'duplicate',
-        errors: ['Duplicate entry (same amount, date, and UTR)'],
-        warnings: [],
-      },
-    ];
-
-    setParsedData(mockData);
+    // The parsed-preview list will populate once a BE bulk-receipt preview
+    // endpoint ships. Today the BE exposes a single POST /lending/receipts/bulk
+    // that validates + creates in one call; we surface its result in the
+    // import-complete view rather than fabricating a client-side preview.
+    setParsedData([]);
     setIsUploading(false);
   };
 
   const handleProcess = async () => {
-    setIsProcessing(true);
-    // Simulate processing
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsProcessing(false);
-    setShowResults(true);
+    const items: BulkReceiptItem[] = parsedData
+      .filter((r) => r.status === 'valid' || r.status === 'warning')
+      .map((r) => ({
+        loanAccountNumber: r.loanAccount,
+        receiptAmount: r.amount,
+        receiptDate: r.receiptDate,
+        receiptMode: r.mode,
+        instrumentNumber: r.instrumentNumber,
+      }));
+    if (items.length === 0) {
+      toast({
+        title: 'Nothing to import',
+        description: 'No valid rows were detected in the uploaded file.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      const response = await importBulk.mutateAsync({
+        receipts: items,
+        autoAllocate: true,
+      });
+      setServerResult(response);
+      toast({
+        title: 'Bulk import complete',
+        description: `${response.successCount} of ${response.totalCount} receipts created.`,
+      });
+      setShowResults(true);
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
   const handleDownloadTemplate = () => {
@@ -149,44 +125,67 @@ export default function BulkReceiptUpload() {
 
   const validRecords = parsedData.filter((r) => r.status === 'valid');
   const warningRecords = parsedData.filter((r) => r.status === 'warning');
-  const invalidRecords = parsedData.filter((r) => r.status === 'invalid' || r.status === 'duplicate');
+  const invalidRecords = parsedData.filter(
+    (r) => r.status === 'invalid' || r.status === 'duplicate',
+  );
   const totalAmount = parsedData
     .filter((r) => r.status === 'valid' || r.status === 'warning')
     .reduce((sum, r) => sum + r.amount, 0);
 
-  if (showResults) {
+  if (showResults && serverResult) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <CheckCircle className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Bulk Upload Complete</h2>
-          <p className="text-muted-foreground mb-6">
-            {validRecords.length + warningRecords.length} receipts created successfully
+          <h2 className="mb-2 text-2xl font-bold">Bulk Upload Complete</h2>
+          <p className="mb-6 text-muted-foreground">
+            {serverResult.successCount} of {serverResult.totalCount} receipts created. Total amount:{' '}
+            {formatCurrency(Number(serverResult.totalAmount))}.
           </p>
-          <div className="grid grid-cols-3 gap-4 max-w-md mx-auto mb-6">
-            <div className="text-center p-4 bg-green-50 rounded-lg">
-              <div className="text-2xl font-bold text-green-600">{validRecords.length}</div>
+          <div className="mx-auto mb-6 grid max-w-md grid-cols-3 gap-4">
+            <div className="rounded-lg bg-green-50 p-4 text-center">
+              <div className="text-2xl font-bold text-green-600">{serverResult.successCount}</div>
               <div className="text-xs text-muted-foreground">Created</div>
             </div>
-            <div className="text-center p-4 bg-yellow-50 rounded-lg">
+            <div className="rounded-lg bg-yellow-50 p-4 text-center">
               <div className="text-2xl font-bold text-yellow-600">{warningRecords.length}</div>
               <div className="text-xs text-muted-foreground">With Warnings</div>
             </div>
-            <div className="text-center p-4 bg-red-50 rounded-lg">
-              <div className="text-2xl font-bold text-red-600">{invalidRecords.length}</div>
-              <div className="text-xs text-muted-foreground">Skipped</div>
+            <div className="rounded-lg bg-red-50 p-4 text-center">
+              <div className="text-2xl font-bold text-red-600">{serverResult.failedCount}</div>
+              <div className="text-xs text-muted-foreground">Failed</div>
             </div>
           </div>
-          <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => navigate('/lending/receipts')}>
+          {serverResult.failures.length > 0 && (
+            <Alert variant="destructive" className="mx-auto mb-6 max-w-2xl text-left">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertTitle>Failures</AlertTitle>
+              <AlertDescription>
+                <ul className="list-disc pl-5 text-sm">
+                  {serverResult.failures.slice(0, 5).map((f, i) => (
+                    <li key={i}>
+                      {f.loanAccountNumber ? `${f.loanAccountNumber}: ` : ''}
+                      {f.error ?? 'Unknown error'}
+                    </li>
+                  ))}
+                  {serverResult.failures.length > 5 && (
+                    <li>… and {serverResult.failures.length - 5} more</li>
+                  )}
+                </ul>
+              </AlertDescription>
+            </Alert>
+          )}
+          <div className="flex justify-center gap-4">
+            <Button variant="outline" onClick={() => navigate('/admin/lending/receipts')}>
               View Receipts
             </Button>
             <Button
               variant="outline"
               onClick={() => {
                 setShowResults(false);
+                setServerResult(null);
                 setParsedData([]);
                 setUploadedFile(null);
               }}
@@ -205,12 +204,12 @@ export default function BulkReceiptUpload() {
         title="Bulk Receipt Upload"
         subtitle="Upload multiple receipts from Excel/CSV file"
         breadcrumbs={[
-          { label: 'Receipts', to: '/lending/receipts' },
+          { label: 'Receipts', to: '/admin/lending/receipts' },
           { label: 'Bulk Upload' },
         ]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Upload Section */}
         <Card className={parsedData.length > 0 ? 'lg:col-span-2' : 'lg:col-span-3'}>
           <CardHeader>
@@ -220,16 +219,16 @@ export default function BulkReceiptUpload() {
           <CardContent>
             {!uploadedFile ? (
               <div
-                className="border-2 border-dashed rounded-lg p-12 text-center cursor-pointer hover:border-primary/50 transition-colors"
+                className="cursor-pointer rounded-lg border-2 border-dashed p-12 text-center transition-colors hover:border-primary/50"
                 onClick={() => fileInputRef.current?.click()}
               >
-                <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                <h3 className="text-lg font-medium mb-2">Drop your file here or click to browse</h3>
-                <p className="text-sm text-muted-foreground mb-4">
+                <Upload className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
+                <h3 className="mb-2 text-lg font-medium">Drop your file here or click to browse</h3>
+                <p className="mb-4 text-sm text-muted-foreground">
                   Supported formats: .xlsx, .xls, .csv (max 5MB)
                 </p>
                 <Button variant="outline">
-                  <FileSpreadsheet className="h-4 w-4 mr-2" />
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
                   Select File
                 </Button>
                 <input
@@ -241,15 +240,15 @@ export default function BulkReceiptUpload() {
                 />
               </div>
             ) : isUploading ? (
-              <div className="text-center py-12">
-                <RefreshCw className="h-12 w-12 mx-auto mb-4 text-primary animate-spin" />
-                <h3 className="text-lg font-medium mb-2">Parsing file...</h3>
-                <Progress value={uploadProgress} className="w-64 mx-auto" />
-                <p className="text-sm text-muted-foreground mt-2">{uploadProgress}% complete</p>
+              <div className="py-12 text-center">
+                <RefreshCw className="mx-auto mb-4 h-12 w-12 animate-spin text-primary" />
+                <h3 className="mb-2 text-lg font-medium">Parsing file...</h3>
+                <Progress value={uploadProgress} className="mx-auto w-64" />
+                <p className="mt-2 text-sm text-muted-foreground">{uploadProgress}% complete</p>
               </div>
             ) : (
               <div>
-                <div className="flex items-center justify-between p-4 border rounded-lg mb-4">
+                <div className="mb-4 flex items-center justify-between rounded-lg border p-4">
                   <div className="flex items-center gap-3">
                     <FileSpreadsheet className="h-8 w-8 text-green-600" />
                     <div>
@@ -272,20 +271,22 @@ export default function BulkReceiptUpload() {
                 </div>
 
                 {/* Validation Summary */}
-                <div className="grid grid-cols-4 gap-4 mb-6">
-                  <div className="text-center p-3 bg-muted rounded-lg">
+                <div className="mb-6 grid grid-cols-4 gap-4">
+                  <div className="rounded-lg bg-muted p-3 text-center">
                     <div className="text-2xl font-bold">{parsedData.length}</div>
                     <div className="text-xs text-muted-foreground">Total Records</div>
                   </div>
-                  <div className="text-center p-3 bg-green-50 rounded-lg">
+                  <div className="rounded-lg bg-green-50 p-3 text-center">
                     <div className="text-2xl font-bold text-green-600">{validRecords.length}</div>
                     <div className="text-xs text-muted-foreground">Valid</div>
                   </div>
-                  <div className="text-center p-3 bg-yellow-50 rounded-lg">
-                    <div className="text-2xl font-bold text-yellow-600">{warningRecords.length}</div>
+                  <div className="rounded-lg bg-yellow-50 p-3 text-center">
+                    <div className="text-2xl font-bold text-yellow-600">
+                      {warningRecords.length}
+                    </div>
                     <div className="text-xs text-muted-foreground">Warnings</div>
                   </div>
-                  <div className="text-center p-3 bg-red-50 rounded-lg">
+                  <div className="rounded-lg bg-red-50 p-3 text-center">
                     <div className="text-2xl font-bold text-red-600">{invalidRecords.length}</div>
                     <div className="text-xs text-muted-foreground">Invalid</div>
                   </div>
@@ -306,36 +307,47 @@ export default function BulkReceiptUpload() {
                   </TableHeader>
                   <TableBody>
                     {parsedData.map((record, index) => (
-                      <TableRow key={index} className={record.status === 'invalid' || record.status === 'duplicate' ? 'bg-red-50' : record.status === 'warning' ? 'bg-yellow-50' : ''}>
+                      <TableRow
+                        key={index}
+                        className={
+                          record.status === 'invalid' || record.status === 'duplicate'
+                            ? 'bg-red-50'
+                            : record.status === 'warning'
+                              ? 'bg-yellow-50'
+                              : ''
+                        }
+                      >
                         <TableCell>{record.row}</TableCell>
-                        <TableCell className="font-mono text-sm">{record.loan_account}</TableCell>
+                        <TableCell className="font-mono text-sm">{record.loanAccount}</TableCell>
                         <TableCell>{record.entity}</TableCell>
-                        <TableCell>{record.receipt_date}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(record.amount)}</TableCell>
+                        <TableCell>{record.receiptDate}</TableCell>
+                        <TableCell className="text-right">
+                          {formatCurrency(record.amount)}
+                        </TableCell>
                         <TableCell>{record.mode}</TableCell>
                         <TableCell>
                           {record.status === 'valid' && (
                             <Badge variant="default" className="bg-green-600">
-                              <CheckCircle className="h-3 w-3 mr-1" />
+                              <CheckCircle className="mr-1 h-3 w-3" />
                               Valid
                             </Badge>
                           )}
                           {record.status === 'warning' && (
                             <div>
                               <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
-                                <AlertTriangle className="h-3 w-3 mr-1" />
+                                <AlertTriangle className="mr-1 h-3 w-3" />
                                 Warning
                               </Badge>
-                              <p className="text-xs text-yellow-600 mt-1">{record.warnings[0]}</p>
+                              <p className="mt-1 text-xs text-yellow-600">{record.warnings[0]}</p>
                             </div>
                           )}
                           {(record.status === 'invalid' || record.status === 'duplicate') && (
                             <div>
                               <Badge variant="destructive">
-                                <XCircle className="h-3 w-3 mr-1" />
+                                <XCircle className="mr-1 h-3 w-3" />
                                 {record.status === 'duplicate' ? 'Duplicate' : 'Invalid'}
                               </Badge>
-                              <p className="text-xs text-red-600 mt-1">{record.errors[0]}</p>
+                              <p className="mt-1 text-xs text-red-600">{record.errors[0]}</p>
                             </div>
                           )}
                         </TableCell>
@@ -349,13 +361,13 @@ export default function BulkReceiptUpload() {
                     <AlertTriangle className="h-4 w-4" />
                     <AlertTitle>Invalid Records Found</AlertTitle>
                     <AlertDescription>
-                      {invalidRecords.length} record(s) will be skipped during processing. Please fix
-                      the errors and re-upload, or proceed with valid records only.
+                      {invalidRecords.length} record(s) will be skipped during processing. Please
+                      fix the errors and re-upload, or proceed with valid records only.
                     </AlertDescription>
                   </Alert>
                 )}
 
-                <div className="flex justify-end gap-4 mt-6">
+                <div className="mt-6 flex justify-end gap-4">
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -367,16 +379,18 @@ export default function BulkReceiptUpload() {
                   </Button>
                   <Button
                     onClick={handleProcess}
-                    disabled={isProcessing || validRecords.length + warningRecords.length === 0}
+                    disabled={
+                      importBulk.isPending || validRecords.length + warningRecords.length === 0
+                    }
                   >
-                    {isProcessing ? (
+                    {importBulk.isPending ? (
                       <>
-                        <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
                         Processing...
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="h-4 w-4 mr-2" />
+                        <CheckCircle className="mr-2 h-4 w-4" />
                         Process {validRecords.length + warningRecords.length} Records
                       </>
                     )}
@@ -395,8 +409,8 @@ export default function BulkReceiptUpload() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div>
-                <h4 className="font-medium mb-2">Required Columns:</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
+                <h4 className="mb-2 font-medium">Required Columns:</h4>
+                <ul className="space-y-1 text-sm text-muted-foreground">
                   <li>- Loan Account Number</li>
                   <li>- Receipt Date (DD/MM/YYYY)</li>
                   <li>- Amount</li>
@@ -405,8 +419,8 @@ export default function BulkReceiptUpload() {
               </div>
 
               <div>
-                <h4 className="font-medium mb-2">Optional Columns:</h4>
-                <ul className="text-sm text-muted-foreground space-y-1">
+                <h4 className="mb-2 font-medium">Optional Columns:</h4>
+                <ul className="space-y-1 text-sm text-muted-foreground">
                   <li>- Value Date</li>
                   <li>- Instrument Number</li>
                   <li>- Instrument Date</li>
@@ -416,7 +430,7 @@ export default function BulkReceiptUpload() {
               </div>
 
               <Button variant="outline" className="w-full" onClick={handleDownloadTemplate}>
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Download Template
               </Button>
             </CardContent>
@@ -449,7 +463,7 @@ export default function BulkReceiptUpload() {
 
               <div className="border-t pt-4">
                 <Button variant="outline" className="w-full" onClick={handleDownloadTemplate}>
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="mr-2 h-4 w-4" />
                   Download Error Report
                 </Button>
               </div>

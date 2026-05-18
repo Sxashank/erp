@@ -7,15 +7,15 @@ import { Check, ChevronsUpDown, Loader2, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Input } from '@/components/ui/input';
-import { cn } from '@/lib/utils';
 import { useCustomer, useCustomers } from '@/hooks/ap_ar/useCustomers';
+import { cn } from '@/lib/utils';
 
 export interface CustomerPickerProps {
   value: string | null;

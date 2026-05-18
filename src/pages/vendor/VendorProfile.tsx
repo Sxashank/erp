@@ -2,7 +2,6 @@
  * Vendor Profile Page
  */
 
-import { useState, useEffect } from 'react';
 import {
   User,
   Building2,
@@ -15,17 +14,20 @@ import {
   Save,
   Edit,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
 import { vendorProfileApi } from '@/services/vendorApi';
 import type { VendorInfo, VendorUser } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorProfile() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -51,7 +53,7 @@ export default function VendorProfile() {
       setFormData(profileRes.data);
       setUsers(usersRes.data.items || []);
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
+      logger.error('Failed to fetch profile:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -70,7 +72,7 @@ export default function VendorProfile() {
       setEditing(false);
       toast({ title: 'Profile updated successfully' });
     } catch (error) {
-      console.error('Failed to update profile:', error);
+      logger.error('Failed to update profile:', error);
       toast({
         variant: 'destructive',
         title: 'Error',

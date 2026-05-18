@@ -229,7 +229,6 @@ class NachBatch(BaseModel):
     __table_args__ = (
         Index("ix_lms_nach_batch_org_date", "organization_id", "batch_date"),
         Index("ix_lms_nach_batch_org_status", "organization_id", "status"),
-        Index("ix_lms_nach_batch_debit_date", "debit_date"),
     )
 
     def __repr__(self) -> str:

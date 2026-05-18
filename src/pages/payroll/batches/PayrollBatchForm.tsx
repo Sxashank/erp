@@ -2,14 +2,15 @@
  * Payroll Batch Create Page
  */
 
+import { Save, Calendar } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Calendar } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -17,10 +18,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import payrollService from '@/services/payrollService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import payrollService from '@/services/payrollService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const MONTHS = [
   { value: '1', label: 'January' },
@@ -67,7 +69,7 @@ export default function PayrollBatchForm() {
       const startDate = new Date(y, m - 1, 1);
       const endDate = new Date(y, m, 0); // Last day of month
 
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         pay_period_from: startDate.toISOString().split('T')[0],
         pay_period_to: endDate.toISOString().split('T')[0],
@@ -76,12 +78,12 @@ export default function PayrollBatchForm() {
   };
 
   const handleMonthChange = (value: string) => {
-    setFormData(prev => ({ ...prev, payroll_month: value }));
+    setFormData((prev) => ({ ...prev, payroll_month: value }));
     updatePayPeriod(value, formData.payroll_year);
   };
 
   const handleYearChange = (value: string) => {
-    setFormData(prev => ({ ...prev, payroll_year: value }));
+    setFormData((prev) => ({ ...prev, payroll_year: value }));
     updatePayPeriod(formData.payroll_month, value);
   };
 
@@ -124,11 +126,11 @@ export default function PayrollBatchForm() {
         description: 'Payroll batch created successfully',
       });
 
-      navigate(`/payroll/batches/${batch.id}`);
-    } catch (error: any) {
+      navigate(`/admin/payroll/batches/${batch.id}`);
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create batch',
+        description: getErrorMessage(error, 'Failed to create batch'),
         variant: 'destructive',
       });
     } finally {
@@ -137,37 +139,25 @@ export default function PayrollBatchForm() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/payroll/batches')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">New Payroll Batch</h1>
-          <p className="text-muted-foreground">
-            Create a new payroll batch for processing
-          </p>
-        </div>
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="New Payroll Batch"
+        subtitle="Create a new payroll batch for processing"
+        breadcrumbs={[{ label: 'Payroll Batches', to: '/admin/payroll/batches' }, { label: 'New' }]}
+      />
 
       <form onSubmit={handleSubmit}>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle>Payroll Period</CardTitle>
-              <CardDescription>
-                Select the month and year for payroll processing
-              </CardDescription>
+              <CardDescription>Select the month and year for payroll processing</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="payroll_month">Month *</Label>
-                  <Select
-                    value={formData.payroll_month}
-                    onValueChange={handleMonthChange}
-                  >
+                  <Select value={formData.payroll_month} onValueChange={handleMonthChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select month" />
                     </SelectTrigger>
@@ -182,10 +172,7 @@ export default function PayrollBatchForm() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="payroll_year">Year *</Label>
-                  <Select
-                    value={formData.payroll_year}
-                    onValueChange={handleYearChange}
-                  >
+                  <Select value={formData.payroll_year} onValueChange={handleYearChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select year" />
                     </SelectTrigger>
@@ -205,9 +192,7 @@ export default function PayrollBatchForm() {
           <Card>
             <CardHeader>
               <CardTitle>Pay Period Dates</CardTitle>
-              <CardDescription>
-                Define the actual date range for salary calculation
-              </CardDescription>
+              <CardDescription>Define the actual date range for salary calculation</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
@@ -217,9 +202,7 @@ export default function PayrollBatchForm() {
                     id="pay_period_from"
                     type="date"
                     value={formData.pay_period_from}
-                    onChange={(e) =>
-                      setFormData({ ...formData, pay_period_from: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, pay_period_from: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -228,14 +211,12 @@ export default function PayrollBatchForm() {
                     id="pay_period_to"
                     type="date"
                     value={formData.pay_period_to}
-                    onChange={(e) =>
-                      setFormData({ ...formData, pay_period_to: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, pay_period_to: e.target.value })}
                   />
                 </div>
               </div>
               <p className="text-sm text-muted-foreground">
-                <Calendar className="inline-block mr-1 h-4 w-4" />
+                <Calendar className="mr-1 inline-block h-4 w-4" />
                 These dates determine the attendance period for LOP calculation
               </p>
             </CardContent>
@@ -251,9 +232,7 @@ export default function PayrollBatchForm() {
                 <Textarea
                   id="remarks"
                   value={formData.remarks}
-                  onChange={(e) =>
-                    setFormData({ ...formData, remarks: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, remarks: e.target.value })}
                   placeholder="Optional notes about this payroll batch"
                   rows={3}
                 />
@@ -262,11 +241,11 @@ export default function PayrollBatchForm() {
           </Card>
         </div>
 
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="mt-6 flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/payroll/batches')}
+            onClick={() => navigate('/admin/payroll/batches')}
           >
             Cancel
           </Button>

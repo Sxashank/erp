@@ -174,7 +174,7 @@ class NachService:
         batch.total_amount = total_amount
         batch.pending_count = batch.total_transactions
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
 
         return batch
@@ -295,7 +295,7 @@ class NachService:
             if t.status == NachTransactionStatus.PENDING:
                 t.status = NachTransactionStatus.INCLUDED
 
-        await self.db.commit()
+        await self.db.flush()
 
         return file_name, file_path, checksum
 
@@ -352,7 +352,7 @@ class NachService:
             batch.status = NachBatchStatus.FAILED
             batch.error_message = response.message
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
 
         return batch
@@ -447,7 +447,7 @@ class NachService:
         if batch.pending_count == 0:
             batch.status = NachBatchStatus.COMPLETED
 
-        await self.db.commit()
+        await self.db.flush()
 
         return success_count, failure_count, parse_errors
 
@@ -624,7 +624,7 @@ class NachService:
         batch.total_amount = total_amount
         batch.pending_count = len(transactions)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
 
         return batch
@@ -858,7 +858,7 @@ class NachService:
             if txn.status in (NachTransactionStatus.PENDING, NachTransactionStatus.INCLUDED):
                 txn.status = NachTransactionStatus.CANCELLED
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
 
         return batch

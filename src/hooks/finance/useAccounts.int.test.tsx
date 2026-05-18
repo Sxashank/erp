@@ -5,10 +5,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
 import type { ReactNode } from 'react';
+import { describe, expect, it } from 'vitest';
 
 import { useAccounts, usePeriods } from './useAccounts';
+
 import { server } from '@/test/msw/server';
 
 function wrapper({ children }: { children: ReactNode }) {

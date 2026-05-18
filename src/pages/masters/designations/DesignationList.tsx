@@ -1,11 +1,11 @@
+import { Edit, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import {
 import { designationsApi } from '@/services/api';
 import type { Designation, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function DesignationList() {
   const navigate = useNavigate();
   const [designations, setDesignations] = useState<Designation[]>([]);
@@ -37,7 +38,7 @@ export function DesignationList() {
       setDesignations(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch designations:', error);
+      logger.error('Failed to fetch designations:', error);
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ export function DesignationList() {
       await designationsApi.delete(id);
       fetchDesignations(pagination.page);
     } catch (error) {
-      console.error('Failed to delete designation:', error);
+      logger.error('Failed to delete designation:', error);
     }
   };
 

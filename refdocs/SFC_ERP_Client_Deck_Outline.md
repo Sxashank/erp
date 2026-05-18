@@ -2,24 +2,27 @@
 
 Prepared for SFC (NBFC)
 
+Implementation roadmap: `refdocs/SFC_ERP_Implementation_Roadmap.md`
+
 ## Slide 1: Title
 - SFC ERP: Integrated NBFC Platform
-- Subtitle: Capabilities, Integrations, and Analytics
+- Subtitle: Manual Operations, Capabilities, and Analytics
 - Date and presenter
 
 ## Slide 2: Executive Summary
 - End-to-end coverage from onboarding to collections and compliance.
 - Single source of truth with audit-grade controls.
-- Self-service portals to improve service and productivity.
+- Manual-first ERP controls to improve service and productivity without relying on live integrations.
+- Corporate/project lending focus for maritime infrastructure, not retail individual loan disbursement.
 
 ## Slide 3: Business Outcomes
 - Faster lending cycle with reduced manual handoffs.
-- Stronger compliance with automated tracking and alerts.
+- Stronger compliance with structured tracking, reminders, and audit trail.
 - Improved management visibility via dashboards and MIS.
 
 ## Slide 4: End-to-End Process Map
-- Borrower onboarding -> LOS -> LAMS -> Collections/NPA -> Closure.
-- Parallel tracks: Treasury/Risk, Finance/Compliance, HR.
+- Resource mobilisation -> borrower onboarding -> appraisal -> sanction -> tranche disbursement -> demand -> receipt allocation -> borrowing repayment -> ALM/risk -> closure.
+- Parallel management tracks: source of funds, profitability/spread, compliance, risk, and treasury liquidity.
 
 ## Slide 5: Module Coverage (At a Glance)
 - Masters + GL
@@ -35,21 +38,24 @@ Prepared for SFC (NBFC)
 - Entity master, KYC/CKYC, credit rating.
 - Application, appraisal, sanction workflows.
 - Sanction terms and condition tracking.
+- Project finance controls: DSCR, escrow/source-of-repayment, security cover, milestone readiness, and promoter contribution.
 
 ## Slide 7: Loan Servicing and Collections
-- Disbursements, schedules, rate resets.
-- Receipt allocation and demand tracking.
-- NPA classification and legal workflows.
+- Tranche disbursements, structured schedules, rate resets, and moratorium tracking.
+- Interest demand generation, manual receipt posting, allocation waterfall, and outstanding balance updates.
+- Current workflow: manual receipt entry, UTR/reference capture, partial payment handling, and allocation review.
+- Future automation: bank statement import, UTR/reference matching, and exception queue.
 
 ## Slide 8: Treasury, ALM, and Risk
 - Borrowings management and cost of funds.
 - ALM buckets, gaps, and early warnings.
 - Exposure monitoring and CRAR trends.
+- Source-of-funds utilisation, spread/NII/NIM, and borrower inflows vs lender outflows.
 
-## Slide 9: Finance and Statutory Compliance
-- Fixed assets, TDS, GST, BRS, FD tracking.
-- Bank statement import and reconciliation.
-- GST returns and ITC reconciliation support.
+## Slide 9: Finance, Accounting, and Reconciliation
+- Accounting for borrowing drawdown, loan disbursement, interest income, interest expense, receipt allocation, and borrowing repayment.
+- Manual BRS observations and future bank statement import/loan-level receipt matching.
+- Fixed assets, TDS, GST, FD tracking, GST returns, and ITC reconciliation.
 
 ## Slide 10: Compliance and Governance
 - RBI/MCA/GST/IT compliance calendar.
@@ -57,24 +63,26 @@ Prepared for SFC (NBFC)
 - Document versioning and secure access.
 
 ## Slide 11: Portals and Self-Service
-- Borrower portal: schedules, statements, payments, requests.
-- Vendor portal: invoices, payment status, TDS certificates.
-- Employee portal: attendance, leave, payroll, claims.
+- Future borrower portal: schedules, statements, payments, requests.
+- Future vendor portal: invoices, payment status, TDS certificates.
+- Future employee portal: attendance, leave, payroll, claims.
 
 ## Slide 12: Analytics and MIS
 - Executive KPIs (AUM, NPA, CRAR, NIM).
 - Standard MIS: ALM, NPA movement, compliance tracker.
 - Scheduled reports with PDF/Excel delivery.
+- Lifecycle cockpits: loan pipeline, disbursement readiness, collections, treasury funding, ALM, profitability, and risk.
 
-## Slide 13: Integrations Landscape
-- CBS, payment gateway, CKYC, CERSAI, CRILC.
-- Credit bureaus, GST/MCA portals.
-- Email/SMS gateways, biometric attendance.
+## Slide 13: Future Automation Landscape
+- No live bank, GST, MCA, credit bureau, payment gateway, NACH, or portal integrations in current scope.
+- Current scope is manual entry, maker-checker, audit trail, dashboards, and reports.
+- Future roadmap can add integrations after business process stabilization.
 
 ## Slide 14: Security and Controls
-- Role-based access and MFA for portals.
+- Role-based access and maker-checker controls.
+- Future portal access can use MFA if portals are enabled.
 - Audit logs for all critical actions.
-- API logging and monitoring.
+- Future API logging and monitoring when integrations are enabled.
 
 ## Slide 15: Implementation Approach
 - Phased rollout by module or business function.
@@ -83,5 +91,6 @@ Prepared for SFC (NBFC)
 
 ## Slide 16: Next Steps
 - Confirm scope and priorities.
-- Validate integrations and report requirements.
+- Validate manual workflows and report requirements.
+- Keep integrations as future roadmap items until approved.
 - Finalize timeline and resourcing.

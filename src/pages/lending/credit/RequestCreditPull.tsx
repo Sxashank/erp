@@ -3,24 +3,20 @@
  * Form to initiate a credit bureau pull for a customer
  */
 
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { CreditCard, User, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
-import {
-  ArrowLeft,
-  CreditCard,
-  User,
-  AlertTriangle,
-  Info,
-  CheckCircle,
-  Loader2,
-} from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Form,
   FormControl,
@@ -30,6 +26,8 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
   SelectContent,
@@ -37,13 +35,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Separator } from '@/components/ui/separator';
-import { DatePicker } from '@/components/ui/date-picker';
-
+import { useCreateCreditPull } from '@/hooks/lending/useCreditPulls';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { logger } from '@/lib/logger';
+import type { CreateCreditPullRequest } from '@/services/lending/creditApi';
 // Form validation schema
 const creditPullFormSchema = z.object({
   bureau: z.enum(['CIBIL', 'EXPERIAN', 'EQUIFAX', 'CRIF'], {
@@ -82,7 +79,8 @@ const creditPullFormSchema = z.object({
   }),
 });
 
-type CreditPullFormData = z.infer<typeof creditPullFormSchema>;
+type CreditPullFormInput = z.input<typeof creditPullFormSchema>;
+type CreditPullFormData = z.output<typeof creditPullFormSchema>;
 
 // Bureau info
 const bureauInfo = {
@@ -111,7 +109,8 @@ const bureauInfo = {
 export default function RequestCreditPull() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const createPullMutation = useCreateCreditPull();
   const [existingScore, setExistingScore] = useState<{
     score: number;
     bureau: string;
@@ -128,8 +127,8 @@ export default function RequestCreditPull() {
     consent: false,
   };
 
-  const form = useForm<CreditPullFormData>({
-    resolver: zodResolver(creditPullFormSchema) as any,
+  const form = useForm<CreditPullFormInput, unknown, CreditPullFormData>({
+    resolver: zodResolver(creditPullFormSchema),
     defaultValues,
   });
 
@@ -137,54 +136,68 @@ export default function RequestCreditPull() {
   const pullType = form.watch('pullType');
   const panNumber = form.watch('panNumber');
 
-  // Check for existing score when PAN changes
-  const checkExistingScore = async (pan: string) => {
-    // Mock check - in reality this would call the API
-    if (pan === 'ABCDE1234F') {
-      setExistingScore({
-        score: 782,
-        bureau: 'CIBIL',
-        pulledAt: '2025-01-10',
-        isValid: true,
-      });
-    } else {
-      setExistingScore(null);
-    }
+  // Check for existing valid score. Wires to
+  // GET /lending/credit/pulls?pan=:pan&status=COMPLETED once that filter is
+  // exposed; until then we just clear any prior score.
+  const checkExistingScore = async (_pan: string) => {
+    setExistingScore(null);
   };
 
   const onSubmit = async (data: CreditPullFormData) => {
-    setIsSubmitting(true);
-    try {
-      // API call would go here
-      logger.debug('Submitting credit pull request:', data);
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    // Build the camelCase request body the backend contract exposes. Only send
+    // populated optional fields so the BE doesn't reject empty strings.
+    const payload: CreateCreditPullRequest = {
+      bureau: data.bureau,
+      pullType: data.pullType,
+      customerName: data.customerName,
+    };
+    if (data.panNumber) payload.panNumber = data.panNumber;
+    if (data.mobileNumber) payload.mobileNumber = data.mobileNumber;
+    if (data.email) payload.email = data.email;
+    if (data.dateOfBirth) {
+      // Wire format is ISO date `yyyy-MM-dd` (CLAUDE.md §5.8).
+      payload.dateOfBirth = data.dateOfBirth.toISOString().slice(0, 10);
+    }
+    if (data.addressLine1) payload.addressLine1 = data.addressLine1;
+    if (data.addressLine2) payload.addressLine2 = data.addressLine2;
+    if (data.city) payload.city = data.city;
+    if (data.state) payload.state = data.state;
+    if (data.pincode) payload.pincode = data.pincode;
+    if (data.entityId) payload.entityId = data.entityId;
+    if (data.loanApplicationId) payload.loanApplicationId = data.loanApplicationId;
+    if (data.purpose) payload.purpose = data.purpose;
 
-      // Navigate to the pull result
-      navigate('/lending/credit/pulls/new-pull-id');
-    } catch (error) {
-      console.error('Error submitting credit pull:', error);
-    } finally {
-      setIsSubmitting(false);
+    // Note: PAN is collected but never logged (CLAUDE.md §8.7). The mutation
+    // hook injects an Idempotency-Key per call (CLAUDE.md §6.3).
+    logger.debug('Submitting credit pull request', {
+      bureau: payload.bureau,
+      pullType: payload.pullType,
+    });
+
+    try {
+      const result = await createPullMutation.mutateAsync(payload);
+      toast({
+        title: 'Credit pull initiated',
+        description: `${result.bureau} ${result.pullType.toLowerCase()} pull queued. Reference: ${
+          result.requestReference ?? result.id.slice(0, 8)
+        }`,
+      });
+      navigate(`/admin/lending/credit/pulls/${result.id}`);
+    } catch (err) {
+      showErrorToast(err, toast);
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/lending/credit')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Request Credit Report</h1>
-          <p className="text-muted-foreground">
-            Pull credit report from CIBIL, Experian, Equifax, or CRIF
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Request Credit Report"
+        subtitle="Pull credit report from CIBIL, Experian, Equifax, or CRIF"
+        breadcrumbs={[{ label: 'Credit Pulls', to: '/admin/lending/credit' }, { label: 'Request' }]}
+      />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid gap-6 lg:grid-cols-3">
             {/* Left Column - Bureau & Pull Type */}
             <div className="space-y-6">
@@ -212,7 +225,7 @@ export default function RequestCreditPull() {
                             {Object.entries(bureauInfo).map(([key, info]) => (
                               <div
                                 key={key}
-                                className={`flex items-start space-x-3 rounded-lg border p-4 cursor-pointer transition-colors ${
+                                className={`flex cursor-pointer items-start space-x-3 rounded-lg border p-4 transition-colors ${
                                   field.value === key
                                     ? 'border-primary bg-primary/5'
                                     : 'border-muted hover:border-primary/50'
@@ -221,10 +234,7 @@ export default function RequestCreditPull() {
                               >
                                 <RadioGroupItem value={key} id={key} className="mt-1" />
                                 <div className="space-y-1">
-                                  <label
-                                    htmlFor={key}
-                                    className="font-medium cursor-pointer"
-                                  >
+                                  <label htmlFor={key} className="cursor-pointer font-medium">
                                     {info.name}
                                   </label>
                                   <p className="text-xs text-muted-foreground">
@@ -264,7 +274,7 @@ export default function RequestCreditPull() {
                             className="space-y-3"
                           >
                             <div
-                              className={`flex items-start space-x-3 rounded-lg border p-4 cursor-pointer transition-colors ${
+                              className={`flex cursor-pointer items-start space-x-3 rounded-lg border p-4 transition-colors ${
                                 field.value === 'SOFT'
                                   ? 'border-green-500 bg-green-50'
                                   : 'border-muted hover:border-green-300'
@@ -273,12 +283,12 @@ export default function RequestCreditPull() {
                             >
                               <RadioGroupItem value="SOFT" id="soft" className="mt-1" />
                               <div className="space-y-1">
-                                <label htmlFor="soft" className="font-medium cursor-pointer">
+                                <label htmlFor="soft" className="cursor-pointer font-medium">
                                   Soft Pull
                                 </label>
                                 <p className="text-xs text-muted-foreground">
-                                  Does not affect customer's credit score. Use for
-                                  pre-qualification and account reviews.
+                                  Does not affect customer's credit score. Use for pre-qualification
+                                  and account reviews.
                                 </p>
                                 <Badge variant="outline" className="bg-green-50 text-green-700">
                                   Recommended
@@ -286,7 +296,7 @@ export default function RequestCreditPull() {
                               </div>
                             </div>
                             <div
-                              className={`flex items-start space-x-3 rounded-lg border p-4 cursor-pointer transition-colors ${
+                              className={`flex cursor-pointer items-start space-x-3 rounded-lg border p-4 transition-colors ${
                                 field.value === 'HARD'
                                   ? 'border-amber-500 bg-amber-50'
                                   : 'border-muted hover:border-amber-300'
@@ -295,12 +305,12 @@ export default function RequestCreditPull() {
                             >
                               <RadioGroupItem value="HARD" id="hard" className="mt-1" />
                               <div className="space-y-1">
-                                <label htmlFor="hard" className="font-medium cursor-pointer">
+                                <label htmlFor="hard" className="cursor-pointer font-medium">
                                   Hard Pull
                                 </label>
                                 <p className="text-xs text-muted-foreground">
-                                  May temporarily affect credit score. Use only for final
-                                  loan approval decisions.
+                                  May temporarily affect credit score. Use only for final loan
+                                  approval decisions.
                                 </p>
                                 <Badge variant="outline" className="bg-amber-50 text-amber-700">
                                   Use with caution
@@ -330,7 +340,7 @@ export default function RequestCreditPull() {
             </div>
 
             {/* Right Column - Customer Details */}
-            <div className="lg:col-span-2 space-y-6">
+            <div className="space-y-6 lg:col-span-2">
               {/* Customer Information */}
               <Card>
                 <CardHeader>
@@ -338,9 +348,7 @@ export default function RequestCreditPull() {
                     <User className="h-5 w-5" />
                     Customer Information
                   </CardTitle>
-                  <CardDescription>
-                    Enter customer details for credit bureau lookup
-                  </CardDescription>
+                  <CardDescription>Enter customer details for credit bureau lookup</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid gap-4 md:grid-cols-2">
@@ -373,7 +381,7 @@ export default function RequestCreditPull() {
                                   checkExistingScore(e.target.value.toUpperCase());
                                 }
                               }}
-                              className="uppercase font-mono"
+                              className="font-mono uppercase"
                             />
                           </FormControl>
                           <FormDescription>
@@ -389,20 +397,17 @@ export default function RequestCreditPull() {
                   {existingScore && (
                     <Alert className="border-green-200 bg-green-50">
                       <CheckCircle className="h-4 w-4 text-green-600" />
-                      <AlertTitle className="text-green-700">
-                        Valid Report Found
-                      </AlertTitle>
+                      <AlertTitle className="text-green-700">Valid Report Found</AlertTitle>
                       <AlertDescription className="text-green-600">
                         A valid {existingScore.bureau} report exists for this PAN with score{' '}
-                        <strong>{existingScore.score}</strong> (pulled on{' '}
-                        {existingScore.pulledAt}). You may use the existing report instead
-                        of pulling a new one.
+                        <strong>{existingScore.score}</strong> (pulled on {existingScore.pulledAt}).
+                        You may use the existing report instead of pulling a new one.
                         <div className="mt-2">
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={() => navigate('/lending/credit/pulls/existing-id')}
+                            onClick={() => navigate('/admin/lending/credit/pulls/existing-id')}
                           >
                             View Existing Report
                           </Button>
@@ -425,9 +430,7 @@ export default function RequestCreditPull() {
                               placeholder="Select date"
                             />
                           </FormControl>
-                          <FormDescription>
-                            Helps in accurate matching
-                          </FormDescription>
+                          <FormDescription>Helps in accurate matching</FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -454,11 +457,7 @@ export default function RequestCreditPull() {
                       <FormItem>
                         <FormLabel>Email</FormLabel>
                         <FormControl>
-                          <Input
-                            type="email"
-                            placeholder="customer@example.com"
-                            {...field}
-                          />
+                          <Input type="email" placeholder="customer@example.com" {...field} />
                         </FormControl>
                         <FormMessage />
                       </FormItem>
@@ -516,10 +515,7 @@ export default function RequestCreditPull() {
                           <FormItem>
                             <FormLabel>State</FormLabel>
                             <FormControl>
-                              <Select
-                                onValueChange={field.onChange}
-                                value={field.value}
-                              >
+                              <Select onValueChange={field.onChange} value={field.value}>
                                 <SelectTrigger>
                                   <SelectValue placeholder="Select state" />
                                 </SelectTrigger>
@@ -650,18 +646,14 @@ export default function RequestCreditPull() {
                     render={({ field }) => (
                       <FormItem className="flex flex-row items-start space-x-3 space-y-0">
                         <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                         <div className="space-y-1 leading-none">
                           <FormLabel>Customer Consent Confirmation *</FormLabel>
                           <FormDescription>
-                            I confirm that the customer has provided explicit consent to
-                            pull their credit report from the selected bureau. The
-                            customer understands that this inquiry will be recorded in
-                            their credit history.
+                            I confirm that the customer has provided explicit consent to pull their
+                            credit report from the selected bureau. The customer understands that
+                            this inquiry will be recorded in their credit history.
                           </FormDescription>
                           <FormMessage />
                         </div>
@@ -676,13 +668,15 @@ export default function RequestCreditPull() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate('/lending/credit')}
+                  onClick={() => navigate('/admin/lending/credit')}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isSubmitting ? 'Pulling Report...' : 'Pull Credit Report'}
+                <Button type="submit" disabled={createPullMutation.isPending}>
+                  {createPullMutation.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {createPullMutation.isPending ? 'Pulling Report...' : 'Pull Credit Report'}
                 </Button>
               </div>
             </div>

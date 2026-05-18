@@ -1,8 +1,4 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useNavigate } from 'react-router-dom';
 import {
   Search,
   User,
@@ -13,12 +9,16 @@ import {
   AlertCircle,
   Download,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
+import * as z from 'zod';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -28,6 +28,8 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -36,9 +38,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { formatDate } from '@/lib/utils';
 
+import { logger } from "@/lib/logger";
 // Form schema for CKYC search
 const ckycSearchSchema = z.object({
   entity_id: z.string().uuid('Please select an entity'),
@@ -157,7 +159,7 @@ export default function CKYCSearch() {
       setSearchResults(mockSearchResults);
       setHasSearched(true);
     } catch (error) {
-      console.error('CKYC Search failed:', error);
+      logger.error('CKYC Search failed:', error);
     } finally {
       setIsSearching(false);
     }

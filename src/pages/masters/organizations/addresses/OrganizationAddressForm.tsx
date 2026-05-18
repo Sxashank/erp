@@ -1,8 +1,9 @@
+import { Loader2, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { organizationsApi } from '@/services/api';
 import { INDIAN_STATES, STATUS_OPTIONS } from '@/types';
+import { logger } from "@/lib/logger";
 import type {
   Organization,
   OrganizationAddress,
@@ -69,7 +71,7 @@ export function OrganizationAddressForm() {
       const response = await organizationsApi.get(orgId);
       setOrganization(response.data);
     } catch (error) {
-      console.error('Failed to fetch organization:', error);
+      logger.error('Failed to fetch organization:', error);
     }
   };
 
@@ -95,7 +97,7 @@ export function OrganizationAddressForm() {
         status: address.status,
       });
     } catch (error) {
-      console.error('Failed to fetch address:', error);
+      logger.error('Failed to fetch address:', error);
     } finally {
       setLoading(false);
     }
@@ -112,7 +114,7 @@ export function OrganizationAddressForm() {
       }
       navigate(`/admin/organizations/${orgId}/addresses`);
     } catch (error) {
-      console.error('Failed to save address:', error);
+      logger.error('Failed to save address:', error);
     } finally {
       setSubmitting(false);
     }
@@ -128,23 +130,16 @@ export function OrganizationAddressForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(`/admin/organizations/${orgId}/addresses`)}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Address' : 'New Address'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {organization?.name} - {isEdit ? 'Update address details' : 'Add a new address'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Address' : 'New Address'}
+        subtitle={`${organization?.name ?? ''} - ${isEdit ? 'Update address details' : 'Add a new address'}`}
+        breadcrumbs={[
+          { label: 'Organizations', to: '/admin/organizations' },
+          { label: organization?.name ?? '...', to: `/admin/organizations/${orgId}` },
+          { label: 'Addresses', to: `/admin/organizations/${orgId}/addresses` },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Address Type */}
@@ -228,11 +223,7 @@ export function OrganizationAddressForm() {
 
             <div className="space-y-2">
               <Label htmlFor="landmark">Landmark</Label>
-              <Input
-                id="landmark"
-                {...register('landmark')}
-                placeholder="Near..."
-              />
+              <Input id="landmark" {...register('landmark')} placeholder="Near..." />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -243,17 +234,11 @@ export function OrganizationAddressForm() {
                   {...register('city', { required: 'City is required' })}
                   placeholder="Mumbai"
                 />
-                {errors.city && (
-                  <p className="text-sm text-red-500">{errors.city.message}</p>
-                )}
+                {errors.city && <p className="text-sm text-red-500">{errors.city.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="district">District</Label>
-                <Input
-                  id="district"
-                  {...register('district')}
-                  placeholder="Mumbai Suburban"
-                />
+                <Input id="district" {...register('district')} placeholder="Mumbai Suburban" />
               </div>
             </div>
 
@@ -283,18 +268,11 @@ export function OrganizationAddressForm() {
                   {...register('pincode', { required: 'Pincode is required' })}
                   placeholder="400001"
                 />
-                {errors.pincode && (
-                  <p className="text-sm text-red-500">{errors.pincode.message}</p>
-                )}
+                {errors.pincode && <p className="text-sm text-red-500">{errors.pincode.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="country">Country</Label>
-                <Input
-                  id="country"
-                  {...register('country')}
-                  placeholder="IN"
-                  defaultValue="IN"
-                />
+                <Input id="country" {...register('country')} placeholder="IN" defaultValue="IN" />
               </div>
             </div>
           </CardContent>
@@ -346,9 +324,7 @@ export function OrganizationAddressForm() {
                 onCheckedChange={(checked) => setValue('is_primary', checked as boolean)}
               />
               <Label htmlFor="is_primary">Primary Address</Label>
-              <span className="text-sm text-slate-500">
-                (Default address for correspondence)
-              </span>
+              <span className="text-sm text-slate-500">(Default address for correspondence)</span>
             </div>
           </CardContent>
         </Card>

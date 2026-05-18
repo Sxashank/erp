@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -20,6 +20,7 @@ import { departmentsApi, organizationsApi } from '@/services/api';
 import { STATUS_OPTIONS } from '@/types';
 import type { DepartmentCreate, DepartmentUpdate, Department, Organization } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function DepartmentForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -62,7 +63,7 @@ export function DepartmentForm() {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
@@ -71,7 +72,7 @@ export function DepartmentForm() {
       const response = await departmentsApi.list({ organization_id: orgId, page_size: 100 });
       setParentDepartments(response.data.items.filter((d: Department) => d.id !== id));
     } catch (error) {
-      console.error('Failed to fetch parent departments:', error);
+      logger.error('Failed to fetch parent departments:', error);
     }
   };
 
@@ -94,7 +95,7 @@ export function DepartmentForm() {
         status: dept.status,
       });
     } catch (error) {
-      console.error('Failed to fetch department:', error);
+      logger.error('Failed to fetch department:', error);
     } finally {
       setLoading(false);
     }
@@ -114,7 +115,7 @@ export function DepartmentForm() {
       }
       navigate('/admin/departments');
     } catch (error) {
-      console.error('Failed to save department:', error);
+      logger.error('Failed to save department:', error);
     } finally {
       setSubmitting(false);
     }

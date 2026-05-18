@@ -4,7 +4,8 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 from app.models.notification import (
     NotificationCategory,
@@ -12,7 +13,7 @@ from app.models.notification import (
 )
 
 
-class TemplateVariableCreate(BaseModel):
+class TemplateVariableCreate(CamelSchema):
     """Schema for creating a template variable."""
 
     name: str = Field(..., min_length=1, max_length=100)
@@ -29,7 +30,7 @@ class TemplateVariableCreate(BaseModel):
     display_order: int = 0
 
 
-class TemplateVariableResponse(BaseModel):
+class TemplateVariableResponse(CamelSchema):
     """Schema for template variable response."""
 
     id: UUID
@@ -47,11 +48,8 @@ class TemplateVariableResponse(BaseModel):
     sample_value: Optional[str] = None
     display_order: int
 
-    class Config:
-        from_attributes = True
 
-
-class NotificationTemplateCreate(BaseModel):
+class NotificationTemplateCreate(CamelSchema):
     """Schema for creating a notification template."""
 
     code: str = Field(..., min_length=1, max_length=100)
@@ -97,7 +95,7 @@ class NotificationTemplateCreate(BaseModel):
     variable_definitions: Optional[List[TemplateVariableCreate]] = None
 
 
-class NotificationTemplateUpdate(BaseModel):
+class NotificationTemplateUpdate(CamelSchema):
     """Schema for updating a notification template."""
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -139,7 +137,7 @@ class NotificationTemplateUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class NotificationTemplateResponse(BaseModel):
+class NotificationTemplateResponse(CamelSchema):
     """Schema for notification template response."""
 
     id: UUID
@@ -188,11 +186,8 @@ class NotificationTemplateResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class NotificationTemplateListResponse(BaseModel):
+class NotificationTemplateListResponse(CamelSchema):
     """Schema for paginated template list response."""
 
     items: List[NotificationTemplateResponse]
@@ -201,7 +196,7 @@ class NotificationTemplateListResponse(BaseModel):
     page_size: int
 
 
-class TemplatePreviewRequest(BaseModel):
+class TemplatePreviewRequest(CamelSchema):
     """Schema for template preview request."""
 
     template_id: Optional[UUID] = None
@@ -210,7 +205,7 @@ class TemplatePreviewRequest(BaseModel):
     channel: str = "email"
 
 
-class TemplatePreviewResponse(BaseModel):
+class TemplatePreviewResponse(CamelSchema):
     """Schema for template preview response."""
 
     channel: str

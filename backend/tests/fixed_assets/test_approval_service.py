@@ -14,7 +14,7 @@ from uuid import uuid4
 
 from app.core.constants import (
     ApprovalWorkflowType,
-    ApprovalStatus,
+    ApprovalRequestStatus,
     ApprovalAction,
 )
 
@@ -38,14 +38,14 @@ class TestApprovalWorkflowConfiguration:
         """Test workflow can have multiple approval levels."""
         # Single level approval
         single_level_workflow = {
-            "workflow_type": ApprovalWorkflowType.ASSET_CAPITALIZATION,
+            "workflow_type": ApprovalWorkflowType.FA_ASSET_CAPITALIZATION,
             "approval_levels": 1,
         }
         assert single_level_workflow["approval_levels"] == 1
 
         # Two level approval
         two_level_workflow = {
-            "workflow_type": ApprovalWorkflowType.ASSET_DISPOSAL,
+            "workflow_type": ApprovalWorkflowType.FA_ASSET_DISPOSAL,
             "approval_levels": 2,
         }
         assert two_level_workflow["approval_levels"] == 2
@@ -67,14 +67,14 @@ class TestApprovalWorkflowConfiguration:
     def test_workflow_types(self):
         """Test all workflow types are defined."""
         workflow_types = [
-            ApprovalWorkflowType.ASSET_CREATION,
-            ApprovalWorkflowType.ASSET_CAPITALIZATION,
-            ApprovalWorkflowType.ASSET_DISPOSAL,
-            ApprovalWorkflowType.ASSET_REVALUATION,
-            ApprovalWorkflowType.DEPRECIATION_RUN,
-            ApprovalWorkflowType.ASSET_TRANSFER,
-            ApprovalWorkflowType.INSURANCE_CLAIM,
-            ApprovalWorkflowType.LEASE_ACTIVATION,
+            ApprovalWorkflowType.FA_ASSET_CREATION,
+            ApprovalWorkflowType.FA_ASSET_CAPITALIZATION,
+            ApprovalWorkflowType.FA_ASSET_DISPOSAL,
+            ApprovalWorkflowType.FA_ASSET_REVALUATION,
+            ApprovalWorkflowType.FA_DEPRECIATION_RUN,
+            ApprovalWorkflowType.FA_ASSET_TRANSFER,
+            ApprovalWorkflowType.FA_INSURANCE_CLAIM,
+            ApprovalWorkflowType.FA_LEASE_ACTIVATION,
         ]
 
         assert len(workflow_types) >= 8
@@ -87,16 +87,16 @@ class TestApprovalRequestCreation:
         """Test creating a new approval request."""
         request = {
             "id": uuid4(),
-            "workflow_type": ApprovalWorkflowType.ASSET_DISPOSAL,
+            "workflow_type": ApprovalWorkflowType.FA_ASSET_DISPOSAL,
             "entity_type": "FIXED_ASSET",
             "entity_id": uuid4(),
             "requested_by": uuid4(),
             "requested_at": datetime.now(timezone.utc),
-            "status": ApprovalStatus.PENDING,
+            "status": ApprovalRequestStatus.PENDING,
             "current_level": 1,
         }
 
-        assert request["status"] == ApprovalStatus.PENDING
+        assert request["status"] == ApprovalRequestStatus.PENDING
         assert request["current_level"] == 1
 
     def test_approval_request_includes_amount(self):
@@ -118,49 +118,49 @@ class TestApprovalRequestCreation:
         assert len(request["remarks"]) > 0
 
 
-class TestApprovalStatusTransitions:
+class TestApprovalRequestStatusTransitions:
     """Tests for approval status transitions."""
 
     def test_pending_to_approved(self):
         """Test PENDING -> APPROVED transition."""
-        current_status = ApprovalStatus.PENDING
+        current_status = ApprovalRequestStatus.PENDING
         action = ApprovalAction.APPROVE
-        new_status = ApprovalStatus.APPROVED
+        new_status = ApprovalRequestStatus.APPROVED
 
-        assert current_status == ApprovalStatus.PENDING
-        assert new_status == ApprovalStatus.APPROVED
+        assert current_status == ApprovalRequestStatus.PENDING
+        assert new_status == ApprovalRequestStatus.APPROVED
 
     def test_pending_to_rejected(self):
         """Test PENDING -> REJECTED transition."""
-        current_status = ApprovalStatus.PENDING
+        current_status = ApprovalRequestStatus.PENDING
         action = ApprovalAction.REJECT
-        new_status = ApprovalStatus.REJECTED
+        new_status = ApprovalRequestStatus.REJECTED
 
-        assert current_status == ApprovalStatus.PENDING
-        assert new_status == ApprovalStatus.REJECTED
+        assert current_status == ApprovalRequestStatus.PENDING
+        assert new_status == ApprovalRequestStatus.REJECTED
 
     def test_pending_to_returned(self):
         """Test PENDING -> RETURNED transition."""
-        current_status = ApprovalStatus.PENDING
+        current_status = ApprovalRequestStatus.PENDING
         action = ApprovalAction.RETURN
-        new_status = ApprovalStatus.RETURNED
+        new_status = ApprovalRequestStatus.RETURNED
 
         # Returned means sent back to maker for clarification
-        assert new_status == ApprovalStatus.RETURNED
+        assert new_status == ApprovalRequestStatus.RETURNED
 
     def test_approved_is_terminal(self):
         """Test APPROVED is a terminal status (for that level)."""
-        status = ApprovalStatus.APPROVED
+        status = ApprovalRequestStatus.APPROVED
 
         # Cannot change from APPROVED
-        assert status == ApprovalStatus.APPROVED
+        assert status == ApprovalRequestStatus.APPROVED
 
     def test_rejected_is_terminal(self):
         """Test REJECTED is a terminal status."""
-        status = ApprovalStatus.REJECTED
+        status = ApprovalRequestStatus.REJECTED
 
         # Cannot change from REJECTED
-        assert status == ApprovalStatus.REJECTED
+        assert status == ApprovalRequestStatus.REJECTED
 
 
 class TestMultiLevelApproval:
@@ -171,28 +171,28 @@ class TestMultiLevelApproval:
         request = {
             "current_level": 1,
             "total_levels": 2,
-            "status": ApprovalStatus.PENDING,
+            "status": ApprovalRequestStatus.PENDING,
         }
 
         # After level 1 approval
         request["current_level"] = 2
-        request["status"] = ApprovalStatus.PENDING  # Still pending level 2
+        request["status"] = ApprovalRequestStatus.PENDING  # Still pending level 2
 
         assert request["current_level"] == 2
-        assert request["status"] == ApprovalStatus.PENDING
+        assert request["status"] == ApprovalRequestStatus.PENDING
 
     def test_final_level_approval_completes_request(self):
         """Test final level approval marks request as approved."""
         request = {
             "current_level": 2,
             "total_levels": 2,
-            "status": ApprovalStatus.PENDING,
+            "status": ApprovalRequestStatus.PENDING,
         }
 
         # After level 2 approval (final level)
-        request["status"] = ApprovalStatus.APPROVED
+        request["status"] = ApprovalRequestStatus.APPROVED
 
-        assert request["status"] == ApprovalStatus.APPROVED
+        assert request["status"] == ApprovalRequestStatus.APPROVED
 
     def test_any_level_rejection_rejects_entire_request(self):
         """Test rejection at any level rejects entire request."""
@@ -200,17 +200,17 @@ class TestMultiLevelApproval:
         level_1_reject = {
             "current_level": 1,
             "action": ApprovalAction.REJECT,
-            "status": ApprovalStatus.REJECTED,
+            "status": ApprovalRequestStatus.REJECTED,
         }
-        assert level_1_reject["status"] == ApprovalStatus.REJECTED
+        assert level_1_reject["status"] == ApprovalRequestStatus.REJECTED
 
         # Level 2 rejection
         level_2_reject = {
             "current_level": 2,
             "action": ApprovalAction.REJECT,
-            "status": ApprovalStatus.REJECTED,
+            "status": ApprovalRequestStatus.REJECTED,
         }
-        assert level_2_reject["status"] == ApprovalStatus.REJECTED
+        assert level_2_reject["status"] == ApprovalRequestStatus.REJECTED
 
     def test_approval_chain_tracking(self):
         """Test approval chain is tracked."""
@@ -394,11 +394,11 @@ class TestApprovalExpiry:
     def test_expired_request_status_updated(self):
         """Test expired request status is updated to EXPIRED."""
         is_expired = True
-        current_status = ApprovalStatus.PENDING
+        current_status = ApprovalRequestStatus.PENDING
 
         if is_expired:
-            new_status = ApprovalStatus.EXPIRED
+            new_status = ApprovalRequestStatus.EXPIRED
         else:
             new_status = current_status
 
-        assert new_status == ApprovalStatus.EXPIRED
+        assert new_status == ApprovalRequestStatus.EXPIRED

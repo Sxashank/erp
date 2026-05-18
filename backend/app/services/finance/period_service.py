@@ -172,7 +172,7 @@ class PeriodService:
         period.locked_by = user_id
         period.lock_reason = reason
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(period)
         return period
 
@@ -207,7 +207,7 @@ class PeriodService:
         period.lock_reason = None
         # Note: In production, log the unlock reason to audit trail
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(period)
         return period
 
@@ -241,7 +241,7 @@ class PeriodService:
         period.gst_return_filed_date = filed_date
         period.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(period)
         return period
 
@@ -269,7 +269,7 @@ class PeriodService:
             period.locked_by = user_id
             period.lock_reason = "PERIOD_CLOSE"
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(period)
         return period
 
@@ -297,6 +297,6 @@ class PeriodService:
         # Keep lock status - admin may want to unlock separately
         # Note: In production, log the reopen reason to audit trail
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(period)
         return period

@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
-class TagCreate(BaseModel):
+class TagCreate(CamelSchema):
     """Schema for creating a tag."""
 
     name: str = Field(..., min_length=1, max_length=100)
@@ -17,7 +18,7 @@ class TagCreate(BaseModel):
     category: Optional[str] = Field(None, max_length=50)
 
 
-class TagUpdate(BaseModel):
+class TagUpdate(CamelSchema):
     """Schema for updating a tag."""
 
     name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -27,7 +28,7 @@ class TagUpdate(BaseModel):
     category: Optional[str] = Field(None, max_length=50)
 
 
-class TagResponse(BaseModel):
+class TagResponse(CamelSchema):
     """Schema for tag response."""
 
     id: UUID
@@ -42,18 +43,15 @@ class TagResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class TagListResponse(BaseModel):
+class TagListResponse(CamelSchema):
     """Schema for tag list response."""
 
     items: List[TagResponse]
     total: int
 
 
-class DocumentTagResponse(BaseModel):
+class DocumentTagResponse(CamelSchema):
     """Schema for document-tag relationship response."""
 
     id: UUID
@@ -63,11 +61,8 @@ class DocumentTagResponse(BaseModel):
     created_by: Optional[UUID] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class TagDocumentsRequest(BaseModel):
+class TagDocumentsRequest(CamelSchema):
     """Schema for bulk tagging documents."""
 
     document_ids: List[UUID]

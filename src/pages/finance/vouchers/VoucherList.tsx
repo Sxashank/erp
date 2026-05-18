@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Check,
   CheckCircle,
@@ -13,11 +11,14 @@ import {
   X,
   XCircle,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +26,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -46,6 +46,7 @@ import { vouchersApi, organizationsApi } from '@/services/api';
 import type { Voucher, Organization, PaginatedResponse } from '@/types';
 import { VOUCHER_STATUSES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function VoucherList() {
   const navigate = useNavigate();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -56,17 +57,7 @@ export function VoucherList() {
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 });
   const [activeTab, setActiveTab] = useState('all');
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchVouchers();
-    }
-  }, [selectedOrgId, selectedStatus, activeTab]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
@@ -75,15 +66,15 @@ export function VoucherList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchVouchers = async (page = 1) => {
+  const fetchVouchers = useCallback(async (page = 1) => {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Parameters<typeof vouchersApi.list>[0] = {
         organization_id: selectedOrgId,
         page,
         page_size: 20,
@@ -101,11 +92,21 @@ export function VoucherList() {
       setVouchers(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch vouchers:', error);
+      logger.error('Failed to fetch vouchers:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [activeTab, selectedOrgId, selectedStatus]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchVouchers();
+    }
+  }, [activeTab, fetchVouchers, selectedOrgId, selectedStatus]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this voucher?')) return;
@@ -113,7 +114,7 @@ export function VoucherList() {
       await vouchersApi.delete(id);
       fetchVouchers(pagination.page);
     } catch (error) {
-      console.error('Failed to delete voucher:', error);
+      logger.error('Failed to delete voucher:', error);
     }
   };
 
@@ -123,7 +124,7 @@ export function VoucherList() {
       await vouchersApi.submit(id);
       fetchVouchers(pagination.page);
     } catch (error) {
-      console.error('Failed to submit voucher:', error);
+      logger.error('Failed to submit voucher:', error);
     }
   };
 
@@ -133,7 +134,7 @@ export function VoucherList() {
       await vouchersApi.approve(id);
       fetchVouchers(pagination.page);
     } catch (error) {
-      console.error('Failed to approve voucher:', error);
+      logger.error('Failed to approve voucher:', error);
     }
   };
 
@@ -144,7 +145,7 @@ export function VoucherList() {
       await vouchersApi.reject(id, reason);
       fetchVouchers(pagination.page);
     } catch (error) {
-      console.error('Failed to reject voucher:', error);
+      logger.error('Failed to reject voucher:', error);
     }
   };
 
@@ -154,7 +155,7 @@ export function VoucherList() {
       await vouchersApi.post(id);
       fetchVouchers(pagination.page);
     } catch (error) {
-      console.error('Failed to post voucher:', error);
+      logger.error('Failed to post voucher:', error);
     }
   };
 
@@ -165,7 +166,7 @@ export function VoucherList() {
       await vouchersApi.cancel(id, reason);
       fetchVouchers(pagination.page);
     } catch (error) {
-      console.error('Failed to cancel voucher:', error);
+      logger.error('Failed to cancel voucher:', error);
     }
   };
 
@@ -178,14 +179,6 @@ export function VoucherList() {
     ) : (
       <Badge>{status}</Badge>
     );
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
   };
 
   const formatAmount = (amount: number) => {
@@ -214,7 +207,7 @@ export function VoucherList() {
           {vouchers.map((voucher) => (
             <TableRow key={voucher.id}>
               <TableCell className="font-medium">{voucher.voucher_number}</TableCell>
-              <TableCell>{formatDate(voucher.voucher_date)}</TableCell>
+              <TableCell><DateDisplay date={voucher.voucher_date} /></TableCell>
               <TableCell>
                 <Badge variant="outline">{voucher.voucher_type_name || voucher.voucher_type_code}</Badge>
               </TableCell>

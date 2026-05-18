@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
-class DocumentCreate(BaseModel):
+class DocumentCreate(CamelSchema):
     """Schema for creating a document."""
 
     folder_id: Optional[UUID] = None
@@ -22,7 +23,7 @@ class DocumentCreate(BaseModel):
     expiry_date: Optional[datetime] = None
 
 
-class DocumentUpdate(BaseModel):
+class DocumentUpdate(CamelSchema):
     """Schema for updating a document."""
 
     name: Optional[str] = Field(None, max_length=500)
@@ -35,7 +36,7 @@ class DocumentUpdate(BaseModel):
     expiry_date: Optional[datetime] = None
 
 
-class DocumentVersionResponse(BaseModel):
+class DocumentVersionResponse(CamelSchema):
     """Schema for document version response."""
 
     id: UUID
@@ -50,11 +51,8 @@ class DocumentVersionResponse(BaseModel):
     created_by: Optional[UUID] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class DocumentHistoryResponse(BaseModel):
+class DocumentHistoryResponse(CamelSchema):
     """Schema for document history response."""
 
     id: UUID
@@ -66,11 +64,8 @@ class DocumentHistoryResponse(BaseModel):
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class DocumentResponse(BaseModel):
+class DocumentResponse(CamelSchema):
     """Schema for document response."""
 
     id: UUID
@@ -104,11 +99,8 @@ class DocumentResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class DocumentListResponse(BaseModel):
+class DocumentListResponse(CamelSchema):
     """Schema for paginated document list response."""
 
     items: List[DocumentResponse]
@@ -117,7 +109,7 @@ class DocumentListResponse(BaseModel):
     limit: int
 
 
-class DocumentDownloadResponse(BaseModel):
+class DocumentDownloadResponse(CamelSchema):
     """Schema for document download info."""
 
     storage_path: str
@@ -125,7 +117,7 @@ class DocumentDownloadResponse(BaseModel):
     mime_type: str
 
 
-class DocumentStatsResponse(BaseModel):
+class DocumentStatsResponse(CamelSchema):
     """Schema for document statistics response."""
 
     total_documents: int
@@ -137,7 +129,7 @@ class DocumentStatsResponse(BaseModel):
     by_extension: dict
 
 
-class DocumentSearchRequest(BaseModel):
+class DocumentSearchRequest(CamelSchema):
     """Schema for document search request."""
 
     query: Optional[str] = None
@@ -155,7 +147,7 @@ class DocumentSearchRequest(BaseModel):
     limit: int = 20
 
 
-class NewVersionCreate(BaseModel):
+class NewVersionCreate(CamelSchema):
     """Schema for uploading a new document version."""
 
     change_notes: Optional[str] = Field(None, max_length=1000)

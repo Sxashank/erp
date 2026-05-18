@@ -36,7 +36,7 @@ class VendorService:
             created_by=created_by,
         )
         self.session.add(vendor)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(vendor)
         return vendor
 
@@ -62,7 +62,7 @@ class VendorService:
             setattr(vendor, field, value)
         vendor.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(vendor)
         return vendor
 
@@ -104,7 +104,7 @@ class VendorService:
         if not vendor:
             raise NotFoundException("Vendor not found")
         vendor.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     async def generate_code(self, organization_id: UUID) -> str:
         """Generate next vendor code."""

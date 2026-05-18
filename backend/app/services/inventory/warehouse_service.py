@@ -44,7 +44,7 @@ class WarehouseService:
 
         warehouse = Warehouse(**warehouse_data)
         self.session.add(warehouse)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(warehouse)
         return warehouse
 
@@ -90,7 +90,7 @@ class WarehouseService:
         if updated_by:
             warehouse.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(warehouse)
         return warehouse
 
@@ -110,7 +110,7 @@ class WarehouseService:
             raise ValueError("Cannot delete warehouse with existing stock")
 
         warehouse.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
         return True
 
     async def list_by_organization(

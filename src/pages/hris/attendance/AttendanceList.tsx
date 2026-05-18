@@ -1,16 +1,16 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Clock,
   Search,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi, departmentsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Attendance {
   id: string;
   employee_id: string;
@@ -131,7 +132,7 @@ export function AttendanceList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -147,7 +148,7 @@ export function AttendanceList() {
         const response = await departmentsApi.list({ organization_id: selectedOrgId, page_size: 100 });
         setDepartments(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch departments:', error);
+        logger.error('Failed to fetch departments:', error);
       }
     };
     fetchDepartments();
@@ -157,7 +158,7 @@ export function AttendanceList() {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Record<string, unknown> = {
         organization_id: selectedOrgId,
         date: selectedDate,
         skip,
@@ -171,7 +172,7 @@ export function AttendanceList() {
       setAttendance(response.data.items || []);
       setPagination((prev) => ({ ...prev, skip, total: response.data.total || 0 }));
     } catch (error) {
-      console.error('Failed to fetch attendance:', error);
+      logger.error('Failed to fetch attendance:', error);
     } finally {
       setLoading(false);
     }

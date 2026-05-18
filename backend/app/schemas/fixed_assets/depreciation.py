@@ -2,21 +2,23 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import List, Literal, Optional
 from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import BaseSchema, AuditSchema
+from app.schemas.base import CamelSchema
+from app.schemas.fixed_assets.common import FixedAssetsAuditSchema, OffsetPaginatedResponse
 from app.core.constants import (
     DepreciationType,
     DepreciationMethod,
     DepreciationBook,
     ITActAssetBlock,
+    ApprovalRequestStatus,
 )
 
 
-class DepreciationRunCreate(BaseSchema):
+class DepreciationRunCreate(CamelSchema):
     """Schema for creating a depreciation run."""
 
     depreciation_period: str = Field(
@@ -32,7 +34,7 @@ class DepreciationRunCreate(BaseSchema):
     organization_id: UUID
 
 
-class DepreciationRunResponse(AuditSchema):
+class DepreciationRunResponse(FixedAssetsAuditSchema):
     """Depreciation run response schema."""
 
     id: UUID
@@ -56,7 +58,7 @@ class DepreciationRunResponse(AuditSchema):
     remarks: Optional[str] = None
 
 
-class DepreciationResponse(AuditSchema):
+class DepreciationResponse(FixedAssetsAuditSchema):
     """Individual depreciation entry response schema."""
 
     id: UUID
@@ -83,7 +85,7 @@ class DepreciationResponse(AuditSchema):
     remarks: Optional[str] = None
 
 
-class DepreciationScheduleItem(BaseSchema):
+class DepreciationScheduleItem(CamelSchema):
     """Single item in depreciation schedule projection."""
 
     period: str  # YYYY-MM
@@ -97,7 +99,7 @@ class DepreciationScheduleItem(BaseSchema):
     is_fully_depreciated: bool = False
 
 
-class DepreciationScheduleResponse(BaseSchema):
+class DepreciationScheduleResponse(CamelSchema):
     """Depreciation schedule projection response."""
 
     asset_id: UUID
@@ -115,13 +117,13 @@ class DepreciationScheduleResponse(BaseSchema):
     schedule: List[DepreciationScheduleItem]
 
 
-class DepreciationReverseRequest(BaseSchema):
+class DepreciationReverseRequest(CamelSchema):
     """Request to reverse a depreciation entry."""
 
     reason: str = Field(..., min_length=1, max_length=500)
 
 
-class DepreciationSummaryItem(BaseSchema):
+class DepreciationSummaryItem(CamelSchema):
     """Depreciation summary by category."""
 
     category_id: UUID
@@ -134,7 +136,7 @@ class DepreciationSummaryItem(BaseSchema):
     closing_wdv: Decimal
 
 
-class DepreciationSummaryResponse(BaseSchema):
+class DepreciationSummaryResponse(CamelSchema):
     """Depreciation summary report response."""
 
     organization_id: UUID
@@ -146,7 +148,7 @@ class DepreciationSummaryResponse(BaseSchema):
     by_category: List[DepreciationSummaryItem]
 
 
-class AssetRegisterItem(BaseSchema):
+class AssetRegisterItem(CamelSchema):
     """Single item in asset register report."""
 
     id: UUID
@@ -167,7 +169,7 @@ class AssetRegisterItem(BaseSchema):
     status: str
 
 
-class AssetRegisterResponse(BaseSchema):
+class AssetRegisterResponse(CamelSchema):
     """Asset register report response."""
 
     organization_id: UUID
@@ -186,7 +188,7 @@ class AssetRegisterResponse(BaseSchema):
 # IT Act Depreciation Schemas
 # ============================================
 
-class ITDepreciationRunCreate(BaseSchema):
+class ITDepreciationRunCreate(CamelSchema):
     """Schema for creating an IT Act depreciation run."""
 
     financial_year: str = Field(
@@ -198,7 +200,7 @@ class ITDepreciationRunCreate(BaseSchema):
     organization_id: UUID
 
 
-class ITBlockSummaryResponse(AuditSchema):
+class ITBlockSummaryResponse(FixedAssetsAuditSchema):
     """IT Act Block Summary response schema."""
 
     id: UUID
@@ -220,7 +222,7 @@ class ITBlockSummaryResponse(AuditSchema):
     remarks: Optional[str] = None
 
 
-class ITBlockSummaryCreate(BaseSchema):
+class ITBlockSummaryCreate(CamelSchema):
     """Schema for initializing IT Block Summary for a financial year."""
 
     organization_id: UUID
@@ -231,7 +233,7 @@ class ITBlockSummaryCreate(BaseSchema):
     )
 
 
-class ITBlockDepreciationItem(BaseSchema):
+class ITBlockDepreciationItem(CamelSchema):
     """Single block depreciation item in IT depreciation report."""
 
     it_block: ITActAssetBlock
@@ -247,7 +249,7 @@ class ITBlockDepreciationItem(BaseSchema):
     asset_count: int
 
 
-class ITDepreciationReportResponse(BaseSchema):
+class ITDepreciationReportResponse(CamelSchema):
     """IT Act Depreciation Report response."""
 
     organization_id: UUID
@@ -261,7 +263,7 @@ class ITDepreciationReportResponse(BaseSchema):
     total_closing_wdv: Decimal
 
 
-class ITDepreciationScheduleItem(BaseSchema):
+class ITDepreciationScheduleItem(CamelSchema):
     """Single item in IT depreciation schedule projection."""
 
     financial_year: str  # YYYY-YY
@@ -275,7 +277,7 @@ class ITDepreciationScheduleItem(BaseSchema):
     is_block_extinguished: bool = False
 
 
-class ITDepreciationScheduleResponse(BaseSchema):
+class ITDepreciationScheduleResponse(CamelSchema):
     """IT Depreciation schedule projection response."""
 
     asset_id: UUID
@@ -292,7 +294,7 @@ class ITDepreciationScheduleResponse(BaseSchema):
     schedule: List[ITDepreciationScheduleItem]
 
 
-class AssetITDepreciationComparison(BaseSchema):
+class AssetITDepreciationComparison(CamelSchema):
     """Asset-level comparison between Companies Act and IT Act depreciation."""
 
     asset_id: UUID
@@ -316,7 +318,7 @@ class AssetITDepreciationComparison(BaseSchema):
     wdv_difference: Decimal
 
 
-class DepreciationComparisonResponse(BaseSchema):
+class DepreciationComparisonResponse(CamelSchema):
     """Comparison report between Companies Act and IT Act depreciation."""
 
     organization_id: UUID
@@ -361,3 +363,22 @@ IT_BLOCK_NAMES = {
     ITActAssetBlock.BLOCK_11: "Containers (50%)",
     ITActAssetBlock.BLOCK_12: "Intangible Assets (25%)",
 }
+
+
+class DepreciationRunListResponse(OffsetPaginatedResponse[DepreciationRunResponse]):
+    """Paginated depreciation-run response."""
+
+
+class DepreciationEntryListResponse(OffsetPaginatedResponse[DepreciationResponse]):
+    """Paginated depreciation-entry response."""
+
+
+class DepreciationPostingActionResponse(CamelSchema):
+    """Result of posting or submitting a depreciation run for approval."""
+
+    mode: Literal["posted", "submitted_for_approval"]
+    message: str
+    run: DepreciationRunResponse
+    approval_request_id: Optional[UUID] = None
+    approval_request_number: Optional[str] = None
+    approval_status: Optional[ApprovalRequestStatus] = None

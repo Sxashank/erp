@@ -1,73 +1,66 @@
 """Services for Phase 2 Loan Accounting."""
 
-from datetime import date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, List, Tuple, Dict, Any
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.repositories.lending.loan_account_repo import (
-    LoanAccountRepository,
-    DisbursementRepository,
-    RepaymentScheduleRepository,
-    ScheduleInstallmentRepository,
-    LoanAccrualRepository,
-    LoanReceiptRepository,
-    ReceiptAllocationRepository,
-    LoanMandateRepository,
-    AssetClassificationHistoryRepository,
-    LoanProvisionRepository,
-    LoanAdjustmentRepository,
-)
-from app.repositories.lending.sanction_repo import LoanSanctionRepository
-from app.models.lending.loan_account import (
-    LoanAccount,
-    Disbursement,
-    RepaymentSchedule,
-    ScheduleInstallment,
-    LoanAccrual,
-    LoanReceipt,
-    ReceiptAllocation,
-    LoanMandate,
-    AssetClassificationHistory,
-    LoanProvision,
-    LoanAdjustment,
-)
 from app.models.lending.enums import (
-    LoanAccountStatus,
-    DisbursementStatus,
-    ScheduleType,
-    InstallmentStatus,
     AccrualCategory,
     AccrualStatus,
-    ReceiptStatus,
-    ReceiptType,
+    AdjustmentType,
     AllocationComponent,
     AssetClassification,
+    DisbursementStatus,
+    InstallmentStatus,
+    LoanAccountStatus,
     MandateStatus,
-    AdjustmentType,
     ProvisioningCategory,
+    ReceiptStatus,
     SanctionStatus,
 )
+from app.models.lending.loan_account import (
+    AssetClassificationHistory,
+    Disbursement,
+    LoanAccount,
+    LoanAccrual,
+    LoanAdjustment,
+    LoanMandate,
+    LoanProvision,
+    LoanReceipt,
+    RepaymentSchedule,
+    ScheduleInstallment,
+)
+from app.repositories.lending.loan_account_repo import (
+    AssetClassificationHistoryRepository,
+    DisbursementRepository,
+    LoanAccountRepository,
+    LoanAccrualRepository,
+    LoanAdjustmentRepository,
+    LoanMandateRepository,
+    LoanProvisionRepository,
+    LoanReceiptRepository,
+    ReceiptAllocationRepository,
+    RepaymentScheduleRepository,
+    ScheduleInstallmentRepository,
+)
+from app.repositories.lending.sanction_repo import LoanSanctionRepository
 from app.schemas.lending.loan_account import (
+    DisbursementApproval,
+    DisbursementCreate,
+    DisbursementProcess,
     LoanAccountCreate,
     LoanAccountUpdate,
-    DisbursementCreate,
-    DisbursementApproval,
-    DisbursementProcess,
-    RepaymentScheduleCreate,
-    LoanReceiptCreate,
-    ReceiptAllocationCreate,
-    LoanMandateCreate,
-    LoanMandateUpdate,
-    MandateRegisterRequest,
-    MandateCancelRequest,
-    AssetClassificationHistoryCreate,
-    LoanProvisionCreate,
     LoanAdjustmentCreate,
+    LoanMandateCreate,
+    LoanReceiptCreate,
+    MandateCancelRequest,
+    MandateRegisterRequest,
     ReceiptBounceRequest,
+    RepaymentScheduleCreate,
 )
 
 
@@ -92,6 +85,29 @@ class LoanAccountService:
     # =========================================================================
     # Loan Account Operations
     # =========================================================================
+
+    @staticmethod
+    def _add_months(base_date: date, months: int) -> date:
+        """Add calendar months without introducing an external dependency."""
+        month_index = base_date.month - 1 + months
+        year = base_date.year + month_index // 12
+        month = month_index % 12 + 1
+        month_lengths = [
+            31,
+            29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+            31,
+            30,
+            31,
+            30,
+            31,
+            31,
+            30,
+            31,
+            30,
+            31,
+        ]
+        day = min(base_date.day, month_lengths[month - 1])
+        return date(year, month, day)
 
     async def create_loan_account(
         self,
@@ -120,20 +136,58 @@ class LoanAccountService:
                 detail="Loan account already exists for this sanction",
             )
 
+        account_open_date = data.account_open_date or date.today()
+        moratorium_months = sanction.moratorium_months or 0
+        maturity_date = self._add_months(account_open_date, sanction.tenure_months)
+        moratorium_end_date = (
+            self._add_months(account_open_date, moratorium_months)
+            if moratorium_months > 0
+            else None
+        )
+
         # Generate account number
         account_number = await self.loan_account_repo.generate_account_number(
-            data.organization_id
+            sanction.organization_id
         )
 
         # Create loan account
-        loan_account_data = data.model_dump()
-        loan_account_data["loan_account_number"] = account_number
-        loan_account_data["undisbursed_amount"] = data.sanctioned_amount
-        loan_account_data["status"] = LoanAccountStatus.CREATED
-        loan_account_data["created_by"] = user_id
+        loan_account_data = {
+            "organization_id": sanction.organization_id,
+            "sanction_id": sanction.id,
+            "entity_id": sanction.entity_id,
+            "product_id": sanction.product_id,
+            "loan_account_number": account_number,
+            "loan_reference_number": data.loan_reference_number,
+            "account_open_date": account_open_date,
+            "repayment_start_date": sanction.repayment_start_date,
+            "maturity_date": maturity_date,
+            "sanctioned_amount": sanction.sanctioned_amount,
+            "tenure_months": sanction.tenure_months,
+            "moratorium_months": moratorium_months,
+            "moratorium_end_date": moratorium_end_date,
+            "interest_type": sanction.interest_type,
+            "base_rate_id": sanction.base_rate_id,
+            "current_base_rate": sanction.base_rate_at_sanction,
+            "spread_bps": sanction.spread_bps,
+            "current_interest_rate": sanction.effective_rate,
+            "rate_reset_frequency": sanction.rate_reset_frequency,
+            "penal_interest_rate": sanction.penal_interest_rate,
+            "repayment_frequency": sanction.repayment_frequency,
+            "repayment_mode": sanction.repayment_mode,
+            "day_count_convention": data.day_count_convention or sanction.day_count_convention,
+            "installment_day": data.installment_day,
+            "prepayment_penalty_rate": sanction.prepayment_penalty_rate,
+            "foreclosure_penalty_rate": sanction.foreclosure_penalty_rate,
+            "allocation_priority": data.allocation_priority,
+            "allocation_order": data.allocation_order,
+            "undisbursed_amount": sanction.sanctioned_amount,
+            "status": LoanAccountStatus.CREATED,
+            "remarks": data.remarks,
+            "created_by": user_id,
+        }
 
         loan_account = await self.loan_account_repo.create(loan_account_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(loan_account)
 
         return loan_account
@@ -141,6 +195,32 @@ class LoanAccountService:
     async def get_loan_account(self, loan_account_id: UUID) -> LoanAccount:
         """Get loan account by ID."""
         loan_account = await self.loan_account_repo.get(loan_account_id)
+        if not loan_account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Loan account not found",
+            )
+        return loan_account
+
+    async def get_loan_account_with_relations(self, loan_account_id: UUID) -> LoanAccount:
+        """Get loan account with entity + product eagerly loaded.
+
+        Lighter than `get_loan_account_with_details` (which loads schedules,
+        receipts, etc.) — just enough for the view page header to surface
+        entity_name, product_name, product_code without N+1.
+        """
+        from sqlalchemy import select as _select
+        from sqlalchemy.orm import selectinload
+
+        result = await self.db.execute(
+            _select(LoanAccount)
+            .where(LoanAccount.id == loan_account_id)
+            .options(
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.product),
+            )
+        )
+        loan_account = result.scalar_one_or_none()
         if not loan_account:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -164,14 +244,14 @@ class LoanAccountService:
         skip: int = 0,
         limit: int = 50,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        product_id: Optional[UUID] = None,
-        loan_status: Optional[LoanAccountStatus] = None,
-        asset_classification: Optional[AssetClassification] = None,
-        min_dpd: Optional[int] = None,
-        max_dpd: Optional[int] = None,
-    ) -> Tuple[List[LoanAccount], int]:
+        search: str | None = None,
+        entity_id: UUID | None = None,
+        product_id: UUID | None = None,
+        loan_status: LoanAccountStatus | None = None,
+        asset_classification: AssetClassification | None = None,
+        min_dpd: int | None = None,
+        max_dpd: int | None = None,
+    ) -> tuple[list[LoanAccount], int]:
         """Get paginated list of loan accounts."""
         return await self.loan_account_repo.get_all_accounts(
             organization_id=organization_id,
@@ -200,7 +280,7 @@ class LoanAccountService:
         update_data["updated_by"] = user_id
 
         loan_account = await self.loan_account_repo.update(loan_account, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(loan_account)
 
         return loan_account
@@ -231,7 +311,7 @@ class LoanAccountService:
         }
 
         loan_account = await self.loan_account_repo.update(loan_account, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(loan_account)
 
         return loan_account
@@ -268,7 +348,7 @@ class LoanAccountService:
         disbursement_data["created_by"] = user_id
 
         disbursement = await self.disbursement_repo.create(disbursement_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(disbursement)
 
         return disbursement
@@ -303,7 +383,7 @@ class LoanAccountService:
         }
 
         disbursement = await self.disbursement_repo.update(disbursement, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(disbursement)
 
         return disbursement
@@ -365,7 +445,7 @@ class LoanAccountService:
             account_update["first_disbursement_date"] = process_data.disbursement_date
 
         await self.loan_account_repo.update(loan_account, account_update)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(disbursement)
 
         return disbursement
@@ -374,7 +454,7 @@ class LoanAccountService:
         self,
         loan_account_id: UUID,
         include_inactive: bool = False,
-    ) -> List[Disbursement]:
+    ) -> list[Disbursement]:
         """Get all disbursements for a loan account."""
         return await self.disbursement_repo.get_loan_disbursements(
             loan_account_id, include_inactive
@@ -400,9 +480,7 @@ class LoanAccountService:
         )
 
         # Get next schedule number
-        schedule_number = await self.schedule_repo.get_next_schedule_number(
-            data.loan_account_id
-        )
+        schedule_number = await self.schedule_repo.get_next_schedule_number(data.loan_account_id)
 
         # Supersede current schedule if exists
         if schedule_number > 1:
@@ -452,7 +530,7 @@ class LoanAccountService:
             },
         )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(schedule)
 
         return schedule
@@ -523,21 +601,24 @@ class LoanAccountService:
         month = start_date.month - 1 + months
         year = start_date.year + month // 12
         month = month % 12 + 1
-        day = min(start_date.day, [31, 29 if year % 4 == 0 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1])
+        day = min(
+            start_date.day,
+            [31, 29 if year % 4 == 0 else 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1],
+        )
         return date(year, month, day)
 
     async def get_current_schedule(
         self,
         loan_account_id: UUID,
-    ) -> Optional[RepaymentSchedule]:
+    ) -> RepaymentSchedule | None:
         """Get current repayment schedule."""
         return await self.schedule_repo.get_current_schedule(loan_account_id)
 
     async def get_due_installments(
         self,
         loan_account_id: UUID,
-        as_of_date: Optional[date] = None,
-    ) -> List[ScheduleInstallment]:
+        as_of_date: date | None = None,
+    ) -> list[ScheduleInstallment]:
         """Get due installments for a loan account."""
         schedule = await self.schedule_repo.get_current_schedule(loan_account_id)
         if not schedule:
@@ -558,21 +639,28 @@ class LoanAccountService:
         user_id: UUID,
     ) -> LoanReceipt:
         """Create a new loan receipt."""
+        if data.loan_account_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Loan account is required",
+            )
         loan_account = await self.get_loan_account(data.loan_account_id)
 
         # Generate receipt number
         receipt_number = await self.receipt_repo.generate_receipt_number(
-            data.organization_id
+            loan_account.organization_id
         )
 
-        receipt_data = data.model_dump()
+        receipt_data = data.model_dump(exclude_none=True)
+        receipt_data["organization_id"] = loan_account.organization_id
+        receipt_data["value_date"] = data.value_date or data.receipt_date
         receipt_data["receipt_number"] = receipt_number
         receipt_data["unallocated_amount"] = data.receipt_amount
         receipt_data["status"] = ReceiptStatus.PENDING
         receipt_data["created_by"] = user_id
 
         receipt = await self.receipt_repo.create(receipt_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(receipt)
 
         return receipt
@@ -649,23 +737,23 @@ class LoanAccountService:
                     continue
                 alloc = min(remaining, outstanding)
                 allocation_seq += 1
-                await self.allocation_repo.create({
-                    "receipt_id": receipt_id,
-                    "installment_id": installment.id,
-                    "allocation_component": component,
-                    "allocated_amount": alloc,
-                    "allocation_sequence": allocation_seq,
-                    "created_by": user_id,
-                })
+                await self.allocation_repo.create(
+                    {
+                        "receipt_id": receipt_id,
+                        "installment_id": installment.id,
+                        "allocation_component": component,
+                        "allocated_amount": alloc,
+                        "allocation_sequence": allocation_seq,
+                        "created_by": user_id,
+                    }
+                )
                 remaining -= alloc
                 total_allocated += alloc
                 new_paid = paid_amount + alloc
                 # Update the in-memory row AND persist so the next pass sees
                 # the new paid amount when it computes outstanding.
                 setattr(installment, component_attr_paid, new_paid)
-                await self.installment_repo.update(
-                    installment, {component_attr_paid: new_paid}
-                )
+                await self.installment_repo.update(installment, {component_attr_paid: new_paid})
             return total_allocated
 
         # Pass 1 — penal interest across all overdue installments.
@@ -725,14 +813,17 @@ class LoanAccountService:
             {
                 "principal_outstanding": loan_account.principal_outstanding - principal_allocated,
                 "total_outstanding": loan_account.total_outstanding - allocated,
-                "total_principal_received": loan_account.total_principal_received + principal_allocated,
-                "total_interest_received": loan_account.total_interest_received + interest_allocated,
-                "total_penal_interest_received": loan_account.total_penal_interest_received + penal_interest_allocated,
+                "total_principal_received": loan_account.total_principal_received
+                + principal_allocated,
+                "total_interest_received": loan_account.total_interest_received
+                + interest_allocated,
+                "total_penal_interest_received": loan_account.total_penal_interest_received
+                + penal_interest_allocated,
                 "updated_by": user_id,
             },
         )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(receipt)
 
         return receipt
@@ -763,7 +854,7 @@ class LoanAccountService:
         }
 
         receipt = await self.receipt_repo.update(receipt, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(receipt)
 
         return receipt
@@ -771,9 +862,9 @@ class LoanAccountService:
     async def get_loan_receipts(
         self,
         loan_account_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> List[LoanReceipt]:
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[LoanReceipt]:
         """Get all receipts for a loan account."""
         return await self.receipt_repo.get_loan_receipts(
             loan_account_id,
@@ -802,7 +893,7 @@ class LoanAccountService:
         mandate_data["created_by"] = user_id
 
         mandate = await self.mandate_repo.create(mandate_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(mandate)
 
         return mandate
@@ -829,7 +920,7 @@ class LoanAccountService:
         }
 
         mandate = await self.mandate_repo.update(mandate, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(mandate)
 
         return mandate
@@ -856,7 +947,7 @@ class LoanAccountService:
         }
 
         mandate = await self.mandate_repo.update(mandate, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(mandate)
 
         return mandate
@@ -864,7 +955,7 @@ class LoanAccountService:
     async def get_loan_mandates(
         self,
         loan_account_id: UUID,
-    ) -> List[LoanMandate]:
+    ) -> list[LoanMandate]:
         """Get all mandates for a loan account."""
         return await self.mandate_repo.get_loan_mandates(loan_account_id)
 
@@ -897,17 +988,19 @@ class LoanAccountService:
         # Check if classification changed
         if new_classification != loan_account.asset_classification:
             # Record history
-            await self.classification_repo.create({
-                "loan_account_id": loan_account_id,
-                "effective_date": date.today(),
-                "previous_classification": loan_account.asset_classification,
-                "new_classification": new_classification,
-                "days_past_due": dpd,
-                "principal_outstanding": loan_account.principal_outstanding,
-                "total_outstanding": loan_account.total_outstanding,
-                "change_reason": "SYSTEM_AUTO",
-                "created_by": user_id,
-            })
+            await self.classification_repo.create(
+                {
+                    "loan_account_id": loan_account_id,
+                    "effective_date": date.today(),
+                    "previous_classification": loan_account.asset_classification,
+                    "new_classification": new_classification,
+                    "days_past_due": dpd,
+                    "principal_outstanding": loan_account.principal_outstanding,
+                    "total_outstanding": loan_account.total_outstanding,
+                    "change_reason": "SYSTEM_AUTO",
+                    "created_by": user_id,
+                }
+            )
 
             # Determine if accrual should be suspended
             is_npa = new_classification in [
@@ -934,7 +1027,7 @@ class LoanAccountService:
 
             loan_account = await self.loan_account_repo.update(loan_account, update_data)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(loan_account)
 
         return loan_account
@@ -955,7 +1048,7 @@ class LoanAccountService:
     async def get_classification_history(
         self,
         loan_account_id: UUID,
-    ) -> List[AssetClassificationHistory]:
+    ) -> list[AssetClassificationHistory]:
         """Get asset classification history."""
         return await self.classification_repo.get_loan_history(loan_account_id)
 
@@ -968,7 +1061,7 @@ class LoanAccountService:
         loan_account_id: UUID,
         accrual_date: date,
         user_id: UUID,
-    ) -> Optional[LoanAccrual]:
+    ) -> LoanAccrual | None:
         """Run daily interest accrual for a loan account."""
         loan_account = await self.get_loan_account(loan_account_id)
 
@@ -1001,7 +1094,11 @@ class LoanAccountService:
             "day_count_basis": 365,
             "accrued_amount": accrued,
             "cumulative_accrued": total_accrued + accrued,
-            "status": AccrualStatus.ACCRUED if not loan_account.accrual_suspended else AccrualStatus.SUSPENDED,
+            "status": (
+                AccrualStatus.ACCRUED
+                if not loan_account.accrual_suspended
+                else AccrualStatus.SUSPENDED
+            ),
             "moved_to_suspense": loan_account.accrual_suspended,
             "suspense_date": date.today() if loan_account.accrual_suspended else None,
             "created_by": user_id,
@@ -1031,7 +1128,7 @@ class LoanAccountService:
                 },
             )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(accrual)
 
         return accrual
@@ -1055,9 +1152,9 @@ class LoanAccountService:
             has_security=True,  # TODO: Check actual security
         )
 
-        provision_required = (
-            loan_account.total_outstanding * prov_pct / Decimal("100")
-        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        provision_required = (loan_account.total_outstanding * prov_pct / Decimal("100")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
 
         # Get previous provision
         last_provision = await self.provision_repo.get_latest_provision(loan_account_id)
@@ -1092,7 +1189,7 @@ class LoanAccountService:
             },
         )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(provision)
 
         return provision
@@ -1101,7 +1198,7 @@ class LoanAccountService:
         self,
         classification: AssetClassification,
         has_security: bool,
-    ) -> Tuple[ProvisioningCategory, Decimal]:
+    ) -> tuple[ProvisioningCategory, Decimal]:
         """Get provision rate based on classification."""
         rates = {
             AssetClassification.STANDARD: (ProvisioningCategory.STANDARD, Decimal("0.40")),
@@ -1109,11 +1206,19 @@ class LoanAccountService:
             AssetClassification.SMA_1: (ProvisioningCategory.STANDARD, Decimal("0.40")),
             AssetClassification.SMA_2: (ProvisioningCategory.STANDARD, Decimal("0.40")),
             AssetClassification.NPA: (
-                ProvisioningCategory.SUBSTANDARD_SECURED if has_security else ProvisioningCategory.SUBSTANDARD_UNSECURED,
+                (
+                    ProvisioningCategory.SUBSTANDARD_SECURED
+                    if has_security
+                    else ProvisioningCategory.SUBSTANDARD_UNSECURED
+                ),
                 Decimal("15") if has_security else Decimal("25"),
             ),
             AssetClassification.SUBSTANDARD: (
-                ProvisioningCategory.SUBSTANDARD_SECURED if has_security else ProvisioningCategory.SUBSTANDARD_UNSECURED,
+                (
+                    ProvisioningCategory.SUBSTANDARD_SECURED
+                    if has_security
+                    else ProvisioningCategory.SUBSTANDARD_UNSECURED
+                ),
                 Decimal("15") if has_security else Decimal("25"),
             ),
             AssetClassification.DOUBTFUL_1: (ProvisioningCategory.DOUBTFUL_1, Decimal("25")),
@@ -1136,9 +1241,7 @@ class LoanAccountService:
         loan_account = await self.get_loan_account(data.loan_account_id)
 
         # Generate reference
-        reference = await self.adjustment_repo.generate_adjustment_reference(
-            data.loan_account_id
-        )
+        reference = await self.adjustment_repo.generate_adjustment_reference(data.loan_account_id)
 
         adjustment_data = data.model_dump()
         adjustment_data["adjustment_reference"] = reference
@@ -1159,7 +1262,7 @@ class LoanAccountService:
                 },
             )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(adjustment)
 
         return adjustment
@@ -1167,7 +1270,7 @@ class LoanAccountService:
     async def get_loan_adjustments(
         self,
         loan_account_id: UUID,
-    ) -> List[LoanAdjustment]:
+    ) -> list[LoanAdjustment]:
         """Get all adjustments for a loan account."""
         return await self.adjustment_repo.get_loan_adjustments(loan_account_id)
 
@@ -1178,7 +1281,7 @@ class LoanAccountService:
     async def get_portfolio_summary(
         self,
         organization_id: UUID,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Get portfolio summary for organization."""
         accounts, total = await self.loan_account_repo.get_all_accounts(
             organization_id=organization_id,
@@ -1190,8 +1293,10 @@ class LoanAccountService:
         total_outstanding = sum(a.total_outstanding for a in accounts)
         total_overdue = sum(a.principal_overdue + a.interest_overdue for a in accounts)
         total_npa = sum(
-            a.total_outstanding for a in accounts
-            if a.asset_classification in [
+            a.total_outstanding
+            for a in accounts
+            if a.asset_classification
+            in [
                 AssetClassification.NPA,
                 AssetClassification.SUBSTANDARD,
                 AssetClassification.DOUBTFUL_1,
@@ -1201,15 +1306,32 @@ class LoanAccountService:
             ]
         )
 
-        standard_count = len([a for a in accounts if a.asset_classification == AssetClassification.STANDARD])
-        sma_count = len([a for a in accounts if a.asset_classification in [
-            AssetClassification.SMA_0, AssetClassification.SMA_1, AssetClassification.SMA_2
-        ]])
-        npa_count = len([a for a in accounts if a.asset_classification in [
-            AssetClassification.NPA, AssetClassification.SUBSTANDARD,
-            AssetClassification.DOUBTFUL_1, AssetClassification.DOUBTFUL_2,
-            AssetClassification.DOUBTFUL_3, AssetClassification.LOSS,
-        ]])
+        standard_count = len(
+            [a for a in accounts if a.asset_classification == AssetClassification.STANDARD]
+        )
+        sma_count = len(
+            [
+                a
+                for a in accounts
+                if a.asset_classification
+                in [AssetClassification.SMA_0, AssetClassification.SMA_1, AssetClassification.SMA_2]
+            ]
+        )
+        npa_count = len(
+            [
+                a
+                for a in accounts
+                if a.asset_classification
+                in [
+                    AssetClassification.NPA,
+                    AssetClassification.SUBSTANDARD,
+                    AssetClassification.DOUBTFUL_1,
+                    AssetClassification.DOUBTFUL_2,
+                    AssetClassification.DOUBTFUL_3,
+                    AssetClassification.LOSS,
+                ]
+            ]
+        )
 
         return {
             "total_accounts": total,
@@ -1226,7 +1348,7 @@ class LoanAccountService:
     async def get_dpd_buckets(
         self,
         organization_id: UUID,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Get DPD bucket wise analysis."""
         accounts, _ = await self.loan_account_repo.get_all_accounts(
             organization_id=organization_id,

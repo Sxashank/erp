@@ -1,276 +1,298 @@
 """Lending module models package."""
 
 # Enums
-from app.models.lending.enums import (
-    # Entity/Borrower Enums
-    EntityType,
-    EntityStatus,
-    ContactType,
-    AddressType,
-    RelationType,
-    RiskCategory,
-    IndustrySector,
-    # KYC Enums
-    KYCDocCategory,
-    KYCVerificationStatus,
-    KYCVerificationMethod,
-    CKYCTransactionType,
-    BureauType,
-    BureauPullStatus,
-    # Credit Rating Enums
-    RatingGrade,
-    RatingType,
-    RatingStatus,
-    RiskCategoryType,
-    # Loan Product Enums
-    ProductCategory,
-    InterestType,
-    RateResetFrequency,
-    RepaymentFrequency,
-    RepaymentMode,
-    DayCountConvention,
-    FeeType,
-    FeeCalculationType,
-    FeeCollectionStage,
-    # Document Checklist Enums
-    DocumentCategory,
-    DocumentStage,
-    # Application Enums
-    ApplicationStage,
-    ApplicationStatus,
-    AppraisalType,
-    TechnicalFeasibility,
-    AppraisalRecommendation,
-    MilestoneStatus,
-    # Sanction Enums
-    SanctionStatus,
-    ConditionType,
-    ConditionCategory,
-    ConditionComplianceStatus,
-    # Security/Collateral Enums
-    SecurityCategory,
-    SecurityType,
-    ChargeType,
-    SecurityStatus,
-)
-
-# Entity/Borrower Models
-from app.models.lending.entity import (
-    Entity,
-    EntityContact,
-    EntityAddress,
-    EntityBankAccount,
-    EntityRelation,
-    EntityFinancial,
-)
-
-# KYC Models
-from app.models.lending.kyc import (
-    KYCDocumentType,
-    EntityKYCDocument,
-    CKYCTransaction,
-    BureauPull,
-    BureauReport,
-)
-
-# Credit Rating Models
-from app.models.lending.rating import (
-    RiskCategory as RiskCategoryModel,
-    RiskParameter,
-    RatingMatrix,
-    EntityRating,
-    RatingScoreDetail,
-)
-
-# Loan Product Models
-from app.models.lending.product import (
-    LoanProduct,
-    InterestRate,
-    InterestRateHistory,
-    FeeMaster,
-    ProductFee,
-    DocumentChecklist,
+# Phase 6: Account Aggregator Integration Models
+from app.models.lending.aa_consent import (
+    AABankAccount,
+    AABankTransaction,
+    AAConsent,
+    AAConsentLog,
+    AAFetchSession,
 )
 
 # Application Models
 from app.models.lending.application import (
-    LoanApplication,
     ApplicationDocument,
     ApplicationFee,
-    TechnicalAppraisal,
     FinancialAnalysis,
+    LoanApplication,
     ProjectMilestone,
+    TechnicalAppraisal,
 )
 
-# Sanction Models
-from app.models.lending.sanction import (
-    LoanSanction,
-    SanctionCondition,
-    LoanSecurity,
-)
-
-# Phase 2: Loan Accounting Models
-from app.models.lending.loan_account import (
-    LoanAccount,
-    Disbursement,
-    RepaymentSchedule,
-    ScheduleInstallment,
-    LoanAccrual,
-    LoanReceipt,
-    ReceiptAllocation,
-    LoanMandate,
-    AssetClassificationHistory,
-    LoanProvision,
-    LoanAdjustment,
-)
-
-# Phase 2: Loan Accounting Enums
-from app.models.lending.enums import (
-    LoanAccountStatus,
-    DisbursementStatus,
-    DisbursementMode,
-    ScheduleType,
-    InstallmentType,
-    InstallmentStatus,
-    AccrualCategory,
-    AccrualStatus,
-    AssetClassification,
-    ReceiptType,
-    ReceiptStatus,
-    ReceiptMode,
-    AllocationPriority,
-    AllocationComponent,
-    AdjustmentType,
-    WaiverType,
-    ProvisioningCategory,
-    MandateStatus,
-    GLEntryType,
+# Approval Checklist Models + Enums
+from app.models.lending.checklist import (
+    ApprovalChecklistTemplate,
+    ApprovalChecklistTemplateItem,
+    LoanChecklist,
+    LoanChecklistItem,
 )
 
 # Phase 3: NPA & Collections Models
 from app.models.lending.collections import (
     CollectionFollowUp,
     DemandNotice,
-    NPARecord,
-    PenalInterest,
-    PenalWaiver,
-    OTSProposal,
-    OTSPaymentSchedule,
-    LoanRestructure,
     LegalCase,
     LegalHearing,
+    LoanRestructure,
+    NPARecord,
+    OTSPaymentSchedule,
+    OTSProposal,
+    PenalInterest,
+    PenalWaiver,
     PropertyAuction,
     WriteOffRecord,
 )
 
+# Phase 7: Credit Bureau Integration Models
+from app.models.lending.credit_pull import (
+    AccountOwnership,
+    CreditAccount,
+    CreditAccountStatus,
+    CreditAccountType,
+    CreditBureau,
+    CreditEnquiry,
+    CreditPull,
+    CreditPullStatus,
+    CreditPullType,
+)
+
+# Entity/Borrower Models
+from app.models.lending.entity import (
+    Entity,
+    EntityAddress,
+    EntityBankAccount,
+    EntityContact,
+    EntityFinancial,
+    EntityRelation,
+)
+
+# Phase 2: Loan Accounting Enums
 # Phase 3: NPA & Collections Enums
-from app.models.lending.enums import (
-    CollectionStage,
-    FollowUpType,
-    FollowUpStatus,
-    FollowUpOutcome,
-    DemandNoticeType,
-    NPAStatus,
-    OTSStatus,
-    OTSPaymentMode,
-    RestructureType,
-    RestructureStatus,
-    LegalForumType,
-    LegalCaseType,
-    LegalCaseStatus,
-    SARFAESIStage,
-    AuctionStatus,
-    WriteOffType,
-    WriteOffStatus,
-)
-
-# Phase 4: Treasury & ALM Models
-from app.models.lending.treasury import (
-    Lender,
-    Borrowing,
-    BorrowingTranche,
-    BorrowingSchedule,
-    BorrowingPayment,
-    BorrowingCovenant,
-    ALMPosition,
-    ALMAsset,
-    ALMLiability,
-    IRSAnalysis,
-    ExposureLimit,
-    ExposureTracking,
-)
-
 # Phase 4: Treasury & ALM Enums
+# Treasury Investment Enums
+# Phase 5: NACH/eNACH Integration Enums
+# Phase 6: Account Aggregator Integration Enums
+# IIF Enums
 from app.models.lending.enums import (
-    LenderType,
-    LenderStatus,
-    BorrowingType,
-    BorrowingStatus,
-    BorrowingSecurityType,
-    DrawdownStatus,
-    BorrowingRateType,
-    BorrowingPaymentType,
+    AAConsentMode,
+    AAConsentPurpose,
+    AAConsentStatus,
+    AADataStatus,
+    AAFetchFrequency,
+    AAFetchSessionStatus,
+    AAFIType,
+    AANotificationType,
+    AAProvider,
+    AccrualCategory,
+    AccrualStatus,
+    AddressType,
+    AdjustmentType,
+    AllocationComponent,
+    AllocationPriority,
+    ALMAssetType,
     ALMBucket,
     ALMCategory,
-    ALMAssetType,
     ALMLiabilityType,
-    IRSShockType,
+    # Application Enums
+    ApplicationStage,
+    ApplicationStatus,
+    AppraisalRecommendation,
+    AppraisalType,
+    AssetClassification,
+    AuctionStatus,
+    BorrowingPaymentType,
+    BorrowingRateType,
+    BorrowingSecurityType,
+    BorrowingStatus,
+    BorrowingType,
+    BureauPullStatus,
+    BureauType,
+    ChargeType,
+    ChecklistAppliesTo,
+    ChecklistItemCategory,
+    ChecklistItemStatus,
+    CKYCTransactionType,
+    ClaimFrequency,
+    CollectionStage,
+    ConditionCategory,
+    ConditionComplianceStatus,
+    ConditionType,
+    ContactType,
+    CouponFrequency,
+    CovenantStatus,
+    CovenantType,
+    DayCountConvention,
+    DemandNoticeType,
+    DisbursementMode,
+    DisbursementStatus,
+    # Document Checklist Enums
+    DocumentCategory,
+    DocumentStage,
+    DrawdownStatus,
+    EntityStatus,
+    # Entity/Borrower Enums
+    EntityType,
     ExposureLimitType,
     ExposureStatus,
+    FeeCalculationType,
+    FeeCollectionStage,
+    FeeType,
+    FollowUpOutcome,
+    FollowUpStatus,
+    FollowUpType,
+    GLEntryType,
+    IIFLoanType,
+    IndustrySector,
+    InstallmentStatus,
+    InstallmentType,
+    InterestType,
+    InvestmentCategory,
+    InvestmentStatus,
+    InvestmentType,
+    IRSShockType,
+    # KYC Enums
+    KYCDocCategory,
+    KYCVerificationMethod,
+    KYCVerificationStatus,
+    LegalCaseStatus,
+    LegalCaseType,
+    LegalForumType,
+    LenderStatus,
+    LenderType,
     LiquidityRatioType,
-    CovenantType,
-    CovenantStatus,
+    LoanAccountStatus,
+    MandateStatus,
+    MilestoneStatus,
+    NachBatchStatus,
+    NachFileFormat,
+    NachReturnCode,
+    NachTransactionStatus,
+    NPAStatus,
+    OTSPaymentMode,
+    OTSStatus,
+    # Loan Product Enums
+    ProductCategory,
+    ProvisioningCategory,
+    RateResetFrequency,
+    # Credit Rating Enums
+    RatingGrade,
+    RatingStatus,
+    RatingType,
+    ReceiptMode,
+    ReceiptStatus,
+    ReceiptType,
+    RelationType,
+    RepaymentFrequency,
+    RepaymentMode,
+    RestructureStatus,
+    RestructureType,
+    RiskCategory,
+    RiskCategoryType,
+    # Sanction Enums
+    SanctionStatus,
+    SARFAESIStage,
+    ScheduleType,
+    # Security/Collateral Enums
+    SecurityCategory,
+    SecurityStatus,
+    SecurityType,
+    SubventionClaimStatus,
+    SubventionEnrollmentStatus,
+    TechnicalFeasibility,
+    WaiverType,
+    WriteOffStatus,
+    WriteOffType,
+)
+
+# Interest Incentivization Fund (IIF) Models
+from app.models.lending.iif import (
+    ApplicationUtilization,
+    FundUtilizationCategory,
+    LoanSubventionEnrollment,
+    SubventionClaim,
+    SubventionScheme,
+)
+
+# KYC Models
+from app.models.lending.kyc import (
+    BureauPull,
+    BureauReport,
+    CKYCTransaction,
+    EntityKYCDocument,
+    KYCDocumentType,
+)
+
+# Phase 2: Loan Accounting Models
+from app.models.lending.loan_account import (
+    AssetClassificationHistory,
+    Disbursement,
+    LoanAccount,
+    LoanAccrual,
+    LoanAdjustment,
+    LoanMandate,
+    LoanProvision,
+    LoanReceipt,
+    LoanReceiptBankStatementMatch,
+    ReceiptAllocation,
+    RepaymentSchedule,
+    ScheduleInstallment,
 )
 
 # Phase 5: NACH/eNACH Integration Models
 from app.models.lending.nach_batch import (
     NachBatch,
-    NachTransaction,
     NachMandateLog,
+    NachTransaction,
 )
 
-# Phase 5: NACH/eNACH Integration Enums
-from app.models.lending.enums import (
-    NachBatchStatus,
-    NachTransactionStatus,
-    NachReturnCode,
-    NachFileFormat,
+# Loan Product Models
+from app.models.lending.product import (
+    DocumentChecklist,
+    FeeMaster,
+    InterestRate,
+    InterestRateHistory,
+    LoanProduct,
+    ProductFee,
+)
+from app.models.lending.rating import (
+    EntityRating,
+    RatingMatrix,
+    RatingScoreDetail,
+    RiskParameter,
 )
 
-# Phase 6: Account Aggregator Integration Models
-from app.models.lending.aa_consent import (
-    AAConsent,
-    AAFetchSession,
-    AABankAccount,
-    AABankTransaction,
-    AAConsentLog,
+# Credit Rating Models
+from app.models.lending.rating import (
+    RiskCategory as RiskCategoryModel,
 )
 
-# Phase 6: Account Aggregator Integration Enums
-from app.models.lending.enums import (
-    AAProvider,
-    AAConsentStatus,
-    AAConsentPurpose,
-    AAConsentMode,
-    AAFetchFrequency,
-    AAFIType,
-    AAFetchSessionStatus,
-    AADataStatus,
-    AANotificationType,
+# Sanction Models
+from app.models.lending.sanction import (
+    LoanSanction,
+    LoanSecurity,
+    SanctionCondition,
 )
 
-# Phase 7: Credit Bureau Integration Models
-from app.models.lending.credit_pull import (
-    CreditPull,
-    CreditAccount,
-    CreditEnquiry,
-    CreditBureau,
-    CreditPullType,
-    CreditPullStatus,
-    CreditAccountType,
-    CreditAccountStatus,
-    AccountOwnership,
+# Phase 4: Treasury & ALM Models
+from app.models.lending.treasury import (
+    ALMAsset,
+    ALMLiability,
+    ALMPosition,
+    Borrowing,
+    BorrowingCovenant,
+    BorrowingPayment,
+    BorrowingSchedule,
+    BorrowingTranche,
+    ExposureLimit,
+    ExposureTracking,
+    FundDeployment,
+    IRSAnalysis,
+    Lender,
 )
+
+# Treasury Investment Portfolio
+from app.models.lending.treasury_investment import TreasuryInvestment
 
 # Aliases for backward compatibility
 LoanSchedule = RepaymentSchedule
@@ -375,6 +397,7 @@ __all__ = [
     "LoanAccrual",
     "LoanReceipt",
     "ReceiptAllocation",
+    "LoanReceiptBankStatementMatch",
     "LoanMandate",
     "AssetClassificationHistory",
     "LoanProvision",
@@ -437,6 +460,7 @@ __all__ = [
     "BorrowingSchedule",
     "BorrowingPayment",
     "BorrowingCovenant",
+    "FundDeployment",
     "ALMPosition",
     "ALMAsset",
     "ALMLiability",
@@ -462,6 +486,12 @@ __all__ = [
     "LiquidityRatioType",
     "CovenantType",
     "CovenantStatus",
+    # Treasury Investment Portfolio
+    "TreasuryInvestment",
+    "InvestmentType",
+    "InvestmentCategory",
+    "CouponFrequency",
+    "InvestmentStatus",
     # Phase 5: NACH/eNACH Integration Models
     "NachBatch",
     "NachTransaction",
@@ -498,6 +528,26 @@ __all__ = [
     "CreditAccountType",
     "CreditAccountStatus",
     "AccountOwnership",
+    # IIF Models
+    "SubventionScheme",
+    "FundUtilizationCategory",
+    "ApplicationUtilization",
+    "LoanSubventionEnrollment",
+    "SubventionClaim",
+    # IIF Enums
+    "IIFLoanType",
+    "ClaimFrequency",
+    "SubventionEnrollmentStatus",
+    "SubventionClaimStatus",
+    # Approval Checklist Models
+    "ApprovalChecklistTemplate",
+    "ApprovalChecklistTemplateItem",
+    "LoanChecklist",
+    "LoanChecklistItem",
+    # Approval Checklist Enums
+    "ChecklistItemCategory",
+    "ChecklistItemStatus",
+    "ChecklistAppliesTo",
     # Aliases
     "LoanSchedule",
     "NPAClassification",

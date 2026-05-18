@@ -3,31 +3,6 @@
  * Make payments, prepayments, and foreclosure
  */
 
-import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   CreditCard,
   IndianRupee,
@@ -40,14 +15,43 @@ import {
   ArrowRight,
   Calculator,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { portalDashboardApi, portalPaymentApi } from '@/services/portalApi';
 import type { LoanSummary, UpcomingDue, PrepaymentQuote, ForeclosureQuote } from '@/types/portal';
 
+import { logger } from "@/lib/logger";
 type PaymentType = 'emi' | 'prepayment' | 'foreclosure';
 type PaymentMode = 'UPI' | 'NETBANKING' | 'CARD';
 
 export default function PortalPayments() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const preselectedLoan = searchParams.get('loan');
 
   const [loading, setLoading] = useState(true);
@@ -82,7 +86,7 @@ export default function PortalPayments() {
       setLoans(loansRes.data.filter((l: LoanSummary) => l.status === 'ACTIVE'));
       setUpcomingDues(duesRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -111,7 +115,7 @@ export default function PortalPayments() {
       });
       setPrepaymentQuote(response.data);
     } catch (error) {
-      console.error('Failed to get prepayment quote:', error);
+      logger.error('Failed to get prepayment quote:', error);
     } finally {
       setQuoteLoading(false);
     }
@@ -128,7 +132,7 @@ export default function PortalPayments() {
       });
       setForeclosureQuote(response.data);
     } catch (error) {
-      console.error('Failed to get foreclosure quote:', error);
+      logger.error('Failed to get foreclosure quote:', error);
     } finally {
       setQuoteLoading(false);
     }
@@ -164,14 +168,14 @@ export default function PortalPayments() {
         window.location.href = response.data.gateway_url;
       }
     } catch (error) {
-      console.error('Failed to initiate payment:', error);
+      logger.error('Failed to initiate payment:', error);
       setPaymentInitiated(false);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
@@ -184,9 +188,9 @@ export default function PortalPayments() {
         subtitle="Pay your EMI, make prepayments, or foreclose your loan"
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Payment Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Select Loan */}
           <Card>
             <CardHeader>
@@ -200,9 +204,9 @@ export default function PortalPayments() {
                 <SelectContent>
                   {loans.map((loan) => (
                     <SelectItem key={loan.id} value={loan.id}>
-                      <div className="flex items-center justify-between w-full">
+                      <div className="flex w-full items-center justify-between">
                         <span>{loan.loan_account_number}</span>
-                        <span className="text-gray-500 ml-4">
+                        <span className="ml-4 text-gray-500">
                           {formatCurrency(loan.total_outstanding)} outstanding
                         </span>
                       </div>
@@ -212,7 +216,7 @@ export default function PortalPayments() {
               </Select>
 
               {selectedLoanData && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <div className="mt-4 rounded-lg bg-gray-50 p-4">
                   <div className="grid grid-cols-3 gap-4 text-sm">
                     <div>
                       <p className="text-gray-500">Product</p>
@@ -257,7 +261,7 @@ export default function PortalPayments() {
 
                   <TabsContent value="emi" className="mt-4">
                     {selectedDue ? (
-                      <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-200">
+                      <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm text-emerald-700">Amount Due</p>
@@ -265,12 +269,10 @@ export default function PortalPayments() {
                               {formatCurrency(selectedDue.total_due)}
                             </p>
                             <p className="text-sm text-emerald-600">
-                              Due Date: {new Date(selectedDue.due_date).toLocaleDateString()}
+                              Due Date: <DateDisplay date={selectedDue.due_date} />
                             </p>
                           </div>
-                          {selectedDue.is_overdue && (
-                            <Badge variant="destructive">Overdue</Badge>
-                          )}
+                          {selectedDue.is_overdue && <Badge variant="destructive">Overdue</Badge>}
                         </div>
                         {selectedDue.overdue_amount > 0 && (
                           <p className="mt-2 text-sm text-red-600">
@@ -280,7 +282,7 @@ export default function PortalPayments() {
                       </div>
                     ) : (
                       <div className="p-4 text-center text-gray-500">
-                        <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                        <CheckCircle className="mx-auto mb-2 h-8 w-8 text-green-500" />
                         <p>No EMI due at the moment</p>
                       </div>
                     )}
@@ -291,7 +293,7 @@ export default function PortalPayments() {
                       <Label htmlFor="prepayment-amount">Prepayment Amount</Label>
                       <div className="flex gap-2">
                         <div className="relative flex-1">
-                          <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <IndianRupee className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                           <Input
                             id="prepayment-amount"
                             type="number"
@@ -309,7 +311,7 @@ export default function PortalPayments() {
                             <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
                             <>
-                              <Calculator className="h-4 w-4 mr-2" />
+                              <Calculator className="mr-2 h-4 w-4" />
                               Calculate
                             </>
                           )}
@@ -318,7 +320,7 @@ export default function PortalPayments() {
                     </div>
 
                     {prepaymentQuote && (
-                      <div className="p-4 bg-blue-50 rounded-lg border border-blue-200 space-y-3">
+                      <div className="space-y-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
                         <h4 className="font-medium text-blue-800">Prepayment Quote</h4>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
@@ -346,14 +348,14 @@ export default function PortalPayments() {
                             </p>
                           </div>
                         </div>
-                        <div className="pt-3 border-t border-blue-200">
+                        <div className="border-t border-blue-200 pt-3">
                           <div className="flex justify-between">
                             <span className="font-medium text-blue-800">Total Payable</span>
                             <span className="text-xl font-bold text-blue-800">
                               {formatCurrency(prepaymentQuote.total_payable)}
                             </span>
                           </div>
-                          <p className="text-sm text-green-600 mt-1">
+                          <p className="mt-1 text-sm text-green-600">
                             Interest Savings: {formatCurrency(prepaymentQuote.interest_savings)}
                           </p>
                         </div>
@@ -368,7 +370,7 @@ export default function PortalPayments() {
                           <Loader2 className="h-4 w-4 animate-spin" />
                         ) : (
                           <>
-                            <Calculator className="h-4 w-4 mr-2" />
+                            <Calculator className="mr-2 h-4 w-4" />
                             Get Foreclosure Quote
                           </>
                         )}
@@ -376,7 +378,7 @@ export default function PortalPayments() {
                     </div>
 
                     {foreclosureQuote && (
-                      <div className="p-4 bg-purple-50 rounded-lg border border-purple-200 space-y-3">
+                      <div className="space-y-3 rounded-lg border border-purple-200 bg-purple-50 p-4">
                         <h4 className="font-medium text-purple-800">Foreclosure Quote</h4>
                         <div className="grid grid-cols-2 gap-4 text-sm">
                           <div>
@@ -410,19 +412,18 @@ export default function PortalPayments() {
                             </p>
                           </div>
                         </div>
-                        <div className="pt-3 border-t border-purple-200">
+                        <div className="border-t border-purple-200 pt-3">
                           <div className="flex justify-between">
                             <span className="font-medium text-purple-800">Total Payable</span>
                             <span className="text-xl font-bold text-purple-800">
                               {formatCurrency(foreclosureQuote.total_payable)}
                             </span>
                           </div>
-                          <p className="text-sm text-green-600 mt-1">
+                          <p className="mt-1 text-sm text-green-600">
                             Interest Savings: {formatCurrency(foreclosureQuote.interest_savings)}
                           </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Valid until:{' '}
-                            {new Date(foreclosureQuote.valid_until).toLocaleDateString()}
+                          <p className="mt-1 text-xs text-gray-500">
+                            Valid until: <DateDisplay date={foreclosureQuote.valid_until} />
                           </p>
                         </div>
                       </div>
@@ -443,12 +444,14 @@ export default function PortalPayments() {
                 <RadioGroup
                   value={paymentMode}
                   onValueChange={(v) => setPaymentMode(v as PaymentMode)}
-                  className="grid grid-cols-1 md:grid-cols-3 gap-4"
+                  className="grid grid-cols-1 gap-4 md:grid-cols-3"
                 >
                   <Label
                     htmlFor="upi"
-                    className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
-                      paymentMode === 'UPI' ? 'border-emerald-500 bg-emerald-50' : 'hover:bg-gray-50'
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors ${
+                      paymentMode === 'UPI'
+                        ? 'border-emerald-500 bg-emerald-50'
+                        : 'hover:bg-gray-50'
                     }`}
                   >
                     <RadioGroupItem value="UPI" id="upi" />
@@ -461,7 +464,7 @@ export default function PortalPayments() {
 
                   <Label
                     htmlFor="netbanking"
-                    className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors ${
                       paymentMode === 'NETBANKING'
                         ? 'border-emerald-500 bg-emerald-50'
                         : 'hover:bg-gray-50'
@@ -477,7 +480,7 @@ export default function PortalPayments() {
 
                   <Label
                     htmlFor="card"
-                    className={`flex items-center gap-3 p-4 border rounded-lg cursor-pointer transition-colors ${
+                    className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 transition-colors ${
                       paymentMode === 'CARD'
                         ? 'border-emerald-500 bg-emerald-50'
                         : 'hover:bg-gray-50'
@@ -520,7 +523,7 @@ export default function PortalPayments() {
                     </div>
                   </div>
 
-                  <div className="pt-4 border-t">
+                  <div className="border-t pt-4">
                     <div className="flex justify-between">
                       <span className="font-medium">Amount to Pay</span>
                       <span className="text-2xl font-bold text-emerald-600">
@@ -548,13 +551,13 @@ export default function PortalPayments() {
                     )}
                   </Button>
 
-                  <p className="text-xs text-center text-gray-500">
+                  <p className="text-center text-xs text-gray-500">
                     You will be redirected to secure payment gateway
                   </p>
                 </>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <div className="py-8 text-center text-gray-500">
+                  <Wallet className="mx-auto mb-4 h-12 w-12 opacity-50" />
                   <p>Select a loan account to proceed</p>
                 </div>
               )}
@@ -571,18 +574,20 @@ export default function PortalPayments() {
                 {upcomingDues.slice(0, 3).map((due) => (
                   <div
                     key={due.loan_account_id}
-                    className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                    className={`rounded-lg p-3 transition-colors ${
                       selectedLoan === due.loan_account_id
-                        ? 'bg-emerald-50 border border-emerald-200'
+                        ? 'border border-emerald-200 bg-emerald-50'
                         : 'bg-gray-50 hover:bg-gray-100'
                     }`}
-                    onClick={() => setSelectedLoan(due.loan_account_id)}
                   >
-                    <div className="flex justify-between items-start">
+                    <div
+                      className="flex cursor-pointer items-start justify-between"
+                      onClick={() => setSelectedLoan(due.loan_account_id)}
+                    >
                       <div>
-                        <p className="font-medium text-sm">{due.loan_account_number}</p>
+                        <p className="text-sm font-medium">{due.loan_account_number}</p>
                         <p className="text-xs text-gray-500">
-                          Due: {new Date(due.due_date).toLocaleDateString()}
+                          Due: <DateDisplay date={due.due_date} />
                         </p>
                       </div>
                       <div className="text-right">
@@ -593,6 +598,18 @@ export default function PortalPayments() {
                           </Badge>
                         )}
                       </div>
+                    </div>
+                    <div className="mt-2 flex justify-end">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate('/portal/pay/coming-soon');
+                        }}
+                      >
+                        Pay
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -624,7 +641,7 @@ export default function PortalPayments() {
               <span className="text-gray-500">Payment Mode</span>
               <span className="font-medium">{paymentMode}</span>
             </div>
-            <div className="flex justify-between pt-4 border-t">
+            <div className="flex justify-between border-t pt-4">
               <span className="font-medium">Total Amount</span>
               <span className="text-xl font-bold text-emerald-600">
                 {formatCurrency(getPaymentAmount())}
@@ -635,10 +652,7 @@ export default function PortalPayments() {
             <Button variant="outline" onClick={() => setShowConfirmDialog(false)}>
               Cancel
             </Button>
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700"
-              onClick={handleInitiatePayment}
-            >
+            <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={handleInitiatePayment}>
               Confirm & Pay
             </Button>
           </DialogFooter>

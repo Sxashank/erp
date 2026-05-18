@@ -7,10 +7,11 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import BaseSchema, AuditSchema
+from app.schemas.base import CamelSchema
+from app.schemas.fixed_assets.common import FixedAssetsAuditSchema, OffsetPaginatedResponse
 
 
-class VerificationScheduleCreate(BaseSchema):
+class VerificationScheduleCreate(CamelSchema):
     """Schema for creating a physical verification schedule."""
 
     schedule_name: str = Field(..., min_length=1, max_length=200)
@@ -29,7 +30,7 @@ class VerificationScheduleCreate(BaseSchema):
     organization_id: UUID
 
 
-class VerificationScheduleUpdate(BaseSchema):
+class VerificationScheduleUpdate(CamelSchema):
     """Schema for updating a physical verification schedule."""
 
     schedule_name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -40,7 +41,7 @@ class VerificationScheduleUpdate(BaseSchema):
     remarks: Optional[str] = Field(None, max_length=1000)
 
 
-class VerificationScheduleResponse(AuditSchema):
+class VerificationScheduleResponse(FixedAssetsAuditSchema):
     """Physical verification schedule response schema."""
 
     id: UUID
@@ -71,7 +72,7 @@ class VerificationScheduleResponse(AuditSchema):
     approved_at: Optional[datetime] = None
 
 
-class VerificationEntryCreate(BaseSchema):
+class VerificationEntryCreate(CamelSchema):
     """Schema for creating a verification entry result."""
 
     asset_id: UUID
@@ -92,7 +93,7 @@ class VerificationEntryCreate(BaseSchema):
     remarks: Optional[str] = Field(None, max_length=500)
 
 
-class VerificationEntryUpdate(BaseSchema):
+class VerificationEntryUpdate(CamelSchema):
     """Schema for updating a verification entry."""
 
     verification_result: Optional[str] = None
@@ -105,7 +106,7 @@ class VerificationEntryUpdate(BaseSchema):
     remarks: Optional[str] = None
 
 
-class VerificationEntryResponse(AuditSchema):
+class VerificationEntryResponse(FixedAssetsAuditSchema):
     """Physical verification entry response schema."""
 
     id: UUID
@@ -134,7 +135,7 @@ class VerificationEntryResponse(AuditSchema):
     remarks: Optional[str] = None
 
 
-class DiscrepancyCreate(BaseSchema):
+class DiscrepancyCreate(CamelSchema):
     """Schema for creating a discrepancy."""
 
     entry_id: UUID
@@ -147,7 +148,7 @@ class DiscrepancyCreate(BaseSchema):
     remarks: Optional[str] = Field(None, max_length=500)
 
 
-class DiscrepancyUpdate(BaseSchema):
+class DiscrepancyUpdate(CamelSchema):
     """Schema for updating a discrepancy."""
 
     status: Optional[str] = Field(
@@ -159,7 +160,7 @@ class DiscrepancyUpdate(BaseSchema):
     remarks: Optional[str] = Field(None, max_length=500)
 
 
-class DiscrepancyResponse(AuditSchema):
+class DiscrepancyResponse(FixedAssetsAuditSchema):
     """Discrepancy response schema."""
 
     id: UUID
@@ -179,7 +180,7 @@ class DiscrepancyResponse(AuditSchema):
     remarks: Optional[str] = None
 
 
-class VerificationSummaryResponse(BaseSchema):
+class VerificationSummaryResponse(CamelSchema):
     """Physical verification summary response."""
 
     organization_id: UUID
@@ -197,19 +198,19 @@ class VerificationSummaryResponse(BaseSchema):
     verification_percentage: Decimal
 
 
-class StartVerificationRequest(BaseSchema):
+class StartVerificationRequest(CamelSchema):
     """Request to start a verification schedule."""
 
     remarks: Optional[str] = Field(None, max_length=500)
 
 
-class CompleteVerificationRequest(BaseSchema):
+class CompleteVerificationRequest(CamelSchema):
     """Request to complete a verification schedule."""
 
     remarks: Optional[str] = Field(None, max_length=500)
 
 
-class BulkVerificationEntry(BaseSchema):
+class BulkVerificationEntry(CamelSchema):
     """Single entry for bulk verification update."""
 
     asset_id: UUID
@@ -220,8 +221,20 @@ class BulkVerificationEntry(BaseSchema):
     barcode_scan: Optional[str] = None
 
 
-class BulkVerificationRequest(BaseSchema):
+class BulkVerificationRequest(CamelSchema):
     """Request for bulk verification update."""
 
     verification_date: date
     entries: List[BulkVerificationEntry]
+
+
+class VerificationScheduleListResponse(OffsetPaginatedResponse[VerificationScheduleResponse]):
+    """Paginated verification-schedule response."""
+
+
+class VerificationEntryListResponse(OffsetPaginatedResponse[VerificationEntryResponse]):
+    """Paginated verification-entry response."""
+
+
+class DiscrepancyListResponse(OffsetPaginatedResponse[DiscrepancyResponse]):
+    """Paginated discrepancy response."""

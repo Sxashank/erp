@@ -28,10 +28,14 @@ export { FormShell, FormSection } from './FormShell';
 export type { FormShellProps, FormSectionProps } from './FormShell';
 export { InlineTabs } from './InlineTabs';
 export type { InlineTabsProps, TabItem } from './InlineTabs';
+export { MakerCheckerGate } from './MakerCheckerGate';
 export { PageHeader } from './PageHeader';
 export type { PageHeaderProps, BreadcrumbItem } from './PageHeader';
 export { PercentageDisplay } from './PercentageDisplay';
+export { PercentageInput } from './PercentageInput';
+export type { PercentageInputProps } from './PercentageInput';
 export { PermissionGate } from './PermissionGate';
+export { RequireModuleAccess } from './RequireModuleAccess';
 export { SkeletonTable } from './SkeletonTable';
 export type { SkeletonTableProps } from './SkeletonTable';
 export {

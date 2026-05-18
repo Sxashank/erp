@@ -1,13 +1,22 @@
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { z } from 'zod';
+
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { DPDBadge } from '@/components/lending/common/DPDBadge';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
+import { StatusBadge } from '@/components/lending/common/StatusBadge';
 import { WizardContainer } from '@/components/lending/wizard/WizardContainer';
 import { WizardStep } from '@/components/lending/wizard/WizardStep';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,7 +24,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -24,28 +32,22 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Plus, Trash2 } from 'lucide-react';
-import { AmountInput } from '@/components/lending/common/AmountInput';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-import { DPDBadge } from '@/components/lending/common/DPDBadge';
-import { StatusBadge } from '@/components/lending/common/StatusBadge';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const otsSchema = z.object({
   loanAccountId: z.string().min(1, 'Account is required'),
   settlementAmount: z.number().min(1, 'Settlement amount is required'),
   paymentMode: z.enum(['LUMPSUM', 'STRUCTURED']),
   validityDays: z.number().min(1),
-  paymentSchedule: z.array(
-    z.object({
-      installment: z.number(),
-      dueDate: z.string(),
-      amount: z.number(),
-    })
-  ).optional(),
+  paymentSchedule: z
+    .array(
+      z.object({
+        installment: z.number(),
+        dueDate: z.string(),
+        amount: z.number(),
+      }),
+    )
+    .optional(),
   justification: z.string().min(10, 'Please provide detailed justification'),
   recoveryProspects: z.string().optional(),
   remarks: z.string().optional(),
@@ -53,27 +55,28 @@ const otsSchema = z.object({
 
 type OTSFormData = z.infer<typeof otsSchema>;
 
-// Mock NPA account data
-const mockNPAAccount = {
-  id: '1',
-  loanAccountNumber: 'SMFC/TL/CHN/2023/L00034',
-  entityName: 'Southern Motors Corp',
-  entityCode: 'ENT/2023/00089',
-  productName: 'Corporate Term Loan',
-  principalOutstanding: 125000000,
-  interestOutstanding: 5250000,
+// Loan account context is keyed off `?accountId=` in the URL. The wizard
+// renders with zeroed defaults until the BE endpoint that prefills the
+// NPA account snapshot (outstanding, classification, collection history)
+// is wired. For now, the user enters figures manually.
+const emptyNPAAccount = {
+  id: '',
+  loanAccountNumber: '',
+  entityName: '',
+  entityCode: '',
+  productName: '',
+  principalOutstanding: 0,
+  interestOutstanding: 0,
   penalOutstanding: 0,
-  totalOutstanding: 130250000,
-  dpd: 95,
-  classification: 'SUB_STANDARD',
-  npaDate: '2024-11-15',
-  collectionHistory: [
-    { date: '2024-10-15', amount: 2500000, remarks: 'Partial EMI payment' },
-    { date: '2024-08-20', amount: 1500000, remarks: 'Part payment' },
-  ],
-  securityValue: 180000000,
-  securityType: 'Property',
+  totalOutstanding: 0,
+  dpd: 0,
+  classification: '',
+  npaDate: '',
+  collectionHistory: [] as { date: string; amount: number; remarks: string }[],
+  securityValue: 0,
+  securityType: '',
 };
+const mockNPAAccount = emptyNPAAccount;
 
 const steps = [
   { id: 'account', title: 'Account Selection', description: 'Select NPA account' },
@@ -100,7 +103,13 @@ export default function OTSWizard() {
     },
   });
 
-  const { watch, setValue, handleSubmit, register, formState: { errors } } = form;
+  const {
+    watch,
+    setValue,
+    handleSubmit,
+    register,
+    formState: { errors },
+  } = form;
 
   const {
     fields: scheduleFields,
@@ -113,12 +122,13 @@ export default function OTSWizard() {
 
   const paymentMode = watch('paymentMode');
   const settlementAmount = watch('settlementAmount') || 0;
-  const discountPercent = ((mockNPAAccount.totalOutstanding - settlementAmount) / mockNPAAccount.totalOutstanding) * 100;
+  const discountPercent =
+    ((mockNPAAccount.totalOutstanding - settlementAmount) / mockNPAAccount.totalOutstanding) * 100;
   const haircut = mockNPAAccount.totalOutstanding - settlementAmount;
 
   const totalScheduled = scheduleFields.reduce(
     (sum, _, index) => sum + (watch(`paymentSchedule.${index}.amount`) || 0),
-    0
+    0,
   );
 
   const onSubmit = async (data: OTSFormData) => {
@@ -174,7 +184,9 @@ export default function OTSWizard() {
               </div>
               <div>
                 <Label className="text-muted-foreground">NPA Date</Label>
-                <p><DateDisplay date={mockNPAAccount.npaDate} /></p>
+                <p>
+                  <DateDisplay date={mockNPAAccount.npaDate} />
+                </p>
               </div>
             </div>
 
@@ -189,12 +201,14 @@ export default function OTSWizard() {
               </div>
               <div>
                 <Label className="text-muted-foreground">Security Value</Label>
-                <p><AmountDisplay amount={mockNPAAccount.securityValue} showFull /></p>
+                <p>
+                  <AmountDisplay amount={mockNPAAccount.securityValue} showFull />
+                </p>
               </div>
             </div>
 
             <div className="border-t pt-4">
-              <h4 className="font-medium mb-3">Outstanding Breakdown</h4>
+              <h4 className="mb-3 font-medium">Outstanding Breakdown</h4>
               <Table>
                 <TableBody>
                   <TableRow>
@@ -215,7 +229,7 @@ export default function OTSWizard() {
                       <AmountDisplay amount={mockNPAAccount.penalOutstanding} showFull />
                     </TableCell>
                   </TableRow>
-                  <TableRow className="font-bold bg-muted/50">
+                  <TableRow className="bg-muted/50 font-bold">
                     <TableCell>Total Outstanding</TableCell>
                     <TableCell className="text-right">
                       <AmountDisplay amount={mockNPAAccount.totalOutstanding} showFull />
@@ -258,7 +272,7 @@ export default function OTSWizard() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3 p-4 bg-muted rounded-lg">
+            <div className="grid gap-4 rounded-lg bg-muted p-4 md:grid-cols-3">
               <div className="text-center">
                 <Label className="text-muted-foreground">Settlement %</Label>
                 <p className="text-2xl font-bold text-green-600">
@@ -323,12 +337,12 @@ export default function OTSWizard() {
           </CardHeader>
           <CardContent className="space-y-6">
             {paymentMode === 'LUMPSUM' ? (
-              <div className="p-6 bg-green-50 border border-green-200 rounded-lg text-center">
+              <div className="rounded-lg border border-green-200 bg-green-50 p-6 text-center">
                 <p className="text-lg font-medium">Lumpsum Settlement</p>
-                <p className="text-3xl font-bold text-green-600 mt-2">
+                <p className="mt-2 text-3xl font-bold text-green-600">
                   <AmountDisplay amount={settlementAmount} showFull />
                 </p>
-                <p className="text-sm text-muted-foreground mt-2">
+                <p className="mt-2 text-sm text-muted-foreground">
                   To be paid within {watch('validityDays')} days of approval
                 </p>
               </div>
@@ -346,7 +360,7 @@ export default function OTSWizard() {
                   <TableBody>
                     {scheduleFields.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                           No payment schedule defined. Click "Add Installment" to create.
                         </TableCell>
                       </TableRow>
@@ -355,10 +369,7 @@ export default function OTSWizard() {
                         <TableRow key={field.id}>
                           <TableCell>{index + 1}</TableCell>
                           <TableCell>
-                            <Input
-                              type="date"
-                              {...register(`paymentSchedule.${index}.dueDate`)}
-                            />
+                            <Input type="date" {...register(`paymentSchedule.${index}.dueDate`)} />
                           </TableCell>
                           <TableCell className="text-right">
                             <Input
@@ -394,7 +405,7 @@ export default function OTSWizard() {
                   </TableBody>
                 </Table>
 
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <Button
                     type="button"
                     variant="outline"
@@ -413,9 +424,7 @@ export default function OTSWizard() {
                   {scheduleFields.length > 0 && (
                     <div
                       className={`text-sm font-medium ${
-                        totalScheduled === settlementAmount
-                          ? 'text-green-600'
-                          : 'text-red-600'
+                        totalScheduled === settlementAmount ? 'text-green-600' : 'text-red-600'
                       }`}
                     >
                       {totalScheduled === settlementAmount
@@ -493,7 +502,7 @@ export default function OTSWizard() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4 p-4 bg-muted rounded-lg">
+            <div className="grid gap-4 rounded-lg bg-muted p-4 md:grid-cols-4">
               <div>
                 <Label className="text-muted-foreground">Outstanding</Label>
                 <p className="font-medium">
@@ -538,7 +547,7 @@ export default function OTSWizard() {
               <p className="text-sm">{watch('justification')}</p>
             </div>
 
-            <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
               <p className="text-sm text-yellow-800">
                 By submitting this proposal, you confirm that all details are accurate and the
                 settlement is in the best interest of the company considering the recovery

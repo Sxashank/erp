@@ -1,16 +1,15 @@
 """User repository."""
 
-from datetime import datetime, timezone
-from typing import List, Optional, Set
+from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.auth.user import User
-from app.models.auth.role import UserRole, Role, RolePermission, Permission
+from app.models.auth.role import Role, RolePermission, UserRole
 from app.models.auth.session import UserSession
+from app.models.auth.user import User
 from app.repositories.base import BaseRepository
 
 
@@ -20,21 +19,25 @@ class UserRepository(BaseRepository[User]):
     def __init__(self, session: AsyncSession):
         super().__init__(User, session)
 
-    async def get_by_username(self, username: str) -> Optional[User]:
+    async def get_by_username(self, username: str) -> User | None:
         """Get user by username."""
-        query = select(User).where(
-            and_(
-                User.username == username,
-                User.is_active == True,
+        query = (
+            select(User)
+            .where(
+                and_(
+                    User.username == username,
+                    User.is_active == True,
+                )
             )
-        ).options(
-            selectinload(User.user_roles),
-            selectinload(User.organization),
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+                selectinload(User.organization),
+            )
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_email(self, email: str) -> Optional[User]:
+    async def get_by_email(self, email: str) -> User | None:
         """Get user by email."""
         query = select(User).where(
             and_(
@@ -45,48 +48,74 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_username_or_email(self, identifier: str) -> Optional[User]:
+    async def get_all(
+        self,
+        skip: int = 0,
+        limit: int = 100,
+        include_inactive: bool = False,
+    ) -> list[User]:
+        """Get users with list response relationships eager loaded."""
+        query = select(User).options(
+            selectinload(User.organization),
+            selectinload(User.default_unit),
+            selectinload(User.user_roles).selectinload(UserRole.role),
+        )
+        if not include_inactive:
+            query = query.where(User.is_active == True)
+        query = query.order_by(User.username).offset(skip).limit(limit)
+        result = await self.session.execute(query)
+        return list(result.scalars().unique().all())
+
+    async def get_by_username_or_email(self, identifier: str) -> User | None:
         """Get user by username or email."""
-        query = select(User).where(
-            and_(
-                or_(
-                    User.username == identifier,
-                    User.email == identifier,
-                ),
-                User.is_active == True,
+        query = (
+            select(User)
+            .where(
+                and_(
+                    or_(
+                        User.username == identifier,
+                        User.email == identifier,
+                    ),
+                    User.is_active == True,
+                )
             )
-        ).options(
-            selectinload(User.user_roles),
+            .options(
+                selectinload(User.user_roles).selectinload(UserRole.role),
+            )
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_with_roles(self, id: UUID) -> Optional[User]:
+    async def get_with_roles(self, id: UUID) -> User | None:
         """Get user with roles loaded."""
-        query = select(User).where(
-            and_(
-                User.id == id,
-                User.is_active == True,
+        query = (
+            select(User)
+            .where(
+                and_(
+                    User.id == id,
+                    User.is_active == True,
+                )
             )
-        ).options(
-            selectinload(User.user_roles)
+            .options(
+                selectinload(User.user_roles)
                 .selectinload(UserRole.role)
                 .selectinload(Role.role_permissions)
                 .selectinload(RolePermission.permission),
-            selectinload(User.organization),
-            selectinload(User.default_unit),
+                selectinload(User.organization),
+                selectinload(User.default_unit),
+            )
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_user_permissions(self, user_id: UUID) -> Set[str]:
+    async def get_user_permissions(self, user_id: UUID) -> set[str]:
         """Get all permission codes for a user."""
         user = await self.get_with_roles(user_id)
         if not user:
             return set()
 
         permissions = set()
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         for user_role in user.user_roles:
             # Check if role assignment is valid
@@ -104,10 +133,10 @@ class UserRepository(BaseRepository[User]):
     async def update_last_login(
         self,
         user: User,
-        ip_address: Optional[str] = None,
+        ip_address: str | None = None,
     ) -> User:
         """Update user's last login timestamp."""
-        user.last_login_at = datetime.now(timezone.utc)
+        user.last_login_at = datetime.now(UTC)
         user.last_login_ip = ip_address
         user.failed_login_attempts = 0
         await self.session.flush()
@@ -132,7 +161,7 @@ class UserRepository(BaseRepository[User]):
         await self.session.flush()
         return user
 
-    async def username_exists(self, username: str, exclude_id: Optional[UUID] = None) -> bool:
+    async def username_exists(self, username: str, exclude_id: UUID | None = None) -> bool:
         """Check if username already exists."""
         query = select(User.id).where(User.username == username)
         if exclude_id:
@@ -140,7 +169,7 @@ class UserRepository(BaseRepository[User]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none() is not None
 
-    async def email_exists(self, email: str, exclude_id: Optional[UUID] = None) -> bool:
+    async def email_exists(self, email: str, exclude_id: UUID | None = None) -> bool:
         """Check if email already exists."""
         query = select(User.id).where(User.email == email)
         if exclude_id:
@@ -155,7 +184,7 @@ class UserSessionRepository(BaseRepository[UserSession]):
     def __init__(self, session: AsyncSession):
         super().__init__(UserSession, session)
 
-    async def get_by_token_hash(self, token_hash: str) -> Optional[UserSession]:
+    async def get_by_token_hash(self, token_hash: str) -> UserSession | None:
         """Get session by refresh token hash — only non-revoked."""
         query = select(UserSession).where(
             and_(
@@ -167,9 +196,7 @@ class UserSessionRepository(BaseRepository[UserSession]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_token_hash_including_revoked(
-        self, token_hash: str
-    ) -> Optional[UserSession]:
+    async def get_by_token_hash_including_revoked(self, token_hash: str) -> UserSession | None:
         """Get session by token hash, INCLUDING revoked ones.
 
         Used for replay detection: when a consumed (rotated) refresh token
@@ -231,7 +258,7 @@ class UserSessionRepository(BaseRepository[UserSession]):
 
     async def cleanup_expired_sessions(self) -> int:
         """Remove expired sessions."""
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         query = select(UserSession).where(UserSession.expires_at < now)
         result = await self.session.execute(query)
         sessions = result.scalars().all()

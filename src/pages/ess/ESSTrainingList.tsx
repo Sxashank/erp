@@ -1,18 +1,3 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Progress } from '@/components/ui/progress';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   GraduationCap,
   Calendar,
@@ -24,124 +9,62 @@ import {
   Award,
   ExternalLink,
 } from 'lucide-react';
+import { useState } from 'react';
 
-// Mock data - Upcoming trainings
-const upcomingTrainings = [
-  {
-    id: '1',
-    name: 'Advanced React Patterns',
-    description: 'Learn advanced React patterns including hooks, context, and performance optimization',
-    trainer: 'External - Tech Academy',
-    type: 'ONLINE',
-    startDate: '2025-01-25',
-    endDate: '2025-01-26',
-    timing: '10:00 AM - 4:00 PM',
-    location: 'Zoom',
-    status: 'NOMINATED',
-    mandatory: false,
-  },
-  {
-    id: '2',
-    name: 'Compliance & Ethics Training',
-    description: 'Annual mandatory compliance training covering POSH, anti-corruption, and code of conduct',
-    trainer: 'Internal - HR Team',
-    type: 'ONLINE',
-    startDate: '2025-02-01',
-    endDate: '2025-02-01',
-    timing: '2:00 PM - 5:00 PM',
-    location: 'MS Teams',
-    status: 'CONFIRMED',
-    mandatory: true,
-  },
-  {
-    id: '3',
-    name: 'Leadership Development Program',
-    description: 'Developing leadership skills for high-potential employees',
-    trainer: 'External - Leadership Institute',
-    type: 'IN_PERSON',
-    startDate: '2025-02-15',
-    endDate: '2025-02-17',
-    timing: '9:00 AM - 6:00 PM',
-    location: 'Mumbai Office',
-    status: 'WAITLISTED',
-    mandatory: false,
-  },
-];
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
-// Mock data - Completed trainings
-const completedTrainings = [
-  {
-    id: '1',
-    name: 'New Employee Orientation',
-    completedDate: '2024-03-15',
-    trainer: 'HR Team',
-    duration: '8 hours',
-    score: 92,
-    certificate: true,
-  },
-  {
-    id: '2',
-    name: 'Git & Version Control',
-    completedDate: '2024-04-20',
-    trainer: 'Tech Lead - Amit',
-    duration: '4 hours',
-    score: 88,
-    certificate: true,
-  },
-  {
-    id: '3',
-    name: 'Agile Methodology',
-    completedDate: '2024-06-10',
-    trainer: 'External - Agile Coach',
-    duration: '16 hours',
-    score: 95,
-    certificate: true,
-  },
-  {
-    id: '4',
-    name: 'Information Security Awareness',
-    completedDate: '2024-08-15',
-    trainer: 'IT Security Team',
-    duration: '2 hours',
-    score: 100,
-    certificate: false,
-  },
-  {
-    id: '5',
-    name: 'TypeScript Fundamentals',
-    completedDate: '2024-10-05',
-    trainer: 'Self-paced',
-    duration: '12 hours',
-    score: 90,
-    certificate: true,
-  },
-];
+interface UpcomingTraining {
+  id: string;
+  name: string;
+  description: string;
+  trainer: string;
+  type: string;
+  startDate: string;
+  endDate: string;
+  timing: string;
+  location: string;
+  status: string;
+  mandatory: boolean;
+}
 
-// Mock data - Available for nomination
-const availableTrainings = [
-  {
-    id: '1',
-    name: 'AWS Solutions Architect',
-    description: 'Prepare for AWS Solutions Architect certification',
-    trainer: 'External - AWS Partner',
-    type: 'ONLINE',
-    startDate: '2025-03-01',
-    duration: '40 hours',
-    seats: 5,
-    enrolled: 3,
-  },
-  {
-    id: '2',
-    name: 'Project Management Basics',
-    description: 'Introduction to project management concepts and tools',
-    trainer: 'Internal - PMO',
-    type: 'IN_PERSON',
-    startDate: '2025-03-15',
-    duration: '16 hours',
-    seats: 20,
-    enrolled: 12,
-  },
-];
+interface CompletedTraining {
+  id: string;
+  name: string;
+  completedDate: string;
+  trainer: string;
+  duration: string;
+  score: number;
+  certificate: boolean;
+}
+
+interface AvailableTraining {
+  id: string;
+  name: string;
+  description: string;
+  trainer: string;
+  type: string;
+  startDate: string;
+  duration: string;
+  seats: number;
+  enrolled: number;
+}
+
+const upcomingTrainings: UpcomingTraining[] = [];
+const completedTrainings: CompletedTraining[] = [];
+const availableTrainings: AvailableTraining[] = [];
 
 export default function ESSTrainingList() {
   const [activeTab, setActiveTab] = useState('upcoming');
@@ -243,7 +166,13 @@ export default function ESSTrainingList() {
         </TabsList>
 
         <TabsContent value="upcoming" className="space-y-4">
-          {upcomingTrainings.map((training) => (
+          {upcomingTrainings.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                Training nomination data is pending ESS training endpoints. Upcoming programs will appear after HRIS training APIs are exposed to ESS.
+              </CardContent>
+            </Card>
+          ) : upcomingTrainings.map((training) => (
             <Card key={training.id}>
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">
@@ -308,7 +237,13 @@ export default function ESSTrainingList() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {completedTrainings.map((training) => (
+                  {completedTrainings.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                        No completed training data is available from ESS yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : completedTrainings.map((training) => (
                     <TableRow key={training.id}>
                       <TableCell className="font-medium">{training.name}</TableCell>
                       <TableCell>{training.completedDate}</TableCell>
@@ -337,7 +272,13 @@ export default function ESSTrainingList() {
         </TabsContent>
 
         <TabsContent value="available" className="space-y-4">
-          {availableTrainings.map((training) => (
+          {availableTrainings.length === 0 ? (
+            <Card>
+              <CardContent className="py-8 text-center text-sm text-muted-foreground">
+                Available program nomination data is pending ESS training endpoints.
+              </CardContent>
+            </Card>
+          ) : availableTrainings.map((training) => (
             <Card key={training.id}>
               <CardContent className="pt-6">
                 <div className="flex justify-between items-start">

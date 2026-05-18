@@ -1,12 +1,8 @@
+import { ArrowLeft, Check, Clock, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Check,
-  Clock,
-  X,
-} from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { hrisApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Regularization {
   id: string;
   employee_id: string;
@@ -37,7 +34,7 @@ interface Regularization {
   created_at: string;
 }
 
-const REQUEST_TYPE_LABELS: { [key: string]: string } = {
+const REQUEST_TYPE_LABELS: Record<string, string> = {
   MISSED_PUNCH: 'Missed Punch',
   CORRECTION: 'Time Correction',
   ON_DUTY: 'On Duty',
@@ -84,7 +81,7 @@ export function RegularizationView() {
         const response = await hrisApi.getRegularization(id);
         setRequest(response.data);
       } catch (error) {
-        console.error('Failed to fetch regularization:', error);
+        logger.error('Failed to fetch regularization:', error);
       } finally {
         setLoading(false);
       }
@@ -102,7 +99,7 @@ export function RegularizationView() {
       setShowApprovalForm(false);
       setRemarks('');
     } catch (error) {
-      console.error('Failed to approve regularization:', error);
+      logger.error('Failed to approve regularization:', error);
     } finally {
       setActionLoading(false);
     }
@@ -118,7 +115,7 @@ export function RegularizationView() {
       setShowRejectionForm(false);
       setRemarks('');
     } catch (error) {
-      console.error('Failed to reject regularization:', error);
+      logger.error('Failed to reject regularization:', error);
     } finally {
       setActionLoading(false);
     }
@@ -145,27 +142,19 @@ export function RegularizationView() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/hris/attendance/regularization')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Regularization Request</h1>
-            <p className="text-sm text-slate-500">
-              {request.employee_name} - {new Date(request.attendance_date).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-        <Badge className={getStatusBadgeColor(request.status)}>
-          {request.status}
-        </Badge>
-      </div>
+      <PageHeader
+        title="Regularization Request"
+        subtitle={`${request.employee_name} - ${new Date(request.attendance_date).toLocaleDateString()}`}
+        breadcrumbs={[
+          { label: 'Regularization', to: '/admin/hris/attendance/regularization' },
+          { label: 'Request' },
+        ]}
+        actions={<Badge className={getStatusBadgeColor(request.status)}>{request.status}</Badge>}
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Employee Info */}
           <Card>
             <CardHeader>
@@ -206,8 +195,8 @@ export function RegularizationView() {
             <CardContent>
               <div className="grid gap-6 md:grid-cols-2">
                 <div className="space-y-4">
-                  <h4 className="font-medium text-sm text-slate-700">Original Timings</h4>
-                  <div className="p-4 bg-slate-50 rounded-lg space-y-2">
+                  <h4 className="text-sm font-medium text-slate-700">Original Timings</h4>
+                  <div className="space-y-2 rounded-lg bg-slate-50 p-4">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">First In</span>
                       <span className="font-medium">{formatTime(request.original_first_in)}</span>
@@ -226,15 +215,19 @@ export function RegularizationView() {
                 </div>
 
                 <div className="space-y-4">
-                  <h4 className="font-medium text-sm text-slate-700">Requested Timings</h4>
-                  <div className="p-4 bg-blue-50 rounded-lg space-y-2">
+                  <h4 className="text-sm font-medium text-slate-700">Requested Timings</h4>
+                  <div className="space-y-2 rounded-lg bg-blue-50 p-4">
                     <div className="flex justify-between">
                       <span className="text-sm text-blue-700">First In</span>
-                      <span className="font-medium text-blue-900">{formatTime(request.requested_first_in)}</span>
+                      <span className="font-medium text-blue-900">
+                        {formatTime(request.requested_first_in)}
+                      </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-blue-700">Last Out</span>
-                      <span className="font-medium text-blue-900">{formatTime(request.requested_last_out)}</span>
+                      <span className="font-medium text-blue-900">
+                        {formatTime(request.requested_last_out)}
+                      </span>
                     </div>
                     {request.requested_status && (
                       <div className="flex justify-between">
@@ -248,7 +241,7 @@ export function RegularizationView() {
 
               <div className="mt-6">
                 <p className="text-sm text-slate-500">Reason for Request</p>
-                <p className="font-medium mt-1">{request.reason}</p>
+                <p className="mt-1 font-medium">{request.reason}</p>
               </div>
             </CardContent>
           </Card>
@@ -289,10 +282,13 @@ export function RegularizationView() {
                       <Button onClick={handleApprove} disabled={actionLoading}>
                         {actionLoading ? 'Processing...' : 'Confirm Approval'}
                       </Button>
-                      <Button variant="outline" onClick={() => {
-                        setShowApprovalForm(false);
-                        setRemarks('');
-                      }}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowApprovalForm(false);
+                          setRemarks('');
+                        }}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -312,13 +308,20 @@ export function RegularizationView() {
                       />
                     </div>
                     <div className="flex gap-2">
-                      <Button variant="destructive" onClick={handleReject} disabled={actionLoading || !remarks}>
+                      <Button
+                        variant="destructive"
+                        onClick={handleReject}
+                        disabled={actionLoading || !remarks}
+                      >
                         {actionLoading ? 'Processing...' : 'Confirm Rejection'}
                       </Button>
-                      <Button variant="outline" onClick={() => {
-                        setShowRejectionForm(false);
-                        setRemarks('');
-                      }}>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowRejectionForm(false);
+                          setRemarks('');
+                        }}
+                      >
                         Cancel
                       </Button>
                     </div>
@@ -348,7 +351,7 @@ export function RegularizationView() {
                     {request.approver_remarks && (
                       <div>
                         <p className="text-sm text-slate-500">Remarks</p>
-                        <p className="font-medium mt-1">{request.approver_remarks}</p>
+                        <p className="mt-1 font-medium">{request.approver_remarks}</p>
                       </div>
                     )}
                   </div>
@@ -365,7 +368,7 @@ export function RegularizationView() {
                     {request.rejection_reason && (
                       <div>
                         <p className="text-sm text-slate-500">Reason</p>
-                        <p className="font-medium mt-1">{request.rejection_reason}</p>
+                        <p className="mt-1 font-medium">{request.rejection_reason}</p>
                       </div>
                     )}
                   </div>
@@ -389,7 +392,7 @@ export function RegularizationView() {
                 <div className="flex gap-3">
                   <div className="flex flex-col items-center">
                     <div className="h-2 w-2 rounded-full bg-green-500" />
-                    <div className="w-px h-full bg-slate-200" />
+                    <div className="h-full w-px bg-slate-200" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">Request Submitted</p>
@@ -402,9 +405,11 @@ export function RegularizationView() {
                 {request.status !== 'PENDING' && (
                   <div className="flex gap-3">
                     <div className="flex flex-col items-center">
-                      <div className={`h-2 w-2 rounded-full ${
-                        request.status === 'APPROVED' ? 'bg-green-500' : 'bg-red-500'
-                      }`} />
+                      <div
+                        className={`h-2 w-2 rounded-full ${
+                          request.status === 'APPROVED' ? 'bg-green-500' : 'bg-red-500'
+                        }`}
+                      />
                     </div>
                     <div>
                       <p className="text-sm font-medium">{request.status}</p>

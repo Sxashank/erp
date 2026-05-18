@@ -4,11 +4,11 @@ from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.gl_posting_service import GLPostingService
 from app.schemas.finance.gl_entry import (
@@ -24,6 +24,7 @@ from app.schemas.finance.gl_entry import (
 )
 from app.schemas.base import PaginatedResponse
 from app.core.constants import PartyType, GLEntryType, GLEntrySourceType
+from app.core.exceptions import NotFoundException
 
 router = APIRouter()
 
@@ -33,9 +34,8 @@ router = APIRouter()
 # =============================================================================
 
 
-@router.get("", response_model=PaginatedResponse[GLEntryResponse])
+@router.get("", response_model=PaginatedResponse[GLEntryResponse], response_model_by_alias=True)
 async def list_gl_entries(
-    organization_id: UUID = Query(..., description="Organization ID"),
     account_id: Optional[UUID] = Query(None, description="Filter by account"),
     voucher_id: Optional[UUID] = Query(None, description="Filter by voucher"),
     voucher_number: Optional[str] = Query(None, description="Filter by voucher number (partial match)"),
@@ -52,7 +52,7 @@ async def list_gl_entries(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of GL entries with filters.
@@ -81,7 +81,7 @@ async def list_gl_entries(
     filters = {k: v for k, v in filters.items() if v is not None}
 
     entries, total = await service.search_entries(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         filters=filters,
         skip=skip,
         limit=page_size,
@@ -91,11 +91,11 @@ async def list_gl_entries(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/{entry_id}", response_model=GLEntryDetailResponse)
+@router.get("/{entry_id}", response_model=GLEntryDetailResponse, response_model_by_alias=True)
 async def get_gl_entry(
     entry_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get a single GL entry by ID.
@@ -105,20 +105,17 @@ async def get_gl_entry(
     entry = await service.get_entry(entry_id)
 
     if not entry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="GL entry not found",
-        )
+        raise NotFoundException(detail="GL entry not found", error_code="GL_ENTRY_NOT_FOUND")
 
     return _entry_to_detail_response(entry)
 
 
-@router.get("/voucher/{voucher_id}", response_model=List[GLEntryResponse])
+@router.get("/voucher/{voucher_id}", response_model=List[GLEntryResponse], response_model_by_alias=True)
 async def get_entries_by_voucher(
     voucher_id: UUID,
     include_reversed: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all GL entries for a voucher.
@@ -129,12 +126,12 @@ async def get_entries_by_voucher(
     return [_entry_to_response(e) for e in entries]
 
 
-@router.get("/source/{source_type}/{source_id}", response_model=List[GLEntryResponse])
+@router.get("/source/{source_type}/{source_id}", response_model=List[GLEntryResponse], response_model_by_alias=True)
 async def get_entries_by_source(
     source_type: GLEntrySourceType,
     source_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get GL entries by source document (purchase bill, sales invoice, etc.).
@@ -150,7 +147,7 @@ async def get_entries_by_source(
 # =============================================================================
 
 
-@router.get("/reports/account-statement", response_model=GLAccountStatement)
+@router.get("/reports/account-statement", response_model=GLAccountStatement, response_model_by_alias=True)
 async def get_account_statement(
     account_id: UUID = Query(..., description="Account ID"),
     date_from: date = Query(..., description="Start date"),
@@ -158,7 +155,7 @@ async def get_account_statement(
     include_reversed: bool = Query(False),
     include_opening_balance: bool = Query(True),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate account statement with running balance.
@@ -174,7 +171,7 @@ async def get_account_statement(
     )
 
 
-@router.get("/reports/party-statement", response_model=GLPartyStatement)
+@router.get("/reports/party-statement", response_model=GLPartyStatement, response_model_by_alias=True)
 async def get_party_statement(
     party_type: PartyType = Query(..., description="Party type"),
     party_id: UUID = Query(..., description="Party ID"),
@@ -183,7 +180,7 @@ async def get_party_statement(
     include_reversed: bool = Query(False),
     include_opening_balance: bool = Query(True),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate party (sub-ledger) statement.
@@ -200,15 +197,14 @@ async def get_party_statement(
     )
 
 
-@router.get("/reports/trial-balance", response_model=GLTrialBalanceResponse)
+@router.get("/reports/trial-balance", response_model=GLTrialBalanceResponse, response_model_by_alias=True)
 async def get_trial_balance(
-    organization_id: UUID = Query(..., description="Organization ID"),
     financial_year_id: UUID = Query(..., description="Financial year ID"),
     period_id: Optional[UUID] = Query(None, description="Period ID (optional)"),
     as_of_date: Optional[date] = Query(None, description="As of date (optional)"),
     include_zero_balance: bool = Query(False, description="Include accounts with zero balance"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate trial balance report.
@@ -216,7 +212,7 @@ async def get_trial_balance(
     """
     service = GLPostingService(db)
     return await service.get_trial_balance(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         financial_year_id=financial_year_id,
         period_id=period_id,
         as_of_date=as_of_date,
@@ -224,13 +220,12 @@ async def get_trial_balance(
     )
 
 
-@router.get("/reports/day-book", response_model=GLDayBookResponse)
+@router.get("/reports/day-book", response_model=GLDayBookResponse, response_model_by_alias=True)
 async def get_day_book(
-    organization_id: UUID = Query(..., description="Organization ID"),
     for_date: date = Query(..., description="Date for day book"),
     include_reversed: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate day book (daily transaction summary).
@@ -238,20 +233,19 @@ async def get_day_book(
     """
     service = GLPostingService(db)
     return await service.get_day_book(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         for_date=for_date,
         include_reversed=include_reversed,
     )
 
 
-@router.get("/reports/cost-center-summary", response_model=List[GLCostCenterSummary])
+@router.get("/reports/cost-center-summary", response_model=List[GLCostCenterSummary], response_model_by_alias=True)
 async def get_cost_center_summary(
-    organization_id: UUID = Query(..., description="Organization ID"),
     date_from: Optional[date] = Query(None, description="Start date"),
     date_to: Optional[date] = Query(None, description="End date"),
     include_reversed: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get summary by cost center.
@@ -259,21 +253,20 @@ async def get_cost_center_summary(
     """
     service = GLPostingService(db)
     return await service.get_cost_center_summary(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         date_from=date_from,
         date_to=date_to,
         include_reversed=include_reversed,
     )
 
 
-@router.get("/reports/source-summary", response_model=List[GLSourceSummary])
+@router.get("/reports/source-summary", response_model=List[GLSourceSummary], response_model_by_alias=True)
 async def get_source_summary(
-    organization_id: UUID = Query(..., description="Organization ID"),
     date_from: Optional[date] = Query(None, description="Start date"),
     date_to: Optional[date] = Query(None, description="End date"),
     include_reversed: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get summary by source type.
@@ -281,7 +274,7 @@ async def get_source_summary(
     """
     service = GLPostingService(db)
     return await service.get_source_summary(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         date_from=date_from,
         date_to=date_to,
         include_reversed=include_reversed,

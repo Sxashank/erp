@@ -9,12 +9,13 @@ from decimal import Decimal
 from typing import Optional, List, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
 # ============== Compliance Item Schemas ==============
 
-class ComplianceItemCreate(BaseModel):
+class ComplianceItemCreate(CamelSchema):
     """Schema for creating a compliance item"""
     organization_id: UUID
     item_code: str = Field(..., max_length=30)
@@ -41,7 +42,7 @@ class ComplianceItemCreate(BaseModel):
     is_active: bool = True
 
 
-class ComplianceItemUpdate(BaseModel):
+class ComplianceItemUpdate(CamelSchema):
     """Schema for updating a compliance item"""
     item_name: Optional[str] = Field(None, max_length=200)
     description: Optional[str] = None
@@ -65,7 +66,7 @@ class ComplianceItemUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
-class ComplianceItemResponse(BaseModel):
+class ComplianceItemResponse(CamelSchema):
     """Schema for compliance item response"""
     id: UUID
     organization_id: UUID
@@ -93,10 +94,8 @@ class ComplianceItemResponse(BaseModel):
     is_active: bool
     created_at: datetime
 
-    model_config = {"from_attributes": True}
 
-
-class ComplianceItemList(BaseModel):
+class ComplianceItemList(CamelSchema):
     """Schema for compliance item list"""
     id: UUID
     item_code: str
@@ -107,12 +106,10 @@ class ComplianceItemList(BaseModel):
     form_name: Optional[str]
     is_active: bool
 
-    model_config = {"from_attributes": True}
-
 
 # ============== Compliance Instance Schemas ==============
 
-class ComplianceInstanceCreate(BaseModel):
+class ComplianceInstanceCreate(CamelSchema):
     """Schema for creating a compliance instance"""
     compliance_item_id: UUID
     period_year: int
@@ -129,7 +126,7 @@ class ComplianceInstanceCreate(BaseModel):
     remarks: Optional[str] = None
 
 
-class ComplianceInstanceUpdate(BaseModel):
+class ComplianceInstanceUpdate(CamelSchema):
     """Schema for updating a compliance instance"""
     status: Optional[str] = None
     extended_due_date: Optional[date] = None
@@ -148,7 +145,7 @@ class ComplianceInstanceUpdate(BaseModel):
     reminder_days: Optional[int] = None
 
 
-class ComplianceInstanceResponse(BaseModel):
+class ComplianceInstanceResponse(CamelSchema):
     """Schema for compliance instance response"""
     id: UUID
     compliance_item_id: UUID
@@ -177,10 +174,8 @@ class ComplianceInstanceResponse(BaseModel):
     reminder_days: Optional[int]
     created_at: datetime
 
-    model_config = {"from_attributes": True}
 
-
-class ComplianceInstanceList(BaseModel):
+class ComplianceInstanceList(CamelSchema):
     """Schema for compliance instance list"""
     id: UUID
     compliance_item_id: UUID
@@ -195,12 +190,10 @@ class ComplianceInstanceList(BaseModel):
     is_delayed: bool
     filed_date: Optional[date]
 
-    model_config = {"from_attributes": True}
-
 
 # ============== Compliance Document Schemas ==============
 
-class ComplianceDocumentCreate(BaseModel):
+class ComplianceDocumentCreate(CamelSchema):
     """Schema for creating a compliance document"""
     instance_id: UUID
     document_type: str
@@ -211,7 +204,7 @@ class ComplianceDocumentCreate(BaseModel):
     remarks: Optional[str] = None
 
 
-class ComplianceDocumentResponse(BaseModel):
+class ComplianceDocumentResponse(CamelSchema):
     """Schema for compliance document response"""
     id: UUID
     instance_id: UUID
@@ -225,12 +218,10 @@ class ComplianceDocumentResponse(BaseModel):
     is_active: bool
     remarks: Optional[str]
 
-    model_config = {"from_attributes": True}
-
 
 # ============== Dashboard/Summary Schemas ==============
 
-class ComplianceSummary(BaseModel):
+class ComplianceSummary(CamelSchema):
     """Summary of compliance status"""
     total: int = 0
     pending: int = 0
@@ -241,7 +232,7 @@ class ComplianceSummary(BaseModel):
     not_applicable: int = 0
 
 
-class ComplianceCalendarItem(BaseModel):
+class ComplianceCalendarItem(CamelSchema):
     """Item for compliance calendar view"""
     id: UUID
     item_code: str
@@ -252,7 +243,7 @@ class ComplianceCalendarItem(BaseModel):
     is_delayed: bool
 
 
-class UpcomingCompliance(BaseModel):
+class UpcomingCompliance(CamelSchema):
     """Upcoming compliance items"""
     due_this_week: List[ComplianceCalendarItem] = []
     due_this_month: List[ComplianceCalendarItem] = []

@@ -5,10 +5,11 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
+from app.schemas.base import CamelSchema
 
 
-class VoucherTemplateLineItem(BaseModel):
+class VoucherTemplateLineItem(CamelSchema):
     """Template line item for voucher template."""
 
     account_id: UUID
@@ -25,7 +26,7 @@ class VoucherTemplateLineItem(BaseModel):
         return v
 
 
-class VoucherTemplateCreate(BaseModel):
+class VoucherTemplateCreate(CamelSchema):
     """Schema for creating a voucher template."""
 
     organization_id: UUID
@@ -49,7 +50,7 @@ class VoucherTemplateCreate(BaseModel):
         return v
 
 
-class VoucherTemplateUpdate(BaseModel):
+class VoucherTemplateUpdate(CamelSchema):
     """Schema for updating a voucher template."""
 
     template_name: Optional[str] = Field(None, min_length=1, max_length=100)
@@ -61,7 +62,7 @@ class VoucherTemplateUpdate(BaseModel):
     lines: Optional[List[VoucherTemplateLineItem]] = None
 
 
-class VoucherTemplateLineResponse(BaseModel):
+class VoucherTemplateLineResponse(CamelSchema):
     """Line item in template response."""
 
     account_id: str
@@ -73,7 +74,7 @@ class VoucherTemplateLineResponse(BaseModel):
     cost_center_id: Optional[str] = None
 
 
-class VoucherTemplateResponse(BaseModel):
+class VoucherTemplateResponse(CamelSchema):
     """Full voucher template response."""
 
     id: str
@@ -95,11 +96,8 @@ class VoucherTemplateResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class VoucherTemplateListItem(BaseModel):
+class VoucherTemplateListItem(CamelSchema):
     """List item for voucher template."""
 
     id: str
@@ -114,7 +112,7 @@ class VoucherTemplateListItem(BaseModel):
     last_used_at: Optional[datetime] = None
 
 
-class VoucherTemplateListResponse(BaseModel):
+class VoucherTemplateListResponse(CamelSchema):
     """Paginated list of voucher templates."""
 
     items: List[VoucherTemplateListItem]
@@ -124,7 +122,7 @@ class VoucherTemplateListResponse(BaseModel):
     pages: int
 
 
-class UseTemplateRequest(BaseModel):
+class UseTemplateRequest(CamelSchema):
     """Request to create a voucher from template."""
 
     voucher_date: str
@@ -132,7 +130,7 @@ class UseTemplateRequest(BaseModel):
     amount_multiplier: Optional[Decimal] = Field(None, gt=0)
 
 
-class UseTemplateResponse(BaseModel):
+class UseTemplateResponse(CamelSchema):
     """Response after creating voucher from template."""
 
     success: bool
@@ -141,14 +139,14 @@ class UseTemplateResponse(BaseModel):
     voucher_number: Optional[str] = None
 
 
-class TemplateCategory(BaseModel):
+class TemplateCategory(CamelSchema):
     """Template category with count."""
 
     category: str
     count: int
 
 
-class VoucherTemplateStats(BaseModel):
+class VoucherTemplateStats(CamelSchema):
     """Statistics for voucher templates."""
 
     total_templates: int

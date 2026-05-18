@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Calendar,
@@ -11,11 +9,13 @@ import {
   Settings,
   Wrench,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { organizationsApi } from '@/services/api';
 import type { Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 interface MaintenanceRecord {
   id: string;
   asset_id: string;
@@ -89,7 +90,6 @@ const STATUSES = [
 ];
 
 export function MaintenanceList() {
-  const navigate = useNavigate();
   const [maintenanceRecords, setMaintenanceRecords] = useState<MaintenanceRecord[]>([]);
   const [amcContracts, setAmcContracts] = useState<AMCContract[]>([]);
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -119,7 +119,7 @@ export function MaintenanceList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
@@ -173,7 +173,7 @@ export function MaintenanceList() {
       ];
       setMaintenanceRecords(mockRecords);
     } catch (error) {
-      console.error('Failed to fetch maintenance records:', error);
+      logger.error('Failed to fetch maintenance records:', error);
     } finally {
       setLoading(false);
     }
@@ -208,7 +208,7 @@ export function MaintenanceList() {
       ];
       setAmcContracts(mockContracts);
     } catch (error) {
-      console.error('Failed to fetch AMC contracts:', error);
+      logger.error('Failed to fetch AMC contracts:', error);
     }
   };
 
@@ -221,13 +221,6 @@ export function MaintenanceList() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -292,9 +285,9 @@ export function MaintenanceList() {
         title="Asset Maintenance"
         subtitle="Manage maintenance schedules and AMC contracts"
         actions={
-          <Button onClick={() => navigate('/admin/fixed-assets/maintenance/new')}>
+          <Button disabled>
             <Plus className="mr-2 h-4 w-4" />
-            Schedule Maintenance
+            Maintenance Workflow Deferred
           </Button>
         }
       />
@@ -430,7 +423,7 @@ export function MaintenanceList() {
                         <TableCell>
                           <div className="flex items-center gap-1">
                             <Calendar className="h-3 w-3 text-slate-400" />
-                            {formatDate(record.scheduled_date)}
+                            <DateDisplay date={record.scheduled_date} />
                           </div>
                         </TableCell>
                         <TableCell>{getPriorityBadge(record.priority)}</TableCell>
@@ -447,11 +440,7 @@ export function MaintenanceList() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => navigate(`/admin/fixed-assets/maintenance/${record.id}`)}
-                              >
-                                View Details
-                              </DropdownMenuItem>
+                              <DropdownMenuItem disabled>View Details</DropdownMenuItem>
                               {record.status === 'SCHEDULED' && (
                                 <DropdownMenuItem>Start Maintenance</DropdownMenuItem>
                               )}
@@ -474,9 +463,9 @@ export function MaintenanceList() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>AMC Contracts</CardTitle>
-              <Button onClick={() => navigate('/admin/fixed-assets/amc/new')}>
+              <Button disabled>
                 <Plus className="mr-2 h-4 w-4" />
-                Add AMC
+                AMC Workflow Deferred
               </Button>
             </CardHeader>
             <CardContent>
@@ -507,8 +496,8 @@ export function MaintenanceList() {
                         <TableCell>{contract.coverage_type}</TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <p>{formatDate(contract.start_date)}</p>
-                            <p className="text-slate-500">to {formatDate(contract.end_date)}</p>
+                            <p><DateDisplay date={contract.start_date} /></p>
+                            <p className="text-slate-500">to <DateDisplay date={contract.end_date} /></p>
                           </div>
                         </TableCell>
                         <TableCell>{contract.asset_count} assets</TableCell>
@@ -524,11 +513,7 @@ export function MaintenanceList() {
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => navigate(`/admin/fixed-assets/amc/${contract.id}`)}
-                              >
-                                View Details
-                              </DropdownMenuItem>
+                              <DropdownMenuItem disabled>View Details</DropdownMenuItem>
                               <DropdownMenuItem>View Assets</DropdownMenuItem>
                               {contract.status === 'EXPIRING_SOON' && (
                                 <DropdownMenuItem>Renew Contract</DropdownMenuItem>

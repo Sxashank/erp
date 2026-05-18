@@ -3,38 +3,6 @@
  * View and manage legal expenses
  */
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   IndianRupee,
   Plus,
@@ -46,9 +14,44 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { legalExpenseApi } from '@/services/legalApi';
 import type { LegalExpense, ExpenseCategory } from '@/types/legal';
 
+import { logger } from "@/lib/logger";
 const expenseCategories: { value: ExpenseCategory; label: string }[] = [
   { value: 'COURT_FEE', label: 'Court Fee' },
   { value: 'ADVOCATE_FEE', label: 'Advocate Fee' },
@@ -105,12 +108,12 @@ export default function LegalExpenseList() {
   const fetchExpenses = async () => {
     try {
       const response = await legalExpenseApi.getList({
-        category: filterCategory !== 'all' ? filterCategory : undefined,
-        status: filterStatus !== 'all' ? filterStatus : undefined,
+        expense_category: filterCategory !== 'all' ? filterCategory : undefined,
+        expense_status: filterStatus !== 'all' ? filterStatus : undefined,
       });
-      setExpenses(response.data);
+      setExpenses(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch expenses:', error);
+      logger.error('Failed to fetch expenses:', error);
     } finally {
       setLoading(false);
     }
@@ -129,7 +132,7 @@ export default function LegalExpenseList() {
       await legalExpenseApi.approve(id);
       fetchExpenses();
     } catch (error) {
-      console.error('Failed to approve expense:', error);
+      logger.error('Failed to approve expense:', error);
     }
   };
 
@@ -141,7 +144,7 @@ export default function LegalExpenseList() {
       await legalExpenseApi.reject(id, { reason });
       fetchExpenses();
     } catch (error) {
-      console.error('Failed to reject expense:', error);
+      logger.error('Failed to reject expense:', error);
     }
   };
 
@@ -158,7 +161,7 @@ export default function LegalExpenseList() {
       setShowDialog(false);
       fetchExpenses();
     } catch (error) {
-      console.error('Failed to create expense:', error);
+      logger.error('Failed to create expense:', error);
     } finally {
       setSubmitting(false);
     }
@@ -181,14 +184,20 @@ export default function LegalExpenseList() {
 
   const stats = {
     total: expenses.reduce((sum, e) => sum + e.total_amount, 0),
-    pending: expenses.filter((e) => e.status === 'PENDING').reduce((sum, e) => sum + e.total_amount, 0),
-    approved: expenses.filter((e) => e.status === 'APPROVED').reduce((sum, e) => sum + e.total_amount, 0),
-    pendingRecovery: expenses.filter((e) => e.recovery_status === 'PENDING').reduce((sum, e) => sum + e.total_amount, 0),
+    pending: expenses
+      .filter((e) => e.status === 'PENDING')
+      .reduce((sum, e) => sum + e.total_amount, 0),
+    approved: expenses
+      .filter((e) => e.status === 'APPROVED')
+      .reduce((sum, e) => sum + e.total_amount, 0),
+    pendingRecovery: expenses
+      .filter((e) => e.recovery_status === 'PENDING')
+      .reduce((sum, e) => sum + e.total_amount, 0),
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -201,18 +210,18 @@ export default function LegalExpenseList() {
         subtitle="Track and manage legal expenses"
         actions={
           <Button onClick={() => setShowDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Record Expense
           </Button>
         }
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <IndianRupee className="h-5 w-5 text-blue-600" />
               </div>
               <div>
@@ -225,7 +234,7 @@ export default function LegalExpenseList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
+              <div className="rounded-lg bg-yellow-100 p-2">
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
@@ -238,7 +247,7 @@ export default function LegalExpenseList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-2">
                 <Check className="h-5 w-5 text-green-600" />
               </div>
               <div>
@@ -251,12 +260,14 @@ export default function LegalExpenseList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-orange-100 rounded-lg">
+              <div className="rounded-lg bg-orange-100 p-2">
                 <AlertTriangle className="h-5 w-5 text-orange-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Pending Recovery</p>
-                <p className="text-lg font-bold text-orange-600">{formatCurrency(stats.pendingRecovery)}</p>
+                <p className="text-lg font-bold text-orange-600">
+                  {formatCurrency(stats.pendingRecovery)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -266,9 +277,9 @@ export default function LegalExpenseList() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex flex-col gap-4 md:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 placeholder="Search by expense number, loan account, payee..."
                 value={searchQuery}
@@ -359,7 +370,7 @@ export default function LegalExpenseList() {
                       </p>
                     )}
                   </TableCell>
-                  <TableCell>{new Date(expense.expense_date).toLocaleDateString()}</TableCell>
+                  <TableCell><DateDisplay date={expense.expense_date} /></TableCell>
                   <TableCell>
                     <Badge className={statusColors[expense.status]}>{expense.status}</Badge>
                   </TableCell>
@@ -370,7 +381,7 @@ export default function LegalExpenseList() {
                           {expense.recovery_status}
                         </Badge>
                         {expense.recovered_amount && expense.recovered_amount > 0 && (
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="mt-1 text-xs text-gray-500">
                             {formatCurrency(expense.recovered_amount)}
                           </p>
                         )}
@@ -405,8 +416,8 @@ export default function LegalExpenseList() {
               ))}
               {filteredExpenses.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-gray-500">
-                    <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <TableCell colSpan={9} className="py-8 text-center text-gray-500">
+                    <Receipt className="mx-auto mb-4 h-12 w-12 opacity-50" />
                     <p>No expenses found</p>
                   </TableCell>
                 </TableRow>
@@ -421,7 +432,9 @@ export default function LegalExpenseList() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>Record Legal Expense</DialogTitle>
-            <DialogDescription>Add a new expense for a legal case or loan account</DialogDescription>
+            <DialogDescription>
+              Add a new expense for a legal case or loan account
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="col-span-2 space-y-2">

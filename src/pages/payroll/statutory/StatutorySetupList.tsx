@@ -2,11 +2,15 @@
  * Statutory Setup List Page
  */
 
+import { Plus, Edit, Settings } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Settings } from 'lucide-react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -15,11 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import payrollService, { StatutorySetup } from '@/services/payrollService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { StatutorySetup } from '@/services/payrollService';
+import payrollService from '@/services/payrollService';
 
 const STATUTORY_TYPES = {
   PF: { label: 'Provident Fund (PF)', description: 'Employee & Employer contribution to PF' },
@@ -65,23 +68,20 @@ export default function StatutorySetupList() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Statutory Setup</h1>
-          <p className="text-muted-foreground">
-            Configure statutory compliance for payroll
-          </p>
-        </div>
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Statutory Setup"
+        subtitle="Configure statutory compliance for payroll"
+        breadcrumbs={[{ label: 'Payroll', to: '/admin/payroll' }, { label: 'Statutory Setup' }]}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         {Object.entries(STATUTORY_TYPES).map(([type, info]) => {
           const setup = getSetupByType(type);
           return (
             <Card key={type}>
               <CardHeader>
-                <div className="flex justify-between items-start">
+                <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-lg">{info.label}</CardTitle>
                     <CardDescription>{info.description}</CardDescription>
@@ -99,52 +99,53 @@ export default function StatutorySetupList() {
                 {setup ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      {setup.employer_contribution_pct !== undefined && setup.employer_contribution_pct !== null && (
-                        <div>
-                          <span className="text-muted-foreground">Employer Rate:</span>
-                          <p className="font-medium">{setup.employer_contribution_pct}%</p>
-                        </div>
-                      )}
-                      {setup.employee_contribution_pct !== undefined && setup.employee_contribution_pct !== null && (
-                        <div>
-                          <span className="text-muted-foreground">Employee Rate:</span>
-                          <p className="font-medium">{setup.employee_contribution_pct}%</p>
-                        </div>
-                      )}
+                      {setup.employer_contribution_pct !== undefined &&
+                        setup.employer_contribution_pct !== null && (
+                          <div>
+                            <span className="text-muted-foreground">Employer Rate:</span>
+                            <p className="font-medium">{setup.employer_contribution_pct}%</p>
+                          </div>
+                        )}
+                      {setup.employee_contribution_pct !== undefined &&
+                        setup.employee_contribution_pct !== null && (
+                          <div>
+                            <span className="text-muted-foreground">Employee Rate:</span>
+                            <p className="font-medium">{setup.employee_contribution_pct}%</p>
+                          </div>
+                        )}
                       {setup.wage_ceiling !== undefined && setup.wage_ceiling !== null && (
                         <div>
                           <span className="text-muted-foreground">Wage Ceiling:</span>
                           <p className="font-medium">₹{setup.wage_ceiling.toLocaleString()}</p>
                         </div>
                       )}
-                      {setup.admin_charges_pct !== undefined && setup.admin_charges_pct !== null && (
-                        <div>
-                          <span className="text-muted-foreground">Admin Charges:</span>
-                          <p className="font-medium">{setup.admin_charges_pct}%</p>
-                        </div>
-                      )}
+                      {setup.admin_charges_pct !== undefined &&
+                        setup.admin_charges_pct !== null && (
+                          <div>
+                            <span className="text-muted-foreground">Admin Charges:</span>
+                            <p className="font-medium">{setup.admin_charges_pct}%</p>
+                          </div>
+                        )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      Effective from: {new Date(setup.effective_from).toLocaleDateString()}
+                      Effective from: <DateDisplay date={setup.effective_from} />
                     </div>
                     <Button
                       variant="outline"
                       className="w-full"
-                      onClick={() => navigate(`/payroll/statutory/${setup.id}/edit`)}
+                      onClick={() => navigate(`/admin/payroll/statutory/${setup.id}/edit`)}
                     >
                       <Edit className="mr-2 h-4 w-4" />
                       Edit Configuration
                     </Button>
                   </div>
                 ) : (
-                  <div className="text-center py-4">
-                    <Settings className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground mb-4">
-                      Not yet configured
-                    </p>
+                  <div className="py-4 text-center">
+                    <Settings className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                    <p className="mb-4 text-sm text-muted-foreground">Not yet configured</p>
                     <Button
                       variant="outline"
-                      onClick={() => navigate(`/payroll/statutory/new?type=${type}`)}
+                      onClick={() => navigate(`/admin/payroll/statutory/new?type=${type}`)}
                     >
                       <Plus className="mr-2 h-4 w-4" />
                       Configure {info.label}
@@ -160,9 +161,7 @@ export default function StatutorySetupList() {
       <Card>
         <CardHeader>
           <CardTitle>All Configurations</CardTitle>
-          <CardDescription>
-            Historical view of all statutory configurations
-          </CardDescription>
+          <CardDescription>Historical view of all statutory configurations</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -180,13 +179,13 @@ export default function StatutorySetupList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={7} className="py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : setups.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8">
+                  <TableCell colSpan={7} className="py-8 text-center">
                     No statutory configurations found
                   </TableCell>
                 </TableRow>
@@ -194,7 +193,8 @@ export default function StatutorySetupList() {
                 setups.map((setup) => (
                   <TableRow key={setup.id}>
                     <TableCell className="font-medium">
-                      {STATUTORY_TYPES[setup.statutory_type as keyof typeof STATUTORY_TYPES]?.label || setup.statutory_type}
+                      {STATUTORY_TYPES[setup.statutory_type as keyof typeof STATUTORY_TYPES]
+                        ?.label || setup.statutory_type}
                     </TableCell>
                     <TableCell>
                       {setup.employee_contribution_pct !== null
@@ -207,13 +207,9 @@ export default function StatutorySetupList() {
                         : '-'}
                     </TableCell>
                     <TableCell>
-                      {setup.wage_ceiling != null
-                        ? `₹${setup.wage_ceiling.toLocaleString()}`
-                        : '-'}
+                      {setup.wage_ceiling != null ? `₹${setup.wage_ceiling.toLocaleString()}` : '-'}
                     </TableCell>
-                    <TableCell>
-                      {new Date(setup.effective_from).toLocaleDateString()}
-                    </TableCell>
+                    <TableCell><DateDisplay date={setup.effective_from} /></TableCell>
                     <TableCell>
                       <Badge variant={setup.is_applicable ? 'default' : 'secondary'}>
                         {setup.is_applicable ? 'Active' : 'Inactive'}
@@ -223,7 +219,7 @@ export default function StatutorySetupList() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => navigate(`/payroll/statutory/${setup.id}/edit`)}
+                        onClick={() => navigate(`/admin/payroll/statutory/${setup.id}/edit`)}
                       >
                         <Edit className="h-4 w-4" />
                       </Button>

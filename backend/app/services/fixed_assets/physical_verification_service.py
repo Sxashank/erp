@@ -94,7 +94,7 @@ class PhysicalVerificationService:
                 entry.created_by = created_by
             self.session.add(entry)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
         return schedule
 
@@ -162,7 +162,7 @@ class PhysicalVerificationService:
         if updated_by:
             schedule.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
         return schedule
 
@@ -184,7 +184,7 @@ class PhysicalVerificationService:
         if started_by:
             schedule.updated_by = started_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
         return schedule
 
@@ -209,7 +209,7 @@ class PhysicalVerificationService:
         if completed_by:
             schedule.updated_by = completed_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
         return schedule
 
@@ -229,7 +229,7 @@ class PhysicalVerificationService:
         schedule.approved_by = approved_by
         schedule.approved_at = datetime.now(timezone.utc)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
         return schedule
 
@@ -316,7 +316,7 @@ class PhysicalVerificationService:
         # Update schedule summary
         await self._update_schedule_summary(schedule)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(entry)
         return entry
 
@@ -366,7 +366,7 @@ class PhysicalVerificationService:
         # Update schedule summary
         await self._update_schedule_summary(schedule)
 
-        await self.session.commit()
+        await self.session.flush()
         return updated_count
 
     # ============================================
@@ -445,7 +445,7 @@ class PhysicalVerificationService:
         if updated_by:
             discrepancy.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(discrepancy)
         return discrepancy
 

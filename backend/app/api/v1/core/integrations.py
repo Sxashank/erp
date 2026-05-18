@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.core.integration_config import IntegrationType, IntegrationProvider
 from app.services.core.integration_service import IntegrationService
@@ -24,6 +24,7 @@ from app.schemas.core.integration_config import (
 )
 from app.schemas.base import PaginatedResponse, MessageResponse
 from app.core.responses import PaginatedResponse as PaginatedResponseModel
+from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
@@ -33,16 +34,15 @@ router = APIRouter(prefix="/integrations", tags=["Integrations"])
 
 @router.get(
     "",
-    response_model=PaginatedResponseModel[IntegrationConfigListResponse],
+    response_model=PaginatedResponseModel[IntegrationConfigListResponse], response_model_by_alias=True,
     summary="List integration configurations",
 )
 async def list_integrations(
-    organization_id: UUID = Query(..., description="Organization ID"),
     integration_type: Optional[IntegrationType] = Query(None, description="Filter by type"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> PaginatedResponseModel[IntegrationConfigListResponse]:
     """
     List all integration configurations for an organization.
@@ -51,7 +51,7 @@ async def list_integrations(
     skip = (page - 1) * page_size
 
     configs, total = await service.list_by_organization(
-        organization_id,
+        current_user.organization_id,
         integration_type,
         skip=skip,
         limit=page_size,
@@ -76,13 +76,13 @@ async def list_integrations(
 
 @router.post(
     "",
-    response_model=IntegrationConfigResponse,
+    response_model=IntegrationConfigResponse, response_model_by_alias=True,
     summary="Create integration configuration",
 )
 async def create_integration(
     data: IntegrationConfigCreate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> IntegrationConfigResponse:
     """
     Create a new integration configuration.
@@ -94,6 +94,8 @@ async def create_integration(
     - CREDIT_BUREAU: member_id, member_password, api_key
     - PAYMENT_GATEWAY: merchant_id, api_key, api_secret (or key_id/key_secret for Razorpay)
     """
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     service = IntegrationService(db)
     config = await service.create(data, current_user.id)
 
@@ -102,7 +104,7 @@ async def create_integration(
 
 @router.get(
     "/types",
-    response_model=List[dict],
+    response_model=List[dict], response_model_by_alias=True,
     summary="List available integration types",
 )
 async def list_integration_types(
@@ -202,22 +204,21 @@ def _get_provider_label(provider: IntegrationProvider) -> str:
 
 @router.get(
     "/by-type/{integration_type}",
-    response_model=Optional[IntegrationConfigResponse],
+    response_model=Optional[IntegrationConfigResponse], response_model_by_alias=True,
     summary="Get integration by type",
 )
 async def get_integration_by_type(
     integration_type: IntegrationType,
-    organization_id: UUID = Query(...),
     provider: Optional[IntegrationProvider] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> Optional[IntegrationConfigResponse]:
     """
     Get integration configuration by type for an organization.
     Returns null if not configured.
     """
     service = IntegrationService(db)
-    config = await service.get_by_type(organization_id, integration_type, provider)
+    config = await service.get_by_type(current_user.organization_id, integration_type, provider)
 
     if not config:
         return None
@@ -227,13 +228,13 @@ async def get_integration_by_type(
 
 @router.get(
     "/{config_id}",
-    response_model=IntegrationConfigResponse,
+    response_model=IntegrationConfigResponse, response_model_by_alias=True,
     summary="Get integration configuration",
 )
 async def get_integration(
     config_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> IntegrationConfigResponse:
     """
     Get a specific integration configuration by ID.
@@ -244,21 +245,24 @@ async def get_integration(
 
     if not config:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Integration config not found")
+        raise NotFoundException(
+            detail="Integration config not found",
+            error_code="INTEGRATION_CONFIG_NOT_FOUND",
+        )
 
     return IntegrationConfigResponse.model_validate(config)
 
 
 @router.put(
     "/{config_id}",
-    response_model=IntegrationConfigResponse,
+    response_model=IntegrationConfigResponse, response_model_by_alias=True,
     summary="Update integration configuration",
 )
 async def update_integration(
     config_id: UUID,
     data: IntegrationConfigUpdate,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> IntegrationConfigResponse:
     """
     Update an existing integration configuration.
@@ -272,13 +276,13 @@ async def update_integration(
 
 @router.delete(
     "/{config_id}",
-    response_model=MessageResponse,
+    response_model=MessageResponse, response_model_by_alias=True,
     summary="Delete integration configuration",
 )
 async def delete_integration(
     config_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> MessageResponse:
     """
     Soft delete an integration configuration.
@@ -294,13 +298,13 @@ async def delete_integration(
 
 @router.post(
     "/{config_id}/test",
-    response_model=IntegrationTestResponse,
+    response_model=IntegrationTestResponse, response_model_by_alias=True,
     summary="Test integration connection",
 )
 async def test_integration(
     config_id: UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> IntegrationTestResponse:
     """
     Test the connection to an external service.
@@ -315,7 +319,7 @@ async def test_integration(
 
 @router.get(
     "/{config_id}/logs",
-    response_model=PaginatedResponseModel[IntegrationLogResponse],
+    response_model=PaginatedResponseModel[IntegrationLogResponse], response_model_by_alias=True,
     summary="Get integration logs",
 )
 async def get_integration_logs(
@@ -323,7 +327,7 @@ async def get_integration_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> PaginatedResponseModel[IntegrationLogResponse]:
     """
     Get API call logs for a specific integration.
@@ -340,11 +344,10 @@ async def get_integration_logs(
 
 @router.get(
     "/logs/organization",
-    response_model=PaginatedResponseModel[IntegrationLogResponse],
+    response_model=PaginatedResponseModel[IntegrationLogResponse], response_model_by_alias=True,
     summary="Get organization integration logs",
 )
 async def get_organization_logs(
-    organization_id: UUID = Query(...),
     integration_type: Optional[str] = Query(None),
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
@@ -352,7 +355,7 @@ async def get_organization_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> PaginatedResponseModel[IntegrationLogResponse]:
     """
     Get all integration logs for an organization.
@@ -361,7 +364,7 @@ async def get_organization_logs(
     skip = (page - 1) * page_size
 
     logs, total = await service.get_organization_logs(
-        organization_id,
+        current_user.organization_id,
         integration_type,
         from_date,
         to_date,
@@ -380,19 +383,18 @@ async def get_organization_logs(
     summary="Get integration log statistics",
 )
 async def get_log_stats(
-    organization_id: UUID = Query(...),
     integration_type: Optional[str] = Query(None),
     from_date: Optional[datetime] = Query(None),
     to_date: Optional[datetime] = Query(None),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ) -> dict:
     """
     Get aggregate statistics for integration API calls.
     """
     service = IntegrationService(db)
     return await service.get_log_stats(
-        organization_id,
+        current_user.organization_id,
         integration_type,
         from_date,
         to_date,
@@ -404,7 +406,7 @@ async def get_log_stats(
 
 @router.get(
     "/templates/{integration_type}",
-    response_model=IntegrationConfigTemplate,
+    response_model=IntegrationConfigTemplate, response_model_by_alias=True,
     summary="Get configuration template",
 )
 async def get_config_template(

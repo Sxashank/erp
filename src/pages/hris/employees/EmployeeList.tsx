@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Edit,
   Eye,
@@ -9,11 +7,15 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { HrisConfirmDialog } from '@/components/hris/HrisConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +40,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi, departmentsApi, designationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Employee {
   id: string;
   employee_code: string;
@@ -112,6 +115,8 @@ export function EmployeeList() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [designations, setDesignations] = useState<Designation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [deleteEmployeeId, setDeleteEmployeeId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [pagination, setPagination] = useState({ skip: 0, limit: 20, total: 0 });
 
   // Filters
@@ -133,7 +138,7 @@ export function EmployeeList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -150,7 +155,7 @@ export function EmployeeList() {
         const response = await departmentsApi.list({ organization_id: selectedOrgId, page_size: 100 });
         setDepartments(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch departments:', error);
+        logger.error('Failed to fetch departments:', error);
       }
     };
     fetchDepartments();
@@ -167,7 +172,7 @@ export function EmployeeList() {
         const response = await designationsApi.list({ department_id: selectedDeptId, page_size: 100 });
         setDesignations(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch designations:', error);
+        logger.error('Failed to fetch designations:', error);
       }
     };
     fetchDesignations();
@@ -178,7 +183,7 @@ export function EmployeeList() {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Record<string, unknown> = {
         organization_id: selectedOrgId,
         skip,
         limit: pagination.limit,
@@ -193,7 +198,7 @@ export function EmployeeList() {
       setEmployees(response.data.items || []);
       setPagination((prev) => ({ ...prev, skip, total: response.data.total || 0 }));
     } catch (error) {
-      console.error('Failed to fetch employees:', error);
+      logger.error('Failed to fetch employees:', error);
     } finally {
       setLoading(false);
     }
@@ -207,13 +212,17 @@ export function EmployeeList() {
     fetchEmployees(0);
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this employee?')) return;
+  const executeDelete = async () => {
+    if (!deleteEmployeeId) return;
     try {
-      await hrisApi.deleteEmployee(id);
+      setDeleteBusy(true);
+      await hrisApi.deleteEmployee(deleteEmployeeId);
+      setDeleteEmployeeId(null);
       fetchEmployees(pagination.skip);
     } catch (error) {
-      console.error('Failed to delete employee:', error);
+      logger.error('Failed to delete employee:', error);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -365,7 +374,7 @@ export function EmployeeList() {
                       <TableCell>
                         <Badge variant="outline">{emp.employment_type}</Badge>
                       </TableCell>
-                      <TableCell>{new Date(emp.date_of_joining).toLocaleDateString()}</TableCell>
+                      <TableCell><DateDisplay date={emp.date_of_joining} /></TableCell>
                       <TableCell>
                         <Badge className={getStatusBadgeColor(emp.employment_status)}>
                           {emp.employment_status}
@@ -388,7 +397,7 @@ export function EmployeeList() {
                               Edit
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleDelete(emp.id)}
+                              onClick={() => setDeleteEmployeeId(emp.id)}
                               className="text-red-600"
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
@@ -430,6 +439,18 @@ export function EmployeeList() {
           )}
         </CardContent>
       </Card>
+      <HrisConfirmDialog
+        open={Boolean(deleteEmployeeId)}
+        title="Delete employee"
+        description="This removes the employee record from active HRIS workflows. Continue only if this is not part of an audited lifecycle action."
+        confirmLabel="Delete employee"
+        destructive
+        busy={deleteBusy}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteEmployeeId(null);
+        }}
+        onConfirm={executeDelete}
+      />
     </div>
   );
 }

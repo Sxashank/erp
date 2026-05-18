@@ -9,7 +9,6 @@
 
 import { useShallow } from 'zustand/react/shallow';
 
-import { useAuthStore, type AuthUser } from '@/stores/authStore';
 import {
   login as loginAction,
   logout as logoutAction,
@@ -17,6 +16,7 @@ import {
   hydrateFromServer,
   type LoginPayload,
 } from '@/services/auth';
+import { useAuthStore, type AuthUser } from '@/stores/authStore';
 
 interface UseAuthReturn {
   user: AuthUser | null;

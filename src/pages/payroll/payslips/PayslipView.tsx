@@ -2,18 +2,16 @@
  * Payslip View Page
  */
 
+import { Download, Printer } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Download, Printer } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import {
   Table,
   TableBody,
@@ -22,14 +20,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
-import { AmountDisplay } from '@/components/common/AmountDisplay';
-import payrollService, { Payslip, PayslipComponent, PayrollStatutory } from '@/services/payrollService';
+import type { Payslip } from '@/services/payrollService';
+import payrollService, { PayslipComponent, PayrollStatutory } from '@/services/payrollService';
 
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 export default function PayslipView() {
@@ -57,7 +64,7 @@ export default function PayslipView() {
         description: 'Failed to load payslip',
         variant: 'destructive',
       });
-      navigate('/payroll/batches');
+      navigate('/admin/payroll/batches');
     } finally {
       setLoading(false);
     }
@@ -70,7 +77,7 @@ export default function PayslipView() {
   if (loading || !payslip) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
@@ -79,38 +86,36 @@ export default function PayslipView() {
   const deductions = payslip.components?.filter((c) => c.component_type === 'DEDUCTION') || [];
 
   return (
-    <div className="container mx-auto py-6 space-y-6 max-w-4xl">
-      <div className="flex items-center justify-between print:hidden">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={() => navigate(-1)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Payslip</h1>
-            <p className="text-muted-foreground">
-              {MONTHS[payslip.payroll_month - 1]} {payslip.payroll_year}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Download PDF
-          </Button>
-        </div>
+    <div className="container mx-auto max-w-4xl space-y-6 py-6">
+      <div className="print:hidden">
+        <PageHeader
+          title="Payslip"
+          subtitle={`${MONTHS[payslip.payroll_month - 1]} ${payslip.payroll_year}`}
+          breadcrumbs={[
+            { label: 'Payslips', to: '/admin/payroll/payslips' },
+            { label: `${MONTHS[payslip.payroll_month - 1]} ${payslip.payroll_year}` },
+          ]}
+          actions={
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
+              <Button variant="outline">
+                <Download className="mr-2 h-4 w-4" />
+                Download PDF
+              </Button>
+            </div>
+          }
+        />
       </div>
 
-      <Card className="print:shadow-none print:border-none">
+      <Card className="print:border-none print:shadow-none">
         <CardHeader className="bg-muted/50">
-          <div className="flex justify-between items-start">
+          <div className="flex items-start justify-between">
             <div>
               <CardTitle className="text-xl">PAYSLIP</CardTitle>
-              <p className="text-sm text-muted-foreground mt-1">
+              <p className="mt-1 text-sm text-muted-foreground">
                 For the period of {MONTHS[payslip.payroll_month - 1]} {payslip.payroll_year}
               </p>
             </div>
@@ -126,7 +131,7 @@ export default function PayslipView() {
           {/* Employee Details */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <h3 className="font-semibold mb-2">Employee Details</h3>
+              <h3 className="mb-2 font-semibold">Employee Details</h3>
               <div className="space-y-1 text-sm">
                 <p>
                   <span className="text-muted-foreground">Name:</span>{' '}
@@ -145,15 +150,14 @@ export default function PayslipView() {
               </div>
             </div>
             <div>
-              <h3 className="font-semibold mb-2">Attendance Summary</h3>
+              <h3 className="mb-2 font-semibold">Attendance Summary</h3>
               <div className="space-y-1 text-sm">
                 <p>
                   <span className="text-muted-foreground">Working Days:</span>{' '}
                   {payslip.working_days}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Paid Days:</span>{' '}
-                  {payslip.paid_days}
+                  <span className="text-muted-foreground">Paid Days:</span> {payslip.paid_days}
                 </p>
                 <p>
                   <span className="text-muted-foreground">LOP Days:</span>{' '}
@@ -171,7 +175,7 @@ export default function PayslipView() {
           <div className="grid grid-cols-2 gap-6">
             {/* Earnings */}
             <div>
-              <h3 className="font-semibold mb-3 text-green-600">Earnings</h3>
+              <h3 className="mb-3 font-semibold text-green-600">Earnings</h3>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -207,7 +211,7 @@ export default function PayslipView() {
 
             {/* Deductions */}
             <div>
-              <h3 className="font-semibold mb-3 text-destructive">Deductions</h3>
+              <h3 className="mb-3 font-semibold text-destructive">Deductions</h3>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -241,7 +245,7 @@ export default function PayslipView() {
           {payslip.statutory && payslip.statutory.length > 0 && (
             <>
               <div>
-                <h3 className="font-semibold mb-3">Statutory Contributions</h3>
+                <h3 className="mb-3 font-semibold">Statutory Contributions</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -274,13 +278,11 @@ export default function PayslipView() {
           )}
 
           {/* Net Pay */}
-          <div className="bg-primary/5 p-4 rounded-lg">
-            <div className="flex justify-between items-center">
+          <div className="rounded-lg bg-primary/5 p-4">
+            <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-lg font-semibold">Net Payable</h3>
-                <p className="text-sm text-muted-foreground">
-                  Gross Earnings - Total Deductions
-                </p>
+                <p className="text-sm text-muted-foreground">Gross Earnings - Total Deductions</p>
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-primary">
@@ -294,12 +296,16 @@ export default function PayslipView() {
           {(payslip.employer_pf || payslip.employer_esi) && (
             <div className="text-sm text-muted-foreground">
               <p className="font-medium">Employer Contributions (Not included in Net Pay):</p>
-              <div className="flex gap-4 mt-1">
+              <div className="mt-1 flex gap-4">
                 {payslip.employer_pf && payslip.employer_pf > 0 && (
-                  <span>PF: <AmountDisplay amount={payslip.employer_pf} compact /></span>
+                  <span>
+                    PF: <AmountDisplay amount={payslip.employer_pf} compact />
+                  </span>
                 )}
                 {payslip.employer_esi && payslip.employer_esi > 0 && (
-                  <span>ESI: <AmountDisplay amount={payslip.employer_esi} compact /></span>
+                  <span>
+                    ESI: <AmountDisplay amount={payslip.employer_esi} compact />
+                  </span>
                 )}
               </div>
             </div>

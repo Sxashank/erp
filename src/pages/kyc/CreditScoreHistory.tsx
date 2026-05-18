@@ -1,10 +1,25 @@
+import {
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  Search,
+  Filter,
+  Eye,
+  Download,
+  History,
+  CreditCard,
+  Calendar,
+  ArrowUpRight,
+  ArrowDownRight,
+} from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -20,20 +35,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  Search,
-  Filter,
-  Eye,
-  Download,
-  History,
-  CreditCard,
-  Calendar,
-  ArrowUpRight,
-  ArrowDownRight,
-} from 'lucide-react';
 
 // Mock customer score history data
 const customerScoreHistory = [

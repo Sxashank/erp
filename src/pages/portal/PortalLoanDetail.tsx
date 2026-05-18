@@ -3,13 +3,24 @@
  * View loan details, schedule, and payment history
  */
 
-import { useState, useEffect } from 'react';
+import { AlertTriangle, Loader2, Download, CreditCard, FileText } from 'lucide-react';
+import { useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+import {
+  AmountDisplay,
+  DataTable,
+  DateDisplay,
+  EmptyState,
+  ErrorState,
+  SkeletonTable,
+  type Column,
+} from '@/components/common';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -18,53 +29,35 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  ArrowLeft,
-  IndianRupee,
-  Calendar,
-  AlertTriangle,
-  Loader2,
-  Download,
-  CreditCard,
-  FileText,
-  CheckCircle,
-  Clock,
-  XCircle,
-} from 'lucide-react';
-import { portalDashboardApi } from '@/services/portalApi';
-import type { LoanDetail, RepaymentScheduleItem, PaymentHistory } from '@/types/portal';
+  useDownloadScheduleCsv,
+  useFailedSchedule,
+  useMissedSchedule,
+} from '@/hooks/portal/useFailedEmis';
+import {
+  usePortalLoan,
+  usePortalLoanPayments,
+  usePortalLoanSchedule,
+} from '@/hooks/portal/useLoanDetail';
+import type { FailedScheduleItem } from '@/services/portalApi';
 
 export default function PortalLoanDetail() {
   const { loanId } = useParams<{ loanId: string }>();
   const navigate = useNavigate();
-  const [loading, setLoading] = useState(true);
-  const [loan, setLoan] = useState<LoanDetail | null>(null);
-  const [schedule, setSchedule] = useState<RepaymentScheduleItem[]>([]);
-  const [payments, setPayments] = useState<PaymentHistory[]>([]);
   const [activeTab, setActiveTab] = useState('overview');
 
-  useEffect(() => {
-    if (loanId) {
-      fetchLoanDetails();
-    }
-  }, [loanId]);
+  const loanQuery = usePortalLoan(loanId);
+  const scheduleQuery = usePortalLoanSchedule(loanId);
+  const paymentsQuery = usePortalLoanPayments(loanId);
 
-  const fetchLoanDetails = async () => {
-    try {
-      const [loanRes, scheduleRes, paymentsRes] = await Promise.all([
-        portalDashboardApi.getLoan(loanId!),
-        portalDashboardApi.getLoanSchedule(loanId!),
-        portalDashboardApi.getLoanPayments(loanId!),
-      ]);
-      setLoan(loanRes.data);
-      setSchedule(scheduleRes.data);
-      setPayments(paymentsRes.data);
-    } catch (error) {
-      console.error('Failed to fetch loan details:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const failedQuery = useFailedSchedule(loanId);
+  const missedQuery = useMissedSchedule(loanId);
+  const scheduleCsv = useDownloadScheduleCsv(loanId);
+
+  const loan = loanQuery.data;
+  const schedule = scheduleQuery.data ?? [];
+  const payments = paymentsQuery.data ?? [];
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -74,22 +67,33 @@ export default function PortalLoanDetail() {
     }).format(amount);
   };
 
-  if (loading) {
+  if (loanQuery.isLoading && !loan) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
+      <div className="space-y-6">
+        <SkeletonTable rows={6} />
+      </div>
+    );
+  }
+
+  if (loanQuery.isError) {
+    return (
+      <div className="space-y-6">
+        <ErrorState error={loanQuery.error} onRetry={() => loanQuery.refetch()} />
       </div>
     );
   }
 
   if (!loan) {
     return (
-      <div className="text-center py-12">
-        <p className="text-gray-500">Loan not found</p>
-        <Button variant="link" onClick={() => navigate('/portal/loans')}>
-          Back to Loans
-        </Button>
-      </div>
+      <EmptyState
+        title="Loan not found"
+        subtitle="We could not find the loan you were looking for."
+        action={
+          <Button variant="link" onClick={() => navigate('/portal/loans')}>
+            Back to Loans
+          </Button>
+        }
+      />
     );
   }
 
@@ -117,29 +121,22 @@ export default function PortalLoanDetail() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/portal/loans')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{loan.loan_account_number}</h1>
-            <p className="text-gray-500">{loan.product_name}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        title={loan.loan_account_number}
+        subtitle={loan.product_name}
+        breadcrumbs={[{ label: 'Loans', to: '/portal/loans' }, { label: loan.loan_account_number }]}
+        actions={
           <Link to={`/portal/payments?loan=${loan.id}`}>
             <Button className="bg-emerald-600 hover:bg-emerald-700">
-              <CreditCard className="h-4 w-4 mr-2" />
+              <CreditCard className="mr-2 h-4 w-4" />
               Make Payment
             </Button>
           </Link>
-        </div>
-      </div>
+        }
+      />
 
       {/* Loan Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Sanctioned Amount</p>
@@ -193,11 +190,13 @@ export default function PortalLoanDetail() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="schedule">EMI Schedule</TabsTrigger>
+          <TabsTrigger value="failed">Failed EMIs</TabsTrigger>
+          <TabsTrigger value="missed">Missed Payments</TabsTrigger>
           <TabsTrigger value="payments">Payment History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Loan Details */}
             <Card>
               <CardHeader>
@@ -215,21 +214,15 @@ export default function PortalLoanDetail() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Disbursement Date</p>
-                    <p className="font-medium">
-                      {new Date(loan.disbursement_date).toLocaleDateString()}
-                    </p>
+                    <DateDisplay date={loan.disbursement_date} className="font-medium" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Maturity Date</p>
-                    <p className="font-medium">
-                      {new Date(loan.maturity_date).toLocaleDateString()}
-                    </p>
+                    <DateDisplay date={loan.maturity_date} className="font-medium" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">EMI Start Date</p>
-                    <p className="font-medium">
-                      {new Date(loan.emi_start_date).toLocaleDateString()}
-                    </p>
+                    <DateDisplay date={loan.emi_start_date} className="font-medium" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Remaining Tenure</p>
@@ -237,8 +230,8 @@ export default function PortalLoanDetail() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t">
-                  <p className="text-sm text-gray-500 mb-2">Borrower</p>
+                <div className="border-t pt-4">
+                  <p className="mb-2 text-sm text-gray-500">Borrower</p>
                   <p className="font-medium">{loan.borrower_name}</p>
                   {loan.co_borrowers && loan.co_borrowers.length > 0 && (
                     <p className="text-sm text-gray-500">
@@ -248,8 +241,8 @@ export default function PortalLoanDetail() {
                 </div>
 
                 {loan.nach_mandate_status && (
-                  <div className="pt-4 border-t">
-                    <p className="text-sm text-gray-500 mb-1">NACH Mandate</p>
+                  <div className="border-t pt-4">
+                    <p className="mb-1 text-sm text-gray-500">NACH Mandate</p>
                     <Badge
                       className={
                         loan.nach_mandate_status === 'ACTIVE'
@@ -271,7 +264,7 @@ export default function PortalLoanDetail() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <div className="flex justify-between text-sm mb-1">
+                  <div className="mb-1 flex justify-between text-sm">
                     <span className="text-gray-500">Repayment Progress</span>
                     <span className="font-medium">{paidPercentage.toFixed(1)}%</span>
                   </div>
@@ -297,7 +290,7 @@ export default function PortalLoanDetail() {
                   </div>
                 </div>
 
-                <div className="pt-4 border-t">
+                <div className="border-t pt-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-500">Outstanding Principal</p>
@@ -313,7 +306,7 @@ export default function PortalLoanDetail() {
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Total Outstanding</p>
-                      <p className="font-bold text-lg">{formatCurrency(loan.total_outstanding)}</p>
+                      <p className="text-lg font-bold">{formatCurrency(loan.total_outstanding)}</p>
                     </div>
                   </div>
                 </div>
@@ -326,9 +319,18 @@ export default function PortalLoanDetail() {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">EMI Repayment Schedule</CardTitle>
-              <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
-                Download
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => scheduleCsv.download()}
+                disabled={scheduleCsv.isDownloading}
+              >
+                {scheduleCsv.isDownloading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="mr-2 h-4 w-4" />
+                )}
+                Download Schedule (CSV)
               </Button>
             </CardHeader>
             <CardContent>
@@ -349,7 +351,7 @@ export default function PortalLoanDetail() {
                     {schedule.map((item) => (
                       <TableRow key={item.installment_number}>
                         <TableCell>{item.installment_number}</TableCell>
-                        <TableCell>{new Date(item.due_date).toLocaleDateString()}</TableCell>
+                        <TableCell><DateDisplay date={item.due_date} /></TableCell>
                         <TableCell className="text-right">
                           {formatCurrency(item.emi_amount)}
                         </TableCell>
@@ -372,12 +374,48 @@ export default function PortalLoanDetail() {
           </Card>
         </TabsContent>
 
+        <TabsContent value="failed">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Failed EMIs</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FailedMissedTable
+                rows={failedQuery.data ?? []}
+                isLoading={failedQuery.isLoading}
+                error={failedQuery.isError ? failedQuery.error : undefined}
+                onRetry={() => failedQuery.refetch()}
+                emptyTitle="No failed EMIs"
+                emptySubtitle="Auto-debit attempts that failed will appear here once the next NACH presentation cycle runs."
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="missed">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Missed Payments</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <FailedMissedTable
+                rows={missedQuery.data ?? []}
+                isLoading={missedQuery.isLoading}
+                error={missedQuery.isError ? missedQuery.error : undefined}
+                onRetry={() => missedQuery.refetch()}
+                emptyTitle="No missed payments"
+                emptySubtitle="Instalments overdue beyond your grace period will be listed here."
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="payments">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-base">Payment History</CardTitle>
               <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Download Statement
               </Button>
             </CardHeader>
@@ -401,7 +439,7 @@ export default function PortalLoanDetail() {
                         <TableRow key={payment.id}>
                           <TableCell className="font-medium">{payment.receipt_number}</TableCell>
                           <TableCell>
-                            {new Date(payment.payment_date).toLocaleDateString()}
+                            <DateDisplay date={payment.payment_date} />
                           </TableCell>
                           <TableCell className="text-right">
                             {formatCurrency(payment.amount)}
@@ -422,8 +460,8 @@ export default function PortalLoanDetail() {
                   </Table>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <div className="py-8 text-center text-gray-500">
+                  <FileText className="mx-auto mb-4 h-12 w-12 opacity-50" />
                   <p>No payment history available</p>
                 </div>
               )}
@@ -432,5 +470,84 @@ export default function PortalLoanDetail() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+interface FailedMissedTableProps {
+  rows: FailedScheduleItem[];
+  isLoading: boolean;
+  error: unknown;
+  onRetry: () => void;
+  emptyTitle: string;
+  emptySubtitle: string;
+}
+
+function FailedMissedTable({
+  rows,
+  isLoading,
+  error,
+  onRetry,
+  emptyTitle,
+  emptySubtitle,
+}: FailedMissedTableProps) {
+  const columns: Column<FailedScheduleItem>[] = [
+    {
+      key: 'installmentNumber',
+      header: 'EMI #',
+      render: (r) => r.installmentNumber,
+      align: 'left',
+      sortable: true,
+      sortValue: (r) => r.installmentNumber,
+    },
+    {
+      key: 'dueDate',
+      header: 'Due Date',
+      render: (r) => <DateDisplay date={r.dueDate} />,
+      sortable: true,
+      sortValue: (r) => r.dueDate,
+    },
+    {
+      key: 'principalDue',
+      header: 'Principal Due',
+      align: 'right',
+      render: (r) => <AmountDisplay amount={Number(r.principalDue)} />,
+    },
+    {
+      key: 'interestDue',
+      header: 'Interest Due',
+      align: 'right',
+      render: (r) => <AmountDisplay amount={Number(r.interestDue)} />,
+    },
+    {
+      key: 'dpdDays',
+      header: 'DPD',
+      align: 'right',
+      render: (r) => `${r.dpdDays}d`,
+      sortable: true,
+      sortValue: (r) => r.dpdDays,
+    },
+    {
+      key: 'failReason',
+      header: 'Reason',
+      render: (r) => r.failReason ?? '—',
+    },
+    {
+      key: 'lastAttemptDate',
+      header: 'Last Attempt',
+      render: (r) => <DateDisplay date={r.lastAttemptDate} />,
+    },
+  ];
+
+  return (
+    <DataTable<FailedScheduleItem>
+      data={rows}
+      columns={columns}
+      getRowId={(r) => String(r.installmentNumber)}
+      isLoading={isLoading}
+      error={error}
+      onRetry={onRetry}
+      emptyTitle={emptyTitle}
+      emptySubtitle={emptySubtitle}
+    />
   );
 }

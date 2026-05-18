@@ -27,8 +27,8 @@ export function useCustomers(params?: { search?: string; enabled?: boolean }) {
     queryFn: async (): Promise<Customer[]> => {
       const res = await customersApi.list({
         organization_id: organizationId!,
-        search: params?.search,
-        page_size: 200,
+        search: params?.search?.trim() || undefined,
+        page_size: 100,
       });
       const data = res.data as Customer[] | { items: Customer[] };
       return Array.isArray(data) ? data : data.items;

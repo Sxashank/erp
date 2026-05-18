@@ -25,13 +25,14 @@ from app.schemas.vendor_portal.profile import (
     PortalUserPermissions,
 )
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter()
 
 
-@router.get("/", response_model=VendorProfileResponse)
+@router.get("/", response_model=VendorProfileResponse, response_model_by_alias=True)
 async def get_profile(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get vendor profile."""
     service = VendorProfileService(db)
@@ -39,12 +40,12 @@ async def get_profile(
     return vendor
 
 
-@router.put("/", response_model=VendorProfileResponse)
+@router.put("/", response_model=VendorProfileResponse, response_model_by_alias=True)
 async def update_profile(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     data: VendorProfileUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update vendor profile."""
     service = VendorProfileService(db)
@@ -53,10 +54,10 @@ async def update_profile(
 
 
 # Bank Account endpoints
-@router.get("/bank-accounts", response_model=List[VendorBankAccountResponse])
+@router.get("/bank-accounts", response_model=List[VendorBankAccountResponse], response_model_by_alias=True)
 async def get_bank_accounts(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get vendor bank accounts."""
     service = VendorProfileService(db)
@@ -64,11 +65,11 @@ async def get_bank_accounts(
     return accounts
 
 
-@router.post("/bank-accounts", response_model=VendorBankAccountResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/bank-accounts", response_model=VendorBankAccountResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def add_bank_account(
     vendor_id: UUID,  # From auth middleware
     data: VendorBankAccountCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Add bank account."""
     service = VendorProfileService(db)
@@ -76,12 +77,12 @@ async def add_bank_account(
     return account
 
 
-@router.put("/bank-accounts/{account_id}", response_model=VendorBankAccountResponse)
+@router.put("/bank-accounts/{account_id}", response_model=VendorBankAccountResponse, response_model_by_alias=True)
 async def update_bank_account(
     vendor_id: UUID,  # From auth middleware
     account_id: UUID,
     data: VendorBankAccountUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update bank account."""
     service = VendorProfileService(db)
@@ -90,10 +91,10 @@ async def update_bank_account(
 
 
 # Contact endpoints
-@router.get("/contacts", response_model=List[VendorContactResponse])
+@router.get("/contacts", response_model=List[VendorContactResponse], response_model_by_alias=True)
 async def get_contacts(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get vendor contacts."""
     service = VendorProfileService(db)
@@ -101,13 +102,13 @@ async def get_contacts(
     return contacts
 
 
-@router.post("/contacts", response_model=VendorContactResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/contacts", response_model=VendorContactResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def add_contact(
     vendor_id: UUID,  # From auth middleware
     organization_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware (invited_by)
     data: VendorContactCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Add contact."""
     service = VendorProfileService(db)
@@ -115,12 +116,12 @@ async def add_contact(
     return contact
 
 
-@router.put("/contacts/{contact_id}", response_model=VendorContactResponse)
+@router.put("/contacts/{contact_id}", response_model=VendorContactResponse, response_model_by_alias=True)
 async def update_contact(
     vendor_id: UUID,  # From auth middleware
     contact_id: UUID,
     data: VendorContactUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update contact."""
     service = VendorProfileService(db)
@@ -132,7 +133,7 @@ async def update_contact(
 async def remove_contact(
     vendor_id: UUID,  # From auth middleware
     contact_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Remove contact."""
     service = VendorProfileService(db)
@@ -140,13 +141,13 @@ async def remove_contact(
 
 
 # Portal User endpoints
-@router.get("/users", response_model=PortalUserListResponse)
+@router.get("/users", response_model=PortalUserListResponse, response_model_by_alias=True)
 async def get_portal_users(
     vendor_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     status: Optional[VendorPortalUserStatus] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get portal users for vendor."""
     service = VendorProfileService(db)
@@ -159,13 +160,13 @@ async def get_portal_users(
     )
 
 
-@router.post("/users", response_model=PortalUserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/users", response_model=PortalUserResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_portal_user(
     vendor_id: UUID,  # From auth middleware
     organization_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware (created_by)
     data: PortalUserCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Create portal user."""
     service = VendorProfileService(db)
@@ -173,12 +174,12 @@ async def create_portal_user(
     return user
 
 
-@router.put("/users/{target_user_id}", response_model=PortalUserResponse)
+@router.put("/users/{target_user_id}", response_model=PortalUserResponse, response_model_by_alias=True)
 async def update_portal_user(
     vendor_id: UUID,  # From auth middleware
     target_user_id: UUID,
     data: PortalUserUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update portal user."""
     service = VendorProfileService(db)
@@ -186,12 +187,12 @@ async def update_portal_user(
     return user
 
 
-@router.put("/users/{target_user_id}/permissions", response_model=PortalUserResponse)
+@router.put("/users/{target_user_id}/permissions", response_model=PortalUserResponse, response_model_by_alias=True)
 async def update_user_permissions(
     vendor_id: UUID,  # From auth middleware
     target_user_id: UUID,
     permissions: PortalUserPermissions,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update user permissions."""
     service = VendorProfileService(db)
@@ -199,10 +200,10 @@ async def update_user_permissions(
     return user
 
 
-@router.post("/users/{target_user_id}/activate", response_model=PortalUserResponse)
+@router.post("/users/{target_user_id}/activate", response_model=PortalUserResponse, response_model_by_alias=True)
 async def activate_user(
     target_user_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Activate a pending user."""
     service = VendorProfileService(db)
@@ -210,12 +211,12 @@ async def activate_user(
     return user
 
 
-@router.post("/users/{target_user_id}/deactivate", response_model=PortalUserResponse)
+@router.post("/users/{target_user_id}/deactivate", response_model=PortalUserResponse, response_model_by_alias=True)
 async def deactivate_user(
     vendor_id: UUID,  # From auth middleware
     target_user_id: UUID,
     reason: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Deactivate a user."""
     service = VendorProfileService(db)
@@ -223,11 +224,11 @@ async def deactivate_user(
     return user
 
 
-@router.post("/users/{target_user_id}/set-primary", response_model=PortalUserResponse)
+@router.post("/users/{target_user_id}/set-primary", response_model=PortalUserResponse, response_model_by_alias=True)
 async def set_primary_contact(
     vendor_id: UUID,  # From auth middleware
     target_user_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Set user as primary contact."""
     service = VendorProfileService(db)

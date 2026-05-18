@@ -4,11 +4,11 @@ from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.schemas.ap_ar.payment_file import (
     PaymentFileFormat,
@@ -22,11 +22,12 @@ from app.schemas.ap_ar.payment_file import (
     PaymentFileProcessingUpdate,
 )
 from app.services.ap_ar.payment_file_service import PaymentFileService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
 
-@router.get("", response_model=PaymentFileListResponse)
+@router.get("", response_model=PaymentFileListResponse, response_model_by_alias=True)
 async def list_payment_files(
     organization_id: UUID,
     status: Optional[str] = None,
@@ -35,7 +36,7 @@ async def list_payment_files(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List payment files for an organization."""
@@ -58,11 +59,11 @@ async def list_payment_files(
     )
 
 
-@router.get("/summary", response_model=PaymentFileSummary)
+@router.get("/summary", response_model=PaymentFileSummary, response_model_by_alias=True)
 async def get_payment_summary(
     organization_id: UUID,
     payment_ids: List[UUID] = Query(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get summary of payments for file generation."""
@@ -70,10 +71,10 @@ async def get_payment_summary(
     return await service.get_payment_summary(organization_id, payment_ids)
 
 
-@router.post("/generate", response_model=PaymentFileResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/generate", response_model=PaymentFileResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def generate_payment_file(
     data: PaymentFileGenerateRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Generate a payment file from selected payments."""
@@ -82,26 +83,20 @@ async def generate_payment_file(
         payment_file = await service.generate_file(data, current_user.id)
         return service.to_response(payment_file)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/{id}", response_model=PaymentFileDetailResponse)
+@router.get("/{id}", response_model=PaymentFileDetailResponse, response_model_by_alias=True)
 async def get_payment_file(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get payment file details with transactions."""
     service = PaymentFileService(db)
     payment_file = await service.get(id)
     if not payment_file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment file not found",
-        )
+        raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
 
     response = service.to_response(payment_file)
     transactions = [
@@ -133,22 +128,19 @@ async def get_payment_file(
 @router.get("/{id}/download")
 async def download_payment_file(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Download the generated payment file."""
     service = PaymentFileService(db)
     payment_file = await service.get(id)
     if not payment_file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment file not found",
-        )
+        raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
 
     if not payment_file.file_content:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="File has not been generated yet",
+            error_code="FILE_HAS_NOT_BEEN_GENERATED_YET",
         )
 
     # Mark as downloaded
@@ -174,60 +166,51 @@ async def download_payment_file(
 @router.get("/{id}/preview")
 async def preview_payment_file(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Preview the generated payment file content."""
     service = PaymentFileService(db)
     content = await service.get_file_content(id)
     if content is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment file not found",
-        )
+        raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
 
     return {"content": content}
 
 
-@router.post("/{id}/mark-uploaded", response_model=PaymentFileResponse)
+@router.post("/{id}/mark-uploaded", response_model=PaymentFileResponse, response_model_by_alias=True)
 async def mark_file_uploaded(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Mark payment file as uploaded to bank."""
     service = PaymentFileService(db)
     payment_file = await service.mark_uploaded(id)
     if not payment_file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment file not found",
-        )
+        raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
     return service.to_response(payment_file)
 
 
-@router.post("/{id}/start-processing", response_model=PaymentFileResponse)
+@router.post("/{id}/start-processing", response_model=PaymentFileResponse, response_model_by_alias=True)
 async def start_file_processing(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Mark payment file as processing started."""
     service = PaymentFileService(db)
     payment_file = await service.start_processing(id)
     if not payment_file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment file not found",
-        )
+        raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
     return service.to_response(payment_file)
 
 
-@router.post("/{id}/update-results", response_model=PaymentFileResponse)
+@router.post("/{id}/update-results", response_model=PaymentFileResponse, response_model_by_alias=True)
 async def update_processing_results(
     id: UUID,
     data: PaymentFileProcessingUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update transaction statuses from bank response."""
@@ -236,16 +219,13 @@ async def update_processing_results(
         payment_file = await service.update_processing_results(id, data.transactions)
         return service.to_response(payment_file)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/{id}/cancel", response_model=PaymentFileResponse)
+@router.post("/{id}/cancel", response_model=PaymentFileResponse, response_model_by_alias=True)
 async def cancel_payment_file(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Cancel a payment file (only if not yet uploaded)."""
@@ -253,30 +233,21 @@ async def cancel_payment_file(
     try:
         payment_file = await service.cancel_file(id)
         if not payment_file:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Payment file not found",
-            )
+            raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
         return service.to_response(payment_file)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/by-reference/{reference}", response_model=PaymentFileResponse)
+@router.get("/by-reference/{reference}", response_model=PaymentFileResponse, response_model_by_alias=True)
 async def get_payment_file_by_reference(
     reference: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get payment file by reference number."""
     service = PaymentFileService(db)
     payment_file = await service.get_by_reference(reference)
     if not payment_file:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payment file not found",
-        )
+        raise NotFoundException(detail="Payment file not found", error_code="PAYMENT_FILE_NOT_FOUND")
     return service.to_response(payment_file)

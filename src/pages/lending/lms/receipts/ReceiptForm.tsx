@@ -1,13 +1,19 @@
-import { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Save, Search } from 'lucide-react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Save, Search } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,7 +21,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -24,11 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { AmountInput } from '@/components/lending/common/AmountInput';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const receiptSchema = z.object({
   loanAccountId: z.string().min(1, 'Loan account is required'),
@@ -45,28 +46,34 @@ const receiptSchema = z.object({
 
 type ReceiptFormData = z.infer<typeof receiptSchema>;
 
-// Mock loan account data
-const mockLoanAccount = {
-  id: '1',
-  loanAccountNumber: 'SMFC/TL/DEL/2025/L00001',
-  entityName: 'ABC Industries Private Limited',
-  productName: 'Corporate Term Loan',
-  totalOutstanding: 49020000,
-  principalOutstanding: 48500000,
-  interestOutstanding: 520000,
+// Loan account context loads via useLoanAccount(accountId) once wired
+// (passed via `?accountId=` query param). Until then, the form starts
+// with no preselected account — user picks one explicitly.
+const emptyLoanAccount = {
+  id: '',
+  loanAccountNumber: '',
+  entityName: '',
+  productName: '',
+  totalOutstanding: 0,
+  principalOutstanding: 0,
+  interestOutstanding: 0,
   penalOutstanding: 0,
   otherCharges: 0,
   dpd: 0,
-  overdues: [
-    { type: 'EMI', dueDate: '2025-02-15', principal: 645000, interest: 510417, total: 1155417 },
-  ],
+  overdues: [] as {
+    type: string;
+    dueDate: string;
+    principal: number;
+    interest: number;
+    total: number;
+  }[],
 };
 
 export default function ReceiptForm() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const accountId = searchParams.get('accountId');
-  const [selectedAccount, setSelectedAccount] = useState(accountId ? mockLoanAccount : null);
+  const [selectedAccount, setSelectedAccount] = useState(accountId ? emptyLoanAccount : null);
 
   const {
     register,
@@ -95,25 +102,22 @@ export default function ReceiptForm() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/lending/receipts')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold">Record Receipt</h1>
-          <p className="text-muted-foreground">Record a new payment receipt against a loan account</p>
-        </div>
-        <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
-          <Save className="mr-2 h-4 w-4" />
-          Save Receipt
-        </Button>
-      </div>
+      <PageHeader
+        title="Record Receipt"
+        subtitle="Record a new payment receipt against a loan account"
+        breadcrumbs={[{ label: 'Receipts', to: '/admin/lending/receipts' }, { label: 'New' }]}
+        actions={
+          <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+            <Save className="mr-2 h-4 w-4" />
+            Save Receipt
+          </Button>
+        }
+      />
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid gap-6 md:grid-cols-3">
           {/* Left Column - Main Form */}
-          <div className="md:col-span-2 space-y-6">
+          <div className="space-y-6 md:col-span-2">
             {/* Loan Account Selection */}
             <Card>
               <CardHeader>
@@ -133,12 +137,10 @@ export default function ReceiptForm() {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-4 border rounded-lg bg-muted/50">
+                  <div className="rounded-lg border bg-muted/50 p-4">
                     <div className="flex items-start justify-between">
                       <div>
-                        <p className="font-mono font-medium">
-                          {selectedAccount.loanAccountNumber}
-                        </p>
+                        <p className="font-mono font-medium">{selectedAccount.loanAccountNumber}</p>
                         <p className="text-sm">{selectedAccount.entityName}</p>
                         <p className="text-sm text-muted-foreground">
                           {selectedAccount.productName}
@@ -267,11 +269,7 @@ export default function ReceiptForm() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="bankName">Bank Name</Label>
-                      <Input
-                        id="bankName"
-                        placeholder="Drawn on bank"
-                        {...register('bankName')}
-                      />
+                      <Input id="bankName" placeholder="Drawn on bank" {...register('bankName')} />
                     </div>
                   </div>
                 )}
@@ -336,7 +334,7 @@ export default function ReceiptForm() {
                             <AmountDisplay amount={selectedAccount.otherCharges} />
                           </TableCell>
                         </TableRow>
-                        <TableRow className="font-bold bg-muted/50">
+                        <TableRow className="bg-muted/50 font-bold">
                           <TableCell>Total Outstanding</TableCell>
                           <TableCell className="text-right">
                             <AmountDisplay amount={selectedAccount.totalOutstanding} />
@@ -385,7 +383,7 @@ export default function ReceiptForm() {
                       <CardTitle>Receipt Preview</CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="p-4 border rounded-lg bg-green-50">
+                      <div className="rounded-lg border bg-green-50 p-4">
                         <div className="text-center">
                           <p className="text-sm text-muted-foreground">Amount Being Received</p>
                           <p className="text-2xl font-bold text-green-600">
@@ -393,10 +391,10 @@ export default function ReceiptForm() {
                           </p>
                         </div>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-4">
+                      <p className="mt-4 text-xs text-muted-foreground">
                         This amount will be allocated to the outstanding dues based on the
-                        configured waterfall priority: Penal → Charges → Overdue Interest →
-                        Current Interest → Overdue Principal → Current Principal
+                        configured waterfall priority: Penal → Charges → Overdue Interest → Current
+                        Interest → Overdue Principal → Current Principal
                       </p>
                     </CardContent>
                   </Card>

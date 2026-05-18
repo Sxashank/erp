@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.ap_ar.customer_service import CustomerService
 from app.schemas.ap_ar.customer import (
@@ -93,56 +93,53 @@ def _to_list_response(customer) -> CustomerListResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[CustomerListResponse])
+@router.get("", response_model=PaginatedResponse[CustomerListResponse], response_model_by_alias=True)
 async def list_customers(
-    organization_id: UUID = Query(..., description="Organization ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     search: Optional[str] = Query(None, description="Search in code, name, GSTIN, PAN"),
     customer_type: Optional[str] = Query(None, description="Filter by customer type"),
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of customers for an organization."""
     service = CustomerService(db)
     skip = (page - 1) * page_size
     customers, total = await service.get_all(
-        organization_id, skip, page_size, include_inactive, search, customer_type
+        current_user.organization_id, skip, page_size, include_inactive, search, customer_type
     )
     items = [_to_list_response(c) for c in customers]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/active", response_model=list[CustomerListResponse])
+@router.get("/active", response_model=list[CustomerListResponse], response_model_by_alias=True)
 async def list_active_customers(
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active customers for dropdown lists."""
     service = CustomerService(db)
-    customers = await service.get_active(organization_id)
+    customers = await service.get_active(current_user.organization_id)
     return [_to_list_response(c) for c in customers]
 
 
 @router.get("/generate-code")
 async def generate_customer_code(
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate next customer code."""
     service = CustomerService(db)
-    code = await service.generate_code(organization_id)
+    code = await service.generate_code(current_user.organization_id)
     return {"code": code}
 
 
-@router.post("", response_model=CustomerResponse)
+@router.post("", response_model=CustomerResponse, response_model_by_alias=True)
 async def create_customer(
     data: CustomerCreate,
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new customer."""
     service = CustomerService(db)
@@ -150,11 +147,11 @@ async def create_customer(
     return _to_response(customer)
 
 
-@router.get("/{customer_id}", response_model=CustomerResponse)
+@router.get("/{customer_id}", response_model=CustomerResponse, response_model_by_alias=True)
 async def get_customer(
     customer_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get customer by ID."""
     service = CustomerService(db)
@@ -162,12 +159,12 @@ async def get_customer(
     return _to_response(customer)
 
 
-@router.put("/{customer_id}", response_model=CustomerResponse)
+@router.put("/{customer_id}", response_model=CustomerResponse, response_model_by_alias=True)
 async def update_customer(
     customer_id: UUID,
     data: CustomerUpdate,
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a customer."""
     service = CustomerService(db)
@@ -179,7 +176,7 @@ async def update_customer(
 async def delete_customer(
     customer_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_CUSTOMER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a customer."""
     service = CustomerService(db)

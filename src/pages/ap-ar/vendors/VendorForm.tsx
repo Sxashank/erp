@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react';
+import { Save, Loader2 } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -14,10 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { logger } from "@/lib/logger";
 import {
   vendorsApi,
   organizationsApi,
@@ -156,23 +158,7 @@ export function VendorForm() {
     is_active: true,
   });
 
-  useEffect(() => {
-    loadInitialData();
-  }, []);
-
-  useEffect(() => {
-    if (isEditMode && id) {
-      loadVendor(id);
-    }
-  }, [id, isEditMode]);
-
-  useEffect(() => {
-    if (formData.organization_id) {
-      loadOrganizationData(formData.organization_id);
-    }
-  }, [formData.organization_id]);
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
       const [orgsRes, tdsRes] = await Promise.all([
         organizationsApi.list({ page: 1, page_size: 100 }),
@@ -186,19 +172,19 @@ export function VendorForm() {
         setFormData((prev) => ({ ...prev, organization_id: firstOrg.id }));
       }
     } catch (error) {
-      console.error('Failed to load initial data:', error);
+      logger.error('Failed to load initial data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load form data',
         variant: 'destructive',
       });
     }
-  };
+  }, [isEditMode, toast]);
 
-  const loadOrganizationData = async (orgId: string) => {
+  const loadOrganizationData = useCallback(async (orgId: string) => {
     try {
       const [accountsRes, termsRes] = await Promise.all([
-        accountsApi.list({ organization_id: orgId, page: 1, page_size: 500 }),
+        accountsApi.list({ organization_id: orgId, page: 1, page_size: 100 }),
         paymentTermsApi.getActive({ organization_id: orgId }),
       ]);
       setAccounts(accountsRes.data.items || []);
@@ -210,11 +196,11 @@ export function VendorForm() {
         setFormData((prev) => ({ ...prev, code: codeRes.data.code }));
       }
     } catch (error) {
-      console.error('Failed to load organization data:', error);
+      logger.error('Failed to load organization data:', error);
     }
-  };
+  }, [isEditMode]);
 
-  const loadVendor = async (vendorId: string) => {
+  const loadVendor = useCallback(async (vendorId: string) => {
     setLoading(true);
     try {
       const response = await vendorsApi.get(vendorId);
@@ -266,7 +252,7 @@ export function VendorForm() {
         is_active: vendor.is_active ?? true,
       });
     } catch (error) {
-      console.error('Failed to load vendor:', error);
+      logger.error('Failed to load vendor:', error);
       toast({
         title: 'Error',
         description: 'Failed to load vendor details',
@@ -276,9 +262,25 @@ export function VendorForm() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate, toast]);
 
-  const handleChange = (field: string, value: any) => {
+  useEffect(() => {
+    loadInitialData();
+  }, [loadInitialData]);
+
+  useEffect(() => {
+    if (isEditMode && id) {
+      loadVendor(id);
+    }
+  }, [id, isEditMode, loadVendor]);
+
+  useEffect(() => {
+    if (formData.organization_id) {
+      loadOrganizationData(formData.organization_id);
+    }
+  }, [formData.organization_id, loadOrganizationData]);
+
+  const handleChange = (field: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
@@ -342,13 +344,9 @@ export function VendorForm() {
         });
       }
       navigate('/admin/ap-ar/vendors');
-    } catch (error: any) {
-      console.error('Failed to save vendor:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save vendor',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      logger.error('Failed to save vendor:', error);
+      showErrorToast(error, toast);
     } finally {
       setSaving(false);
     }

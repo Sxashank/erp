@@ -2,72 +2,72 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
 from app.core.pii import MaskedPIIModel
+from app.schemas.base import CamelSchema
 
 
-class CustomerBase(BaseModel):
+class CustomerBase(CamelSchema):
     """Base customer schema."""
     code: str = Field(..., max_length=20)
     name: str = Field(..., max_length=200)
-    display_name: Optional[str] = Field(None, max_length=200)
+    display_name: str | None = Field(None, max_length=200)
     customer_type: str = Field(default="COMPANY")
     organization_id: UUID
 
     # Tax & Compliance
-    pan: Optional[str] = Field(None, max_length=10)
-    gstin: Optional[str] = Field(None, max_length=15)
-    gst_registration_type: Optional[str] = None
-    place_of_supply_state: Optional[str] = Field(None, max_length=2)
+    pan: str | None = Field(None, max_length=10)
+    gstin: str | None = Field(None, max_length=15)
+    gst_registration_type: str | None = None
+    place_of_supply_state: str | None = Field(None, max_length=2)
     tcs_applicable: bool = False
-    tcs_section_id: Optional[UUID] = None
+    tcs_section_id: UUID | None = None
 
     # Contact & Billing Address
-    contact_person: Optional[str] = Field(None, max_length=100)
-    email: Optional[str] = Field(None, max_length=100)
-    phone: Optional[str] = Field(None, max_length=20)
-    mobile: Optional[str] = Field(None, max_length=20)
-    billing_address_line1: Optional[str] = Field(None, max_length=200)
-    billing_address_line2: Optional[str] = Field(None, max_length=200)
-    billing_city: Optional[str] = Field(None, max_length=100)
-    billing_state_code: Optional[str] = Field(None, max_length=2)
-    billing_pincode: Optional[str] = Field(None, max_length=10)
+    contact_person: str | None = Field(None, max_length=100)
+    email: str | None = Field(None, max_length=100)
+    phone: str | None = Field(None, max_length=20)
+    mobile: str | None = Field(None, max_length=20)
+    billing_address_line1: str | None = Field(None, max_length=200)
+    billing_address_line2: str | None = Field(None, max_length=200)
+    billing_city: str | None = Field(None, max_length=100)
+    billing_state_code: str | None = Field(None, max_length=2)
+    billing_pincode: str | None = Field(None, max_length=10)
     billing_country: str = Field(default="India", max_length=50)
 
     # Shipping Address
-    shipping_address_line1: Optional[str] = Field(None, max_length=200)
-    shipping_address_line2: Optional[str] = Field(None, max_length=200)
-    shipping_city: Optional[str] = Field(None, max_length=100)
-    shipping_state_code: Optional[str] = Field(None, max_length=2)
-    shipping_pincode: Optional[str] = Field(None, max_length=10)
+    shipping_address_line1: str | None = Field(None, max_length=200)
+    shipping_address_line2: str | None = Field(None, max_length=200)
+    shipping_city: str | None = Field(None, max_length=100)
+    shipping_state_code: str | None = Field(None, max_length=2)
+    shipping_pincode: str | None = Field(None, max_length=10)
     shipping_country: str = Field(default="India", max_length=50)
 
     # Banking Details
-    bank_name: Optional[str] = Field(None, max_length=100)
-    bank_account_number: Optional[str] = Field(None, max_length=50)
-    bank_ifsc_code: Optional[str] = Field(None, max_length=11)
-    bank_branch: Optional[str] = Field(None, max_length=100)
-    payment_mode_preference: Optional[str] = None
+    bank_name: str | None = Field(None, max_length=100)
+    bank_account_number: str | None = Field(None, max_length=50)
+    bank_ifsc_code: str | None = Field(None, max_length=11)
+    bank_branch: str | None = Field(None, max_length=100)
+    payment_mode_preference: str | None = None
 
     # Financial Settings
-    control_account_id: Optional[UUID] = None
-    revenue_account_id: Optional[UUID] = None
-    payment_terms_id: Optional[UUID] = None
+    control_account_id: UUID | None = None
+    revenue_account_id: UUID | None = None
+    payment_terms_id: UUID | None = None
     credit_days: int = Field(default=30, ge=0)
-    credit_limit: Optional[Decimal] = None
+    credit_limit: Decimal | None = None
     credit_limit_enabled: bool = False
     currency_code: str = Field(default="INR", max_length=3)
 
     # Balances
     opening_balance: Decimal = Field(default=Decimal("0"))
-    opening_balance_type: Optional[str] = None
+    opening_balance_type: str | None = None
 
     # Notes
-    remarks: Optional[str] = None
+    remarks: str | None = None
     is_active: bool = True
 
 
@@ -76,150 +76,144 @@ class CustomerCreate(CustomerBase):
     pass
 
 
-class CustomerUpdate(BaseModel):
+class CustomerUpdate(CamelSchema):
     """Schema for updating a customer."""
-    name: Optional[str] = Field(None, max_length=200)
-    display_name: Optional[str] = Field(None, max_length=200)
-    customer_type: Optional[str] = None
+    name: str | None = Field(None, max_length=200)
+    display_name: str | None = Field(None, max_length=200)
+    customer_type: str | None = None
 
     # Tax & Compliance
-    pan: Optional[str] = Field(None, max_length=10)
-    gstin: Optional[str] = Field(None, max_length=15)
-    gst_registration_type: Optional[str] = None
-    place_of_supply_state: Optional[str] = Field(None, max_length=2)
-    tcs_applicable: Optional[bool] = None
-    tcs_section_id: Optional[UUID] = None
+    pan: str | None = Field(None, max_length=10)
+    gstin: str | None = Field(None, max_length=15)
+    gst_registration_type: str | None = None
+    place_of_supply_state: str | None = Field(None, max_length=2)
+    tcs_applicable: bool | None = None
+    tcs_section_id: UUID | None = None
 
     # Contact & Billing Address
-    contact_person: Optional[str] = Field(None, max_length=100)
-    email: Optional[str] = Field(None, max_length=100)
-    phone: Optional[str] = Field(None, max_length=20)
-    mobile: Optional[str] = Field(None, max_length=20)
-    billing_address_line1: Optional[str] = Field(None, max_length=200)
-    billing_address_line2: Optional[str] = Field(None, max_length=200)
-    billing_city: Optional[str] = Field(None, max_length=100)
-    billing_state_code: Optional[str] = Field(None, max_length=2)
-    billing_pincode: Optional[str] = Field(None, max_length=10)
-    billing_country: Optional[str] = Field(None, max_length=50)
+    contact_person: str | None = Field(None, max_length=100)
+    email: str | None = Field(None, max_length=100)
+    phone: str | None = Field(None, max_length=20)
+    mobile: str | None = Field(None, max_length=20)
+    billing_address_line1: str | None = Field(None, max_length=200)
+    billing_address_line2: str | None = Field(None, max_length=200)
+    billing_city: str | None = Field(None, max_length=100)
+    billing_state_code: str | None = Field(None, max_length=2)
+    billing_pincode: str | None = Field(None, max_length=10)
+    billing_country: str | None = Field(None, max_length=50)
 
     # Shipping Address
-    shipping_address_line1: Optional[str] = Field(None, max_length=200)
-    shipping_address_line2: Optional[str] = Field(None, max_length=200)
-    shipping_city: Optional[str] = Field(None, max_length=100)
-    shipping_state_code: Optional[str] = Field(None, max_length=2)
-    shipping_pincode: Optional[str] = Field(None, max_length=10)
-    shipping_country: Optional[str] = Field(None, max_length=50)
+    shipping_address_line1: str | None = Field(None, max_length=200)
+    shipping_address_line2: str | None = Field(None, max_length=200)
+    shipping_city: str | None = Field(None, max_length=100)
+    shipping_state_code: str | None = Field(None, max_length=2)
+    shipping_pincode: str | None = Field(None, max_length=10)
+    shipping_country: str | None = Field(None, max_length=50)
 
     # Banking Details
-    bank_name: Optional[str] = Field(None, max_length=100)
-    bank_account_number: Optional[str] = Field(None, max_length=50)
-    bank_ifsc_code: Optional[str] = Field(None, max_length=11)
-    bank_branch: Optional[str] = Field(None, max_length=100)
-    payment_mode_preference: Optional[str] = None
+    bank_name: str | None = Field(None, max_length=100)
+    bank_account_number: str | None = Field(None, max_length=50)
+    bank_ifsc_code: str | None = Field(None, max_length=11)
+    bank_branch: str | None = Field(None, max_length=100)
+    payment_mode_preference: str | None = None
 
     # Financial Settings
-    control_account_id: Optional[UUID] = None
-    revenue_account_id: Optional[UUID] = None
-    payment_terms_id: Optional[UUID] = None
-    credit_days: Optional[int] = Field(None, ge=0)
-    credit_limit: Optional[Decimal] = None
-    credit_limit_enabled: Optional[bool] = None
-    currency_code: Optional[str] = Field(None, max_length=3)
+    control_account_id: UUID | None = None
+    revenue_account_id: UUID | None = None
+    payment_terms_id: UUID | None = None
+    credit_days: int | None = Field(None, ge=0)
+    credit_limit: Decimal | None = None
+    credit_limit_enabled: bool | None = None
+    currency_code: str | None = Field(None, max_length=3)
 
     # Balances
-    opening_balance: Optional[Decimal] = None
-    opening_balance_type: Optional[str] = None
+    opening_balance: Decimal | None = None
+    opening_balance_type: str | None = None
 
     # Notes
-    remarks: Optional[str] = None
-    is_active: Optional[bool] = None
+    remarks: str | None = None
+    is_active: bool | None = None
 
 
-class CustomerResponse(MaskedPIIModel, BaseModel):
+class CustomerResponse(MaskedPIIModel):
     """Schema for customer response."""
     id: UUID
     code: str
     name: str
-    display_name: Optional[str]
-    customer_type: Optional[str]
+    display_name: str | None
+    customer_type: str | None
     organization_id: UUID
 
     # Tax & Compliance
-    pan: Optional[str]
-    gstin: Optional[str]
-    gst_registration_type: Optional[str]
-    place_of_supply_state: Optional[str]
+    pan: str | None
+    gstin: str | None
+    gst_registration_type: str | None
+    place_of_supply_state: str | None
     tcs_applicable: bool
-    tcs_section_id: Optional[UUID]
+    tcs_section_id: UUID | None
 
     # Contact & Billing Address
-    contact_person: Optional[str]
-    email: Optional[str]
-    phone: Optional[str]
-    mobile: Optional[str]
-    billing_address_line1: Optional[str]
-    billing_address_line2: Optional[str]
-    billing_city: Optional[str]
-    billing_state_code: Optional[str]
-    billing_pincode: Optional[str]
+    contact_person: str | None
+    email: str | None
+    phone: str | None
+    mobile: str | None
+    billing_address_line1: str | None
+    billing_address_line2: str | None
+    billing_city: str | None
+    billing_state_code: str | None
+    billing_pincode: str | None
     billing_country: str
 
     # Shipping Address
-    shipping_address_line1: Optional[str]
-    shipping_address_line2: Optional[str]
-    shipping_city: Optional[str]
-    shipping_state_code: Optional[str]
-    shipping_pincode: Optional[str]
+    shipping_address_line1: str | None
+    shipping_address_line2: str | None
+    shipping_city: str | None
+    shipping_state_code: str | None
+    shipping_pincode: str | None
     shipping_country: str
 
     # Banking Details
-    bank_name: Optional[str]
-    bank_account_number: Optional[str]
-    bank_ifsc_code: Optional[str]
-    bank_branch: Optional[str]
-    payment_mode_preference: Optional[str]
+    bank_name: str | None
+    bank_account_number: str | None
+    bank_ifsc_code: str | None
+    bank_branch: str | None
+    payment_mode_preference: str | None
 
     # Financial Settings
-    control_account_id: Optional[UUID]
-    revenue_account_id: Optional[UUID]
-    payment_terms_id: Optional[UUID]
+    control_account_id: UUID | None
+    revenue_account_id: UUID | None
+    payment_terms_id: UUID | None
     credit_days: int
-    credit_limit: Optional[Decimal]
+    credit_limit: Decimal | None
     credit_limit_enabled: bool
     currency_code: str
 
     # Balances
     opening_balance: Decimal
-    opening_balance_type: Optional[str]
+    opening_balance_type: str | None
     current_balance: Decimal
-    current_balance_type: Optional[str]
+    current_balance_type: str | None
 
     # Notes
-    remarks: Optional[str]
+    remarks: str | None
 
     # Audit
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: datetime | None
     is_active: bool
 
-    class Config:
-        from_attributes = True
 
-
-class CustomerListResponse(BaseModel):
+class CustomerListResponse(CamelSchema):
     """Schema for customer list response (lighter)."""
     id: UUID
     code: str
     name: str
-    display_name: Optional[str]
-    customer_type: Optional[str]
-    gstin: Optional[str]
-    pan: Optional[str]
-    billing_city: Optional[str]
-    billing_state_code: Optional[str]
+    display_name: str | None
+    customer_type: str | None
+    gstin: str | None
+    pan: str | None
+    billing_city: str | None
+    billing_state_code: str | None
     current_balance: Decimal
-    current_balance_type: Optional[str]
+    current_balance_type: str | None
     is_active: bool
-
-    class Config:
-        from_attributes = True

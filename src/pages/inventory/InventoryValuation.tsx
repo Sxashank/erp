@@ -1,8 +1,19 @@
+import {
+  Calculator,
+  Download,
+  TrendingUp,
+  TrendingDown,
+  Warehouse,
+  Package,
+  PieChart,
+  Calendar,
+} from 'lucide-react';
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -19,16 +30,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Calculator,
-  Download,
-  TrendingUp,
-  TrendingDown,
-  Warehouse,
-  Package,
-  PieChart,
-  Calendar,
-} from 'lucide-react';
+
+const ALL_OPTION_VALUE = '__all__';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -77,7 +80,7 @@ const agingAnalysis = [
 ];
 
 const warehouses = [
-  { id: '', name: 'All Warehouses' },
+  { id: ALL_OPTION_VALUE, name: 'All Warehouses' },
   { id: '1', name: 'Main Warehouse' },
   { id: '2', name: 'Branch A Store' },
   { id: '3', name: 'Branch B Store' },
@@ -90,7 +93,7 @@ const valuationMethods = [
 ];
 
 export default function InventoryValuation() {
-  const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [selectedWarehouse, setSelectedWarehouse] = useState(ALL_OPTION_VALUE);
   const [selectedMethod, setSelectedMethod] = useState<'FIFO' | 'LIFO' | 'WEIGHTED_AVG'>('WEIGHTED_AVG');
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
 

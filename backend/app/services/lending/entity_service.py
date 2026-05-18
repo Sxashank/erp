@@ -1,42 +1,41 @@
 """Entity/Borrower service for the lending module."""
 
-from typing import List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ConflictException, NotFoundException
 from app.models.lending.entity import (
     Entity,
-    EntityContact,
     EntityAddress,
     EntityBankAccount,
-    EntityRelation,
+    EntityContact,
     EntityFinancial,
+    EntityRelation,
 )
-from app.models.lending.enums import EntityType, EntityStatus, RiskCategory
+from app.models.lending.enums import EntityStatus, EntityType, RiskCategory
+from app.repositories.lending.entity_repo import (
+    EntityAddressRepository,
+    EntityBankAccountRepository,
+    EntityContactRepository,
+    EntityFinancialRepository,
+    EntityRelationRepository,
+    EntityRepository,
+)
 from app.schemas.lending.entity import (
-    EntityCreate,
-    EntityUpdate,
-    EntityContactCreate,
-    EntityContactUpdate,
     EntityAddressCreate,
     EntityAddressUpdate,
     EntityBankAccountCreate,
     EntityBankAccountUpdate,
-    EntityRelationCreate,
-    EntityRelationUpdate,
+    EntityContactCreate,
+    EntityContactUpdate,
+    EntityCreate,
     EntityFinancialCreate,
     EntityFinancialUpdate,
+    EntityRelationCreate,
+    EntityRelationUpdate,
+    EntityUpdate,
 )
-from app.repositories.lending.entity_repo import (
-    EntityRepository,
-    EntityContactRepository,
-    EntityAddressRepository,
-    EntityBankAccountRepository,
-    EntityRelationRepository,
-    EntityFinancialRepository,
-)
-from app.core.exceptions import NotFoundException, ConflictException, ValidationException
 
 
 class EntityService:
@@ -55,9 +54,7 @@ class EntityService:
     # Entity CRUD
     # =========================================================================
 
-    async def create_entity(
-        self, data: EntityCreate, created_by: UUID
-    ) -> Entity:
+    async def create_entity(self, data: EntityCreate, created_by: UUID) -> Entity:
         """Create a new entity/borrower."""
         # Validate PAN uniqueness
         existing_pan = await self.repo.get_by_pan(data.pan, data.organization_id)
@@ -85,13 +82,11 @@ class EntityService:
             created_by=created_by,
         )
         self.session.add(entity)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(entity)
         return entity
 
-    async def update_entity(
-        self, id: UUID, data: EntityUpdate, updated_by: UUID
-    ) -> Entity:
+    async def update_entity(self, id: UUID, data: EntityUpdate, updated_by: UUID) -> Entity:
         """Update an entity."""
         entity = await self.repo.get(id)
         if not entity:
@@ -114,7 +109,7 @@ class EntityService:
             setattr(entity, field, value)
         entity.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(entity)
         return entity
 
@@ -132,9 +127,7 @@ class EntityService:
             raise NotFoundException("Entity not found")
         return entity
 
-    async def get_entity_by_code(
-        self, entity_code: str, organization_id: UUID
-    ) -> Entity:
+    async def get_entity_by_code(self, entity_code: str, organization_id: UUID) -> Entity:
         """Get entity by code."""
         entity = await self.repo.get_by_code(entity_code, organization_id)
         if not entity:
@@ -147,12 +140,12 @@ class EntityService:
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_type: Optional[EntityType] = None,
-        status: Optional[EntityStatus] = None,
-        risk_category: Optional[RiskCategory] = None,
-        relationship_manager_id: Optional[UUID] = None,
-    ) -> Tuple[List[Entity], int]:
+        search: str | None = None,
+        entity_type: EntityType | None = None,
+        status: EntityStatus | None = None,
+        risk_category: RiskCategory | None = None,
+        relationship_manager_id: UUID | None = None,
+    ) -> tuple[list[Entity], int]:
         """Get all entities for an organization."""
         return await self.repo.get_all_by_organization(
             organization_id=organization_id,
@@ -169,8 +162,8 @@ class EntityService:
     async def get_active_entities(
         self,
         organization_id: UUID,
-        entity_type: Optional[EntityType] = None,
-    ) -> List[Entity]:
+        entity_type: EntityType | None = None,
+    ) -> list[Entity]:
         """Get active entities for dropdowns."""
         return await self.repo.get_active_entities(organization_id, entity_type)
 
@@ -180,27 +173,31 @@ class EntityService:
         if not entity:
             raise NotFoundException("Entity not found")
         entity.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Entity Contact Operations
     # =========================================================================
 
-    async def add_contact(
-        self, data: EntityContactCreate, created_by: UUID
-    ) -> EntityContact:
+    async def add_contact(self, data: EntityContactCreate, created_by: UUID) -> EntityContact:
         """Add a contact to an entity."""
         # Verify entity exists
         entity = await self.repo.get(data.entity_id)
         if not entity:
             raise NotFoundException("Entity not found")
 
+        create_data = data.model_dump()
+        name = create_data.pop("name")
+        name_parts = name.split()
+        create_data["first_name"] = name_parts[0]
+        create_data["last_name"] = " ".join(name_parts[1:]) if len(name_parts) > 1 else "-"
+
         contact = EntityContact(
-            **data.model_dump(),
+            **create_data,
             created_by=created_by,
         )
         self.session.add(contact)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(contact)
         return contact
 
@@ -213,17 +210,22 @@ class EntityService:
             raise NotFoundException("Contact not found")
 
         update_data = data.model_dump(exclude_unset=True)
+        if "name" in update_data:
+            name = update_data.pop("name")
+            name_parts = name.split()
+            update_data["first_name"] = name_parts[0]
+            update_data["last_name"] = " ".join(name_parts[1:]) if len(name_parts) > 1 else "-"
         for field, value in update_data.items():
             setattr(contact, field, value)
         contact.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(contact)
         return contact
 
     async def get_entity_contacts(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityContact]:
+    ) -> list[EntityContact]:
         """Get all contacts for an entity."""
         return await self.contact_repo.get_by_entity(entity_id, include_inactive)
 
@@ -233,15 +235,13 @@ class EntityService:
         if not contact:
             raise NotFoundException("Contact not found")
         contact.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Entity Address Operations
     # =========================================================================
 
-    async def add_address(
-        self, data: EntityAddressCreate, created_by: UUID
-    ) -> EntityAddress:
+    async def add_address(self, data: EntityAddressCreate, created_by: UUID) -> EntityAddress:
         """Add an address to an entity."""
         entity = await self.repo.get(data.entity_id)
         if not entity:
@@ -252,7 +252,7 @@ class EntityService:
             created_by=created_by,
         )
         self.session.add(address)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(address)
         return address
 
@@ -269,13 +269,13 @@ class EntityService:
             setattr(address, field, value)
         address.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(address)
         return address
 
     async def get_entity_addresses(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityAddress]:
+    ) -> list[EntityAddress]:
         """Get all addresses for an entity."""
         return await self.address_repo.get_by_entity(entity_id, include_inactive)
 
@@ -285,7 +285,7 @@ class EntityService:
         if not address:
             raise NotFoundException("Address not found")
         address.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Entity Bank Account Operations
@@ -311,7 +311,7 @@ class EntityService:
             created_by=created_by,
         )
         self.session.add(bank_account)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(bank_account)
         return bank_account
 
@@ -325,9 +325,7 @@ class EntityService:
 
         # If setting as primary, unset other primary accounts
         if data.is_primary:
-            existing_accounts = await self.bank_account_repo.get_by_entity(
-                bank_account.entity_id
-            )
+            existing_accounts = await self.bank_account_repo.get_by_entity(bank_account.entity_id)
             for account in existing_accounts:
                 if account.id != id and account.is_primary:
                     account.is_primary = False
@@ -337,13 +335,13 @@ class EntityService:
             setattr(bank_account, field, value)
         bank_account.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(bank_account)
         return bank_account
 
     async def get_entity_bank_accounts(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityBankAccount]:
+    ) -> list[EntityBankAccount]:
         """Get all bank accounts for an entity."""
         return await self.bank_account_repo.get_by_entity(entity_id, include_inactive)
 
@@ -353,15 +351,13 @@ class EntityService:
         if not bank_account:
             raise NotFoundException("Bank account not found")
         bank_account.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Entity Relation Operations
     # =========================================================================
 
-    async def add_relation(
-        self, data: EntityRelationCreate, created_by: UUID
-    ) -> EntityRelation:
+    async def add_relation(self, data: EntityRelationCreate, created_by: UUID) -> EntityRelation:
         """Add a relation to an entity."""
         entity = await self.repo.get(data.entity_id)
         if not entity:
@@ -372,7 +368,7 @@ class EntityService:
             created_by=created_by,
         )
         self.session.add(relation)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(relation)
         return relation
 
@@ -389,13 +385,13 @@ class EntityService:
             setattr(relation, field, value)
         relation.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(relation)
         return relation
 
     async def get_entity_relations(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityRelation]:
+    ) -> list[EntityRelation]:
         """Get all relations for an entity."""
         return await self.relation_repo.get_by_entity(entity_id, include_inactive)
 
@@ -405,15 +401,13 @@ class EntityService:
         if not relation:
             raise NotFoundException("Relation not found")
         relation.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Entity Financial Operations
     # =========================================================================
 
-    async def add_financial(
-        self, data: EntityFinancialCreate, created_by: UUID
-    ) -> EntityFinancial:
+    async def add_financial(self, data: EntityFinancialCreate, created_by: UUID) -> EntityFinancial:
         """Add financial data for an entity."""
         entity = await self.repo.get(data.entity_id)
         if not entity:
@@ -433,7 +427,7 @@ class EntityService:
             created_by=created_by,
         )
         self.session.add(financial)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(financial)
         return financial
 
@@ -450,19 +444,17 @@ class EntityService:
             setattr(financial, field, value)
         financial.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(financial)
         return financial
 
     async def get_entity_financials(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityFinancial]:
+    ) -> list[EntityFinancial]:
         """Get all financial data for an entity."""
         return await self.financial_repo.get_by_entity(entity_id, include_inactive)
 
-    async def get_latest_financial(
-        self, entity_id: UUID
-    ) -> Optional[EntityFinancial]:
+    async def get_latest_financial(self, entity_id: UUID) -> EntityFinancial | None:
         """Get latest financial data for an entity."""
         return await self.financial_repo.get_latest_financial(entity_id)
 
@@ -472,4 +464,4 @@ class EntityService:
         if not financial:
             raise NotFoundException("Financial data not found")
         financial.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

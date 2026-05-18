@@ -2,7 +2,7 @@
  * Gauge/Progress Widget - displays a gauge or progress indicator
  */
 
-import { GaugeConfig } from '@/types/bi';
+import type { GaugeConfig } from '@/types/bi';
 
 interface GaugeWidgetProps {
   config: GaugeConfig;

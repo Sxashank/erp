@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Save } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,9 +15,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { paymentTermsApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -55,17 +56,7 @@ export function PaymentTermsForm() {
     is_active: true,
   });
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchPaymentTerms(id);
-    }
-  }, [id, isEdit]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -76,11 +67,11 @@ export function PaymentTermsForm() {
         }));
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, [isEdit]);
 
-  const fetchPaymentTerms = async (termsId: string) => {
+  const fetchPaymentTerms = useCallback(async (termsId: string) => {
     try {
       setLoading(true);
       const response = await paymentTermsApi.get(termsId);
@@ -96,12 +87,22 @@ export function PaymentTermsForm() {
         is_active: data.is_active,
       });
     } catch (error) {
-      console.error('Failed to fetch payment terms:', error);
+      logger.error('Failed to fetch payment terms:', error);
       setError('Failed to load payment terms');
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      fetchPaymentTerms(id);
+    }
+  }, [fetchPaymentTerms, id, isEdit]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -135,10 +136,17 @@ export function PaymentTermsForm() {
         });
       }
       navigate('/admin/ap-ar/payment-terms');
-    } catch (error: any) {
-      console.error('Failed to save payment terms:', error);
+    } catch (error: unknown) {
+      logger.error('Failed to save payment terms:', error);
+      const message =
+        typeof error === 'object' &&
+        error !== null &&
+        'response' in error &&
+        typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail === 'string'
+          ? (error as { response: { data: { detail: string } } }).response.data.detail
+          : 'Failed to save payment terms';
       setError(
-        error.response?.data?.detail || 'Failed to save payment terms'
+        message
       );
     } finally {
       setSaving(false);

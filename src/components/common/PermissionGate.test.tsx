@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { PermissionGate } from './PermissionGate';
+
 import { useAuthStore } from '@/stores/authStore';
 
-import { PermissionGate } from './PermissionGate';
 
 function seed(perms: string[]): void {
   useAuthStore.setState({

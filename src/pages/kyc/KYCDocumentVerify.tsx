@@ -1,19 +1,4 @@
-import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  ArrowLeft,
   CheckCircle,
   XCircle,
   ZoomIn,
@@ -22,11 +7,24 @@ import {
   Download,
   Clock,
   User,
-  Calendar,
   FileText,
-  AlertTriangle,
-  Shield,
 } from 'lucide-react';
+import { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 
 // Mock document data
 const documentData = {
@@ -89,14 +87,14 @@ export default function KYCDocumentVerify() {
   const [remarks, setRemarks] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleZoomIn = () => setZoom(prev => Math.min(prev + 25, 200));
-  const handleZoomOut = () => setZoom(prev => Math.max(prev - 25, 50));
-  const handleRotate = () => setRotation(prev => (prev + 90) % 360);
+  const handleZoomIn = () => setZoom((prev) => Math.min(prev + 25, 200));
+  const handleZoomOut = () => setZoom((prev) => Math.max(prev - 25, 50));
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
 
   const handleVerify = async () => {
     setIsSubmitting(true);
     // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     navigate('/admin/kyc/documents');
   };
@@ -104,38 +102,41 @@ export default function KYCDocumentVerify() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'VERIFIED':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Verified</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <CheckCircle className="mr-1 h-3 w-3" />
+            Verified
+          </Badge>
+        );
       case 'REJECTED':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>;
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Rejected
+          </Badge>
+        );
       case 'PENDING':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pending Verification</Badge>;
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Pending Verification
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link to="/admin/kyc/documents">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
-            </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <Shield className="h-6 w-6" />
-              Verify Document
-            </h1>
-            <p className="text-muted-foreground">Review and verify KYC document</p>
-          </div>
-        </div>
-        {getStatusBadge(documentData.verificationStatus)}
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Verify Document"
+        subtitle="Review and verify KYC document"
+        breadcrumbs={[{ label: 'KYC Documents', to: '/admin/kyc/documents' }, { label: 'Verify' }]}
+        actions={getStatusBadge(documentData.verificationStatus)}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Document Preview */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -145,7 +146,7 @@ export default function KYCDocumentVerify() {
                 <Button variant="outline" size="sm" onClick={handleZoomOut}>
                   <ZoomOut className="h-4 w-4" />
                 </Button>
-                <span className="text-sm w-12 text-center">{zoom}%</span>
+                <span className="w-12 text-center text-sm">{zoom}%</span>
                 <Button variant="outline" size="sm" onClick={handleZoomIn}>
                   <ZoomIn className="h-4 w-4" />
                 </Button>
@@ -159,7 +160,7 @@ export default function KYCDocumentVerify() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="bg-gray-100 rounded-lg p-4 min-h-[500px] flex items-center justify-center overflow-auto">
+            <div className="flex min-h-[500px] items-center justify-center overflow-auto rounded-lg bg-gray-100 p-4">
               <div
                 style={{
                   transform: `scale(${zoom / 100}) rotate(${rotation}deg)`,
@@ -167,11 +168,13 @@ export default function KYCDocumentVerify() {
                 }}
               >
                 {/* Placeholder for actual document image */}
-                <div className="bg-white rounded-lg shadow-lg p-8 w-[400px] h-[250px] flex flex-col items-center justify-center">
-                  <FileText className="h-16 w-16 text-gray-400 mb-4" />
-                  <p className="text-lg font-medium">{documentTypeLabels[documentData.documentType]}</p>
+                <div className="flex h-[250px] w-[400px] flex-col items-center justify-center rounded-lg bg-white p-8 shadow-lg">
+                  <FileText className="mb-4 h-16 w-16 text-gray-400" />
+                  <p className="text-lg font-medium">
+                    {documentTypeLabels[documentData.documentType]}
+                  </p>
                   <p className="text-sm text-muted-foreground">{documentData.fileName}</p>
-                  <p className="text-xs text-muted-foreground mt-2">{documentData.fileSize}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{documentData.fileSize}</p>
                 </div>
               </div>
             </div>
@@ -258,17 +261,19 @@ export default function KYCDocumentVerify() {
                 <div className="flex gap-2">
                   <Button
                     variant={verificationAction === 'approve' ? 'default' : 'outline'}
-                    className={verificationAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : ''}
+                    className={
+                      verificationAction === 'approve' ? 'bg-green-600 hover:bg-green-700' : ''
+                    }
                     onClick={() => setVerificationAction('approve')}
                   >
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <CheckCircle className="mr-2 h-4 w-4" />
                     Approve
                   </Button>
                   <Button
                     variant={verificationAction === 'reject' ? 'destructive' : 'outline'}
                     onClick={() => setVerificationAction('reject')}
                   >
-                    <XCircle className="h-4 w-4 mr-2" />
+                    <XCircle className="mr-2 h-4 w-4" />
                     Reject
                   </Button>
                 </div>
@@ -281,7 +286,7 @@ export default function KYCDocumentVerify() {
                         <SelectValue placeholder="Select reason" />
                       </SelectTrigger>
                       <SelectContent>
-                        {rejectionReasons.map(reason => (
+                        {rejectionReasons.map((reason) => (
                           <SelectItem key={reason.value} value={reason.value}>
                             {reason.label}
                           </SelectItem>
@@ -325,7 +330,7 @@ export default function KYCDocumentVerify() {
               <div className="space-y-3">
                 {documentData.previousVerifications.map((entry, index) => (
                   <div key={index} className="flex items-start gap-3 text-sm">
-                    <div className="h-8 w-8 rounded-full bg-gray-100 flex items-center justify-center flex-shrink-0">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100">
                       <User className="h-4 w-4 text-gray-600" />
                     </div>
                     <div>
@@ -334,7 +339,7 @@ export default function KYCDocumentVerify() {
                         by {entry.by} on {entry.at}
                       </p>
                       {entry.remarks && (
-                        <p className="text-muted-foreground mt-1">{entry.remarks}</p>
+                        <p className="mt-1 text-muted-foreground">{entry.remarks}</p>
                       )}
                     </div>
                   </div>

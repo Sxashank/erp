@@ -3,20 +3,6 @@
  * Overview of legal cases, hearings, auctions, and expenses
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Briefcase,
   Scale,
@@ -32,9 +18,26 @@ import {
   Users,
   Home,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { legalAnalyticsApi } from '@/services/legalApi';
 import type { LegalDashboard as LegalDashboardType, LegalHearing, PropertyAuction, PeriodTracking } from '@/types/legal';
 
+import { logger } from "@/lib/logger";
 const forumColors: Record<string, string> = {
   DRT: 'bg-blue-100 text-blue-700',
   DRAT: 'bg-indigo-100 text-indigo-700',
@@ -69,7 +72,7 @@ export default function LegalDashboard() {
       const response = await legalAnalyticsApi.getDashboard();
       setDashboard(response.data);
     } catch (error) {
-      console.error('Failed to fetch dashboard:', error);
+      logger.error('Failed to fetch dashboard:', error);
     } finally {
       setLoading(false);
     }
@@ -346,7 +349,7 @@ export default function LegalDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="font-medium">
-                        {new Date(hearing.hearing_date).toLocaleDateString()}
+                        <DateDisplay date={hearing.hearing_date} />
                       </p>
                       {hearing.hearing_time && (
                         <p className="text-sm text-gray-500">{hearing.hearing_time}</p>
@@ -391,7 +394,7 @@ export default function LegalDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="font-medium">
-                        {new Date(auction.auction_date).toLocaleDateString()}
+                        <DateDisplay date={auction.auction_date} />
                       </p>
                       <p className="text-sm text-green-600">
                         {formatCurrency(auction.reserve_price)}
@@ -432,7 +435,7 @@ export default function LegalDashboard() {
                   <TableRow key={period.id}>
                     <TableCell className="font-medium">{period.loan_account_number}</TableCell>
                     <TableCell>{period.provision_name}</TableCell>
-                    <TableCell>{new Date(period.end_date).toLocaleDateString()}</TableCell>
+                    <TableCell><DateDisplay date={period.end_date} /></TableCell>
                     <TableCell>
                       <span
                         className={

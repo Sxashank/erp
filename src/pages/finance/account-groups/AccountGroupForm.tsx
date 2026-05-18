@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Loader2, Save } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,9 +17,17 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { accountGroupsApi, organizationsApi } from '@/services/api';
-import type { AccountGroup, AccountGroupCreate, AccountGroupUpdate, Organization, PaginatedResponse } from '@/types';
-import { ACCOUNT_NATURES, AccountNature } from '@/types';
+import type {
+  AccountGroup,
+  AccountGroupCreate,
+  AccountGroupUpdate,
+  Organization,
+  PaginatedResponse,
+  AccountNature,
+} from '@/types';
+import { ACCOUNT_NATURES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function AccountGroupForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -40,33 +49,17 @@ export function AccountGroupForm() {
     formState: { errors },
   } = useForm<AccountGroupCreate | AccountGroupUpdate>();
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchAccountGroup(id);
-    }
-  }, [id, isEdit]);
-
-  useEffect(() => {
-    if (selectedOrg && selectedNature) {
-      fetchParentGroups();
-    }
-  }, [selectedOrg, selectedNature]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchParentGroups = async () => {
+  const fetchParentGroups = useCallback(async () => {
     if (!selectedOrg || !selectedNature) return;
     try {
       const response = await accountGroupsApi.list({
@@ -79,11 +72,11 @@ export function AccountGroupForm() {
       const filtered = isEdit ? data.items.filter((g) => g.id !== id) : data.items;
       setParentGroups(filtered);
     } catch (error) {
-      console.error('Failed to fetch parent groups:', error);
+      logger.error('Failed to fetch parent groups:', error);
     }
-  };
+  }, [id, isEdit, selectedNature, selectedOrg]);
 
-  const fetchAccountGroup = async (groupId: string) => {
+  const fetchAccountGroup = useCallback(async (groupId: string) => {
     try {
       setLoading(true);
       const response = await accountGroupsApi.get(groupId);
@@ -100,11 +93,27 @@ export function AccountGroupForm() {
         organization_id: group.organization_id,
       });
     } catch (error) {
-      console.error('Failed to fetch account group:', error);
+      logger.error('Failed to fetch account group:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      fetchAccountGroup(id);
+    }
+  }, [fetchAccountGroup, id, isEdit]);
+
+  useEffect(() => {
+    if (selectedOrg && selectedNature) {
+      fetchParentGroups();
+    }
+  }, [fetchParentGroups, selectedOrg, selectedNature]);
 
   const onSubmit = async (data: AccountGroupCreate | AccountGroupUpdate) => {
     try {
@@ -121,7 +130,7 @@ export function AccountGroupForm() {
       }
       navigate('/admin/finance/account-groups');
     } catch (error) {
-      console.error('Failed to save account group:', error);
+      logger.error('Failed to save account group:', error);
     } finally {
       setSubmitting(false);
     }
@@ -150,19 +159,14 @@ export function AccountGroupForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/account-groups')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Account Group' : 'New Account Group'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {isEdit ? 'Update account group details' : 'Create a new account group'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Account Group' : 'New Account Group'}
+        subtitle={isEdit ? 'Update account group details' : 'Create a new account group'}
+        breadcrumbs={[
+          { label: 'Account Groups', to: '/admin/finance/account-groups' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
@@ -174,11 +178,7 @@ export function AccountGroupForm() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="organization_id">Organization *</Label>
-                <Select
-                  value={selectedOrg}
-                  onValueChange={handleOrgChange}
-                  disabled={isEdit}
-                >
+                <Select value={selectedOrg} onValueChange={handleOrgChange} disabled={isEdit}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select organization" />
                   </SelectTrigger>
@@ -193,11 +193,7 @@ export function AccountGroupForm() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="nature">Account Nature *</Label>
-                <Select
-                  value={selectedNature}
-                  onValueChange={handleNatureChange}
-                  disabled={isEdit}
-                >
+                <Select value={selectedNature} onValueChange={handleNatureChange} disabled={isEdit}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select nature" />
                   </SelectTrigger>
@@ -221,9 +217,7 @@ export function AccountGroupForm() {
                   placeholder="CURR_ASSETS"
                   disabled={isEdit}
                 />
-                {errors.code && (
-                  <p className="text-sm text-red-500">{errors.code.message}</p>
-                )}
+                {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Group Name *</Label>
@@ -232,9 +226,7 @@ export function AccountGroupForm() {
                   {...register('name', { required: 'Name is required' })}
                   placeholder="Current Assets"
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
-                )}
+                {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
               </div>
             </div>
 
@@ -243,7 +235,9 @@ export function AccountGroupForm() {
                 <Label htmlFor="parent_group_id">Parent Group</Label>
                 <Select
                   value={watch('parent_group_id') || 'none'}
-                  onValueChange={(value) => setValue('parent_group_id', value === 'none' ? '' : value)}
+                  onValueChange={(value) =>
+                    setValue('parent_group_id', value === 'none' ? '' : value)
+                  }
                   disabled={!selectedOrg || !selectedNature}
                 >
                   <SelectTrigger>

@@ -2,13 +2,17 @@
  * Employee Salary List Page
  */
 
+import { Plus, Eye, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Eye, Search } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -17,11 +21,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { AmountDisplay } from '@/components/common/AmountDisplay';
-import payrollService, { EmployeeSalary } from '@/services/payrollService';
+import type { EmployeeSalary } from '@/services/payrollService';
+import payrollService from '@/services/payrollService';
 
 export default function EmployeeSalaryList() {
   const navigate = useNavigate();
@@ -67,12 +69,12 @@ export default function EmployeeSalaryList() {
   });
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Employee Salaries"
         subtitle="View and manage employee salary assignments"
         actions={
-          <Button onClick={() => navigate('/payroll/employee-salary/new')}>
+          <Button onClick={() => navigate('/admin/payroll/employee-salary/new')}>
             <Plus className="mr-2 h-4 w-4" />
             Assign Salary
           </Button>
@@ -81,9 +83,9 @@ export default function EmployeeSalaryList() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <div className="flex flex-col justify-between gap-4 md:flex-row">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search employees..."
                 value={searchTerm}
@@ -111,13 +113,13 @@ export default function EmployeeSalaryList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={9} className="py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredSalaries.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={9} className="py-8 text-center">
                     No employee salaries found
                   </TableCell>
                 </TableRow>
@@ -135,12 +137,8 @@ export default function EmployeeSalaryList() {
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      {salary.structure?.structure_name || '-'}
-                    </TableCell>
-                    <TableCell>
-                      {new Date(salary.effective_from).toLocaleDateString()}
-                    </TableCell>
+                    <TableCell>{salary.structure?.structure_name || '-'}</TableCell>
+                    <TableCell><DateDisplay date={salary.effective_from} /></TableCell>
                     <TableCell className="text-right">
                       <AmountDisplay amount={salary.gross_salary} compact />
                     </TableCell>
@@ -154,9 +152,7 @@ export default function EmployeeSalaryList() {
                       <Badge variant="outline">Rev {salary.revision_number}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={salary.status === 'ACTIVE' ? 'default' : 'secondary'}
-                      >
+                      <Badge variant={salary.status === 'ACTIVE' ? 'default' : 'secondary'}>
                         {salary.status}
                       </Badge>
                     </TableCell>
@@ -164,9 +160,7 @@ export default function EmployeeSalaryList() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() =>
-                          navigate(`/payroll/employee-salary/${salary.id}`)
-                        }
+                        onClick={() => navigate(`/admin/payroll/employee-salary/${salary.id}`)}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>

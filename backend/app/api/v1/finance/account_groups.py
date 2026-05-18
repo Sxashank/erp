@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.account_group_service import AccountGroupService
 from app.schemas.finance.account_group import (
@@ -21,14 +21,13 @@ from app.schemas.base import PaginatedResponse, MessageResponse
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[AccountGroupResponse])
+@router.get("", response_model=PaginatedResponse[AccountGroupResponse], response_model_by_alias=True)
 async def list_account_groups(
-    organization_id: UUID = Query(...),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of account groups.
@@ -36,18 +35,18 @@ async def list_account_groups(
     """
     service = AccountGroupService(db)
     skip = (page - 1) * page_size
-    groups, total = await service.get_all(organization_id, skip, page_size, include_inactive)
+    groups, total = await service.get_all(current_user.organization_id, skip, page_size, include_inactive)
 
     items = [_group_to_response(g) for g in groups]
 
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=AccountGroupResponse)
+@router.post("", response_model=AccountGroupResponse, response_model_by_alias=True)
 async def create_account_group(
     data: AccountGroupCreate,
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new account group.
@@ -59,26 +58,25 @@ async def create_account_group(
     return _group_to_response(group)
 
 
-@router.get("/tree", response_model=List[AccountGroupTreeResponse])
+@router.get("/tree", response_model=List[AccountGroupTreeResponse], response_model_by_alias=True)
 async def get_account_group_tree(
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get account group hierarchy tree.
     Requires FIN_COA_VIEW permission.
     """
     service = AccountGroupService(db)
-    tree = await service.get_tree(organization_id)
+    tree = await service.get_tree(current_user.organization_id)
     return tree
 
 
-@router.get("/{group_id}", response_model=AccountGroupResponse)
+@router.get("/{group_id}", response_model=AccountGroupResponse, response_model_by_alias=True)
 async def get_account_group(
     group_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get account group by ID.
@@ -90,12 +88,12 @@ async def get_account_group(
     return _group_to_response(group)
 
 
-@router.put("/{group_id}", response_model=AccountGroupResponse)
+@router.put("/{group_id}", response_model=AccountGroupResponse, response_model_by_alias=True)
 async def update_account_group(
     group_id: UUID,
     data: AccountGroupUpdate,
     current_user: User = Depends(RequirePermissions("FIN_COA_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an account group.
@@ -107,11 +105,11 @@ async def update_account_group(
     return _group_to_response(group)
 
 
-@router.delete("/{group_id}", response_model=MessageResponse)
+@router.delete("/{group_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_account_group(
     group_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete an account group.
@@ -123,11 +121,11 @@ async def delete_account_group(
     return MessageResponse(message="Account group deleted successfully")
 
 
-@router.get("/{group_id}/children", response_model=List[AccountGroupResponse])
+@router.get("/{group_id}/children", response_model=List[AccountGroupResponse], response_model_by_alias=True)
 async def get_account_group_children(
     group_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get child account groups.

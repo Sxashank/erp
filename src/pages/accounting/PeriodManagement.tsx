@@ -1,9 +1,18 @@
-import { useState } from 'react';
+import {
+  Calendar,
+  Lock,
+  Unlock,
+  Clock,
+  AlertTriangle,
+  ChevronRight,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -12,109 +21,80 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Calendar,
-  Lock,
-  Unlock,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertTriangle,
-  Settings,
-  Play,
-  ChevronRight,
-} from 'lucide-react';
+import { financialYearsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-// Mock periods data
-const periods = [
-  {
-    id: 'FY2024-25-Q4-M3',
-    name: 'March 2025',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q4',
-    startDate: '2025-03-01',
-    endDate: '2025-03-31',
-    status: 'FUTURE',
-    glPostings: 0,
-    pendingPostings: 0,
-    isYearEnd: true,
-  },
-  {
-    id: 'FY2024-25-Q4-M2',
-    name: 'February 2025',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q4',
-    startDate: '2025-02-01',
-    endDate: '2025-02-28',
-    status: 'FUTURE',
-    glPostings: 0,
-    pendingPostings: 0,
-    isYearEnd: false,
-  },
-  {
-    id: 'FY2024-25-Q4-M1',
-    name: 'January 2025',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q4',
-    startDate: '2025-01-01',
-    endDate: '2025-01-31',
-    status: 'OPEN',
-    glPostings: 45,
-    pendingPostings: 3,
-    isYearEnd: false,
-  },
-  {
-    id: 'FY2024-25-Q3-M3',
-    name: 'December 2024',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q3',
-    startDate: '2024-12-01',
-    endDate: '2024-12-31',
-    status: 'SOFT_CLOSED',
-    glPostings: 120,
-    pendingPostings: 0,
-    isYearEnd: false,
-  },
-  {
-    id: 'FY2024-25-Q3-M2',
-    name: 'November 2024',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q3',
-    startDate: '2024-11-01',
-    endDate: '2024-11-30',
-    status: 'CLOSED',
-    glPostings: 98,
-    pendingPostings: 0,
-    isYearEnd: false,
-  },
-  {
-    id: 'FY2024-25-Q3-M1',
-    name: 'October 2024',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q3',
-    startDate: '2024-10-01',
-    endDate: '2024-10-31',
-    status: 'CLOSED',
-    glPostings: 105,
-    pendingPostings: 0,
-    isYearEnd: false,
-  },
-  {
-    id: 'FY2024-25-Q2-M3',
-    name: 'September 2024',
-    fiscalYear: 'FY 2024-25',
-    quarter: 'Q2',
-    startDate: '2024-09-01',
-    endDate: '2024-09-30',
-    status: 'CLOSED',
-    glPostings: 112,
-    pendingPostings: 0,
-    isYearEnd: false,
-  },
-];
+import { logger } from "@/lib/logger";
+interface AccountingPeriod {
+  id: string;
+  name: string;
+  fiscalYear: string;
+  quarter: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  glPostings: number;
+  pendingPostings: number;
+  isYearEnd: boolean;
+  financialYearId: string;
+}
+
+interface FinancialYearPeriodDto {
+  id: string;
+  name: string;
+  period_number?: number | string | null;
+  start_date: string;
+  end_date: string;
+  is_closed?: boolean | null;
+  is_locked?: boolean | null;
+}
+
+interface FinancialYearDto {
+  id: string;
+  code?: string | null;
+  name: string;
+  periods?: FinancialYearPeriodDto[];
+}
 
 export default function PeriodManagement() {
-  const [selectedPeriod, setSelectedPeriod] = useState<typeof periods[0] | null>(null);
+  const organizationId = useActiveOrganizationId();
+  const [periods, setPeriods] = useState<AccountingPeriod[]>([]);
+  const [selectedPeriod, setSelectedPeriod] = useState<AccountingPeriod | null>(null);
+
+  useEffect(() => {
+    const loadPeriods = async () => {
+      if (!organizationId) return;
+      try {
+        const response = await financialYearsApi.list({
+          organization_id: organizationId,
+          page_size: 100,
+        });
+        const financialYears = (response.data.items || []) as FinancialYearDto[];
+        const flattened = financialYears.flatMap((fy) =>
+          (fy.periods || []).map((period) => ({
+            id: period.id,
+            name: period.name,
+            fiscalYear: fy.code || fy.name,
+            quarter: `Q${Math.ceil(Number(period.period_number || 1) / 3)}`,
+            startDate: period.start_date,
+            endDate: period.end_date,
+            status: period.is_closed ? 'CLOSED' : period.is_locked ? 'SOFT_CLOSED' : 'OPEN',
+            glPostings: 0,
+            pendingPostings: 0,
+            isYearEnd: Number(period.period_number) === 12,
+            financialYearId: fy.id,
+          })),
+        );
+        setPeriods(flattened);
+        setSelectedPeriod((current) => current || flattened.find((p: AccountingPeriod) => p.status === 'OPEN') || flattened[0] || null);
+      } catch (error) {
+        logger.error('Failed to load accounting periods:', error);
+        setPeriods([]);
+      }
+    };
+
+    loadPeriods();
+  }, [organizationId]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {

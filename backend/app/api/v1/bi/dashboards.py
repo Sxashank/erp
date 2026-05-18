@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.bi.dashboard_service import DashboardService
 from app.schemas.bi.dashboard import (
@@ -148,11 +148,11 @@ def _to_landing_response(dashboard, landing_order: int = 0) -> LandingDashboardR
     )
 
 
-@router.get("", response_model=List[DashboardListResponse])
+@router.get("", response_model=List[DashboardListResponse], response_model_by_alias=True)
 async def list_dashboards(
     organization_id: Optional[UUID] = None,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List all dashboards for the organization."""
     service = DashboardService(db)
@@ -161,10 +161,10 @@ async def list_dashboards(
     return [_to_list_response(d) for d in dashboards]
 
 
-@router.get("/landing", response_model=List[LandingDashboardResponse])
+@router.get("/landing", response_model=List[LandingDashboardResponse], response_model_by_alias=True)
 async def get_landing_dashboards(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get dashboards for current user's landing page."""
     if not current_user.organization_id:
@@ -190,10 +190,10 @@ async def get_landing_dashboards(
     return sorted(results, key=lambda x: (x.landing_order, x.display_order))
 
 
-@router.get("/accessible", response_model=List[DashboardListResponse])
+@router.get("/accessible", response_model=List[DashboardListResponse], response_model_by_alias=True)
 async def list_accessible_dashboards(
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List dashboards accessible to current user."""
     if not current_user.organization_id:
@@ -208,11 +208,11 @@ async def list_accessible_dashboards(
     return [_to_list_response(d) for d in dashboards]
 
 
-@router.post("", response_model=DashboardResponse)
+@router.post("", response_model=DashboardResponse, response_model_by_alias=True)
 async def create_dashboard(
     data: DashboardCreate,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new dashboard."""
     service = DashboardService(db)
@@ -221,11 +221,11 @@ async def create_dashboard(
     return _to_response(dashboard)
 
 
-@router.get("/{dashboard_id}", response_model=DashboardResponse)
+@router.get("/{dashboard_id}", response_model=DashboardResponse, response_model_by_alias=True)
 async def get_dashboard(
     dashboard_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a dashboard by ID."""
     service = DashboardService(db)
@@ -233,12 +233,12 @@ async def get_dashboard(
     return _to_response(dashboard)
 
 
-@router.put("/{dashboard_id}", response_model=DashboardResponse)
+@router.put("/{dashboard_id}", response_model=DashboardResponse, response_model_by_alias=True)
 async def update_dashboard(
     dashboard_id: UUID,
     data: DashboardUpdate,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a dashboard."""
     service = DashboardService(db)
@@ -247,11 +247,11 @@ async def update_dashboard(
     return _to_response(dashboard)
 
 
-@router.delete("/{dashboard_id}", response_model=MessageResponse)
+@router.delete("/{dashboard_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_dashboard(
     dashboard_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a dashboard."""
     service = DashboardService(db)
@@ -260,11 +260,11 @@ async def delete_dashboard(
     return MessageResponse(message="Dashboard deleted successfully", success=True)
 
 
-@router.post("/{dashboard_id}/set-default", response_model=DashboardResponse)
+@router.post("/{dashboard_id}/set-default", response_model=DashboardResponse, response_model_by_alias=True)
 async def set_default_dashboard(
     dashboard_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Set a dashboard as default for the organization."""
     service = DashboardService(db)
@@ -279,11 +279,11 @@ async def set_default_dashboard(
 
 
 # Role Access endpoints
-@router.get("/{dashboard_id}/access", response_model=List[DashboardRoleAccessResponse])
+@router.get("/{dashboard_id}/access", response_model=List[DashboardRoleAccessResponse], response_model_by_alias=True)
 async def list_dashboard_access(
     dashboard_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_ACCESS_MANAGE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List role access for a dashboard."""
     service = DashboardService(db)
@@ -291,12 +291,12 @@ async def list_dashboard_access(
     return [_to_role_access_response(a) for a in access_list]
 
 
-@router.post("/{dashboard_id}/access", response_model=DashboardRoleAccessResponse)
+@router.post("/{dashboard_id}/access", response_model=DashboardRoleAccessResponse, response_model_by_alias=True)
 async def create_dashboard_access(
     dashboard_id: UUID,
     data: DashboardRoleAccessCreate,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_ACCESS_MANAGE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create role access for a dashboard."""
     service = DashboardService(db)
@@ -305,13 +305,13 @@ async def create_dashboard_access(
     return _to_role_access_response(access)
 
 
-@router.put("/{dashboard_id}/access/{access_id}", response_model=DashboardRoleAccessResponse)
+@router.put("/{dashboard_id}/access/{access_id}", response_model=DashboardRoleAccessResponse, response_model_by_alias=True)
 async def update_dashboard_access(
     dashboard_id: UUID,
     access_id: UUID,
     data: DashboardRoleAccessUpdate,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_ACCESS_MANAGE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update role access for a dashboard."""
     service = DashboardService(db)
@@ -320,12 +320,12 @@ async def update_dashboard_access(
     return _to_role_access_response(access)
 
 
-@router.delete("/{dashboard_id}/access/{access_id}", response_model=MessageResponse)
+@router.delete("/{dashboard_id}/access/{access_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_dashboard_access(
     dashboard_id: UUID,
     access_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_ACCESS_MANAGE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete role access for a dashboard."""
     service = DashboardService(db)

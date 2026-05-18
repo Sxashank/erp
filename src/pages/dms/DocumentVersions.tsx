@@ -3,9 +3,6 @@
  * Manage document versions, upload new versions, compare versions
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useDropzone } from 'react-dropzone';
 import {
   FileText,
   Upload,
@@ -13,19 +10,19 @@ import {
   ArrowLeft,
   Check,
   Clock,
-  User,
   Loader2,
   File,
   FileImage,
   FileSpreadsheet,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Progress } from '@/components/ui/progress';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +31,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -42,11 +42,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { documentApi } from '@/services/dmsApi';
 import type { DMSDocument, DocumentVersion } from '@/types/dms';
 import { formatFileSize } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
 export default function DocumentVersions() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -67,14 +69,11 @@ export default function DocumentVersions() {
     if (!id) return;
 
     try {
-      const [doc, vers] = await Promise.all([
-        documentApi.get(id),
-        documentApi.getVersions(id),
-      ]);
+      const [doc, vers] = await Promise.all([documentApi.get(id), documentApi.getVersions(id)]);
       setDocument(doc);
       setVersions(vers);
     } catch (error) {
-      console.error('Failed to fetch document:', error);
+      logger.error('Failed to fetch document:', error);
       toast({
         title: 'Error',
         description: 'Failed to load document versions',
@@ -191,10 +190,10 @@ export default function DocumentVersions() {
   if (!document) {
     return (
       <div className="p-6 text-center">
-        <FileText className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-        <h2 className="text-xl font-semibold mb-2">Document Not Found</h2>
+        <FileText className="mx-auto mb-4 h-16 w-16 text-muted-foreground" />
+        <h2 className="mb-2 text-xl font-semibold">Document Not Found</h2>
         <Button onClick={() => navigate('/admin/dms')}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
+          <ArrowLeft className="mr-2 h-4 w-4" />
           Back to DMS
         </Button>
       </div>
@@ -203,27 +202,21 @@ export default function DocumentVersions() {
 
   return (
     <div className="space-y-6 p-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-5 w-5" />
+      <PageHeader
+        title={document.name}
+        subtitle={`Version History • ${versions.length} version${versions.length !== 1 ? 's' : ''}`}
+        breadcrumbs={[
+          { label: 'DMS', to: '/admin/dms' },
+          { label: document.name, to: `/admin/dms/documents/${id}` },
+          { label: 'Versions' },
+        ]}
+        actions={
+          <Button onClick={() => setShowUploadDialog(true)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Upload New Version
           </Button>
-          <div className="flex items-center gap-4">
-            {getDocIcon()}
-            <div>
-              <h1 className="text-2xl font-bold">{document.name}</h1>
-              <p className="text-muted-foreground">
-                Version History • {versions.length} version{versions.length !== 1 ? 's' : ''}
-              </p>
-            </div>
-          </div>
-        </div>
-        <Button onClick={() => setShowUploadDialog(true)}>
-          <Upload className="h-4 w-4 mr-2" />
-          Upload New Version
-        </Button>
-      </div>
+        }
+      />
 
       {/* Current Version Card */}
       <Card>
@@ -232,19 +225,17 @@ export default function DocumentVersions() {
             <Check className="h-5 w-5 text-green-500" />
             Current Version
           </CardTitle>
-          <CardDescription>
-            This is the active version of the document
-          </CardDescription>
+          <CardDescription>This is the active version of the document</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">Version</p>
-              <p className="font-medium text-lg">v{document.current_version}</p>
+              <p className="text-lg font-medium">v{document.current_version}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">File Name</p>
-              <p className="font-medium truncate">{document.file_name}</p>
+              <p className="truncate font-medium">{document.file_name}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">File Size</p>
@@ -264,9 +255,7 @@ export default function DocumentVersions() {
       <Card>
         <CardHeader>
           <CardTitle>Version History</CardTitle>
-          <CardDescription>
-            All versions of this document
-          </CardDescription>
+          <CardDescription>All versions of this document</CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -295,14 +284,12 @@ export default function DocumentVersions() {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       <File className="h-4 w-4 text-muted-foreground" />
-                      <span className="truncate max-w-[200px]">
-                        {version.file_name}
-                      </span>
+                      <span className="max-w-[200px] truncate">{version.file_name}</span>
                     </div>
                   </TableCell>
                   <TableCell>{formatFileSize(version.file_size)}</TableCell>
                   <TableCell>
-                    <span className="text-sm text-muted-foreground line-clamp-1">
+                    <span className="line-clamp-1 text-sm text-muted-foreground">
                       {version.change_notes || '-'}
                     </span>
                   </TableCell>
@@ -315,7 +302,7 @@ export default function DocumentVersions() {
                   <TableCell>
                     {version.is_current ? (
                       <Badge variant="default" className="bg-green-500">
-                        <Check className="h-3 w-3 mr-1" />
+                        <Check className="mr-1 h-3 w-3" />
                         Current
                       </Badge>
                     ) : (
@@ -328,7 +315,7 @@ export default function DocumentVersions() {
                       size="sm"
                       onClick={() => handleDownloadVersion(version)}
                     >
-                      <Download className="h-4 w-4 mr-1" />
+                      <Download className="mr-1 h-4 w-4" />
                       Download
                     </Button>
                   </TableCell>
@@ -338,7 +325,7 @@ export default function DocumentVersions() {
           </Table>
 
           {versions.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="py-8 text-center text-muted-foreground">
               No version history available
             </div>
           )}
@@ -351,8 +338,7 @@ export default function DocumentVersions() {
           <DialogHeader>
             <DialogTitle>Upload New Version</DialogTitle>
             <DialogDescription>
-              Upload a new version of "{document.name}". This will become the
-              current version.
+              Upload a new version of "{document.name}". This will become the current version.
             </DialogDescription>
           </DialogHeader>
 
@@ -360,10 +346,7 @@ export default function DocumentVersions() {
             {/* Dropzone */}
             <div
               {...getRootProps()}
-              className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors
-                ${isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'}
-                ${uploadFile ? 'border-green-500 bg-green-50' : ''}
-              `}
+              className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors ${isDragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25 hover:border-primary/50'} ${uploadFile ? 'border-green-500 bg-green-50' : ''} `}
             >
               <input {...getInputProps()} />
               {uploadFile ? (
@@ -378,11 +361,11 @@ export default function DocumentVersions() {
                 </div>
               ) : (
                 <>
-                  <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
+                  <Upload className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
                   <p className="text-sm font-medium">
                     {isDragActive ? 'Drop file here' : 'Click or drag file to upload'}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     Current: {document.file_name}
                   </p>
                 </>
@@ -403,7 +386,7 @@ export default function DocumentVersions() {
             {/* Upload Progress */}
             {uploading && (
               <div>
-                <div className="flex justify-between text-sm mb-1">
+                <div className="mb-1 flex justify-between text-sm">
                   <span>Uploading...</span>
                   <span>{uploadProgress}%</span>
                 </div>
@@ -424,18 +407,15 @@ export default function DocumentVersions() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleUploadVersion}
-              disabled={!uploadFile || uploading}
-            >
+            <Button onClick={handleUploadVersion} disabled={!uploadFile || uploading}>
               {uploading ? (
                 <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Uploading...
                 </>
               ) : (
                 <>
-                  <Upload className="h-4 w-4 mr-2" />
+                  <Upload className="mr-2 h-4 w-4" />
                   Upload Version
                 </>
               )}

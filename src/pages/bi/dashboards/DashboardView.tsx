@@ -2,16 +2,19 @@
  * Dashboard View Page - read-only dashboard view
  */
 
+import { Edit, Loader2, RefreshCw } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Loader2, RefreshCw } from 'lucide-react';
+
+import { ResponsiveDashboardGrid } from '@/components/bi/DashboardGrid';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { biDashboardApi } from '@/services/biApi';
-import { Dashboard } from '@/types/bi';
-import { ResponsiveDashboardGrid } from '@/components/bi/DashboardGrid';
 import { hasPermission, Permissions } from '@/lib/permissions';
+import { biDashboardApi } from '@/services/biApi';
+import type { Dashboard } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
 export function DashboardView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -32,7 +35,7 @@ export function DashboardView() {
       const response = await biDashboardApi.get(id);
       setDashboard(response.data);
     } catch (error) {
-      console.error('Error fetching dashboard:', error);
+      logger.error('Error fetching dashboard:', error);
       toast({
         title: 'Error',
         description: 'Failed to load dashboard',
@@ -57,7 +60,7 @@ export function DashboardView() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -65,13 +68,9 @@ export function DashboardView() {
 
   if (!dashboard) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-muted-foreground">Dashboard not found</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => navigate('/admin/bi/dashboards')}
-        >
+        <Button variant="outline" className="mt-4" onClick={() => navigate('/admin/bi/dashboards')}>
           Back to Dashboards
         </Button>
       </div>
@@ -80,30 +79,27 @@ export function DashboardView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/bi/dashboards')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{dashboard.name}</h1>
-            {dashboard.description && (
-              <p className="text-muted-foreground">{dashboard.description}</p>
+      <PageHeader
+        title={dashboard.name}
+        subtitle={dashboard.description || undefined}
+        breadcrumbs={[
+          { label: 'Dashboards', to: '/admin/bi/dashboards' },
+          { label: dashboard.name },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={handleRefresh}>
+              <RefreshCw className="h-4 w-4" />
+            </Button>
+            {canEdit && (
+              <Button onClick={() => navigate(`/admin/bi/dashboards/${id}/edit`)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Dashboard
+              </Button>
             )}
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={handleRefresh}>
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          {canEdit && (
-            <Button onClick={() => navigate(`/admin/bi/dashboards/${id}/edit`)}>
-              <Edit className="h-4 w-4 mr-2" />
-              Edit Dashboard
-            </Button>
-          )}
-        </div>
-      </div>
+        }
+      />
 
       <div key={refreshKey}>
         <ResponsiveDashboardGrid

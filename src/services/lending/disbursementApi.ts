@@ -1,211 +1,258 @@
 /**
  * Disbursement API Service
- * API calls for Loan Disbursement management
+ *
+ * The list endpoint emits camelCase via Pydantic CamelSchema on the
+ * backend (`response_model_by_alias=True`) — no client-side mapping.
+ *
+ * Monetary fields are JSON strings on the wire (Pydantic Decimal —
+ * CLAUDE.md §6.2). Coerce via `Number(...)` for display-only sums.
+ *
+ * Mutation endpoints require an `Idempotency-Key` header (CLAUDE.md §6.3 —
+ * the BE idempotency middleware lists `lending/disbursements` as a financial
+ * mutation resource).
  */
 
 import api from '../api';
-import type {
-  Disbursement,
-  DisbursementFilters,
-  PaginatedResponse,
-} from '@/types/lending';
+
+import type { DisbursementFilters, PaginatedResponse } from '@/types/lending';
 
 const BASE_URL = '/lending/disbursements';
 
-// ============== Disbursement Request CRUD ==============
+// ============== List item (matches DisbursementListResponse) ==============
 
-export async function getDisbursements(filters?: DisbursementFilters): Promise<PaginatedResponse<Disbursement>> {
-  const params = new URLSearchParams();
+export type DisbursementStatusValue =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'PROCESSED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'FAILED'
+  | 'REVERSED';
 
-  if (filters?.search) params.append('search', filters.search);
-  if (filters?.loan_account_id) params.append('loan_account_id', filters.loan_account_id);
-  if (filters?.entity_id) params.append('entity_id', filters.entity_id);
-  if (filters?.status) params.append('status', filters.status);
-  if (filters?.date_from) params.append('date_from', filters.date_from);
-  if (filters?.date_to) params.append('date_to', filters.date_to);
-  if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.page_size) params.append('page_size', filters.page_size.toString());
-
-  const response = await api.get<PaginatedResponse<Disbursement>>(`${BASE_URL}?${params.toString()}`);
-  return response.data;
+export interface DisbursementListItem {
+  id: string;
+  disbursementReference: string;
+  disbursementNumber: number;
+  loanAccountId: string;
+  loanAccountNumber: string | null;
+  entityId: string | null;
+  entityName: string | null;
+  requestedAmount: string;
+  approvedAmount: string | null;
+  disbursedAmount: string | null;
+  requestDate: string;
+  disbursementDate: string | null;
+  status: DisbursementStatusValue;
+  beneficiaryName: string;
+  utrNumber: string | null;
 }
 
-export async function getDisbursement(disbursementId: string): Promise<Disbursement> {
-  const response = await api.get<Disbursement>(`${BASE_URL}/${disbursementId}`);
-  return response.data;
-}
+// ============== Mutation request / response shapes ==============
 
-export interface CreateDisbursementRequest {
-  loan_account_id: string;
-  tranche_number?: number;
-  requested_amount: number;
-  disbursement_date: string;
-  bank_account_id: string;
+/**
+ * Body for `POST /lending/disbursements/` — matches the BE
+ * `DisbursementCreateRequest` Pydantic model.
+ *
+ * Decimal fields are sent as strings (CLAUDE.md §6.2).
+ */
+export interface DisbursementCreateBody {
+  loanAccountId: string;
+  requestedAmount: string;
+  beneficiaryName: string;
+  beneficiaryAccountNumber: string;
+  beneficiaryIfsc: string;
+  disbursementMode: string;
+  scheduledDate?: string;
   purpose?: string;
-  milestone_id?: string;
+  beneficiaryBank?: string;
+  bankAccountId?: string;
+  milestoneId?: string;
+}
+
+/** Matches BE `DisbursementResponse`. */
+export interface DisbursementCreateResponse {
+  id: string;
+  disbursementReference: string;
+  loanAccountId: string;
+  disbursementNumber: number;
+  requestedAmount: string;
+  approvedAmount: string | null;
+  disbursedAmount: string | null;
+  status: string;
+  disbursementMode: string;
+  beneficiaryName: string;
+  requestDate: string;
+  scheduledDate: string | null;
+  disbursementDate: string | null;
+  conditionsVerified: boolean;
+}
+
+/** Body for `POST /lending/disbursements/approve`. */
+export interface ApprovalBody {
+  disbursementId: string;
+  approvedAmount?: string;
   remarks?: string;
 }
 
-export async function createDisbursementRequest(data: CreateDisbursementRequest): Promise<Disbursement> {
-  const response = await api.post<Disbursement>(`${BASE_URL}/request`, data);
-  return response.data;
+/** Body for `POST /lending/disbursements/verify-conditions`. */
+export interface VerifyConditionsBody {
+  disbursementId: string;
+  verificationNotes?: string;
 }
 
-export async function updateDisbursementRequest(
-  disbursementId: string,
-  data: Partial<CreateDisbursementRequest>
-): Promise<Disbursement> {
-  const response = await api.put<Disbursement>(`${BASE_URL}/${disbursementId}`, data);
-  return response.data;
+export interface VerifyConditionsResponse {
+  disbursementId: string;
+  conditionsVerified: boolean;
+  verifiedAt: string | null;
+  message: string;
 }
 
-export async function deleteDisbursementRequest(disbursementId: string): Promise<void> {
-  await api.delete(`${BASE_URL}/${disbursementId}`);
+/** Body for `POST /lending/disbursements/reject`. */
+export interface RejectBody {
+  disbursementId: string;
+  rejectionReason: string;
 }
 
-// ============== Condition Verification ==============
-
-export async function getPendingConditions(loanAccountId: string): Promise<Array<{
-  condition_id: string;
-  condition_type: 'PRE_DISBURSEMENT' | 'POST_DISBURSEMENT';
-  description: string;
-  is_complied: boolean;
-  compliance_date?: string;
-}>> {
-  const response = await api.get(`${BASE_URL}/conditions/${loanAccountId}/pending`);
-  return response.data;
+/** Body for `POST /lending/disbursements/process`. */
+export interface ProcessBody {
+  disbursementId: string;
+  disbursedAmount: string;
+  sourceAccountId?: string;
+  disbursementDate?: string;
+  valueDate?: string;
+  utrNumber?: string;
+  chequeNumber?: string;
+  disbursementCharges?: string;
 }
 
-export async function verifyCondition(
-  conditionId: string,
-  data: { is_complied: boolean; remarks?: string; document_path?: string }
-): Promise<void> {
-  await api.post(`${BASE_URL}/conditions/${conditionId}/verify`, data);
-}
-
-// ============== Workflow Actions ==============
-
-export async function submitDisbursement(disbursementId: string, remarks?: string): Promise<Disbursement> {
-  const response = await api.post<Disbursement>(`${BASE_URL}/${disbursementId}/submit`, { remarks });
-  return response.data;
-}
-
-export async function approveDisbursement(
-  disbursementId: string,
-  data: { action: 'APPROVE' | 'REJECT' | 'RETURN'; remarks: string }
-): Promise<Disbursement> {
-  const response = await api.post<Disbursement>(`${BASE_URL}/${disbursementId}/approve`, data);
-  return response.data;
-}
-
-// ============== Fund Transfer ==============
-
-export async function initiateFundTransfer(
-  disbursementId: string,
-  data?: { payment_mode?: 'NEFT' | 'RTGS' | 'IMPS'; scheduled_time?: string }
-): Promise<{
-  transfer_id: string;
+/**
+ * Shape of the generic action ack envelope used by approve / reject /
+ * process / cancel / reverse. Extra fields beyond `disbursementId` and
+ * `status` vary by action — keep this loose.
+ */
+export interface DisbursementActionResponse {
+  disbursementId: string;
   status: string;
-  utr_number?: string;
-}> {
-  const response = await api.post(`${BASE_URL}/${disbursementId}/transfer/initiate`, data);
-  return response.data;
+  message: string;
+  approvedAmount?: string | null;
+  approvalDate?: string | null;
+  disbursedAmount?: string | null;
+  netDisbursement?: string | null;
+  utrNumber?: string | null;
+  loanAccount?: {
+    id: string;
+    totalDisbursed: string;
+    undisbursed?: string;
+    principalOutstanding: string;
+    status: string;
+  };
 }
 
-export async function getTransferStatus(disbursementId: string): Promise<{
-  transfer_id: string;
-  status: 'INITIATED' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
-  utr_number?: string;
-  failure_reason?: string;
-  completed_at?: string;
-}> {
-  const response = await api.get(`${BASE_URL}/${disbursementId}/transfer/status`);
-  return response.data;
+// ============== Real BE endpoints ==============
+
+/**
+ * Build an `Idempotency-Key` header. The BE idempotency middleware
+ * requires it on every POST to `/lending/disbursements/*` (CLAUDE.md §6.3).
+ */
+function idempotencyHeaders(): Record<string, string> {
+  return { 'Idempotency-Key': crypto.randomUUID() };
 }
 
-export async function confirmDisbursement(
-  disbursementId: string,
-  data: { utr_number: string; disbursement_date: string; remarks?: string }
-): Promise<Disbursement> {
-  const response = await api.post<Disbursement>(`${BASE_URL}/${disbursementId}/confirm`, data);
-  return response.data;
-}
-
-// ============== Tranche Management ==============
-
-export async function getTranches(loanAccountId: string): Promise<Array<{
-  tranche_number: number;
-  sanctioned_amount: number;
-  disbursed_amount: number;
-  pending_amount: number;
-  status: 'PENDING' | 'PARTIAL' | 'FULLY_DISBURSED';
-  disbursements: Disbursement[];
-}>> {
-  const response = await api.get(`${BASE_URL}/tranches/${loanAccountId}`);
-  return response.data;
-}
-
-export async function getDisbursementsByAccount(loanAccountId: string): Promise<Disbursement[]> {
-  const response = await api.get<Disbursement[]>(`${BASE_URL}/account/${loanAccountId}`);
-  return response.data;
-}
-
-// ============== Utilization Certificate ==============
-
-export async function uploadUtilizationCertificate(
-  disbursementId: string,
-  formData: FormData
-): Promise<{ document_id: string; document_url: string }> {
-  const response = await api.post(`${BASE_URL}/${disbursementId}/utilization-certificate`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
+/**
+ * `POST /lending/disbursements/` — create a new disbursement request.
+ * Maps to `DisbursementService.create_disbursement_request`.
+ */
+export async function createDisbursement(
+  body: DisbursementCreateBody,
+): Promise<DisbursementCreateResponse> {
+  const response = await api.post<DisbursementCreateResponse>(`${BASE_URL}/`, body, {
+    headers: idempotencyHeaders(),
   });
   return response.data;
 }
 
-export async function getUtilizationCertificates(loanAccountId: string): Promise<Array<{
-  document_id: string;
-  disbursement_id: string;
-  tranche_number: number;
-  document_url: string;
-  uploaded_at: string;
-  verified: boolean;
-}>> {
-  const response = await api.get(`${BASE_URL}/utilization-certificates/${loanAccountId}`);
+/**
+ * `POST /lending/disbursements/approve` — approve a disbursement request.
+ * Maps to `DisbursementService.approve_disbursement`.
+ */
+export async function approveDisbursementRequest(
+  body: ApprovalBody,
+): Promise<DisbursementActionResponse> {
+  const response = await api.post<DisbursementActionResponse>(`${BASE_URL}/approve`, body, {
+    headers: idempotencyHeaders(),
+  });
+  return response.data;
+}
+
+/**
+ * `POST /lending/disbursements/verify-conditions` — record manual
+ * verification of pre-disbursement conditions before approval.
+ */
+export async function verifyDisbursementConditions(
+  body: VerifyConditionsBody,
+): Promise<VerifyConditionsResponse> {
+  const response = await api.post<VerifyConditionsResponse>(`${BASE_URL}/verify-conditions`, body, {
+    headers: idempotencyHeaders(),
+  });
+  return response.data;
+}
+
+/**
+ * `POST /lending/disbursements/reject` — reject a disbursement request.
+ * Maps to `DisbursementService.reject_disbursement`.
+ */
+export async function rejectDisbursementRequest(
+  body: RejectBody,
+): Promise<DisbursementActionResponse> {
+  const response = await api.post<DisbursementActionResponse>(`${BASE_URL}/reject`, body, {
+    headers: idempotencyHeaders(),
+  });
+  return response.data;
+}
+
+/**
+ * `POST /lending/disbursements/process` — release funds for an approved
+ * disbursement. Maps to `DisbursementService.process_disbursement`.
+ */
+export async function processDisbursementRequest(
+  body: ProcessBody,
+): Promise<DisbursementActionResponse> {
+  const response = await api.post<DisbursementActionResponse>(`${BASE_URL}/process`, body, {
+    headers: idempotencyHeaders(),
+  });
+  return response.data;
+}
+
+// ============== Disbursement Request Queries ==============
+
+export async function getDisbursements(
+  filters?: DisbursementFilters,
+): Promise<PaginatedResponse<DisbursementListItem>> {
+  const params = new URLSearchParams();
+
+  if (filters?.search) params.append('search', filters.search);
+  if (filters?.status) params.append('status', filters.status);
+  if (filters?.page) params.append('page', filters.page.toString());
+  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+
+  const response = await api.get<PaginatedResponse<DisbursementListItem>>(
+    `${BASE_URL}?${params.toString()}`,
+  );
   return response.data;
 }
 
 // ============== Export all functions ==============
 
 export const disbursementApi = {
+  // Real BE endpoints (use these)
+  createDisbursement,
+  verifyDisbursementConditions,
+  approveDisbursementRequest,
+  rejectDisbursementRequest,
+  processDisbursementRequest,
+
   // CRUD
   getDisbursements,
-  getDisbursement,
-  createDisbursementRequest,
-  updateDisbursementRequest,
-  deleteDisbursementRequest,
-
-  // Conditions
-  getPendingConditions,
-  verifyCondition,
-
-  // Workflow
-  submitDisbursement,
-  approveDisbursement,
-
-  // Fund Transfer
-  initiateFundTransfer,
-  getTransferStatus,
-  confirmDisbursement,
-
-  // Tranches
-  getTranches,
-  getDisbursementsByAccount,
-
-  // Utilization
-  uploadUtilizationCertificate,
-  getUtilizationCertificates,
 };
 
 export default disbursementApi;

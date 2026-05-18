@@ -2,43 +2,41 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
 from app.api.deps import RequirePermissions
+from app.database import get_db
 from app.models.auth.user import User
 from app.models.lending.enums import (
     ApplicationStage,
     ApplicationStatus,
 )
-from app.services.lending.application_service import ApplicationService
+from app.schemas.base import PaginatedResponse
 from app.schemas.lending.application import (
-    LoanApplicationCreate,
-    LoanApplicationUpdate,
-    LoanApplicationResponse,
-    LoanApplicationListResponse,
-    LoanApplicationDetailResponse,
     ApplicationDocumentCreate,
-    ApplicationDocumentUpdate,
     ApplicationDocumentResponse,
     ApplicationFeeCreate,
-    ApplicationFeeUpdate,
     ApplicationFeeResponse,
-    TechnicalAppraisalCreate,
-    TechnicalAppraisalUpdate,
-    TechnicalAppraisalResponse,
     FinancialAnalysisCreate,
-    FinancialAnalysisUpdate,
     FinancialAnalysisResponse,
+    FinancialAnalysisUpdate,
+    LoanApplicationCreate,
+    LoanApplicationDetailResponse,
+    LoanApplicationListResponse,
+    LoanApplicationResponse,
+    LoanApplicationUpdate,
+    LoanApplicationViewResponse,
     ProjectMilestoneCreate,
-    ProjectMilestoneUpdate,
     ProjectMilestoneResponse,
+    ProjectMilestoneUpdate,
+    TechnicalAppraisalCreate,
+    TechnicalAppraisalResponse,
+    TechnicalAppraisalUpdate,
 )
-from app.schemas.base import PaginatedResponse
+from app.services.lending.application_service import ApplicationService
 
 router = APIRouter()
 
@@ -48,20 +46,24 @@ router = APIRouter()
 # =============================================================================
 
 
-@router.get("", response_model=PaginatedResponse[LoanApplicationListResponse])
+@router.get(
+    "",
+    response_model=PaginatedResponse[LoanApplicationListResponse],
+    response_model_by_alias=True,
+)
 async def list_applications(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
-    search: Optional[str] = Query(None, description="Search in application number, entity name"),
-    entity_id: Optional[UUID] = Query(None),
-    product_id: Optional[UUID] = Query(None),
-    stage: Optional[ApplicationStage] = Query(None),
-    status: Optional[ApplicationStatus] = Query(None),
-    relationship_manager_id: Optional[UUID] = Query(None),
-    credit_officer_id: Optional[UUID] = Query(None),
-    from_date: Optional[date] = Query(None),
-    to_date: Optional[date] = Query(None),
+    search: str | None = Query(None, description="Search in application number, entity name"),
+    entity_id: UUID | None = Query(None),
+    product_id: UUID | None = Query(None),
+    stage: ApplicationStage | None = Query(None),
+    status: ApplicationStatus | None = Query(None),
+    relationship_manager_id: UUID | None = Query(None),
+    credit_officer_id: UUID | None = Query(None),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -98,7 +100,11 @@ async def get_stage_counts(
     return counts
 
 
-@router.get("/entity/{entity_id}", response_model=list[LoanApplicationListResponse])
+@router.get(
+    "/entity/{entity_id}",
+    response_model=list[LoanApplicationListResponse],
+    response_model_by_alias=True,
+)
 async def get_entity_applications(
     entity_id: UUID,
     include_inactive: bool = Query(False),
@@ -111,31 +117,44 @@ async def get_entity_applications(
     return [LoanApplicationListResponse.model_validate(a) for a in applications]
 
 
-@router.post("", response_model=LoanApplicationResponse)
+@router.post(
+    "",
+    response_model=LoanApplicationResponse,
+    response_model_by_alias=True,
+)
 async def create_application(
     data: LoanApplicationCreate,
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_CREATE")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new loan application."""
+    data.organization_id = current_user.organization_id
     service = ApplicationService(db)
     application = await service.create_application(data, current_user.id)
     return LoanApplicationResponse.model_validate(application)
 
 
-@router.get("/{application_id}", response_model=LoanApplicationResponse)
+@router.get(
+    "/{application_id}",
+    response_model=LoanApplicationViewResponse,
+    response_model_by_alias=True,
+)
 async def get_application(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get loan application by ID."""
+    """Get loan application by ID (camelCase view shape with joined entity/product)."""
     service = ApplicationService(db)
     application = await service.get_application(application_id)
-    return LoanApplicationResponse.model_validate(application)
+    return LoanApplicationViewResponse.model_validate(application)
 
 
-@router.get("/{application_id}/details", response_model=LoanApplicationDetailResponse)
+@router.get(
+    "/{application_id}/details",
+    response_model=LoanApplicationDetailResponse,
+    response_model_by_alias=True,
+)
 async def get_application_details(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_VIEW")),
@@ -147,7 +166,11 @@ async def get_application_details(
     return LoanApplicationDetailResponse.model_validate(application)
 
 
-@router.put("/{application_id}", response_model=LoanApplicationResponse)
+@router.put(
+    "/{application_id}",
+    response_model=LoanApplicationResponse,
+    response_model_by_alias=True,
+)
 async def update_application(
     application_id: UUID,
     data: LoanApplicationUpdate,
@@ -160,7 +183,11 @@ async def update_application(
     return LoanApplicationResponse.model_validate(application)
 
 
-@router.post("/{application_id}/submit", response_model=LoanApplicationResponse)
+@router.post(
+    "/{application_id}/submit",
+    response_model=LoanApplicationResponse,
+    response_model_by_alias=True,
+)
 async def submit_application(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_UPDATE")),
@@ -172,7 +199,11 @@ async def submit_application(
     return LoanApplicationResponse.model_validate(application)
 
 
-@router.post("/{application_id}/move-to-appraisal", response_model=LoanApplicationResponse)
+@router.post(
+    "/{application_id}/move-to-appraisal",
+    response_model=LoanApplicationResponse,
+    response_model_by_alias=True,
+)
 async def move_to_appraisal(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_UPDATE")),
@@ -201,7 +232,11 @@ async def delete_application(
 # =============================================================================
 
 
-@router.get("/{application_id}/documents", response_model=list[ApplicationDocumentResponse])
+@router.get(
+    "/{application_id}/documents",
+    response_model=list[ApplicationDocumentResponse],
+    response_model_by_alias=True,
+)
 async def list_application_documents(
     application_id: UUID,
     include_inactive: bool = Query(False),
@@ -214,7 +249,11 @@ async def list_application_documents(
     return [ApplicationDocumentResponse.model_validate(d) for d in documents]
 
 
-@router.post("/{application_id}/documents", response_model=ApplicationDocumentResponse)
+@router.post(
+    "/{application_id}/documents",
+    response_model=ApplicationDocumentResponse,
+    response_model_by_alias=True,
+)
 async def upload_document(
     application_id: UUID,
     data: ApplicationDocumentCreate,
@@ -228,10 +267,15 @@ async def upload_document(
     return ApplicationDocumentResponse.model_validate(document)
 
 
-@router.post("/documents/{document_id}/verify", response_model=ApplicationDocumentResponse)
+@router.post(
+    "/{application_id}/documents/{document_id}/verify",
+    response_model=ApplicationDocumentResponse,
+    response_model_by_alias=True,
+)
 async def verify_document(
+    application_id: UUID,
     document_id: UUID,
-    remarks: Optional[str] = Query(None),
+    remarks: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_UPDATE")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -241,12 +285,29 @@ async def verify_document(
     return ApplicationDocumentResponse.model_validate(document)
 
 
+@router.delete("/{application_id}/documents/{document_id}")
+async def delete_document(
+    application_id: UUID,
+    document_id: UUID,
+    current_user: User = Depends(RequirePermissions("LOS_APPLICATION_UPDATE")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft delete an application document."""
+    service = ApplicationService(db)
+    await service.delete_document(document_id, current_user.id)
+    return {"message": "Document deleted successfully"}
+
+
 # =============================================================================
 # Application Fee Endpoints
 # =============================================================================
 
 
-@router.get("/{application_id}/fees", response_model=list[ApplicationFeeResponse])
+@router.get(
+    "/{application_id}/fees",
+    response_model=list[ApplicationFeeResponse],
+    response_model_by_alias=True,
+)
 async def list_application_fees(
     application_id: UUID,
     include_inactive: bool = Query(False),
@@ -271,7 +332,11 @@ async def get_fee_summary(
     return summary
 
 
-@router.post("/{application_id}/fees", response_model=ApplicationFeeResponse)
+@router.post(
+    "/{application_id}/fees",
+    response_model=ApplicationFeeResponse,
+    response_model_by_alias=True,
+)
 async def add_application_fee(
     application_id: UUID,
     data: ApplicationFeeCreate,
@@ -285,7 +350,11 @@ async def add_application_fee(
     return ApplicationFeeResponse.model_validate(fee)
 
 
-@router.post("/fees/{fee_id}/collect", response_model=ApplicationFeeResponse)
+@router.post(
+    "/fees/{fee_id}/collect",
+    response_model=ApplicationFeeResponse,
+    response_model_by_alias=True,
+)
 async def collect_fee(
     fee_id: UUID,
     collected_amount: Decimal = Query(...),
@@ -304,7 +373,11 @@ async def collect_fee(
 # =============================================================================
 
 
-@router.get("/{application_id}/appraisals/technical", response_model=list[TechnicalAppraisalResponse])
+@router.get(
+    "/{application_id}/appraisals/technical",
+    response_model=list[TechnicalAppraisalResponse],
+    response_model_by_alias=True,
+)
 async def list_technical_appraisals(
     application_id: UUID,
     include_inactive: bool = Query(False),
@@ -317,7 +390,11 @@ async def list_technical_appraisals(
     return [TechnicalAppraisalResponse.model_validate(a) for a in appraisals]
 
 
-@router.post("/{application_id}/appraisals/technical", response_model=TechnicalAppraisalResponse)
+@router.post(
+    "/{application_id}/appraisals/technical",
+    response_model=TechnicalAppraisalResponse,
+    response_model_by_alias=True,
+)
 async def create_technical_appraisal(
     application_id: UUID,
     data: TechnicalAppraisalCreate,
@@ -331,7 +408,11 @@ async def create_technical_appraisal(
     return TechnicalAppraisalResponse.model_validate(appraisal)
 
 
-@router.put("/appraisals/technical/{appraisal_id}", response_model=TechnicalAppraisalResponse)
+@router.put(
+    "/appraisals/technical/{appraisal_id}",
+    response_model=TechnicalAppraisalResponse,
+    response_model_by_alias=True,
+)
 async def update_technical_appraisal(
     appraisal_id: UUID,
     data: TechnicalAppraisalUpdate,
@@ -349,7 +430,11 @@ async def update_technical_appraisal(
 # =============================================================================
 
 
-@router.get("/{application_id}/appraisals/financial", response_model=list[FinancialAnalysisResponse])
+@router.get(
+    "/{application_id}/appraisals/financial",
+    response_model=list[FinancialAnalysisResponse],
+    response_model_by_alias=True,
+)
 async def list_financial_analyses(
     application_id: UUID,
     include_inactive: bool = Query(False),
@@ -362,7 +447,11 @@ async def list_financial_analyses(
     return [FinancialAnalysisResponse.model_validate(a) for a in analyses]
 
 
-@router.post("/{application_id}/appraisals/financial", response_model=FinancialAnalysisResponse)
+@router.post(
+    "/{application_id}/appraisals/financial",
+    response_model=FinancialAnalysisResponse,
+    response_model_by_alias=True,
+)
 async def create_financial_analysis(
     application_id: UUID,
     data: FinancialAnalysisCreate,
@@ -376,7 +465,11 @@ async def create_financial_analysis(
     return FinancialAnalysisResponse.model_validate(analysis)
 
 
-@router.put("/appraisals/financial/{analysis_id}", response_model=FinancialAnalysisResponse)
+@router.put(
+    "/appraisals/financial/{analysis_id}",
+    response_model=FinancialAnalysisResponse,
+    response_model_by_alias=True,
+)
 async def update_financial_analysis(
     analysis_id: UUID,
     data: FinancialAnalysisUpdate,
@@ -394,7 +487,11 @@ async def update_financial_analysis(
 # =============================================================================
 
 
-@router.get("/{application_id}/milestones", response_model=list[ProjectMilestoneResponse])
+@router.get(
+    "/{application_id}/milestones",
+    response_model=list[ProjectMilestoneResponse],
+    response_model_by_alias=True,
+)
 async def list_milestones(
     application_id: UUID,
     include_inactive: bool = Query(False),
@@ -407,7 +504,11 @@ async def list_milestones(
     return [ProjectMilestoneResponse.model_validate(m) for m in milestones]
 
 
-@router.get("/{application_id}/milestones/next", response_model=ProjectMilestoneResponse)
+@router.get(
+    "/{application_id}/milestones/next",
+    response_model=ProjectMilestoneResponse,
+    response_model_by_alias=True,
+)
 async def get_next_milestone(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_VIEW")),
@@ -421,7 +522,11 @@ async def get_next_milestone(
     return None
 
 
-@router.post("/{application_id}/milestones", response_model=ProjectMilestoneResponse)
+@router.post(
+    "/{application_id}/milestones",
+    response_model=ProjectMilestoneResponse,
+    response_model_by_alias=True,
+)
 async def add_milestone(
     application_id: UUID,
     data: ProjectMilestoneCreate,
@@ -435,7 +540,11 @@ async def add_milestone(
     return ProjectMilestoneResponse.model_validate(milestone)
 
 
-@router.put("/milestones/{milestone_id}", response_model=ProjectMilestoneResponse)
+@router.put(
+    "/milestones/{milestone_id}",
+    response_model=ProjectMilestoneResponse,
+    response_model_by_alias=True,
+)
 async def update_milestone(
     milestone_id: UUID,
     data: ProjectMilestoneUpdate,
@@ -448,11 +557,15 @@ async def update_milestone(
     return ProjectMilestoneResponse.model_validate(milestone)
 
 
-@router.post("/milestones/{milestone_id}/complete", response_model=ProjectMilestoneResponse)
+@router.post(
+    "/milestones/{milestone_id}/complete",
+    response_model=ProjectMilestoneResponse,
+    response_model_by_alias=True,
+)
 async def complete_milestone(
     milestone_id: UUID,
     completion_date: date = Query(...),
-    remarks: Optional[str] = Query(None),
+    remarks: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_APPLICATION_UPDATE")),
     db: AsyncSession = Depends(get_db),
 ):

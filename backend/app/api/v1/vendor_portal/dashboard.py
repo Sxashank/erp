@@ -14,13 +14,14 @@ from app.services.vendor_portal.payment_service import VendorPaymentService
 from app.services.vendor_portal.compliance_service import VendorComplianceService
 from app.schemas.vendor_portal.compliance import NotificationListResponse
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter()
 
 
 @router.get("/summary")
 async def get_dashboard_summary(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get vendor dashboard summary."""
     po_service = VendorPOService(db)
@@ -78,7 +79,7 @@ async def get_dashboard_summary(
 @router.get("/pending-actions")
 async def get_pending_actions(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get list of pending actions for vendor."""
     po_service = VendorPOService(db)
@@ -129,10 +130,10 @@ async def get_pending_actions(
     }
 
 
-@router.get("/notifications", response_model=NotificationListResponse)
+@router.get("/notifications", response_model=NotificationListResponse, response_model_by_alias=True)
 async def get_notifications(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get recent notifications for vendor dashboard."""
     service = VendorComplianceService(db)
@@ -150,7 +151,7 @@ async def get_notifications(
 @router.get("/quick-stats")
 async def get_quick_stats(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get quick stats for dashboard cards."""
     po_service = VendorPOService(db)
@@ -173,7 +174,7 @@ async def get_quick_stats(
 @router.get("/recent-activity")
 async def get_recent_activity(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
     limit: int = 10,
 ):
     """Get recent activity feed."""

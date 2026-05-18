@@ -1,15 +1,8 @@
+import { Building2, Loader2, MapPin, MoreHorizontal, Plus, Star } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Building2,
-  Loader2,
-  MapPin,
-  MoreHorizontal,
-  Plus,
-  Star,
-} from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -30,6 +23,7 @@ import {
 import { organizationsApi } from '@/services/api';
 import type { Organization, OrganizationAddress } from '@/types';
 
+import { logger } from "@/lib/logger";
 const ADDRESS_TYPE_LABELS: Record<string, string> = {
   REGISTERED: 'Registered Office',
   CORPORATE: 'Corporate Office',
@@ -64,7 +58,7 @@ export function OrganizationAddressList() {
       setOrganization(orgRes.data);
       setAddresses(addrRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -76,7 +70,7 @@ export function OrganizationAddressList() {
       await organizationsApi.setPrimaryAddress(orgId, id);
       fetchData();
     } catch (error) {
-      console.error('Failed to set primary:', error);
+      logger.error('Failed to set primary:', error);
     }
   };
 
@@ -86,7 +80,7 @@ export function OrganizationAddressList() {
       await organizationsApi.deleteAddress(orgId, id);
       fetchData();
     } catch (error) {
-      console.error('Failed to delete:', error);
+      logger.error('Failed to delete:', error);
     }
   };
 
@@ -100,23 +94,21 @@ export function OrganizationAddressList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/organizations')}>
-            <ArrowLeft className="h-5 w-5" />
+      <PageHeader
+        title="Addresses"
+        subtitle={`Manage addresses for ${organization?.name}`}
+        breadcrumbs={[
+          { label: 'Organizations', to: '/admin/organizations' },
+          { label: organization?.name ?? '...', to: `/admin/organizations/${orgId}` },
+          { label: 'Addresses' },
+        ]}
+        actions={
+          <Button onClick={() => navigate(`/admin/organizations/${orgId}/addresses/new`)}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Address
           </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Addresses</h1>
-            <p className="text-sm text-slate-500">
-              Manage addresses for {organization?.name}
-            </p>
-          </div>
-        </div>
-        <Button onClick={() => navigate(`/admin/organizations/${orgId}/addresses/new`)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Address
-        </Button>
-      </div>
+        }
+      />
 
       <Card>
         <CardHeader>

@@ -5,15 +5,16 @@ Schemas for credit bureau pull requests, responses, and report data.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List, Dict, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, validator
+from pydantic import Field, validator
 
+from app.schemas.base import CamelSchema
 
 # ============================================================================
 # Enums as string types for API
 # ============================================================================
+
 
 class CreditBureauEnum:
     CIBIL = "CIBIL"
@@ -40,7 +41,8 @@ class CreditPullStatusEnum:
 # Request Schemas
 # ============================================================================
 
-class CreditPullRequest(BaseModel):
+
+class CreditPullRequest(CamelSchema):
     """Request to initiate a credit bureau pull."""
 
     bureau: str = Field(..., description="Credit bureau: CIBIL, EXPERIAN, EQUIFAX, CRIF")
@@ -48,23 +50,23 @@ class CreditPullRequest(BaseModel):
 
     # Customer identification
     customer_name: str = Field(..., min_length=2, max_length=200)
-    pan_number: Optional[str] = Field(None, min_length=10, max_length=10)
-    aadhaar_last4: Optional[str] = Field(None, min_length=4, max_length=4)
-    mobile_number: Optional[str] = Field(None, max_length=15)
-    email: Optional[str] = Field(None, max_length=255)
-    date_of_birth: Optional[date] = None
+    pan_number: str | None = Field(None, min_length=10, max_length=10)
+    aadhaar_last4: str | None = Field(None, min_length=4, max_length=4)
+    mobile_number: str | None = Field(None, max_length=15)
+    email: str | None = Field(None, max_length=255)
+    date_of_birth: date | None = None
 
     # Address
-    address_line1: Optional[str] = Field(None, max_length=255)
-    address_line2: Optional[str] = Field(None, max_length=255)
-    city: Optional[str] = Field(None, max_length=100)
-    state: Optional[str] = Field(None, max_length=100)
-    pincode: Optional[str] = Field(None, max_length=10)
+    address_line1: str | None = Field(None, max_length=255)
+    address_line2: str | None = Field(None, max_length=255)
+    city: str | None = Field(None, max_length=100)
+    state: str | None = Field(None, max_length=100)
+    pincode: str | None = Field(None, max_length=10)
 
     # Optional links
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
-    purpose: Optional[str] = Field(None, max_length=100)
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
+    purpose: str | None = Field(None, max_length=100)
 
     @validator("pan_number")
     def validate_pan(cls, v):
@@ -82,54 +84,55 @@ class CreditPullRequest(BaseModel):
         return v.upper()
 
 
-class CreditPullBulkRequest(BaseModel):
+class CreditPullBulkRequest(CamelSchema):
     """Request to pull credit from multiple bureaus."""
 
-    bureaus: List[str] = Field(..., description="List of bureaus to pull from")
+    bureaus: list[str] = Field(..., description="List of bureaus to pull from")
     pull_type: str = Field(default="SOFT")
     customer_name: str
-    pan_number: Optional[str] = None
-    date_of_birth: Optional[date] = None
-    mobile_number: Optional[str] = None
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
+    pan_number: str | None = None
+    date_of_birth: date | None = None
+    mobile_number: str | None = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
 
 
 # ============================================================================
 # Response Schemas
 # ============================================================================
 
-class CreditAccountResponse(BaseModel):
+
+class CreditAccountResponse(CamelSchema):
     """Credit account from bureau report."""
 
     id: UUID
-    account_number_masked: Optional[str] = None
-    institution_name: Optional[str] = None
-    institution_type: Optional[str] = None
+    account_number_masked: str | None = None
+    institution_name: str | None = None
+    institution_type: str | None = None
     account_type: str
     account_status: str
     ownership: str
 
     # Financial details
-    sanctioned_amount: Optional[Decimal] = None
-    current_balance: Optional[Decimal] = None
-    overdue_amount: Optional[Decimal] = None
-    emi_amount: Optional[Decimal] = None
-    credit_limit: Optional[Decimal] = None
-    high_credit: Optional[Decimal] = None
-    write_off_amount: Optional[Decimal] = None
+    sanctioned_amount: Decimal | None = None
+    current_balance: Decimal | None = None
+    overdue_amount: Decimal | None = None
+    emi_amount: Decimal | None = None
+    credit_limit: Decimal | None = None
+    high_credit: Decimal | None = None
+    write_off_amount: Decimal | None = None
 
     # Dates
-    opened_date: Optional[date] = None
-    closed_date: Optional[date] = None
-    last_payment_date: Optional[date] = None
-    reported_date: Optional[date] = None
+    opened_date: date | None = None
+    closed_date: date | None = None
+    last_payment_date: date | None = None
+    reported_date: date | None = None
 
     # Payment behavior
-    tenure_months: Optional[int] = None
-    remaining_tenure: Optional[int] = None
-    max_dpd: Optional[int] = None
-    dpd_history: Optional[Dict[str, int]] = None
+    tenure_months: int | None = None
+    remaining_tenure: int | None = None
+    max_dpd: int | None = None
+    dpd_history: dict[str, int] | None = None
 
     # Flags
     is_secured: bool = False
@@ -139,26 +142,26 @@ class CreditAccountResponse(BaseModel):
         from_attributes = True
 
 
-class CreditEnquiryResponse(BaseModel):
+class CreditEnquiryResponse(CamelSchema):
     """Credit enquiry from bureau report."""
 
     id: UUID
-    enquiry_date: Optional[date] = None
-    institution_name: Optional[str] = None
-    enquiry_purpose: Optional[str] = None
-    enquiry_amount: Optional[Decimal] = None
+    enquiry_date: date | None = None
+    institution_name: str | None = None
+    enquiry_purpose: str | None = None
+    enquiry_amount: Decimal | None = None
 
     class Config:
         from_attributes = True
 
 
-class CreditPullResponse(BaseModel):
+class CreditPullResponse(CamelSchema):
     """Credit pull response with full report data."""
 
     id: UUID
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
 
     # Bureau details
     bureau: str
@@ -167,41 +170,41 @@ class CreditPullResponse(BaseModel):
 
     # Customer info
     customer_name: str
-    pan_number: Optional[str] = None
+    pan_number: str | None = None
 
     # Reference numbers
-    request_reference: Optional[str] = None
-    bureau_reference: Optional[str] = None
+    request_reference: str | None = None
+    bureau_reference: str | None = None
 
     # Credit Score
-    credit_score: Optional[int] = None
-    score_version: Optional[str] = None
-    score_date: Optional[date] = None
-    score_band: Optional[str] = None
+    credit_score: int | None = None
+    score_version: str | None = None
+    score_date: date | None = None
+    score_band: str | None = None
 
     # Summary
-    total_accounts: Optional[int] = None
-    active_accounts: Optional[int] = None
-    total_sanctioned: Optional[Decimal] = None
-    total_outstanding: Optional[Decimal] = None
-    total_overdue: Optional[Decimal] = None
-    max_dpd_last_12m: Optional[int] = None
-    max_dpd_last_24m: Optional[int] = None
-    enquiries_last_30d: Optional[int] = None
-    enquiries_last_12m: Optional[int] = None
+    total_accounts: int | None = None
+    active_accounts: int | None = None
+    total_sanctioned: Decimal | None = None
+    total_outstanding: Decimal | None = None
+    total_overdue: Decimal | None = None
+    max_dpd_last_12m: int | None = None
+    max_dpd_last_24m: int | None = None
+    enquiries_last_30d: int | None = None
+    enquiries_last_12m: int | None = None
 
     # Error info
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    error_code: str | None = None
+    error_message: str | None = None
 
     # Timestamps
-    pulled_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    pulled_at: datetime | None = None
+    expires_at: datetime | None = None
     created_at: datetime
 
     # Related data
-    accounts: List[CreditAccountResponse] = []
-    enquiries: List[CreditEnquiryResponse] = []
+    accounts: list[CreditAccountResponse] = []
+    enquiries: list[CreditEnquiryResponse] = []
 
     # Computed fields
     is_valid: bool = False
@@ -210,40 +213,37 @@ class CreditPullResponse(BaseModel):
         from_attributes = True
 
 
-class CreditPullListResponse(BaseModel):
-    """Credit pull list item (without full report data)."""
+class CreditPullListResponse(CamelSchema):
+    """Credit pull list item (camelCase wire format)."""
 
     id: UUID
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
     bureau: str
     pull_type: str
     status: str
     customer_name: str
-    pan_number: Optional[str] = None
-    credit_score: Optional[int] = None
-    score_band: Optional[str] = None
-    pulled_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    pan_number: str | None = None
+    credit_score: int | None = None
+    score_band: str | None = None
+    pulled_at: datetime | None = None
+    expires_at: datetime | None = None
     is_valid: bool = False
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class CreditPullSummaryResponse(BaseModel):
+class CreditPullSummaryResponse(CamelSchema):
     """Summary of credit pulls for an entity/application."""
 
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
     total_pulls: int = 0
-    latest_score: Optional[int] = None
-    latest_score_date: Optional[date] = None
-    latest_bureau: Optional[str] = None
-    score_band: Optional[str] = None
-    pulls_by_bureau: Dict[str, int] = {}
+    latest_score: int | None = None
+    latest_score_date: date | None = None
+    latest_bureau: str | None = None
+    score_band: str | None = None
+    pulls_by_bureau: dict[str, int] = {}
     has_valid_report: bool = False
 
 
@@ -251,7 +251,8 @@ class CreditPullSummaryResponse(BaseModel):
 # Report Analysis Schemas
 # ============================================================================
 
-class CreditScoreHistory(BaseModel):
+
+class CreditScoreHistory(CamelSchema):
     """Historical credit scores."""
 
     date: date
@@ -260,7 +261,7 @@ class CreditScoreHistory(BaseModel):
     score_band: str
 
 
-class AccountSummaryByType(BaseModel):
+class AccountSummaryByType(CamelSchema):
     """Summary of accounts by type."""
 
     account_type: str
@@ -272,7 +273,7 @@ class AccountSummaryByType(BaseModel):
     closed_count: int = 0
 
 
-class DPDAnalysis(BaseModel):
+class DPDAnalysis(CamelSchema):
     """DPD (Days Past Due) analysis."""
 
     max_dpd_ever: int = 0
@@ -283,7 +284,7 @@ class DPDAnalysis(BaseModel):
     current_dpd: int = 0
 
 
-class CreditReportAnalysis(BaseModel):
+class CreditReportAnalysis(CamelSchema):
     """Comprehensive credit report analysis."""
 
     pull_id: UUID
@@ -291,26 +292,26 @@ class CreditReportAnalysis(BaseModel):
     report_date: date
 
     # Score analysis
-    credit_score: Optional[int] = None
-    score_band: Optional[str] = None
-    score_percentile: Optional[int] = None
+    credit_score: int | None = None
+    score_band: str | None = None
+    score_percentile: int | None = None
 
     # Account summary
     total_accounts: int = 0
     active_accounts: int = 0
     closed_accounts: int = 0
     written_off_accounts: int = 0
-    accounts_by_type: List[AccountSummaryByType] = []
+    accounts_by_type: list[AccountSummaryByType] = []
 
     # Financial summary
     total_sanctioned: Decimal = Decimal("0")
     total_outstanding: Decimal = Decimal("0")
     total_overdue: Decimal = Decimal("0")
     total_emi: Decimal = Decimal("0")
-    utilization_ratio: Optional[Decimal] = None
+    utilization_ratio: Decimal | None = None
 
     # DPD analysis
-    dpd_analysis: Optional[DPDAnalysis] = None
+    dpd_analysis: DPDAnalysis | None = None
 
     # Enquiry analysis
     total_enquiries: int = 0
@@ -330,10 +331,11 @@ class CreditReportAnalysis(BaseModel):
 # Paginated Response
 # ============================================================================
 
-class PaginatedCreditPullResponse(BaseModel):
-    """Paginated list of credit pulls."""
 
-    items: List[CreditPullListResponse]
+class PaginatedCreditPullResponse(CamelSchema):
+    """Paginated list of credit pulls (camelCase wire format)."""
+
+    items: list[CreditPullListResponse]
     total: int
     page: int
     page_size: int
@@ -344,14 +346,15 @@ class PaginatedCreditPullResponse(BaseModel):
 # Statistics Schemas
 # ============================================================================
 
-class CreditBureauStats(BaseModel):
+
+class CreditBureauStats(CamelSchema):
     """Credit bureau usage statistics."""
 
     total_pulls: int = 0
     successful_pulls: int = 0
     failed_pulls: int = 0
     no_hit_pulls: int = 0
-    pulls_by_bureau: Dict[str, int] = {}
-    pulls_by_status: Dict[str, int] = {}
-    average_score: Optional[float] = None
-    score_distribution: Dict[str, int] = {}
+    pulls_by_bureau: dict[str, int] = {}
+    pulls_by_status: dict[str, int] = {}
+    average_score: float | None = None
+    score_distribution: dict[str, int] = {}

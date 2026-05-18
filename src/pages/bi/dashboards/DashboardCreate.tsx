@@ -2,20 +2,24 @@
  * Dashboard Create Page
  */
 
+import { Loader2, Save } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biDashboardApi } from '@/services/biApi';
-import { DashboardCreate as DashboardCreateType } from '@/types/bi';
+import type { DashboardCreate as DashboardCreateType } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 interface FormData {
   code: string;
   name: string;
@@ -72,11 +76,11 @@ export function DashboardCreate() {
 
       // Navigate to edit page to add widgets
       navigate(`/admin/bi/dashboards/${response.data.id}/edit`);
-    } catch (error: any) {
-      console.error('Error creating dashboard:', error);
+    } catch (error: unknown) {
+      logger.error('Error creating dashboard:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create dashboard',
+        description: getErrorMessage(error, 'Failed to create dashboard'),
         variant: 'destructive',
       });
     } finally {
@@ -86,17 +90,11 @@ export function DashboardCreate() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/bi/dashboards')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Create Dashboard</h1>
-          <p className="text-muted-foreground">
-            Create a new BI dashboard
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Create Dashboard"
+        subtitle="Create a new BI dashboard"
+        breadcrumbs={[{ label: 'Dashboards', to: '/admin/bi/dashboards' }, { label: 'New' }]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <Card>
@@ -118,9 +116,7 @@ export function DashboardCreate() {
                     },
                   })}
                 />
-                {errors.code && (
-                  <p className="text-sm text-red-500">{errors.code.message}</p>
-                )}
+                {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
               </div>
 
               <div className="space-y-2">
@@ -130,9 +126,7 @@ export function DashboardCreate() {
                   placeholder="Sales Dashboard"
                   {...register('name', { required: 'Name is required' })}
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
-                )}
+                {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
               </div>
             </div>
 
@@ -175,7 +169,7 @@ export function DashboardCreate() {
             </div>
 
             <div className="border-t pt-6">
-              <h3 className="font-medium mb-4">Auto Refresh Settings</h3>
+              <h3 className="mb-4 font-medium">Auto Refresh Settings</h3>
               <div className="grid grid-cols-2 gap-6">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
@@ -203,7 +197,9 @@ export function DashboardCreate() {
                       })}
                     />
                     {errors.refresh_interval_seconds && (
-                      <p className="text-sm text-red-500">{errors.refresh_interval_seconds.message}</p>
+                      <p className="text-sm text-red-500">
+                        {errors.refresh_interval_seconds.message}
+                      </p>
                     )}
                   </div>
                 )}
@@ -219,8 +215,8 @@ export function DashboardCreate() {
                 Cancel
               </Button>
               <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <Save className="h-4 w-4 mr-2" />
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Save className="mr-2 h-4 w-4" />
                 Create & Add Widgets
               </Button>
             </div>

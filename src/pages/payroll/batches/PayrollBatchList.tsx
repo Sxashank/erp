@@ -2,13 +2,24 @@
  * Payroll Batch List Page
  */
 
+import { Plus, Eye, Play, CheckCircle, Banknote, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Eye, Play, CheckCircle, Banknote, Search } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { PayrollConfirmDialog } from '@/components/payroll/PayrollConfirmDialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -17,23 +28,25 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { AmountDisplay } from '@/components/common/AmountDisplay';
-import payrollService, { PayrollBatch } from '@/services/payrollService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { PayrollBatch } from '@/services/payrollService';
+import payrollService from '@/services/payrollService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December'
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
 ];
 
 const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
@@ -45,6 +58,28 @@ const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'o
   CANCELLED: 'destructive',
 };
 
+const ALL_STATUSES = '__all__';
+
+type BatchAction = 'process' | 'approve' | 'paid';
+
+const ACTION_COPY: Record<BatchAction, { title: string; description: string; confirmLabel: string }> = {
+  process: {
+    title: 'Process payroll batch?',
+    description: 'This recalculates payroll for eligible employees using locked attendance and active salary setup.',
+    confirmLabel: 'Process Payroll',
+  },
+  approve: {
+    title: 'Approve payroll batch?',
+    description: 'Approved payroll becomes available for bank payout export and GL posting.',
+    confirmLabel: 'Approve Batch',
+  },
+  paid: {
+    title: 'Mark payroll batch as paid?',
+    description: 'This marks generated payslips as paid. Confirm only after salary payout is complete.',
+    confirmLabel: 'Mark Paid',
+  },
+};
+
 export default function PayrollBatchList() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -53,8 +88,10 @@ export default function PayrollBatchList() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [yearFilter, setYearFilter] = useState<string>(new Date().getFullYear().toString());
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUSES);
   const [total, setTotal] = useState(0);
+  const [confirmAction, setConfirmAction] = useState<{ batchId: string; action: BatchAction } | null>(null);
+  const [actionBusy, setActionBusy] = useState(false);
 
   const organizationId = useRequiredActiveOrganizationId();
 
@@ -71,7 +108,7 @@ export default function PayrollBatchList() {
       const response = await payrollService.listBatches({
         organization_id: organizationId,
         year: yearFilter ? parseInt(yearFilter) : undefined,
-        status: statusFilter || undefined,
+        status: statusFilter === ALL_STATUSES ? undefined : statusFilter,
       });
       setBatches(response.items);
       setTotal(response.total);
@@ -86,74 +123,55 @@ export default function PayrollBatchList() {
     }
   };
 
-  const handleProcess = async (id: string) => {
-    if (!confirm('Start processing payroll for this batch?')) return;
-
+  const executeBatchAction = async () => {
+    if (!confirmAction) return;
     try {
-      await payrollService.processBatch(id);
-      toast({
-        title: 'Success',
-        description: 'Payroll processing started',
-      });
-      loadBatches();
-    } catch (error: any) {
+      setActionBusy(true);
+      if (confirmAction.action === 'process') {
+        await payrollService.processBatch(confirmAction.batchId);
+        toast({
+          title: 'Success',
+          description: 'Payroll processing completed',
+        });
+      }
+      if (confirmAction.action === 'approve') {
+        await payrollService.approveBatch(confirmAction.batchId);
+        toast({
+          title: 'Success',
+          description: 'Batch approved successfully',
+        });
+      }
+      if (confirmAction.action === 'paid') {
+        await payrollService.markBatchPaid(confirmAction.batchId);
+        toast({
+          title: 'Success',
+          description: 'Batch marked as paid',
+        });
+      }
+      setConfirmAction(null);
+      await loadBatches();
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to process batch',
+        description: getErrorMessage(error, 'Payroll batch action failed'),
         variant: 'destructive',
       });
-    }
-  };
-
-  const handleApprove = async (id: string) => {
-    if (!confirm('Approve this payroll batch?')) return;
-
-    try {
-      await payrollService.approveBatch(id);
-      toast({
-        title: 'Success',
-        description: 'Batch approved successfully',
-      });
-      loadBatches();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve batch',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleMarkPaid = async (id: string) => {
-    if (!confirm('Mark this batch as paid?')) return;
-
-    try {
-      await payrollService.markBatchPaid(id);
-      toast({
-        title: 'Success',
-        description: 'Batch marked as paid',
-      });
-      loadBatches();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to mark as paid',
-        variant: 'destructive',
-      });
+    } finally {
+      setActionBusy(false);
     }
   };
 
   const filteredBatches = batches.filter((batch) =>
-    batch.batch_reference.toLowerCase().includes(searchTerm.toLowerCase())
+    batch.batch_reference.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Payroll Batches"
         subtitle="Process and manage monthly payroll runs"
         actions={
-          <Button onClick={() => navigate('/payroll/batches/new')}>
+          <Button onClick={() => navigate('/admin/payroll/batches/new')}>
             <Plus className="mr-2 h-4 w-4" />
             New Batch
           </Button>
@@ -162,9 +180,9 @@ export default function PayrollBatchList() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <div className="flex flex-col justify-between gap-4 md:flex-row">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search batches..."
                 value={searchTerm}
@@ -190,7 +208,7 @@ export default function PayrollBatchList() {
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Status</SelectItem>
+                  <SelectItem value={ALL_STATUSES}>All Status</SelectItem>
                   <SelectItem value="DRAFT">Draft</SelectItem>
                   <SelectItem value="PROCESSING">Processing</SelectItem>
                   <SelectItem value="PROCESSED">Processed</SelectItem>
@@ -219,28 +237,24 @@ export default function PayrollBatchList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={8} className="py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredBatches.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={8} className="py-8 text-center">
                     No batches found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredBatches.map((batch) => (
                   <TableRow key={batch.id}>
-                    <TableCell className="font-mono">
-                      {batch.batch_reference}
-                    </TableCell>
+                    <TableCell className="font-mono">{batch.batch_reference}</TableCell>
                     <TableCell>
                       {MONTHS[batch.payroll_month - 1]} {batch.payroll_year}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {batch.total_employees}
-                    </TableCell>
+                    <TableCell className="text-right">{batch.total_employees}</TableCell>
                     <TableCell className="text-right">
                       <AmountDisplay amount={batch.total_gross} />
                     </TableCell>
@@ -260,7 +274,7 @@ export default function PayrollBatchList() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => navigate(`/payroll/batches/${batch.id}`)}
+                          onClick={() => navigate(`/admin/payroll/batches/${batch.id}`)}
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -268,7 +282,7 @@ export default function PayrollBatchList() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleProcess(batch.id)}
+                            onClick={() => setConfirmAction({ batchId: batch.id, action: 'process' })}
                             title="Process Payroll"
                           >
                             <Play className="h-4 w-4" />
@@ -278,7 +292,7 @@ export default function PayrollBatchList() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleApprove(batch.id)}
+                            onClick={() => setConfirmAction({ batchId: batch.id, action: 'approve' })}
                             title="Approve"
                           >
                             <CheckCircle className="h-4 w-4" />
@@ -288,7 +302,7 @@ export default function PayrollBatchList() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() => handleMarkPaid(batch.id)}
+                            onClick={() => setConfirmAction({ batchId: batch.id, action: 'paid' })}
                             title="Mark as Paid"
                           >
                             <Banknote className="h-4 w-4" />
@@ -303,6 +317,18 @@ export default function PayrollBatchList() {
           </Table>
         </CardContent>
       </Card>
+
+      <PayrollConfirmDialog
+        open={Boolean(confirmAction)}
+        title={confirmAction ? ACTION_COPY[confirmAction.action].title : ''}
+        description={confirmAction ? ACTION_COPY[confirmAction.action].description : ''}
+        confirmLabel={confirmAction ? ACTION_COPY[confirmAction.action].confirmLabel : 'Confirm'}
+        busy={actionBusy}
+        onOpenChange={(open) => {
+          if (!open && !actionBusy) setConfirmAction(null);
+        }}
+        onConfirm={executeBatchAction}
+      />
     </div>
   );
 }

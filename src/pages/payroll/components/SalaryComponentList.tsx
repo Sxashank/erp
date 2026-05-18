@@ -2,13 +2,23 @@
  * Salary Component List Page
  */
 
+import { Plus, Edit, Trash2, Search, Filter } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Search, Filter } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/common/PageHeader';
+import { PayrollConfirmDialog } from '@/components/payroll/PayrollConfirmDialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -17,18 +27,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import payrollService, { SalaryComponent } from '@/services/payrollService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { SalaryComponent } from '@/services/payrollService';
+import payrollService from '@/services/payrollService';
 
 const COMPONENT_TYPES = ['EARNING', 'DEDUCTION'];
 const CATEGORIES = ['BASIC', 'ALLOWANCE', 'REIMBURSEMENT', 'BONUS', 'STATUTORY', 'OTHER'];
@@ -43,6 +45,8 @@ export default function SalaryComponentList() {
   const [typeFilter, setTypeFilter] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [total, setTotal] = useState(0);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const organizationId = useRequiredActiveOrganizationId();
 
@@ -72,38 +76,41 @@ export default function SalaryComponentList() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to deactivate this component?')) return;
-
+  const handleDelete = async () => {
+    if (!deleteId) return;
     try {
-      await payrollService.deleteComponent(id);
+      setDeleting(true);
+      await payrollService.deleteComponent(deleteId);
       toast({
         title: 'Success',
         description: 'Component deactivated successfully',
       });
-      loadComponents();
+      setDeleteId(null);
+      await loadComponents();
     } catch (error) {
       toast({
         title: 'Error',
         description: 'Failed to deactivate component',
         variant: 'destructive',
       });
+    } finally {
+      setDeleting(false);
     }
   };
 
   const filteredComponents = components.filter(
     (comp) =>
       comp.component_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comp.component_code.toLowerCase().includes(searchTerm.toLowerCase())
+      comp.component_code.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Salary Components"
         subtitle="Manage earnings and deductions for payroll"
         actions={
-          <Button onClick={() => navigate('/payroll/components/new')}>
+          <Button onClick={() => navigate('/admin/payroll/components/new')}>
             <Plus className="mr-2 h-4 w-4" />
             Add Component
           </Button>
@@ -112,9 +119,9 @@ export default function SalaryComponentList() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <div className="flex flex-col justify-between gap-4 md:flex-row">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search components..."
                 value={searchTerm}
@@ -170,32 +177,24 @@ export default function SalaryComponentList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={9} className="py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredComponents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8">
+                  <TableCell colSpan={9} className="py-8 text-center">
                     No components found
                   </TableCell>
                 </TableRow>
               ) : (
                 filteredComponents.map((component) => (
                   <TableRow key={component.id}>
-                    <TableCell className="font-mono">
-                      {component.component_code}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                      {component.component_name}
-                    </TableCell>
+                    <TableCell className="font-mono">{component.component_code}</TableCell>
+                    <TableCell className="font-medium">{component.component_name}</TableCell>
                     <TableCell>
                       <Badge
-                        variant={
-                          component.component_type === 'EARNING'
-                            ? 'default'
-                            : 'secondary'
-                        }
+                        variant={component.component_type === 'EARNING' ? 'default' : 'secondary'}
                       >
                         {component.component_type}
                       </Badge>
@@ -205,7 +204,7 @@ export default function SalaryComponentList() {
                       {component.calculation_type}
                       {component.calculation_type === 'PERCENTAGE' &&
                         component.percentage_value && (
-                          <span className="text-muted-foreground ml-1">
+                          <span className="ml-1 text-muted-foreground">
                             ({component.percentage_value}%)
                           </span>
                         )}
@@ -215,27 +214,21 @@ export default function SalaryComponentList() {
                         {component.is_taxable ? 'Yes' : 'No'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      {component.affects_pf ? 'Yes' : 'No'}
-                    </TableCell>
-                    <TableCell>
-                      {component.affects_esi ? 'Yes' : 'No'}
-                    </TableCell>
+                    <TableCell>{component.affects_pf ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>{component.affects_esi ? 'Yes' : 'No'}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() =>
-                            navigate(`/payroll/components/${component.id}/edit`)
-                          }
+                          onClick={() => navigate(`/admin/payroll/components/${component.id}/edit`)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleDelete(component.id)}
+                          onClick={() => setDeleteId(component.id)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -248,6 +241,19 @@ export default function SalaryComponentList() {
           </Table>
         </CardContent>
       </Card>
+
+      <PayrollConfirmDialog
+        open={Boolean(deleteId)}
+        title="Deactivate salary component?"
+        description="This removes the component from active payroll configuration lists. Existing payroll history is not changed."
+        confirmLabel="Deactivate"
+        destructive
+        busy={deleting}
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteId(null);
+        }}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

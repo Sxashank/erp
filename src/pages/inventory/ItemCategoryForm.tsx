@@ -1,12 +1,12 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
@@ -17,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -24,9 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Save } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
+
+const NONE_OPTION_VALUE = '__none__';
+
 const categorySchema = z.object({
   categoryCode: z.string().min(1, 'Category code is required').max(20),
   categoryName: z.string().min(1, 'Category name is required').max(100),
@@ -76,16 +79,16 @@ export default function ItemCategoryForm() {
 
   const onSubmit = (data: CategoryFormData) => {
     logger.debug('Form submitted:', data);
-    navigate('/inventory/categories');
+    navigate('/admin/inventory/categories');
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={isEdit ? 'Edit Category' : 'Create Category'}
         subtitle={isEdit ? 'Update category details' : 'Add a new item category'}
         breadcrumbs={[
-          { label: 'Categories', to: '/inventory/categories' },
+          { label: 'Categories', to: '/admin/inventory/categories' },
           { label: isEdit ? 'Edit' : 'New' },
         ]}
       />
@@ -96,7 +99,7 @@ export default function ItemCategoryForm() {
             <CardHeader>
               <CardTitle>Category Information</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="categoryCode"
@@ -129,16 +132,21 @@ export default function ItemCategoryForm() {
                 control={form.control}
                 name="parentCategoryId"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Parent Category</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormItem>
+                      <FormLabel>Parent Category</FormLabel>
+                    <Select
+                      onValueChange={(value) =>
+                        field.onChange(value === NONE_OPTION_VALUE ? '' : value)
+                      }
+                      value={field.value || NONE_OPTION_VALUE}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select parent (optional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None (Root Category)</SelectItem>
+                        <SelectItem value={NONE_OPTION_VALUE}>None (Root Category)</SelectItem>
                         {parentCategories.map((cat) => (
                           <SelectItem key={cat.id} value={cat.id}>
                             {cat.name}
@@ -160,11 +168,7 @@ export default function ItemCategoryForm() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea
-                          placeholder="Enter category description"
-                          rows={3}
-                          {...field}
-                        />
+                        <Textarea placeholder="Enter category description" rows={3} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -179,17 +183,14 @@ export default function ItemCategoryForm() {
               <CardTitle>Tracking Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <FormField
                   control={form.control}
                   name="isStockable"
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <div>
                         <FormLabel className="font-normal">Is Stockable</FormLabel>
@@ -205,10 +206,7 @@ export default function ItemCategoryForm() {
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <div>
                         <FormLabel className="font-normal">Requires Serial Number</FormLabel>
@@ -224,10 +222,7 @@ export default function ItemCategoryForm() {
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <div>
                         <FormLabel className="font-normal">Requires Batch Number</FormLabel>
@@ -244,7 +239,7 @@ export default function ItemCategoryForm() {
             <CardHeader>
               <CardTitle>GL Account Mapping</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="glInventoryAccountId"
@@ -308,7 +303,7 @@ export default function ItemCategoryForm() {
               Cancel
             </Button>
             <Button type="submit">
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               {isEdit ? 'Update Category' : 'Create Category'}
             </Button>
           </div>

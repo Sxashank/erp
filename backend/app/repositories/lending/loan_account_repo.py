@@ -2,36 +2,35 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional, List, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.repositories.base import BaseRepository
-from app.models.lending.loan_account import (
-    LoanAccount,
-    Disbursement,
-    RepaymentSchedule,
-    ScheduleInstallment,
-    LoanAccrual,
-    LoanReceipt,
-    ReceiptAllocation,
-    LoanMandate,
-    AssetClassificationHistory,
-    LoanProvision,
-    LoanAdjustment,
-)
 from app.models.lending.enums import (
-    LoanAccountStatus,
+    AccrualStatus,
+    AssetClassification,
     DisbursementStatus,
     InstallmentStatus,
-    ReceiptStatus,
+    LoanAccountStatus,
     MandateStatus,
-    AssetClassification,
-    AccrualStatus,
+    ReceiptStatus,
 )
+from app.models.lending.loan_account import (
+    AssetClassificationHistory,
+    Disbursement,
+    LoanAccount,
+    LoanAccrual,
+    LoanAdjustment,
+    LoanMandate,
+    LoanProvision,
+    LoanReceipt,
+    ReceiptAllocation,
+    RepaymentSchedule,
+    ScheduleInstallment,
+)
+from app.repositories.base import BaseRepository
 
 
 class LoanAccountRepository(BaseRepository[LoanAccount]):
@@ -40,7 +39,7 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
     def __init__(self, db: AsyncSession):
         super().__init__(LoanAccount, db)
 
-    async def get_by_account_number(self, account_number: str) -> Optional[LoanAccount]:
+    async def get_by_account_number(self, account_number: str) -> LoanAccount | None:
         """Get loan account by account number."""
         query = select(LoanAccount).where(
             LoanAccount.loan_account_number == account_number,
@@ -49,7 +48,7 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_sanction(self, sanction_id: UUID) -> Optional[LoanAccount]:
+    async def get_by_sanction(self, sanction_id: UUID) -> LoanAccount | None:
         """Get loan account by sanction ID."""
         query = select(LoanAccount).where(
             LoanAccount.sanction_id == sanction_id,
@@ -62,7 +61,7 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
         self,
         entity_id: UUID,
         include_closed: bool = False,
-    ) -> List[LoanAccount]:
+    ) -> list[LoanAccount]:
         """Get all loan accounts for an entity."""
         query = select(LoanAccount).where(
             LoanAccount.entity_id == entity_id,
@@ -74,7 +73,7 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_with_details(self, loan_account_id: UUID) -> Optional[LoanAccount]:
+    async def get_with_details(self, loan_account_id: UUID) -> LoanAccount | None:
         """Get loan account with related data."""
         query = (
             select(LoanAccount)
@@ -97,16 +96,23 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
         skip: int = 0,
         limit: int = 50,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        product_id: Optional[UUID] = None,
-        status: Optional[LoanAccountStatus] = None,
-        asset_classification: Optional[AssetClassification] = None,
-        min_dpd: Optional[int] = None,
-        max_dpd: Optional[int] = None,
-    ) -> Tuple[List[LoanAccount], int]:
+        search: str | None = None,
+        entity_id: UUID | None = None,
+        product_id: UUID | None = None,
+        status: LoanAccountStatus | None = None,
+        asset_classification: AssetClassification | None = None,
+        min_dpd: int | None = None,
+        max_dpd: int | None = None,
+    ) -> tuple[list[LoanAccount], int]:
         """Get paginated list of loan accounts with filters."""
-        query = select(LoanAccount).where(LoanAccount.organization_id == organization_id)
+        query = (
+            select(LoanAccount)
+            .where(LoanAccount.organization_id == organization_id)
+            .options(
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.product),
+            )
+        )
 
         if not include_inactive:
             query = query.where(LoanAccount.is_active == True)
@@ -147,19 +153,21 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
     async def get_npa_accounts(
         self,
         organization_id: UUID,
-    ) -> List[LoanAccount]:
+    ) -> list[LoanAccount]:
         """Get all NPA accounts."""
         query = select(LoanAccount).where(
             LoanAccount.organization_id == organization_id,
             LoanAccount.is_active == True,
-            LoanAccount.asset_classification.in_([
-                AssetClassification.NPA,
-                AssetClassification.SUBSTANDARD,
-                AssetClassification.DOUBTFUL_1,
-                AssetClassification.DOUBTFUL_2,
-                AssetClassification.DOUBTFUL_3,
-                AssetClassification.LOSS,
-            ]),
+            LoanAccount.asset_classification.in_(
+                [
+                    AssetClassification.NPA,
+                    AssetClassification.SUBSTANDARD,
+                    AssetClassification.DOUBTFUL_1,
+                    AssetClassification.DOUBTFUL_2,
+                    AssetClassification.DOUBTFUL_3,
+                    AssetClassification.LOSS,
+                ]
+            ),
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
@@ -168,7 +176,7 @@ class LoanAccountRepository(BaseRepository[LoanAccount]):
         self,
         organization_id: UUID,
         accrual_date: date,
-    ) -> List[LoanAccount]:
+    ) -> list[LoanAccount]:
         """Get accounts eligible for accrual on given date."""
         query = select(LoanAccount).where(
             LoanAccount.organization_id == organization_id,
@@ -218,7 +226,7 @@ class DisbursementRepository(BaseRepository[Disbursement]):
     def __init__(self, db: AsyncSession):
         super().__init__(Disbursement, db)
 
-    async def get_by_reference(self, reference: str) -> Optional[Disbursement]:
+    async def get_by_reference(self, reference: str) -> Disbursement | None:
         """Get disbursement by reference number."""
         query = select(Disbursement).where(
             Disbursement.disbursement_reference == reference,
@@ -227,7 +235,7 @@ class DisbursementRepository(BaseRepository[Disbursement]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_utr(self, utr_number: str) -> Optional[Disbursement]:
+    async def get_by_utr(self, utr_number: str) -> Disbursement | None:
         """Get disbursement by UTR number."""
         query = select(Disbursement).where(
             Disbursement.utr_number == utr_number,
@@ -240,7 +248,7 @@ class DisbursementRepository(BaseRepository[Disbursement]):
         self,
         loan_account_id: UUID,
         include_inactive: bool = False,
-    ) -> List[Disbursement]:
+    ) -> list[Disbursement]:
         """Get all disbursements for a loan account."""
         query = select(Disbursement).where(Disbursement.loan_account_id == loan_account_id)
         if not include_inactive:
@@ -252,7 +260,7 @@ class DisbursementRepository(BaseRepository[Disbursement]):
     async def get_pending_disbursements(
         self,
         loan_account_id: UUID,
-    ) -> List[Disbursement]:
+    ) -> list[Disbursement]:
         """Get pending disbursements for a loan account."""
         query = select(Disbursement).where(
             Disbursement.loan_account_id == loan_account_id,
@@ -291,7 +299,7 @@ class RepaymentScheduleRepository(BaseRepository[RepaymentSchedule]):
     async def get_current_schedule(
         self,
         loan_account_id: UUID,
-    ) -> Optional[RepaymentSchedule]:
+    ) -> RepaymentSchedule | None:
         """Get current active schedule for a loan account."""
         query = (
             select(RepaymentSchedule)
@@ -308,7 +316,7 @@ class RepaymentScheduleRepository(BaseRepository[RepaymentSchedule]):
     async def get_all_schedules(
         self,
         loan_account_id: UUID,
-    ) -> List[RepaymentSchedule]:
+    ) -> list[RepaymentSchedule]:
         """Get all schedules for a loan account."""
         query = (
             select(RepaymentSchedule)
@@ -361,7 +369,7 @@ class ScheduleInstallmentRepository(BaseRepository[ScheduleInstallment]):
     async def get_schedule_installments(
         self,
         schedule_id: UUID,
-    ) -> List[ScheduleInstallment]:
+    ) -> list[ScheduleInstallment]:
         """Get all installments for a schedule."""
         query = (
             select(ScheduleInstallment)
@@ -378,7 +386,7 @@ class ScheduleInstallmentRepository(BaseRepository[ScheduleInstallment]):
         self,
         schedule_id: UUID,
         as_of_date: date,
-    ) -> List[ScheduleInstallment]:
+    ) -> list[ScheduleInstallment]:
         """Get installments due as of a date."""
         query = (
             select(ScheduleInstallment)
@@ -386,11 +394,13 @@ class ScheduleInstallmentRepository(BaseRepository[ScheduleInstallment]):
                 ScheduleInstallment.schedule_id == schedule_id,
                 ScheduleInstallment.is_active == True,
                 ScheduleInstallment.due_date <= as_of_date,
-                ScheduleInstallment.status.in_([
-                    InstallmentStatus.DUE,
-                    InstallmentStatus.PARTIALLY_PAID,
-                    InstallmentStatus.OVERDUE,
-                ]),
+                ScheduleInstallment.status.in_(
+                    [
+                        InstallmentStatus.DUE,
+                        InstallmentStatus.PARTIALLY_PAID,
+                        InstallmentStatus.OVERDUE,
+                    ]
+                ),
             )
             .order_by(ScheduleInstallment.due_date)
         )
@@ -400,7 +410,7 @@ class ScheduleInstallmentRepository(BaseRepository[ScheduleInstallment]):
     async def get_overdue_installments(
         self,
         schedule_id: UUID,
-    ) -> List[ScheduleInstallment]:
+    ) -> list[ScheduleInstallment]:
         """Get overdue installments for a schedule."""
         query = (
             select(ScheduleInstallment)
@@ -417,19 +427,21 @@ class ScheduleInstallmentRepository(BaseRepository[ScheduleInstallment]):
     async def get_next_due_installment(
         self,
         schedule_id: UUID,
-    ) -> Optional[ScheduleInstallment]:
+    ) -> ScheduleInstallment | None:
         """Get next unpaid installment."""
         query = (
             select(ScheduleInstallment)
             .where(
                 ScheduleInstallment.schedule_id == schedule_id,
                 ScheduleInstallment.is_active == True,
-                ScheduleInstallment.status.in_([
-                    InstallmentStatus.NOT_DUE,
-                    InstallmentStatus.DUE,
-                    InstallmentStatus.PARTIALLY_PAID,
-                    InstallmentStatus.OVERDUE,
-                ]),
+                ScheduleInstallment.status.in_(
+                    [
+                        InstallmentStatus.NOT_DUE,
+                        InstallmentStatus.DUE,
+                        InstallmentStatus.PARTIALLY_PAID,
+                        InstallmentStatus.OVERDUE,
+                    ]
+                ),
             )
             .order_by(ScheduleInstallment.due_date)
             .limit(1)
@@ -440,19 +452,18 @@ class ScheduleInstallmentRepository(BaseRepository[ScheduleInstallment]):
     async def get_oldest_unpaid_date(
         self,
         schedule_id: UUID,
-    ) -> Optional[date]:
+    ) -> date | None:
         """Get oldest unpaid installment date."""
-        query = (
-            select(func.min(ScheduleInstallment.due_date))
-            .where(
-                ScheduleInstallment.schedule_id == schedule_id,
-                ScheduleInstallment.is_active == True,
-                ScheduleInstallment.status.in_([
+        query = select(func.min(ScheduleInstallment.due_date)).where(
+            ScheduleInstallment.schedule_id == schedule_id,
+            ScheduleInstallment.is_active == True,
+            ScheduleInstallment.status.in_(
+                [
                     InstallmentStatus.DUE,
                     InstallmentStatus.PARTIALLY_PAID,
                     InstallmentStatus.OVERDUE,
-                ]),
-            )
+                ]
+            ),
         )
         result = await self.session.execute(query)
         return result.scalar()
@@ -467,9 +478,9 @@ class LoanAccrualRepository(BaseRepository[LoanAccrual]):
     async def get_loan_accruals(
         self,
         loan_account_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> List[LoanAccrual]:
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[LoanAccrual]:
         """Get accruals for a loan account."""
         query = select(LoanAccrual).where(
             LoanAccrual.loan_account_id == loan_account_id,
@@ -488,7 +499,7 @@ class LoanAccrualRepository(BaseRepository[LoanAccrual]):
         loan_account_id: UUID,
         accrual_date: date,
         category: str,
-    ) -> Optional[LoanAccrual]:
+    ) -> LoanAccrual | None:
         """Get accrual for specific date and category."""
         query = select(LoanAccrual).where(
             LoanAccrual.loan_account_id == loan_account_id,
@@ -502,8 +513,8 @@ class LoanAccrualRepository(BaseRepository[LoanAccrual]):
     async def get_total_accrued(
         self,
         loan_account_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> Decimal:
         """Get total accrued amount."""
         query = select(func.sum(LoanAccrual.accrued_amount)).where(
@@ -525,7 +536,7 @@ class LoanReceiptRepository(BaseRepository[LoanReceipt]):
     def __init__(self, db: AsyncSession):
         super().__init__(LoanReceipt, db)
 
-    async def get_by_receipt_number(self, receipt_number: str) -> Optional[LoanReceipt]:
+    async def get_by_receipt_number(self, receipt_number: str) -> LoanReceipt | None:
         """Get receipt by receipt number."""
         query = select(LoanReceipt).where(
             LoanReceipt.receipt_number == receipt_number,
@@ -538,9 +549,9 @@ class LoanReceiptRepository(BaseRepository[LoanReceipt]):
         self,
         loan_account_id: UUID,
         include_inactive: bool = False,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> List[LoanReceipt]:
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[LoanReceipt]:
         """Get all receipts for a loan account."""
         query = select(LoanReceipt).where(LoanReceipt.loan_account_id == loan_account_id)
         if not include_inactive:
@@ -553,7 +564,7 @@ class LoanReceiptRepository(BaseRepository[LoanReceipt]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_with_allocations(self, receipt_id: UUID) -> Optional[LoanReceipt]:
+    async def get_with_allocations(self, receipt_id: UUID) -> LoanReceipt | None:
         """Get receipt with allocations."""
         query = (
             select(LoanReceipt)
@@ -566,8 +577,8 @@ class LoanReceiptRepository(BaseRepository[LoanReceipt]):
     async def get_total_collected(
         self,
         loan_account_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> Decimal:
         """Get total collected amount."""
         query = select(func.sum(LoanReceipt.receipt_amount)).where(
@@ -607,7 +618,7 @@ class ReceiptAllocationRepository(BaseRepository[ReceiptAllocation]):
     async def get_receipt_allocations(
         self,
         receipt_id: UUID,
-    ) -> List[ReceiptAllocation]:
+    ) -> list[ReceiptAllocation]:
         """Get all allocations for a receipt."""
         query = (
             select(ReceiptAllocation)
@@ -623,7 +634,7 @@ class ReceiptAllocationRepository(BaseRepository[ReceiptAllocation]):
     async def get_installment_allocations(
         self,
         installment_id: UUID,
-    ) -> List[ReceiptAllocation]:
+    ) -> list[ReceiptAllocation]:
         """Get all allocations for an installment."""
         query = select(ReceiptAllocation).where(
             ReceiptAllocation.installment_id == installment_id,
@@ -639,7 +650,7 @@ class LoanMandateRepository(BaseRepository[LoanMandate]):
     def __init__(self, db: AsyncSession):
         super().__init__(LoanMandate, db)
 
-    async def get_by_reference(self, reference: str) -> Optional[LoanMandate]:
+    async def get_by_reference(self, reference: str) -> LoanMandate | None:
         """Get mandate by reference."""
         query = select(LoanMandate).where(
             LoanMandate.mandate_reference == reference,
@@ -648,7 +659,7 @@ class LoanMandateRepository(BaseRepository[LoanMandate]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_umrn(self, umrn: str) -> Optional[LoanMandate]:
+    async def get_by_umrn(self, umrn: str) -> LoanMandate | None:
         """Get mandate by UMRN."""
         query = select(LoanMandate).where(
             LoanMandate.umrn == umrn,
@@ -661,7 +672,7 @@ class LoanMandateRepository(BaseRepository[LoanMandate]):
         self,
         loan_account_id: UUID,
         include_inactive: bool = False,
-    ) -> List[LoanMandate]:
+    ) -> list[LoanMandate]:
         """Get all mandates for a loan account."""
         query = select(LoanMandate).where(LoanMandate.loan_account_id == loan_account_id)
         if not include_inactive:
@@ -673,7 +684,7 @@ class LoanMandateRepository(BaseRepository[LoanMandate]):
     async def get_active_mandate(
         self,
         loan_account_id: UUID,
-    ) -> Optional[LoanMandate]:
+    ) -> LoanMandate | None:
         """Get active mandate for a loan account."""
         query = select(LoanMandate).where(
             LoanMandate.loan_account_id == loan_account_id,
@@ -693,7 +704,7 @@ class AssetClassificationHistoryRepository(BaseRepository[AssetClassificationHis
     async def get_loan_history(
         self,
         loan_account_id: UUID,
-    ) -> List[AssetClassificationHistory]:
+    ) -> list[AssetClassificationHistory]:
         """Get classification history for a loan account."""
         query = (
             select(AssetClassificationHistory)
@@ -709,7 +720,7 @@ class AssetClassificationHistoryRepository(BaseRepository[AssetClassificationHis
     async def get_latest_classification(
         self,
         loan_account_id: UUID,
-    ) -> Optional[AssetClassificationHistory]:
+    ) -> AssetClassificationHistory | None:
         """Get latest classification for a loan account."""
         query = (
             select(AssetClassificationHistory)
@@ -733,9 +744,9 @@ class LoanProvisionRepository(BaseRepository[LoanProvision]):
     async def get_loan_provisions(
         self,
         loan_account_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> List[LoanProvision]:
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> list[LoanProvision]:
         """Get provisions for a loan account."""
         query = select(LoanProvision).where(
             LoanProvision.loan_account_id == loan_account_id,
@@ -752,7 +763,7 @@ class LoanProvisionRepository(BaseRepository[LoanProvision]):
     async def get_latest_provision(
         self,
         loan_account_id: UUID,
-    ) -> Optional[LoanProvision]:
+    ) -> LoanProvision | None:
         """Get latest provision for a loan account."""
         query = (
             select(LoanProvision)
@@ -787,7 +798,7 @@ class LoanAdjustmentRepository(BaseRepository[LoanAdjustment]):
     def __init__(self, db: AsyncSession):
         super().__init__(LoanAdjustment, db)
 
-    async def get_by_reference(self, reference: str) -> Optional[LoanAdjustment]:
+    async def get_by_reference(self, reference: str) -> LoanAdjustment | None:
         """Get adjustment by reference."""
         query = select(LoanAdjustment).where(
             LoanAdjustment.adjustment_reference == reference,
@@ -800,7 +811,7 @@ class LoanAdjustmentRepository(BaseRepository[LoanAdjustment]):
         self,
         loan_account_id: UUID,
         include_inactive: bool = False,
-    ) -> List[LoanAdjustment]:
+    ) -> list[LoanAdjustment]:
         """Get all adjustments for a loan account."""
         query = select(LoanAdjustment).where(LoanAdjustment.loan_account_id == loan_account_id)
         if not include_inactive:

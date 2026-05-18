@@ -1,7 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
 import { AlertTriangle, Calculator, Plus, Save, Send, Trash2 } from 'lucide-react';
-import { useState } from 'react';
 import { useFieldArray, useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
@@ -40,8 +39,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { useToast } from '@/hooks/use-toast';
 import { useAccounts, usePeriods } from '@/hooks/finance/useAccounts';
+import { useToast } from '@/hooks/use-toast';
 import { formatCurrency } from '@/lib/utils';
 import { vouchersApi } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
@@ -152,9 +151,6 @@ export default function GLPostingCreate(): JSX.Element {
           credit_amount: e.credit,
           cost_center_id: e.costCenter || null,
         })),
-      };
-      const headers: Record<string, string> = {
-        'Idempotency-Key': crypto.randomUUID(),
       };
       const created = await vouchersApi.create(body);
       if (action === 'submit' && created.data?.id) {

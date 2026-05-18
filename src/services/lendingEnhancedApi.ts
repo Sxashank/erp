@@ -4,6 +4,7 @@
  */
 
 import api from './api';
+
 import type {
   NPAClassificationResult,
   ProvisionCalculation,
@@ -67,8 +68,8 @@ export const npaApi = {
   batchClassify: async (
     organizationId: string,
     asOfDate?: string,
-    autoUpdate: boolean = true
-  ): Promise<{ total_processed: number; classifications: Record<string, number>; errors: any[] }> => {
+    autoUpdate = true
+  ): Promise<{ total_processed: number; classifications: Record<string, number>; errors: unknown[] }> => {
     const response = await api.post(`${BASE_URL}/npa/batch-classify`, {
       as_of_date: asOfDate,
       auto_update: autoUpdate,
@@ -130,7 +131,7 @@ export const scheduleApi = {
     return response.data;
   },
 
-  getSchedule: async (loanAccountId: string, includePaid: boolean = true): Promise<LoanSchedule> => {
+  getSchedule: async (loanAccountId: string, includePaid = true): Promise<LoanSchedule> => {
     const response = await api.get(`${BASE_URL}/schedules/${loanAccountId}`, {
       params: { include_paid: includePaid },
     });
@@ -180,8 +181,8 @@ export const receiptApi = {
 
   allocateReceipt: async (
     receiptId: string,
-    allocationMethod: string = 'fifo',
-    specificAllocations?: any[]
+    allocationMethod = 'fifo',
+    specificAllocations?: Record<string, unknown>[]
   ): Promise<{ receipt_id: string; allocation_count: number; allocations: ReceiptAllocation[] }> => {
     const response = await api.post(`${BASE_URL}/receipts/allocate`, {
       receipt_id: receiptId,
@@ -203,7 +204,7 @@ export const receiptApi = {
   processBulkReceipts: async (
     organizationId: string,
     receipts: BulkReceiptItem[],
-    autoAllocate: boolean = true
+    autoAllocate = true
   ): Promise<BulkReceiptResult> => {
     const response = await api.post(`${BASE_URL}/receipts/bulk`, {
       receipts,
@@ -340,7 +341,7 @@ export const disbursementApi = {
   getPendingDisbursements: async (
     organizationId: string,
     status?: string
-  ): Promise<{ organization_id: string; count: number; disbursements: any[] }> => {
+  ): Promise<{ organization_id: string; count: number; disbursements: Record<string, unknown>[] }> => {
     const response = await api.get(`${BASE_URL}/disbursements/pending`, {
       params: { organization_id: organizationId, status },
     });
@@ -420,7 +421,7 @@ export const collateralApi = {
     return response.data;
   },
 
-  getCoverage: async (sanctionId: string, includeReleased: boolean = false): Promise<SecurityCoverage> => {
+  getCoverage: async (sanctionId: string, includeReleased = false): Promise<SecurityCoverage> => {
     const response = await api.get(`${BASE_URL}/collaterals/coverage/${sanctionId}`, {
       params: { include_released: includeReleased },
     });
@@ -436,8 +437,8 @@ export const collateralApi = {
 
   getDueForValuation: async (
     organizationId: string,
-    daysAhead: number = 30
-  ): Promise<{ organization_id: string; count: number; securities: any[] }> => {
+    daysAhead = 30
+  ): Promise<{ organization_id: string; count: number; securities: Record<string, unknown>[] }> => {
     const response = await api.get(`${BASE_URL}/collaterals/due-valuation`, {
       params: { organization_id: organizationId, days_ahead: daysAhead },
     });

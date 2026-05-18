@@ -3,19 +3,6 @@
  * Wrapper layout for all ESS pages with navigation
  */
 
-import { useState } from 'react';
-import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { cn } from '@/lib/utils';
 import {
   LayoutDashboard,
   User,
@@ -31,6 +18,21 @@ import {
   Building2,
   ChevronRight,
 } from 'lucide-react';
+import { useState } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
+
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { cn } from '@/lib/utils';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 
 const navItems = [
   { label: 'Dashboard', href: '/ess/dashboard', icon: LayoutDashboard },
@@ -46,15 +48,11 @@ export default function ESSLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  // Get user from localStorage
-  const userStr = localStorage.getItem('ess_user');
-  const user = userStr ? JSON.parse(userStr) : null;
+  const user = useEssAuthStore((state) => state.user);
+  const clearSession = useEssAuthStore((state) => state.clear);
 
   const handleLogout = () => {
-    localStorage.removeItem('ess_access_token');
-    localStorage.removeItem('ess_refresh_token');
-    localStorage.removeItem('ess_user');
+    clearSession();
     navigate('/ess/login');
   };
 
@@ -116,18 +114,18 @@ export default function ESSLayout() {
                   <Avatar className="h-8 w-8">
                     <AvatarImage src="" />
                     <AvatarFallback className="bg-blue-600 text-white text-sm">
-                      {user?.employee_name?.charAt(0) || 'E'}
+                    {(user?.employee_name ?? user?.name)?.charAt(0) || 'E'}
                     </AvatarFallback>
                   </Avatar>
                   <span className="hidden sm:block text-sm font-medium max-w-[120px] truncate">
-                    {user?.employee_name || 'Employee'}
+                    {user?.employee_name ?? user?.name ?? 'Employee'}
                   </span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>
                   <div>
-                    <p className="font-medium">{user?.employee_name}</p>
+                    <p className="font-medium">{user?.employee_name ?? user?.name}</p>
                     <p className="text-xs text-gray-500">{user?.employee_code}</p>
                   </div>
                 </DropdownMenuLabel>

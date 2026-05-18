@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Calculator,
@@ -13,9 +11,14 @@ import {
   FileText,
   Printer,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import {
   Table,
@@ -26,8 +29,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useToast } from '@/hooks/use-toast';
 import { formatDate, formatCurrency } from '@/lib/utils';
+import { hrisApi } from '@/services/api';
 
 interface FnFData {
   separation_id: string;
@@ -84,136 +88,285 @@ interface FnFData {
     total_earnings: number;
     total_deductions: number;
     net_payable: number;
-    status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID';
+    status: 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID' | 'CANCELLED';
   };
 }
 
-// Mock F&F data
-const mockFnFData: FnFData = {
-  separation_id: 'sep-001',
-  employee: {
-    id: 'emp-001',
-    code: 'EMP001',
-    name: 'Rahul Sharma',
-    department: 'Engineering',
-    designation: 'Senior Developer',
-    date_of_joining: '2018-03-15',
-    last_working_date: '2024-12-31',
-    total_service_years: 6,
-    total_service_months: 9,
-  },
-  salary_components: {
-    basic: 50000,
-    da: 10000,
-    hra: 25000,
-    special_allowance: 15000,
-    other_allowances: 5000,
-    gross_salary: 105000,
-  },
-  earnings: [
-    { component: 'Salary (Pro-rata)', description: '15 days of December 2024', amount: 52500, days: 15 },
-    { component: 'Leave Encashment', description: 'EL Balance: 24 days', amount: 48000, days: 24 },
-    { component: 'Gratuity', description: '6 years 9 months service', amount: 346154 },
-    { component: 'Bonus (Pro-rata)', description: 'FY 2024-25 (9 months)', amount: 37500 },
-    { component: 'Notice Period Buyout', description: 'Company paid', amount: 0 },
-    { component: 'Reimbursements', description: 'Pending claims', amount: 12500 },
-  ],
-  deductions: [
-    { component: 'PF Recovery', description: 'Employee contribution', amount: 9000 },
-    { component: 'Professional Tax', description: 'December 2024', amount: 200 },
-    { component: 'Loan Recovery', description: 'Outstanding balance', amount: 50000 },
-    { component: 'Notice Period Shortfall', description: 'Not applicable', amount: 0 },
-    { component: 'Asset Recovery', description: 'Laptop not returned', amount: 0 },
-    { component: 'TDS', description: 'Tax on F&F', amount: 45000 },
-  ],
-  gratuity: {
-    eligible: true,
-    service_years: 6,
-    last_drawn_basic_da: 60000,
-    calculated_amount: 346154,
-    capped_amount: 346154,
-    formula: '(Basic + DA) × 15 / 26 × Years of Service',
-  },
-  leave_encashment: {
-    el_balance: 24,
-    daily_rate: 2000,
-    amount: 48000,
-  },
-  tax_calculation: {
-    total_earnings: 496654,
-    total_deductions: 104200,
-    taxable_amount: 392454,
-    tds_deducted: 45000,
-  },
-  summary: {
-    total_earnings: 496654,
-    total_deductions: 104200,
-    net_payable: 392454,
-    status: 'PENDING_APPROVAL',
-  },
+interface SeparationSummary {
+  employee_id: string;
+  employee_code?: string;
+  employee_name?: string;
+  approved_last_working_date?: string;
+  requested_last_working_date?: string;
+  actual_last_working_date?: string;
+}
+
+interface FnFApiResponse {
+  id: string;
+  separation_id: string;
+  employee_id: string;
+  last_working_date: string;
+  status: 'DRAFT' | 'CALCULATED' | 'PENDING_APPROVAL' | 'APPROVED' | 'PAID' | 'CANCELLED';
+  pending_salary: number | string;
+  leave_encashment: number | string;
+  leave_encashment_days: number | string;
+  gratuity_amount: number | string;
+  gratuity_years: number | string;
+  gratuity_eligible: boolean;
+  bonus_amount: number | string;
+  pending_reimbursements: number | string;
+  other_earnings: number | string;
+  total_earnings: number | string;
+  notice_recovery: number | string;
+  notice_shortfall_days: number;
+  advance_recovery: number | string;
+  loan_recovery: number | string;
+  asset_recovery: number | string;
+  clearance_recovery: number | string;
+  other_deductions: number | string;
+  tds_amount: number | string;
+  total_deductions: number | string;
+  net_payable: number | string;
+}
+
+const toNumber = (value: number | string | undefined) => Number(value ?? 0);
+
+const toFnFData = (fnf: FnFApiResponse, separation?: SeparationSummary): FnFData => {
+  const pendingSalary = toNumber(fnf.pending_salary);
+  const leaveEncashment = toNumber(fnf.leave_encashment);
+  const gratuityAmount = toNumber(fnf.gratuity_amount);
+  const leaveDays = toNumber(fnf.leave_encashment_days);
+  const gratuityYears = toNumber(fnf.gratuity_years);
+  const tdsAmount = toNumber(fnf.tds_amount);
+  const totalEarnings = toNumber(fnf.total_earnings);
+  const totalDeductions = toNumber(fnf.total_deductions);
+
+  return {
+    separation_id: fnf.separation_id,
+    employee: {
+      id: fnf.employee_id,
+      code: separation?.employee_code || fnf.employee_id,
+      name: separation?.employee_name || 'Employee',
+      department: '—',
+      designation: '—',
+      date_of_joining: '',
+      last_working_date:
+        fnf.last_working_date ||
+        separation?.actual_last_working_date ||
+        separation?.approved_last_working_date ||
+        separation?.requested_last_working_date ||
+        '',
+      total_service_years: Math.floor(gratuityYears),
+      total_service_months: Math.round((gratuityYears % 1) * 12),
+    },
+    salary_components: {
+      basic: 0,
+      da: 0,
+      hra: 0,
+      special_allowance: 0,
+      other_allowances: 0,
+      gross_salary: pendingSalary,
+    },
+    earnings: [
+      { component: 'Pending salary', description: 'Salary payable until last working date', amount: pendingSalary },
+      { component: 'Leave encashment', description: `${leaveDays} days encashed`, amount: leaveEncashment, days: leaveDays },
+      { component: 'Gratuity', description: `${gratuityYears} years eligible service`, amount: gratuityAmount },
+      { component: 'Bonus', description: 'Pending bonus payable', amount: toNumber(fnf.bonus_amount) },
+      { component: 'Reimbursements', description: 'Approved pending reimbursements', amount: toNumber(fnf.pending_reimbursements) },
+      { component: 'Other earnings', description: 'Additional earnings captured in FnF', amount: toNumber(fnf.other_earnings) },
+    ].filter((item) => item.amount !== 0),
+    deductions: [
+      { component: 'Notice recovery', description: `${fnf.notice_shortfall_days} day shortfall`, amount: toNumber(fnf.notice_recovery) },
+      { component: 'Advance recovery', description: 'Outstanding employee advances', amount: toNumber(fnf.advance_recovery) },
+      { component: 'Loan recovery', description: 'Outstanding employee loan balance', amount: toNumber(fnf.loan_recovery) },
+      { component: 'Asset recovery', description: 'Asset or clearance recovery', amount: toNumber(fnf.asset_recovery) },
+      { component: 'Clearance recovery', description: 'Pending clearance recoveries', amount: toNumber(fnf.clearance_recovery) },
+      { component: 'Other deductions', description: 'Additional deductions captured in FnF', amount: toNumber(fnf.other_deductions) },
+      { component: 'TDS', description: 'Tax deducted at source on FnF', amount: tdsAmount },
+    ].filter((item) => item.amount !== 0),
+    gratuity: {
+      eligible: fnf.gratuity_eligible,
+      service_years: gratuityYears,
+      last_drawn_basic_da: 0,
+      calculated_amount: gratuityAmount,
+      capped_amount: gratuityAmount,
+      formula: '(Basic + DA) × 15 / 26 × Years of Service',
+    },
+    leave_encashment: {
+      el_balance: leaveDays,
+      daily_rate: leaveDays > 0 ? leaveEncashment / leaveDays : 0,
+      amount: leaveEncashment,
+    },
+    tax_calculation: {
+      total_earnings: totalEarnings,
+      total_deductions: totalDeductions,
+      taxable_amount: Math.max(0, totalEarnings - gratuityAmount - leaveEncashment),
+      tds_deducted: tdsAmount,
+    },
+    summary: {
+      total_earnings: totalEarnings,
+      total_deductions: totalDeductions,
+      net_payable: toNumber(fnf.net_payable),
+      status: fnf.status === 'CALCULATED' ? 'PENDING_APPROVAL' : fnf.status,
+    },
+  };
 };
 
 export default function FnFCalculation() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const [fnfData] = useState<FnFData>(mockFnFData);
+  const { toast } = useToast();
+  const [fnfData, setFnfData] = useState<FnFData | null>(null);
+  const [separation, setSeparation] = useState<SeparationSummary | undefined>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCalculating, setIsCalculating] = useState(false);
+
+  const loadFnF = useCallback(async () => {
+    if (!id) return;
+    setIsLoading(true);
+    try {
+      const separationResponse = await hrisApi.getSeparation(id);
+      const separationData = separationResponse.data as SeparationSummary;
+      setSeparation(separationData);
+      const fnfResponse = await hrisApi.getFnF(id);
+      setFnfData(toFnFData(fnfResponse.data as FnFApiResponse, separationData));
+    } catch (error: unknown) {
+      const status = (error as { response?: { status?: number } } | null)?.response?.status;
+      if (status !== 404) {
+        toast({
+          title: 'Unable to load FnF settlement',
+          description: 'Check HRIS FnF permissions and retry.',
+          variant: 'destructive',
+        });
+      }
+      setFnfData(null);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [id, toast]);
+
+  useEffect(() => {
+    loadFnF();
+  }, [loadFnF]);
+
+  const handleCalculate = async () => {
+    if (!id) return;
+    setIsCalculating(true);
+    try {
+      const response = await hrisApi.calculateFnF(id, {
+        include_gratuity: true,
+        include_leave_encashment: true,
+      });
+      setFnfData(toFnFData(response.data as FnFApiResponse, separation));
+      toast({ title: 'FnF settlement calculated' });
+    } catch (error) {
+      toast({
+        title: 'Unable to calculate FnF',
+        description: 'Complete required approvals and clearance steps before calculation.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCalculating(false);
+    }
+  };
 
   const getStatusBadge = (status: string) => {
-    const config: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
+    const config: Record<
+      string,
+      { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }
+    > = {
       DRAFT: { variant: 'outline', label: 'Draft' },
       PENDING_APPROVAL: { variant: 'secondary', label: 'Pending Approval' },
       APPROVED: { variant: 'default', label: 'Approved' },
       PAID: { variant: 'default', label: 'Paid' },
+      CANCELLED: { variant: 'destructive', label: 'Cancelled' },
     };
     const cfg = config[status] || config.DRAFT;
     return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
   };
 
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Full & Final Settlement"
+          subtitle="Loading settlement calculation"
+          breadcrumbs={[{ label: 'Separation', to: '/admin/hris/separation' }, { label: 'FnF' }]}
+        />
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Loading FnF settlement...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!fnfData) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Full & Final Settlement"
+          subtitle={`Settlement calculation for ${separation?.employee_name || 'employee separation'}`}
+          breadcrumbs={[{ label: 'Separation', to: '/admin/hris/separation' }, { label: 'FnF' }]}
+          actions={
+            <Button onClick={handleCalculate} disabled={isCalculating}>
+              <Calculator className="mr-2 h-4 w-4" />
+              {isCalculating ? 'Calculating...' : 'Calculate FnF'}
+            </Button>
+          }
+        />
+        <Card>
+          <CardContent className="py-10 text-center">
+            <Calculator className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+            <h3 className="text-base font-semibold">No FnF settlement calculated</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Generate the settlement from approved separation, clearance, salary, leave, and recovery data.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/hris/separation')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <h1 className="text-3xl font-bold">Full & Final Settlement</h1>
-            <p className="text-muted-foreground">
-              Settlement calculation for {fnfData.employee.name}
-            </p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export PDF
-          </Button>
-          {fnfData.summary.status === 'PENDING_APPROVAL' && (
-            <Button>
-              <Send className="h-4 w-4 mr-2" />
-              Submit for Approval
+      <PageHeader
+        title="Full & Final Settlement"
+        subtitle={`Settlement calculation for ${fnfData.employee.name}`}
+        breadcrumbs={[{ label: 'Separation', to: '/admin/hris/separation' }, { label: 'FnF' }]}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
             </Button>
-          )}
-        </div>
-      </div>
+            <Button variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Export PDF
+            </Button>
+            {fnfData.summary.status === 'PENDING_APPROVAL' && (
+              <Button>
+                <Send className="mr-2 h-4 w-4" />
+                Submit for Approval
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {/* Employee Info Card */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
                 <User className="h-8 w-8 text-primary" />
               </div>
               <div>
                 <h2 className="text-xl font-semibold">{fnfData.employee.name}</h2>
                 <p className="text-muted-foreground">{fnfData.employee.code}</p>
-                <div className="flex items-center gap-4 mt-1 text-sm">
+                <div className="mt-1 flex items-center gap-4 text-sm">
                   <span>{fnfData.employee.department}</span>
                   <span>•</span>
                   <span>{fnfData.employee.designation}</span>
@@ -222,12 +375,13 @@ export default function FnFCalculation() {
             </div>
             <div className="text-right">
               {getStatusBadge(fnfData.summary.status)}
-              <p className="text-sm text-muted-foreground mt-2">
-                Service: {fnfData.employee.total_service_years} years {fnfData.employee.total_service_months} months
+              <p className="mt-2 text-sm text-muted-foreground">
+                Service: {fnfData.employee.total_service_years} years{' '}
+                {fnfData.employee.total_service_months} months
               </p>
             </div>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-4 border-t">
+          <div className="mt-6 grid grid-cols-2 gap-4 border-t pt-4 md:grid-cols-4">
             <div>
               <p className="text-xs text-muted-foreground">Date of Joining</p>
               <p className="font-medium">{formatDate(fnfData.employee.date_of_joining)}</p>
@@ -238,7 +392,9 @@ export default function FnFCalculation() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Gross Salary</p>
-              <p className="font-medium">{formatCurrency(fnfData.salary_components.gross_salary)}</p>
+              <p className="font-medium">
+                {formatCurrency(fnfData.salary_components.gross_salary)}
+              </p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Basic + DA</p>
@@ -251,8 +407,8 @@ export default function FnFCalculation() {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-green-50 border-green-200">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -266,7 +422,7 @@ export default function FnFCalculation() {
           </CardContent>
         </Card>
 
-        <Card className="bg-red-50 border-red-200">
+        <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -280,7 +436,7 @@ export default function FnFCalculation() {
           </CardContent>
         </Card>
 
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="border-blue-200 bg-blue-50">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -294,7 +450,7 @@ export default function FnFCalculation() {
           </CardContent>
         </Card>
 
-        <Card className="bg-purple-50 border-purple-200">
+        <Card className="border-purple-200 bg-purple-50">
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
@@ -319,11 +475,11 @@ export default function FnFCalculation() {
         </TabsList>
 
         <TabsContent value="breakdown" className="space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Earnings */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-green-700 flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-green-700">
                   <CheckCircle className="h-5 w-5" />
                   Earnings
                 </CardTitle>
@@ -365,7 +521,7 @@ export default function FnFCalculation() {
             {/* Deductions */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-red-700 flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-red-700">
                   <AlertTriangle className="h-5 w-5" />
                   Deductions
                 </CardTitle>
@@ -413,9 +569,7 @@ export default function FnFCalculation() {
                 <Calculator className="h-5 w-5" />
                 Gratuity Calculation
               </CardTitle>
-              <CardDescription>
-                As per Payment of Gratuity Act, 1972
-              </CardDescription>
+              <CardDescription>As per Payment of Gratuity Act, 1972</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               {fnfData.gratuity.eligible ? (
@@ -428,24 +582,24 @@ export default function FnFCalculation() {
                     </AlertDescription>
                   </Alert>
 
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="p-4 bg-muted rounded-lg">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                    <div className="rounded-lg bg-muted p-4">
                       <p className="text-sm text-muted-foreground">Service Years</p>
                       <p className="text-2xl font-bold">{fnfData.gratuity.service_years}</p>
                     </div>
-                    <div className="p-4 bg-muted rounded-lg">
+                    <div className="rounded-lg bg-muted p-4">
                       <p className="text-sm text-muted-foreground">Last Drawn Basic + DA</p>
                       <p className="text-2xl font-bold">
                         {formatCurrency(fnfData.gratuity.last_drawn_basic_da)}
                       </p>
                     </div>
-                    <div className="p-4 bg-muted rounded-lg">
+                    <div className="rounded-lg bg-muted p-4">
                       <p className="text-sm text-muted-foreground">Calculated Amount</p>
                       <p className="text-2xl font-bold">
                         {formatCurrency(fnfData.gratuity.calculated_amount)}
                       </p>
                     </div>
-                    <div className="p-4 bg-green-100 rounded-lg">
+                    <div className="rounded-lg bg-green-100 p-4">
                       <p className="text-sm text-green-700">Payable Amount</p>
                       <p className="text-2xl font-bold text-green-800">
                         {formatCurrency(fnfData.gratuity.capped_amount)}
@@ -453,16 +607,17 @@ export default function FnFCalculation() {
                     </div>
                   </div>
 
-                  <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="rounded-lg bg-blue-50 p-4">
                     <p className="text-sm font-medium text-blue-800">Formula Applied:</p>
-                    <p className="text-blue-700 mt-1">{fnfData.gratuity.formula}</p>
-                    <p className="text-sm text-blue-600 mt-2">
-                      = {formatCurrency(fnfData.gratuity.last_drawn_basic_da)} × 15 / 26 × {fnfData.gratuity.service_years}
+                    <p className="mt-1 text-blue-700">{fnfData.gratuity.formula}</p>
+                    <p className="mt-2 text-sm text-blue-600">
+                      = {formatCurrency(fnfData.gratuity.last_drawn_basic_da)} × 15 / 26 ×{' '}
+                      {fnfData.gratuity.service_years}
                     </p>
                     <p className="text-sm text-blue-600">
                       = {formatCurrency(fnfData.gratuity.calculated_amount)}
                     </p>
-                    <p className="text-xs text-muted-foreground mt-2">
+                    <p className="mt-2 text-xs text-muted-foreground">
                       Note: Maximum gratuity payable is capped at ₹20,00,000 as per the Act
                     </p>
                   </div>
@@ -487,23 +642,21 @@ export default function FnFCalculation() {
                 <Calendar className="h-5 w-5" />
                 Leave Encashment
               </CardTitle>
-              <CardDescription>
-                Encashment of earned leave balance
-              </CardDescription>
+              <CardDescription>Encashment of earned leave balance</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-3 gap-4">
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="rounded-lg bg-muted p-4">
                   <p className="text-sm text-muted-foreground">EL Balance</p>
                   <p className="text-2xl font-bold">{fnfData.leave_encashment.el_balance} days</p>
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="rounded-lg bg-muted p-4">
                   <p className="text-sm text-muted-foreground">Daily Rate (Basic + DA / 26)</p>
                   <p className="text-2xl font-bold">
                     {formatCurrency(fnfData.leave_encashment.daily_rate)}
                   </p>
                 </div>
-                <div className="p-4 bg-green-100 rounded-lg">
+                <div className="rounded-lg bg-green-100 p-4">
                   <p className="text-sm text-green-700">Encashment Amount</p>
                   <p className="text-2xl font-bold text-green-800">
                     {formatCurrency(fnfData.leave_encashment.amount)}
@@ -511,10 +664,12 @@ export default function FnFCalculation() {
                 </div>
               </div>
 
-              <div className="p-4 bg-blue-50 rounded-lg">
+              <div className="rounded-lg bg-blue-50 p-4">
                 <p className="text-sm font-medium text-blue-800">Calculation:</p>
-                <p className="text-blue-700 mt-1">
-                  {fnfData.leave_encashment.el_balance} days × {formatCurrency(fnfData.leave_encashment.daily_rate)} = {formatCurrency(fnfData.leave_encashment.amount)}
+                <p className="mt-1 text-blue-700">
+                  {fnfData.leave_encashment.el_balance} days ×{' '}
+                  {formatCurrency(fnfData.leave_encashment.daily_rate)} ={' '}
+                  {formatCurrency(fnfData.leave_encashment.amount)}
                 </p>
               </div>
             </CardContent>
@@ -528,31 +683,32 @@ export default function FnFCalculation() {
                 <FileText className="h-5 w-5" />
                 Tax Calculation
               </CardTitle>
-              <CardDescription>
-                TDS on Full & Final Settlement
-              </CardDescription>
+              <CardDescription>TDS on Full & Final Settlement</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="p-4 bg-muted rounded-lg">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div className="rounded-lg bg-muted p-4">
                   <p className="text-sm text-muted-foreground">Total Earnings</p>
                   <p className="text-xl font-bold">
                     {formatCurrency(fnfData.tax_calculation.total_earnings)}
                   </p>
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="rounded-lg bg-muted p-4">
                   <p className="text-sm text-muted-foreground">Exemptions</p>
                   <p className="text-xl font-bold">
-                    {formatCurrency(fnfData.tax_calculation.total_earnings - fnfData.tax_calculation.taxable_amount)}
+                    {formatCurrency(
+                      fnfData.tax_calculation.total_earnings -
+                        fnfData.tax_calculation.taxable_amount,
+                    )}
                   </p>
                 </div>
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="rounded-lg bg-muted p-4">
                   <p className="text-sm text-muted-foreground">Taxable Amount</p>
                   <p className="text-xl font-bold">
                     {formatCurrency(fnfData.tax_calculation.taxable_amount)}
                   </p>
                 </div>
-                <div className="p-4 bg-red-100 rounded-lg">
+                <div className="rounded-lg bg-red-100 p-4">
                   <p className="text-sm text-red-700">TDS Deducted</p>
                   <p className="text-xl font-bold text-red-800">
                     {formatCurrency(fnfData.tax_calculation.tds_deducted)}
@@ -564,7 +720,7 @@ export default function FnFCalculation() {
                 <FileText className="h-4 w-4" />
                 <AlertTitle>Tax Treatment Notes</AlertTitle>
                 <AlertDescription>
-                  <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
+                  <ul className="mt-2 list-inside list-disc space-y-1 text-sm">
                     <li>Gratuity up to ₹20 lakh is exempt under Section 10(10)</li>
                     <li>Leave encashment up to ₹25 lakh is exempt under Section 10(10AA)</li>
                     <li>Pro-rata salary is fully taxable</li>
@@ -583,9 +739,7 @@ export default function FnFCalculation() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-semibold">Net Payable Amount</h3>
-              <p className="text-sm text-muted-foreground">
-                After all deductions including TDS
-              </p>
+              <p className="text-sm text-muted-foreground">After all deductions including TDS</p>
             </div>
             <div className="text-right">
               <p className="text-3xl font-bold text-primary">
@@ -605,8 +759,30 @@ export default function FnFCalculation() {
 // Helper function to convert number to words (simplified)
 function numberToWords(num: number): string {
   const ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine'];
-  const teens = ['Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen', 'Eighteen', 'Nineteen'];
-  const tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+  const teens = [
+    'Ten',
+    'Eleven',
+    'Twelve',
+    'Thirteen',
+    'Fourteen',
+    'Fifteen',
+    'Sixteen',
+    'Seventeen',
+    'Eighteen',
+    'Nineteen',
+  ];
+  const tens = [
+    '',
+    '',
+    'Twenty',
+    'Thirty',
+    'Forty',
+    'Fifty',
+    'Sixty',
+    'Seventy',
+    'Eighty',
+    'Ninety',
+  ];
 
   if (num === 0) return 'Zero';
 

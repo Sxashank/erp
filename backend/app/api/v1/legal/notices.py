@@ -2,22 +2,22 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import RequirePermissions, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.legal.enums import (
-    NoticeType,
     DeliveryMode,
     DeliveryStatus,
+    NoticeType,
 )
 from app.services.legal.notice_service import NoticeService
+from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/notices", tags=["Legal Notices"])
 
@@ -36,7 +36,7 @@ class NoticeTemplateCreate(BaseModel):
     subject_template: str
     body_template: str
     statutory_period_days: int = Field(..., ge=0)
-    legal_reference: Optional[str] = None
+    legal_reference: str | None = None
     default_language: str = "en"
     requires_acknowledgment: bool = True
     requires_witness: bool = False
@@ -50,7 +50,7 @@ class NoticeTemplateResponse(BaseModel):
     template_name: str
     notice_type: str
     statutory_period_days: int
-    legal_reference: Optional[str] = None
+    legal_reference: str | None = None
     default_language: str
     is_active: bool
 
@@ -65,13 +65,13 @@ class NoticeGenerateRequest(BaseModel):
     loan_account_id: UUID
     customer_id: UUID
     notice_type: NoticeType
-    template_id: Optional[UUID] = None
+    template_id: UUID | None = None
     amount_demanded: Decimal
-    principal_outstanding: Optional[Decimal] = None
-    interest_outstanding: Optional[Decimal] = None
-    other_charges: Optional[Decimal] = None
-    notice_date: Optional[date] = None
-    custom_content: Optional[str] = None
+    principal_outstanding: Decimal | None = None
+    interest_outstanding: Decimal | None = None
+    other_charges: Decimal | None = None
+    notice_date: date | None = None
+    custom_content: str | None = None
     language: str = "en"
 
 
@@ -89,7 +89,7 @@ class NoticeResponse(BaseModel):
     statutory_period_days: int
     response_due_date: date
     is_responded: bool
-    response_date: Optional[date] = None
+    response_date: date | None = None
     is_complied: bool
     current_status: str
 
@@ -101,13 +101,13 @@ class NoticeDispatchRequest(BaseModel):
     """Record notice dispatch request."""
 
     delivery_mode: DeliveryMode
-    tracking_number: Optional[str] = None
-    dispatch_date: Optional[date] = None
+    tracking_number: str | None = None
+    dispatch_date: date | None = None
     recipient_name: str
     recipient_address: str
-    recipient_pincode: Optional[str] = None
-    dispatch_office: Optional[str] = None
-    dispatch_cost: Optional[Decimal] = None
+    recipient_pincode: str | None = None
+    dispatch_office: str | None = None
+    dispatch_cost: Decimal | None = None
 
 
 class NoticeDeliveryResponse(BaseModel):
@@ -116,10 +116,10 @@ class NoticeDeliveryResponse(BaseModel):
     id: UUID
     notice_id: UUID
     delivery_mode: str
-    tracking_number: Optional[str] = None
+    tracking_number: str | None = None
     dispatch_date: date
     delivery_status: str
-    delivered_date: Optional[date] = None
+    delivered_date: date | None = None
     recipient_name: str
     pod_received: bool
 
@@ -131,10 +131,10 @@ class DeliveryUpdateRequest(BaseModel):
     """Update delivery status request."""
 
     delivery_status: DeliveryStatus
-    delivered_date: Optional[date] = None
-    received_by: Optional[str] = None
-    pod_document_id: Optional[UUID] = None
-    remarks: Optional[str] = None
+    delivered_date: date | None = None
+    received_by: str | None = None
+    pod_document_id: UUID | None = None
+    remarks: str | None = None
 
 
 class NoticeResponseRequest(BaseModel):
@@ -142,15 +142,15 @@ class NoticeResponseRequest(BaseModel):
 
     response_date: date
     response_type: str = Field(..., description="OBJECTION, COMPLIANCE, PARTIAL_COMPLIANCE")
-    response_content: Optional[str] = None
-    amount_paid: Optional[Decimal] = None
-    document_ids: Optional[List[UUID]] = None
+    response_content: str | None = None
+    amount_paid: Decimal | None = None
+    document_ids: list[UUID] | None = None
 
 
 class PaginatedResponse(BaseModel):
     """Paginated list response."""
 
-    items: List
+    items: list
     total: int
     page: int
     page_size: int
@@ -164,20 +164,20 @@ class PaginatedResponse(BaseModel):
 
 @router.post(
     "/templates",
-    response_model=NoticeTemplateResponse,
+    response_model=NoticeTemplateResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create Notice Template",
 )
 async def create_template(
-    organization_id: UUID,
     request: NoticeTemplateCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice_template.create")),
+    organization_id: UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Create a new notice template."""
     service = NoticeService(db)
     template = await service.create_template(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         created_by=current_user.id,
         **request.model_dump(),
     )
@@ -187,22 +187,22 @@ async def create_template(
 
 @router.get(
     "/templates",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="List Notice Templates",
 )
 async def list_templates(
-    organization_id: UUID,
-    notice_type: Optional[NoticeType] = None,
+    organization_id: UUID | None = Query(None),
+    notice_type: NoticeType | None = None,
     is_active: bool = True,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice_template.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """List notice templates."""
     service = NoticeService(db)
     items, total = await service.list_templates(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         notice_type=notice_type,
         is_active=is_active,
         page=page,
@@ -224,20 +224,20 @@ async def list_templates(
 
 @router.post(
     "",
-    response_model=NoticeResponse,
+    response_model=NoticeResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Generate Legal Notice",
 )
 async def generate_notice(
-    organization_id: UUID,
     request: NoticeGenerateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.create")),
+    organization_id: UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Generate a new legal notice."""
     service = NoticeService(db)
     notice = await service.generate_notice(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         created_by=current_user.id,
         **request.model_dump(),
     )
@@ -247,27 +247,27 @@ async def generate_notice(
 
 @router.get(
     "",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="List Legal Notices",
 )
 async def list_notices(
-    organization_id: UUID,
-    legal_case_id: Optional[UUID] = None,
-    loan_account_id: Optional[UUID] = None,
-    customer_id: Optional[UUID] = None,
-    notice_type: Optional[NoticeType] = None,
-    is_responded: Optional[bool] = None,
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
+    organization_id: UUID | None = Query(None),
+    legal_case_id: UUID | None = None,
+    loan_account_id: UUID | None = None,
+    customer_id: UUID | None = None,
+    notice_type: NoticeType | None = None,
+    is_responded: bool | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """List legal notices with filtering."""
     service = NoticeService(db)
     items, total = await service.list_notices(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         legal_case_id=legal_case_id,
         loan_account_id=loan_account_id,
         customer_id=customer_id,
@@ -289,22 +289,19 @@ async def list_notices(
 
 @router.get(
     "/{notice_id}",
-    response_model=NoticeResponse,
+    response_model=NoticeResponse, response_model_by_alias=True,
     summary="Get Notice Details",
 )
 async def get_notice(
     notice_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get legal notice details."""
     service = NoticeService(db)
     notice = await service.get_notice(notice_id)
     if not notice:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notice not found",
-        )
+        raise NotFoundException(detail="Notice not found", error_code="NOTICE_NOT_FOUND")
     return notice
 
 
@@ -314,26 +311,21 @@ async def get_notice(
 )
 async def download_notice_pdf(
     notice_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Download notice as PDF."""
     service = NoticeService(db)
     notice = await service.get_notice(notice_id)
     if not notice:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notice not found",
-        )
+        raise NotFoundException(detail="Notice not found", error_code="NOTICE_NOT_FOUND")
 
     pdf_content = await service.generate_notice_pdf(notice_id)
 
     return StreamingResponse(
         iter([pdf_content]),
         media_type="application/pdf",
-        headers={
-            "Content-Disposition": f"attachment; filename=notice_{notice.notice_number}.pdf"
-        },
+        headers={"Content-Disposition": f"attachment; filename=notice_{notice.notice_number}.pdf"},
     )
 
 
@@ -344,15 +336,15 @@ async def download_notice_pdf(
 
 @router.post(
     "/{notice_id}/dispatch",
-    response_model=NoticeDeliveryResponse,
+    response_model=NoticeDeliveryResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Record Notice Dispatch",
 )
 async def record_dispatch(
     notice_id: UUID,
     request: NoticeDispatchRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Record notice dispatch details."""
     service = NoticeService(db)
@@ -367,13 +359,13 @@ async def record_dispatch(
 
 @router.get(
     "/{notice_id}/deliveries",
-    response_model=List[NoticeDeliveryResponse],
+    response_model=list[NoticeDeliveryResponse], response_model_by_alias=True,
     summary="Get Notice Deliveries",
 )
 async def get_notice_deliveries(
     notice_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get all delivery attempts for a notice."""
     service = NoticeService(db)
@@ -383,14 +375,14 @@ async def get_notice_deliveries(
 
 @router.put(
     "/deliveries/{delivery_id}",
-    response_model=NoticeDeliveryResponse,
+    response_model=NoticeDeliveryResponse, response_model_by_alias=True,
     summary="Update Delivery Status",
 )
 async def update_delivery_status(
     delivery_id: UUID,
     request: DeliveryUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Update notice delivery status."""
     service = NoticeService(db)
@@ -400,9 +392,9 @@ async def update_delivery_status(
         **request.model_dump(),
     )
     if not delivery:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Delivery record not found",
+            error_code="DELIVERY_RECORD_NOT_FOUND",
         )
     await db.commit()
     return delivery
@@ -415,14 +407,14 @@ async def update_delivery_status(
 
 @router.post(
     "/{notice_id}/response",
-    response_model=NoticeResponse,
+    response_model=NoticeResponse, response_model_by_alias=True,
     summary="Record Notice Response",
 )
 async def record_response(
     notice_id: UUID,
     request: NoticeResponseRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Record borrower's response to notice."""
     service = NoticeService(db)
@@ -432,10 +424,7 @@ async def record_response(
         **request.model_dump(),
     )
     if not notice:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notice not found",
-        )
+        raise NotFoundException(detail="Notice not found", error_code="NOTICE_NOT_FOUND")
     await db.commit()
     return notice
 
@@ -447,21 +436,21 @@ async def record_response(
 
 @router.get(
     "/overdue",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Overdue Notices",
 )
 async def get_overdue_notices(
-    organization_id: UUID,
-    notice_type: Optional[NoticeType] = None,
+    organization_id: UUID | None = Query(None),
+    notice_type: NoticeType | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get notices past their statutory response period without response."""
     service = NoticeService(db)
     items, total = await service.get_overdue_notices(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         notice_type=notice_type,
         page=page,
         page_size=page_size,
@@ -477,20 +466,20 @@ async def get_overdue_notices(
 
 @router.get(
     "/pending-delivery",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Pending Delivery Notices",
 )
 async def get_pending_delivery_notices(
-    organization_id: UUID,
+    organization_id: UUID | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.notice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get notices dispatched but not yet delivered."""
     service = NoticeService(db)
     items, total = await service.get_pending_delivery_notices(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         page=page,
         page_size=page_size,
     )

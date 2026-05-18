@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -23,8 +25,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { logger } from "@/lib/logger";
 import {
   purchaseBillsApi,
   organizationsApi,
@@ -38,6 +41,8 @@ interface Organization {
   id: string;
   code: string;
   name: string;
+  reg_state_code?: string | null;
+  state_code?: string | null;
 }
 
 interface Unit {
@@ -60,10 +65,10 @@ interface GSTRate {
   code: string;
   name: string;
   rate: number;
-  cgst_rate: number;
-  sgst_rate: number;
-  igst_rate: number;
-  cess_rate: number;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  cessRate: number;
 }
 
 interface Account {
@@ -94,6 +99,54 @@ interface BillLine {
   total_amount: number;
   expense_account_id: string;
 }
+
+interface BillLineApi {
+  id?: string;
+  lineNumber: number;
+  description: string;
+  hsnSacCode?: string | null;
+  quantity: number;
+  unitPrice: number;
+  discountPercent?: number | null;
+  discountAmount?: number | null;
+  taxableAmount: number;
+  gstRateId?: string | null;
+  cgstRate?: number | null;
+  cgstAmount?: number | null;
+  sgstRate?: number | null;
+  sgstAmount?: number | null;
+  igstRate?: number | null;
+  igstAmount?: number | null;
+  cessRate?: number | null;
+  cessAmount?: number | null;
+  totalAmount: number;
+  expenseAccountId?: string | null;
+}
+
+interface PurchaseBillApi {
+  organizationId: string;
+  unitId?: string | null;
+  vendorId: string;
+  vendorInvoiceNumber?: string | null;
+  vendorInvoiceDate?: string | null;
+  billDate: string;
+  dueDate?: string | null;
+  placeOfSupply?: string | null;
+  isReverseCharge?: boolean | null;
+  tdsAmount?: number | null;
+  roundOff?: number | null;
+  narration?: string | null;
+  referenceNumber?: string | null;
+  lines?: BillLineApi[];
+}
+
+const recalculatedLineFields: (keyof BillLine)[] = [
+  'quantity',
+  'unit_price',
+  'discount_percent',
+  'discount_amount',
+  'gst_rate_id',
+];
 
 const stateList = [
   { code: '01', name: 'Jammu & Kashmir' },
@@ -200,177 +253,123 @@ export function PurchaseBillForm() {
     };
   }
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      loadUnits();
-      loadVendors();
-      loadGstRates();
-      loadExpenseAccounts();
-    }
-  }, [selectedOrgId]);
-
-  useEffect(() => {
-    if (isEdit && id && selectedOrgId) {
-      loadBill(id);
-    }
-  }, [id, isEdit, selectedOrgId]);
-
-  useEffect(() => {
-    calculateTotals();
-  }, [lines, tdsAmount, roundOff]);
-
-  useEffect(() => {
-    // Auto-set place of supply when vendor changes
-    if (vendorId) {
-      const vendor = vendors.find((v) => v.id === vendorId);
-      if (vendor?.state_code) {
-        setPlaceOfSupply(vendor.state_code);
-      }
-    }
-  }, [vendorId, vendors]);
-
-  useEffect(() => {
-    // Recalculate GST when place of supply changes
-    recalculateGst();
-  }, [placeOfSupply, orgStateCode]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0 && !isEdit) {
         setSelectedOrgId(orgs[0].id);
-        // Get org's state code from first GST registration
-        // For now, using a default state code (27 = Maharashtra)
-        setOrgStateCode('27');
+        setOrgStateCode(orgs[0].reg_state_code || orgs[0].state_code || '');
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
     }
-  };
+  }, [isEdit]);
 
-  const loadUnits = async () => {
+  const loadUnits = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await unitsApi.list({ organization_id: selectedOrgId, page_size: 100 });
       setUnits(response.data.items || []);
     } catch (error) {
-      console.error('Failed to load units:', error);
+      logger.error('Failed to load units:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadVendors = async () => {
+  const loadVendors = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await vendorsApi.getActive({ organization_id: selectedOrgId });
       setVendors(response.data || []);
     } catch (error) {
-      console.error('Failed to load vendors:', error);
+      logger.error('Failed to load vendors:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadGstRates = async () => {
+  const loadGstRates = useCallback(async () => {
     try {
       const response = await gstRatesApi.getActive({});
-      setGstRates(response.data || []);
+      setGstRates(response.data.items || []);
     } catch (error) {
-      console.error('Failed to load GST rates:', error);
+      logger.error('Failed to load GST rates:', error);
     }
-  };
+  }, []);
 
-  const loadExpenseAccounts = async () => {
+  const loadExpenseAccounts = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await accountsApi.list({
         organization_id: selectedOrgId,
-        page_size: 200,
+        page_size: 100,
       });
       // Filter for expense accounts (nature = EXPENSES)
       const accounts = response.data.items || [];
       setExpenseAccounts(accounts);
     } catch (error) {
-      console.error('Failed to load accounts:', error);
+      logger.error('Failed to load accounts:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadBill = async (billId: string) => {
+  const loadBill = useCallback(async (billId: string) => {
     try {
       setLoading(true);
       const response = await purchaseBillsApi.get(billId);
-      const bill = response.data;
+      const bill = response.data as PurchaseBillApi;
 
-      setSelectedOrgId(bill.organization_id);
-      setUnitId(bill.unit_id || '');
-      setVendorId(bill.vendor_id);
-      setVendorInvoiceNumber(bill.vendor_invoice_number || '');
-      setVendorInvoiceDate(bill.vendor_invoice_date || '');
-      setBillDate(bill.bill_date);
-      setDueDate(bill.due_date);
-      setPlaceOfSupply(bill.place_of_supply || '');
-      setIsReverseCharge(bill.is_reverse_charge || false);
-      setTdsAmount(bill.tds_amount || 0);
-      setRoundOff(bill.round_off || 0);
+      setSelectedOrgId(bill.organizationId);
+      setUnitId(bill.unitId || '');
+      setVendorId(bill.vendorId);
+      setVendorInvoiceNumber(bill.vendorInvoiceNumber || '');
+      setVendorInvoiceDate(bill.vendorInvoiceDate || '');
+      setBillDate(bill.billDate);
+      setDueDate(bill.dueDate || '');
+      setPlaceOfSupply(bill.placeOfSupply || '');
+      setIsReverseCharge(bill.isReverseCharge || false);
+      setTdsAmount(bill.tdsAmount || 0);
+      setRoundOff(bill.roundOff || 0);
       setNarration(bill.narration || '');
-      setReferenceNumber(bill.reference_number || '');
+      setReferenceNumber(bill.referenceNumber || '');
 
       if (bill.lines && bill.lines.length > 0) {
         setLines(
-          bill.lines.map((line: any) => ({
+          bill.lines.map((line) => ({
             id: line.id,
-            line_number: line.line_number,
+            line_number: line.lineNumber,
             description: line.description,
-            hsn_sac_code: line.hsn_sac_code || '',
+            hsn_sac_code: line.hsnSacCode || '',
             quantity: line.quantity,
-            unit_price: line.unit_price,
-            discount_percent: line.discount_percent || 0,
-            discount_amount: line.discount_amount || 0,
-            taxable_amount: line.taxable_amount,
-            gst_rate_id: line.gst_rate_id || '',
-            cgst_rate: line.cgst_rate || 0,
-            cgst_amount: line.cgst_amount || 0,
-            sgst_rate: line.sgst_rate || 0,
-            sgst_amount: line.sgst_amount || 0,
-            igst_rate: line.igst_rate || 0,
-            igst_amount: line.igst_amount || 0,
-            cess_rate: line.cess_rate || 0,
-            cess_amount: line.cess_amount || 0,
-            total_amount: line.total_amount,
-            expense_account_id: line.expense_account_id || '',
+            unit_price: line.unitPrice,
+            discount_percent: line.discountPercent || 0,
+            discount_amount: line.discountAmount || 0,
+            taxable_amount: line.taxableAmount,
+            gst_rate_id: line.gstRateId || '',
+            cgst_rate: line.cgstRate || 0,
+            cgst_amount: line.cgstAmount || 0,
+            sgst_rate: line.sgstRate || 0,
+            sgst_amount: line.sgstAmount || 0,
+            igst_rate: line.igstRate || 0,
+            igst_amount: line.igstAmount || 0,
+            cess_rate: line.cessRate || 0,
+            cess_amount: line.cessAmount || 0,
+            total_amount: line.totalAmount,
+            expense_account_id: line.expenseAccountId || '',
           }))
         );
       }
     } catch (error) {
-      console.error('Failed to load bill:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load purchase bill',
-        variant: 'destructive',
-      });
+      logger.error('Failed to load bill:', error);
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const isIntraState = () => {
+  const isIntraState = useCallback(() => {
     return placeOfSupply === orgStateCode;
-  };
+  }, [orgStateCode, placeOfSupply]);
 
-  const recalculateGst = () => {
-    const newLines = lines.map((line) => {
-      if (line.gst_rate_id) {
-        return calculateLine(line);
-      }
-      return line;
-    });
-    setLines(newLines);
-  };
-
-  const calculateLine = (line: BillLine): BillLine => {
+  const calculateLine = useCallback((line: BillLine): BillLine => {
     const grossAmount = line.quantity * line.unit_price;
     const discountAmount = line.discount_percent > 0
       ? (grossAmount * line.discount_percent) / 100
@@ -381,16 +380,16 @@ export function PurchaseBillForm() {
     let cgstRate = 0, cgstAmount = 0, sgstRate = 0, sgstAmount = 0, igstRate = 0, igstAmount = 0, cessRate = 0, cessAmount = 0;
 
     if (gstRate) {
-      cessRate = gstRate.cess_rate || 0;
+      cessRate = gstRate.cessRate || 0;
       cessAmount = (taxableAmount * cessRate) / 100;
 
       if (isIntraState()) {
-        cgstRate = gstRate.cgst_rate;
-        sgstRate = gstRate.sgst_rate;
+        cgstRate = gstRate.cgstRate;
+        sgstRate = gstRate.sgstRate;
         cgstAmount = (taxableAmount * cgstRate) / 100;
         sgstAmount = (taxableAmount * sgstRate) / 100;
       } else {
-        igstRate = gstRate.igst_rate;
+        igstRate = gstRate.igstRate;
         igstAmount = (taxableAmount * igstRate) / 100;
       }
     }
@@ -411,9 +410,20 @@ export function PurchaseBillForm() {
       cess_amount: cessAmount,
       total_amount: totalAmount,
     };
-  };
+  }, [gstRates, isIntraState]);
 
-  const calculateTotals = () => {
+  const recalculateGst = useCallback(() => {
+    setLines((currentLines) =>
+      currentLines.map((line) => {
+        if (line.gst_rate_id) {
+          return calculateLine(line);
+        }
+        return line;
+      })
+    );
+  }, [calculateLine]);
+
+  const calculateTotals = useCallback(() => {
     let sub = 0, disc = 0, taxable = 0, cgst = 0, sgst = 0, igst = 0, cess = 0;
 
     lines.forEach((line) => {
@@ -434,7 +444,45 @@ export function PurchaseBillForm() {
     setTotalIgst(igst);
     setTotalCess(cess);
     setGrandTotal(taxable + cgst + sgst + igst + cess - tdsAmount + roundOff);
-  };
+  }, [lines, roundOff, tdsAmount]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      const selectedOrg = organizations.find((org) => org.id === selectedOrgId);
+      setOrgStateCode(selectedOrg?.reg_state_code || selectedOrg?.state_code || '');
+      loadUnits();
+      loadVendors();
+      loadGstRates();
+      loadExpenseAccounts();
+    }
+  }, [loadExpenseAccounts, loadGstRates, loadUnits, loadVendors, organizations, selectedOrgId]);
+
+  useEffect(() => {
+    if (isEdit && id && selectedOrgId) {
+      loadBill(id);
+    }
+  }, [id, isEdit, loadBill, selectedOrgId]);
+
+  useEffect(() => {
+    calculateTotals();
+  }, [calculateTotals]);
+
+  useEffect(() => {
+    if (vendorId) {
+      const vendor = vendors.find((v) => v.id === vendorId);
+      if (vendor?.state_code) {
+        setPlaceOfSupply(vendor.state_code);
+      }
+    }
+  }, [vendorId, vendors]);
+
+  useEffect(() => {
+    recalculateGst();
+  }, [orgStateCode, placeOfSupply, recalculateGst]);
 
   const handleAddLine = () => {
     setLines([...lines, createEmptyLine(lines.length + 1)]);
@@ -449,15 +497,19 @@ export function PurchaseBillForm() {
     setLines(newLines);
   };
 
-  const handleLineChange = (index: number, field: keyof BillLine, value: any) => {
+  const handleLineChange = (
+    index: number,
+    field: keyof BillLine,
+    value: BillLine[keyof BillLine]
+  ) => {
     const newLines = [...lines];
-    (newLines[index] as any)[field] = value;
+    const updatedLine = { ...newLines[index], [field]: value } as BillLine;
 
-    // Recalculate line when relevant fields change
-    if (['quantity', 'unit_price', 'discount_percent', 'discount_amount', 'gst_rate_id'].includes(field)) {
-      newLines[index] = calculateLine(newLines[index]);
+    if (recalculatedLineFields.includes(field)) {
+      newLines[index] = calculateLine(updatedLine);
+    } else {
+      newLines[index] = updatedLine;
     }
-
     setLines(newLines);
   };
 
@@ -493,42 +545,42 @@ export function PurchaseBillForm() {
       setSubmitting(true);
 
       const billData = {
-        vendor_id: vendorId,
-        vendor_invoice_number: vendorInvoiceNumber || undefined,
-        vendor_invoice_date: vendorInvoiceDate || undefined,
-        bill_date: billDate,
-        due_date: dueDate,
-        organization_id: selectedOrgId,
-        unit_id: unitId || undefined,
-        place_of_supply: placeOfSupply || undefined,
-        is_reverse_charge: isReverseCharge,
-        supply_type: isIntraState() ? 'INTRA_STATE' : 'INTER_STATE',
-        tds_amount: tdsAmount,
-        round_off: roundOff,
+        vendorId,
+        vendorInvoiceNumber: vendorInvoiceNumber || undefined,
+        vendorInvoiceDate: vendorInvoiceDate || undefined,
+        billDate,
+        dueDate,
+        organizationId: selectedOrgId,
+        unitId: unitId || undefined,
+        placeOfSupply: placeOfSupply || undefined,
+        isReverseCharge,
+        supplyType: isIntraState() ? 'INTRA_STATE' : 'INTER_STATE',
+        tdsAmount,
+        roundOff,
         narration: narration || undefined,
-        reference_number: referenceNumber || undefined,
+        referenceNumber: referenceNumber || undefined,
         lines: lines
           .filter((l) => l.description && l.taxable_amount > 0)
           .map((l) => ({
-            line_number: l.line_number,
+            lineNumber: l.line_number,
             description: l.description,
-            hsn_sac_code: l.hsn_sac_code || undefined,
+            hsnSacCode: l.hsn_sac_code || undefined,
             quantity: l.quantity,
-            unit_price: l.unit_price,
-            discount_percent: l.discount_percent,
-            discount_amount: l.discount_amount,
-            taxable_amount: l.taxable_amount,
-            gst_rate_id: l.gst_rate_id || undefined,
-            cgst_rate: l.cgst_rate,
-            cgst_amount: l.cgst_amount,
-            sgst_rate: l.sgst_rate,
-            sgst_amount: l.sgst_amount,
-            igst_rate: l.igst_rate,
-            igst_amount: l.igst_amount,
-            cess_rate: l.cess_rate,
-            cess_amount: l.cess_amount,
-            total_amount: l.total_amount,
-            expense_account_id: l.expense_account_id || undefined,
+            unitPrice: l.unit_price,
+            discountPercent: l.discount_percent,
+            discountAmount: l.discount_amount,
+            taxableAmount: l.taxable_amount,
+            gstRateId: l.gst_rate_id || undefined,
+            cgstRate: l.cgst_rate,
+            cgstAmount: l.cgst_amount,
+            sgstRate: l.sgst_rate,
+            sgstAmount: l.sgst_amount,
+            igstRate: l.igst_rate,
+            igstAmount: l.igst_amount,
+            cessRate: l.cess_rate,
+            cessAmount: l.cess_amount,
+            totalAmount: l.total_amount,
+            expenseAccountId: l.expense_account_id || undefined,
           })),
       };
 
@@ -547,24 +599,12 @@ export function PurchaseBillForm() {
       }
 
       navigate('/admin/ap-ar/purchase-bills');
-    } catch (error: any) {
-      console.error('Failed to save purchase bill:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      logger.error('Failed to save purchase bill:', error);
+      showErrorToast(error, toast);
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
   };
 
   if (loading) {
@@ -616,12 +656,15 @@ export function PurchaseBillForm() {
               </div>
               <div className="space-y-2">
                 <Label>Unit</Label>
-                <Select value={unitId} onValueChange={setUnitId}>
+                <Select
+                  value={unitId || '__all_units__'}
+                  onValueChange={(value) => setUnitId(value === '__all_units__' ? '' : value)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Units</SelectItem>
+                    <SelectItem value="__all_units__">All Units</SelectItem>
                     {units.map((unit) => (
                       <SelectItem key={unit.id} value={unit.id}>
                         {unit.code} - {unit.name}
@@ -820,20 +863,20 @@ export function PurchaseBillForm() {
                         </Select>
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(line.taxable_amount)}
+                        <AmountDisplay amount={line.taxable_amount} />
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         {isIntraState() ? (
                           <span>
-                            C: {formatCurrency(line.cgst_amount)}<br />
-                            S: {formatCurrency(line.sgst_amount)}
+                            C: <AmountDisplay amount={line.cgst_amount} /><br />
+                            S: <AmountDisplay amount={line.sgst_amount} />
                           </span>
                         ) : (
-                          <span>I: {formatCurrency(line.igst_amount)}</span>
+                          <span>I: <AmountDisplay amount={line.igst_amount} /></span>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(line.total_amount)}
+                        <AmountDisplay amount={line.total_amount} />
                       </TableCell>
                       <TableCell>
                         <Select
@@ -894,39 +937,39 @@ export function PurchaseBillForm() {
             <CardContent className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-slate-600">Subtotal</span>
-                <span>{formatCurrency(subtotal)}</span>
+                <AmountDisplay amount={subtotal} />
               </div>
               {totalDiscount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount</span>
-                  <span>- {formatCurrency(totalDiscount)}</span>
+                  <span>- <AmountDisplay amount={totalDiscount} /></span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Taxable Amount</span>
-                <span>{formatCurrency(totalTaxable)}</span>
+                <AmountDisplay amount={totalTaxable} />
               </div>
               {isIntraState() ? (
                 <>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600">CGST</span>
-                    <span>{formatCurrency(totalCgst)}</span>
+                    <AmountDisplay amount={totalCgst} />
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600">SGST</span>
-                    <span>{formatCurrency(totalSgst)}</span>
+                    <AmountDisplay amount={totalSgst} />
                   </div>
                 </>
               ) : (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">IGST</span>
-                  <span>{formatCurrency(totalIgst)}</span>
+                  <AmountDisplay amount={totalIgst} />
                 </div>
               )}
               {totalCess > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">Cess</span>
-                  <span>{formatCurrency(totalCess)}</span>
+                  <AmountDisplay amount={totalCess} />
                 </div>
               )}
               <div className="flex justify-between items-center">
@@ -952,7 +995,7 @@ export function PurchaseBillForm() {
               </div>
               <div className="border-t pt-3 flex justify-between font-bold text-lg">
                 <span>Grand Total</span>
-                <span>{formatCurrency(grandTotal)}</span>
+                <AmountDisplay amount={grandTotal} />
               </div>
             </CardContent>
           </Card>

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.voucher_type_service import VoucherTypeService
 from app.schemas.finance.voucher_type import (
@@ -21,15 +21,14 @@ from app.core.constants import VoucherClass
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[VoucherTypeResponse])
+@router.get("", response_model=PaginatedResponse[VoucherTypeResponse], response_model_by_alias=True)
 async def list_voucher_types(
-    organization_id: UUID = Query(...),
     voucher_class: Optional[VoucherClass] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_VTYPE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of voucher types.
@@ -39,12 +38,12 @@ async def list_voucher_types(
     skip = (page - 1) * page_size
 
     if voucher_class:
-        vtypes = await service.get_by_class(organization_id, voucher_class)
+        vtypes = await service.get_by_class(current_user.organization_id, voucher_class)
         total = len(vtypes)
         vtypes = vtypes[skip:skip + page_size]
     else:
         vtypes, total = await service.get_all(
-            organization_id, skip, page_size, include_inactive
+            current_user.organization_id, skip, page_size, include_inactive
         )
 
     items = [_vtype_to_response(v) for v in vtypes]
@@ -52,11 +51,11 @@ async def list_voucher_types(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=VoucherTypeResponse)
+@router.post("", response_model=VoucherTypeResponse, response_model_by_alias=True)
 async def create_voucher_type(
     data: VoucherTypeCreate,
     current_user: User = Depends(RequirePermissions("FIN_VTYPE_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new voucher type.
@@ -68,11 +67,11 @@ async def create_voucher_type(
     return _vtype_to_response(vtype)
 
 
-@router.get("/{vtype_id}", response_model=VoucherTypeResponse)
+@router.get("/{vtype_id}", response_model=VoucherTypeResponse, response_model_by_alias=True)
 async def get_voucher_type(
     vtype_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VTYPE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get voucher type by ID.
@@ -84,12 +83,12 @@ async def get_voucher_type(
     return _vtype_to_response(vtype)
 
 
-@router.put("/{vtype_id}", response_model=VoucherTypeResponse)
+@router.put("/{vtype_id}", response_model=VoucherTypeResponse, response_model_by_alias=True)
 async def update_voucher_type(
     vtype_id: UUID,
     data: VoucherTypeUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VTYPE_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update a voucher type.
@@ -101,11 +100,11 @@ async def update_voucher_type(
     return _vtype_to_response(vtype)
 
 
-@router.delete("/{vtype_id}", response_model=MessageResponse)
+@router.delete("/{vtype_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_voucher_type(
     vtype_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VTYPE_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a voucher type.

@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Building,
   Plus,
@@ -13,19 +11,21 @@ import {
   CheckCircle,
   Clock,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -34,97 +34,47 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Progress } from '@/components/ui/progress';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-// Mock data
+// Collateral data loads from the BE collateral endpoint once wired
+// (/lending/collaterals — TBD). Until then the list starts empty so the
+// page doesn't surface fabricated security values.
 const collateralSummary = {
-  total_count: 156,
-  total_value: 25000000000,
-  total_net_value: 18750000000,
+  total_count: 0,
+  total_value: 0,
+  total_net_value: 0,
   by_category: {
-    PRIMARY: { count: 85, value: 15000000000 },
-    COLLATERAL: { count: 55, value: 8000000000 },
-    GUARANTEE: { count: 16, value: 2000000000 },
-  },
-  pending_valuation: 12,
+    PRIMARY: { count: 0, value: 0 },
+    COLLATERAL: { count: 0, value: 0 },
+    GUARANTEE: { count: 0, value: 0 },
+  } as Record<string, { count: number; value: number }>,
+  pending_valuation: 0,
 };
 
-const collaterals = [
-  {
-    id: '1',
-    security_code: 'SEC/2024/00125',
-    loan_account: 'SMFC/LA/2024/00089',
-    entity: 'ABC Industries',
-    category: 'PRIMARY',
-    type: 'IMMOVABLE_PROPERTY',
-    description: 'Commercial Building at MG Road, Bangalore',
-    acceptable_value: 50000000,
-    margin: 25,
-    net_value: 37500000,
-    market_value: 55000000,
-    valuation_date: '2024-06-15',
-    next_valuation: '2025-06-15',
-    status: 'ACTIVE',
-    charge_created: true,
-  },
-  {
-    id: '2',
-    security_code: 'SEC/2024/00126',
-    loan_account: 'SMFC/LA/2024/00090',
-    entity: 'XYZ Trading',
-    category: 'COLLATERAL',
-    type: 'PLANT_MACHINERY',
-    description: 'CNC Machines - 5 Units',
-    acceptable_value: 15000000,
-    margin: 30,
-    net_value: 10500000,
-    market_value: 18000000,
-    valuation_date: '2024-08-20',
-    next_valuation: '2025-02-20',
-    status: 'ACTIVE',
-    charge_created: true,
-  },
-  {
-    id: '3',
-    security_code: 'SEC/2024/00127',
-    loan_account: 'SMFC/LA/2024/00091',
-    entity: 'Metro Logistics',
-    category: 'PRIMARY',
-    type: 'IMMOVABLE_PROPERTY',
-    description: 'Warehouse at Electronic City',
-    acceptable_value: 80000000,
-    margin: 25,
-    net_value: 60000000,
-    market_value: 90000000,
-    valuation_date: '2024-03-10',
-    next_valuation: '2025-03-10',
-    status: 'ACTIVE',
-    charge_created: false,
-  },
-  {
-    id: '4',
-    security_code: 'SEC/2024/00128',
-    loan_account: 'SMFC/LA/2024/00092',
-    entity: 'Eastern Corp',
-    category: 'GUARANTEE',
-    type: 'PERSONAL_GUARANTEE',
-    description: 'Personal Guarantee - Mr. John Doe',
-    acceptable_value: 25000000,
-    margin: 0,
-    net_value: 25000000,
-    market_value: null,
-    valuation_date: null,
-    next_valuation: null,
-    status: 'ACTIVE',
-    charge_created: true,
-  },
-];
+const collaterals: {
+  id: string;
+  security_code: string;
+  loan_account: string;
+  entity: string;
+  category: string;
+  type: string;
+  description: string;
+  acceptable_value: number;
+  margin: number;
+  net_value: number;
+  market_value: number | null;
+  valuation_date: string | null;
+  next_valuation: string | null;
+  status: string;
+  charge_created: boolean;
+}[] = [];
 
 const getCategoryBadge = (category: string) => {
   const variants: Record<string, 'default' | 'secondary' | 'outline'> = {
@@ -182,11 +132,11 @@ export default function CollateralList() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
-            <Button onClick={() => navigate('/lending/collaterals/create')}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button onClick={() => navigate('/admin/lending/collaterals/create')}>
+              <Plus className="mr-2 h-4 w-4" />
               Add Collateral
             </Button>
           </div>
@@ -194,7 +144,7 @@ export default function CollateralList() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -228,9 +178,7 @@ export default function CollateralList() {
             <CardTitle className="text-sm font-medium text-muted-foreground">Primary</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">
-              {collateralSummary.by_category.PRIMARY.count}
-            </div>
+            <div className="text-3xl font-bold">{collateralSummary.by_category.PRIMARY.count}</div>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(collateralSummary.by_category.PRIMARY.value)}
             </p>
@@ -258,9 +206,9 @@ export default function CollateralList() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap gap-4">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by code, entity, or description..."
                 className="pl-10"
@@ -330,9 +278,7 @@ export default function CollateralList() {
                     <div className="text-xs text-muted-foreground">{collateral.type}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="font-medium">
-                      {formatCurrency(collateral.acceptable_value)}
-                    </div>
+                    <div className="font-medium">{formatCurrency(collateral.acceptable_value)}</div>
                     <div className="text-xs text-muted-foreground">
                       Net: {formatCurrency(collateral.net_value)}
                     </div>
@@ -363,21 +309,25 @@ export default function CollateralList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => navigate(`/lending/collaterals/${collateral.id}`)}
+                          onClick={() => navigate(`/admin/lending/collaterals/${collateral.id}`)}
                         >
-                          <Eye className="h-4 w-4 mr-2" />
+                          <Eye className="mr-2 h-4 w-4" />
                           View Details
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => navigate(`/lending/collaterals/${collateral.id}/valuation`)}
+                          onClick={() =>
+                            navigate(`/admin/lending/collaterals/${collateral.id}/valuation`)
+                          }
                         >
-                          <RefreshCw className="h-4 w-4 mr-2" />
+                          <RefreshCw className="mr-2 h-4 w-4" />
                           Update Valuation
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => navigate(`/lending/collaterals/${collateral.id}/release`)}
+                          onClick={() =>
+                            navigate(`/admin/lending/collaterals/${collateral.id}/release`)
+                          }
                         >
-                          <Edit className="h-4 w-4 mr-2" />
+                          <Edit className="mr-2 h-4 w-4" />
                           Release
                         </DropdownMenuItem>
                       </DropdownMenuContent>

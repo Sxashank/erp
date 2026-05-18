@@ -19,9 +19,11 @@ plugs into response models so forgotten masks fail the type check.
 from __future__ import annotations
 
 import re
-from typing import Any, Self
+from typing import Any
 
-from pydantic import BaseModel, field_validator
+from pydantic import field_validator
+
+from app.schemas.base import CamelSchema
 
 _PAN_RE = re.compile(r"^[A-Z]{5}[0-9]{4}[A-Z]$")
 _AADHAAR_RE = re.compile(r"^\d{12}$")
@@ -111,7 +113,7 @@ def mask_ifsc(ifsc: str | None) -> str | None:
 # Pydantic mixin — apply on response models that expose PII fields.
 # ---------------------------------------------------------------------------
 
-class MaskedPIIModel(BaseModel):
+class MaskedPIIModel(CamelSchema):
     """Pydantic v2 base that auto-masks common PII fields at serialization.
 
     Subclasses declare fields named `pan`, `aadhaar`, `phone`, `email`,

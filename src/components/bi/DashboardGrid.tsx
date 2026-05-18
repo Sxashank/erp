@@ -3,11 +3,14 @@
  */
 
 import { useMemo, useCallback } from 'react';
-import GridLayout, { Layout, LayoutItem } from 'react-grid-layout';
+import type { Layout, LayoutItem } from 'react-grid-layout';
+import GridLayout from 'react-grid-layout';
+
 import 'react-grid-layout/css/styles.css';
 import 'react-resizable/css/styles.css';
-import { DashboardWidget, GridLayoutItem } from '@/types/bi';
 import { WidgetCard } from './WidgetCard';
+
+import type { DashboardWidget, GridLayoutItem } from '@/types/bi';
 
 interface DashboardGridProps {
   widgets: DashboardWidget[];

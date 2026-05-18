@@ -1,27 +1,12 @@
-import { useState } from 'react';
-import { Download, RefreshCw, Calendar, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
+/**
+ * ALM Dashboard
+ *
+ * Data source: GET /lending/treasury/summary (camelCase via Pydantic CamelSchema).
+ * Returns ALMSummary with gap_analysis if a snapshot has been generated.
+ */
+
+import { Download, RefreshCw, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
   Bar,
@@ -35,70 +20,65 @@ import {
   Line,
 } from 'recharts';
 
-// ALM Bucket Data (RBI Guidelines)
-const almBuckets = [
-  { bucket: 'Day 1', daysFrom: 1, daysTo: 1, assets: 2500000000, liabilities: 1800000000, gap: 700000000, cumulativeGap: 700000000 },
-  { bucket: '2-7 Days', daysFrom: 2, daysTo: 7, assets: 1500000000, liabilities: 2000000000, gap: -500000000, cumulativeGap: 200000000 },
-  { bucket: '8-14 Days', daysFrom: 8, daysTo: 14, assets: 1200000000, liabilities: 1000000000, gap: 200000000, cumulativeGap: 400000000 },
-  { bucket: '15-28 Days', daysFrom: 15, daysTo: 28, assets: 2000000000, liabilities: 1500000000, gap: 500000000, cumulativeGap: 900000000 },
-  { bucket: '29D-3M', daysFrom: 29, daysTo: 90, assets: 5000000000, liabilities: 4500000000, gap: 500000000, cumulativeGap: 1400000000 },
-  { bucket: '3-6M', daysFrom: 91, daysTo: 180, assets: 8000000000, liabilities: 7000000000, gap: 1000000000, cumulativeGap: 2400000000 },
-  { bucket: '6-12M', daysFrom: 181, daysTo: 365, assets: 15000000000, liabilities: 12000000000, gap: 3000000000, cumulativeGap: 5400000000 },
-  { bucket: '1-3Y', daysFrom: 366, daysTo: 1095, assets: 25000000000, liabilities: 20000000000, gap: 5000000000, cumulativeGap: 10400000000 },
-  { bucket: '3-5Y', daysFrom: 1096, daysTo: 1825, assets: 15000000000, liabilities: 10000000000, gap: 5000000000, cumulativeGap: 15400000000 },
-  { bucket: '>5Y', daysFrom: 1826, daysTo: null, assets: 10000000000, liabilities: 5000000000, gap: 5000000000, cumulativeGap: 20400000000 },
-];
-
-// Interest Rate Sensitivity Data
-const irsSensitivity = [
-  { bucket: 'Up to 1M', rsaAssets: 4000000000, rslLiabilities: 3500000000, gap: 500000000 },
-  { bucket: '1-3M', rsaAssets: 5000000000, rslLiabilities: 4500000000, gap: 500000000 },
-  { bucket: '3-6M', rsaAssets: 8000000000, rslLiabilities: 7000000000, gap: 1000000000 },
-  { bucket: '6-12M', rsaAssets: 15000000000, rslLiabilities: 12000000000, gap: 3000000000 },
-  { bucket: 'Over 1Y', rsaAssets: 50000000000, rslLiabilities: 35000000000, gap: 15000000000 },
-];
-
-// Chart data for visualization
-const gapChartData = almBuckets.map((bucket) => ({
-  name: bucket.bucket,
-  assets: bucket.assets / 10000000, // Convert to Cr
-  liabilities: bucket.liabilities / 10000000,
-  gap: bucket.gap / 10000000,
-}));
-
-const cumulativeGapData = almBuckets.map((bucket) => ({
-  name: bucket.bucket,
-  cumulativeGap: bucket.cumulativeGap / 10000000,
-}));
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { useTreasurySummary } from '@/hooks/lending/useTreasurySummary';
 
 export default function ALMDashboard() {
-  const [reportDate, setReportDate] = useState('2025-01-31');
+  const navigate = useNavigate();
+  const { data, isLoading, isError, error, refetch, isFetching } = useTreasurySummary();
+  const alm = data?.almSummary;
 
-  const totalAssets = almBuckets.reduce((sum, b) => sum + b.assets, 0);
-  const totalLiabilities = almBuckets.reduce((sum, b) => sum + b.liabilities, 0);
-  const shortTermGap = almBuckets.slice(0, 4).reduce((sum, b) => sum + b.gap, 0);
-  const netGap = almBuckets.reduce((sum, b) => sum + b.gap, 0);
+  // Coerce string Decimal → number for charts and math (display only).
+  const buckets = (alm?.gapAnalysis ?? []).map((b) => ({
+    bucket: b.bucket,
+    assets: Number(b.assets),
+    liabilities: Number(b.liabilities),
+    gap: Number(b.gap),
+    cumulativeGap: Number(b.cumulativeGap),
+    gapPercent: Number(b.gapPercent),
+  }));
+
+  const totalAssets = Number(alm?.totalAssets ?? 0);
+  const totalLiabilities = Number(alm?.totalLiabilities ?? 0);
+  const netGap = Number(alm?.netPosition ?? 0);
+  const shortTermGap = buckets.slice(0, 4).reduce((sum, b) => sum + b.gap, 0);
+
+  const gapChartData = buckets.map((b) => ({
+    name: b.bucket,
+    assets: b.assets / 1e7, // → Cr
+    liabilities: b.liabilities / 1e7,
+    gap: b.gap / 1e7,
+  }));
+  const cumulativeChartData = buckets.map((b) => ({
+    name: b.bucket,
+    cumulativeGap: b.cumulativeGap / 1e7,
+  }));
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="ALM Dashboard"
-        subtitle="Asset Liability Management - Structural Liquidity & Interest Rate Sensitivity"
+        subtitle="Asset Liability Management – Structural Liquidity & Interest Rate Sensitivity"
         actions={
           <div className="flex gap-2">
-            <Select value={reportDate} onValueChange={setReportDate}>
-              <SelectTrigger className="w-[180px]">
-                <Calendar className="mr-2 h-4 w-4" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="2025-01-31">31-Jan-2025</SelectItem>
-                <SelectItem value="2024-12-31">31-Dec-2024</SelectItem>
-                <SelectItem value="2024-11-30">30-Nov-2024</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline">
-              <RefreshCw className="mr-2 h-4 w-4" />
+            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
               Refresh
             </Button>
             <Button variant="outline">
@@ -109,6 +89,10 @@ export default function ALMDashboard() {
         }
       />
 
+      {isError && (
+        <ErrorState title="Could not load ALM summary" error={error} onRetry={() => refetch()} />
+      )}
+
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
@@ -117,8 +101,18 @@ export default function ALMDashboard() {
             <TrendingUp className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={totalAssets} abbreviated className="text-2xl font-bold" />
-            <p className="text-xs text-muted-foreground">Loans & advances</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <AmountDisplay
+                  amount={alm?.totalAssets ?? 0}
+                  abbreviated
+                  className="text-2xl font-bold"
+                />
+                <p className="text-xs text-muted-foreground">Loans & advances</p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -127,255 +121,217 @@ export default function ALMDashboard() {
             <TrendingDown className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={totalLiabilities} abbreviated className="text-2xl font-bold" />
-            <p className="text-xs text-muted-foreground">Borrowings & NCDs</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <AmountDisplay
+                  amount={alm?.totalLiabilities ?? 0}
+                  abbreviated
+                  className="text-2xl font-bold"
+                />
+                <p className="text-xs text-muted-foreground">Borrowings & NCDs</p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Short-term Gap</CardTitle>
-            {shortTermGap >= 0 ? (
-              <Badge variant="default" className="bg-green-100 text-green-700">Surplus</Badge>
-            ) : (
-              <Badge variant="destructive">Deficit</Badge>
-            )}
+            {!isLoading &&
+              (shortTermGap >= 0 ? (
+                <Badge variant="default" className="bg-green-100 text-green-700">
+                  Surplus
+                </Badge>
+              ) : (
+                <Badge variant="destructive">Deficit</Badge>
+              ))}
           </CardHeader>
           <CardContent>
-            <AmountDisplay
-              amount={Math.abs(shortTermGap)}
-              abbreviated
-              className={`text-2xl font-bold ${shortTermGap >= 0 ? 'text-green-600' : 'text-red-600'}`}
-            />
-            <p className="text-xs text-muted-foreground">Up to 28 days</p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <AmountDisplay
+                  amount={Math.abs(shortTermGap)}
+                  abbreviated
+                  className={`text-2xl font-bold ${
+                    shortTermGap >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}
+                />
+                <p className="text-xs text-muted-foreground">First 4 buckets</p>
+              </>
+            )}
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Net Gap</CardTitle>
+            <CardTitle className="text-sm font-medium">Net Position</CardTitle>
           </CardHeader>
           <CardContent>
-            <AmountDisplay
-              amount={netGap}
-              abbreviated
-              className="text-2xl font-bold text-green-600"
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <>
+                <AmountDisplay
+                  amount={Math.abs(netGap)}
+                  abbreviated
+                  className={`text-2xl font-bold ${
+                    netGap >= 0 ? 'text-green-600' : 'text-red-600'
+                  }`}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Assets − Liabilities
+                  {alm?.positionDate && (
+                    <>
+                      {' '}
+                      · As of <DateDisplay date={alm.positionDate} format="short" />
+                    </>
+                  )}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Empty state when no snapshot exists */}
+      {!isLoading && !alm && (
+        <Card>
+          <CardContent className="py-12">
+            <EmptyState
+              title="No ALM snapshot generated"
+              subtitle="Generate an ALM snapshot to see structural liquidity gap analysis across RBI time buckets."
+              icon={AlertTriangle}
+              action={
+                <Button variant="outline" onClick={() => navigate('/admin/treasury/alm/gap')}>
+                  Open Gap Analysis
+                </Button>
+              }
             />
-            <p className="text-xs text-muted-foreground">Assets - Liabilities</p>
           </CardContent>
         </Card>
-      </div>
+      )}
 
-      {/* Structural Liquidity (ALM-1) */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Structural Liquidity Statement (ALM-1)</CardTitle>
-          <CardDescription>
-            As on <DateDisplay date={reportDate} /> - RBI bucket-wise analysis
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time Bucket</TableHead>
-                <TableHead className="text-right">Inflows (Assets)</TableHead>
-                <TableHead className="text-right">Outflows (Liabilities)</TableHead>
-                <TableHead className="text-right">Gap</TableHead>
-                <TableHead className="text-right">Cumulative Gap</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {almBuckets.map((bucket, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{bucket.bucket}</TableCell>
-                  <TableCell className="text-right">
-                    <AmountDisplay amount={bucket.assets} abbreviated />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AmountDisplay amount={bucket.liabilities} abbreviated />
-                  </TableCell>
-                  <TableCell className={`text-right font-medium ${bucket.gap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {bucket.gap >= 0 ? '+' : ''}
-                    <AmountDisplay amount={bucket.gap} abbreviated />
-                  </TableCell>
-                  <TableCell className={`text-right font-medium ${bucket.cumulativeGap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {bucket.cumulativeGap >= 0 ? '+' : ''}
-                    <AmountDisplay amount={bucket.cumulativeGap} abbreviated />
-                  </TableCell>
-                  <TableCell>
-                    {bucket.gap >= 0 ? (
-                      <Badge variant="outline" className="bg-green-100 text-green-700">
-                        Surplus
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="bg-red-100 text-red-700">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
-                        Deficit
-                      </Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="font-bold bg-muted/50">
-                <TableCell>Total</TableCell>
-                <TableCell className="text-right">
-                  <AmountDisplay amount={totalAssets} abbreviated />
-                </TableCell>
-                <TableCell className="text-right">
-                  <AmountDisplay amount={totalLiabilities} abbreviated />
-                </TableCell>
-                <TableCell className="text-right text-green-600">
-                  +<AmountDisplay amount={netGap} abbreviated />
-                </TableCell>
-                <TableCell></TableCell>
-                <TableCell></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {alm && buckets.length > 0 && (
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Assets vs Liabilities by Bucket</CardTitle>
+                <CardDescription>RBI time-bucket structural liquidity (in ₹ Cr)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={gapChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <YAxis />
+                      <Tooltip />
+                      <Legend />
+                      <Bar dataKey="assets" name="Assets" fill="#22c55e" />
+                      <Bar dataKey="liabilities" name="Liabilities" fill="#f59e0b" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
 
-      {/* Charts */}
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Asset-Liability Gap Analysis</CardTitle>
-            <CardDescription>Bucket-wise inflows vs outflows</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={gapChartData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    formatter={(value: number | undefined) => [`₹ ${(value ?? 0).toFixed(0)} Cr`, '']}
-                  />
-                  <Legend />
-                  <Bar dataKey="assets" name="Assets" fill="#22c55e" />
-                  <Bar dataKey="liabilities" name="Liabilities" fill="#f59e0b" />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle>Cumulative Gap</CardTitle>
+                <CardDescription>Running gap across buckets (in ₹ Cr)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={cumulativeChartData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+                      <YAxis />
+                      <Tooltip />
+                      <Line
+                        type="monotone"
+                        dataKey="cumulativeGap"
+                        name="Cumulative Gap"
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Cumulative Gap Trend</CardTitle>
-            <CardDescription>Running liquidity position</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={cumulativeGapData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip
-                    formatter={(value: number | undefined) => [`₹ ${(value ?? 0).toFixed(0)} Cr`, 'Cumulative Gap']}
-                  />
-                  <Legend />
-                  <Line
-                    type="monotone"
-                    dataKey="cumulativeGap"
-                    name="Cumulative Gap"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    dot={{ fill: '#3b82f6' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Interest Rate Sensitivity */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Interest Rate Sensitivity (ALM-2)</CardTitle>
-          <CardDescription>
-            Impact of 100 bps rate change on NIM - Rate Sensitive Assets vs Liabilities
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Time Bucket</TableHead>
-                <TableHead className="text-right">RSA (Rate Sensitive Assets)</TableHead>
-                <TableHead className="text-right">RSL (Rate Sensitive Liabilities)</TableHead>
-                <TableHead className="text-right">Gap</TableHead>
-                <TableHead className="text-right">Impact (+100 bps)</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {irsSensitivity.map((row, index) => {
-                const impact = (row.gap * 0.01); // 1% of gap
-                return (
-                  <TableRow key={index}>
-                    <TableCell className="font-medium">{row.bucket}</TableCell>
-                    <TableCell className="text-right">
-                      <AmountDisplay amount={row.rsaAssets} abbreviated />
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <AmountDisplay amount={row.rslLiabilities} abbreviated />
-                    </TableCell>
-                    <TableCell className={`text-right font-medium ${row.gap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {row.gap >= 0 ? '+' : ''}
-                      <AmountDisplay amount={row.gap} abbreviated />
-                    </TableCell>
-                    <TableCell className={`text-right font-medium ${impact >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {impact >= 0 ? '+' : ''}
-                      <AmountDisplay amount={impact} abbreviated />
-                    </TableCell>
+          <Card>
+            <CardHeader>
+              <CardTitle>Time-Bucket Detail</CardTitle>
+              <CardDescription>RBI structural liquidity statement (ALM-1 buckets)</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Bucket</TableHead>
+                    <TableHead className="text-right">Assets</TableHead>
+                    <TableHead className="text-right">Liabilities</TableHead>
+                    <TableHead className="text-right">Gap</TableHead>
+                    <TableHead className="text-right">Cumulative Gap</TableHead>
+                    <TableHead className="text-right">Gap %</TableHead>
                   </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-          <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
-              <strong>Note:</strong> A positive gap indicates that assets reprice faster than
-              liabilities. In a rising rate environment, this results in higher NIM. The bank
-              maintains an asset-sensitive position with positive gaps across most buckets.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Compliance Indicators */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Regulatory Compliance Indicators</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div className="p-4 border rounded-lg">
-              <p className="text-sm text-muted-foreground">LCR (Liquidity Coverage Ratio)</p>
-              <p className="text-2xl font-bold text-green-600">125%</p>
-              <p className="text-xs text-muted-foreground">Min required: 100%</p>
-            </div>
-            <div className="p-4 border rounded-lg">
-              <p className="text-sm text-muted-foreground">NSFR (Net Stable Funding Ratio)</p>
-              <p className="text-2xl font-bold text-green-600">115%</p>
-              <p className="text-xs text-muted-foreground">Min required: 100%</p>
-            </div>
-            <div className="p-4 border rounded-lg">
-              <p className="text-sm text-muted-foreground">Short-term Gap / Assets</p>
-              <p className="text-2xl font-bold text-green-600">8.5%</p>
-              <p className="text-xs text-muted-foreground">Within tolerance</p>
-            </div>
-            <div className="p-4 border rounded-lg">
-              <p className="text-sm text-muted-foreground">CRAR (Capital Adequacy)</p>
-              <p className="text-2xl font-bold text-green-600">18.5%</p>
-              <p className="text-xs text-muted-foreground">Min required: 15%</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+                </TableHeader>
+                <TableBody>
+                  {buckets.map((b) => (
+                    <TableRow key={b.bucket}>
+                      <TableCell className="font-medium">{b.bucket}</TableCell>
+                      <TableCell className="text-right">
+                        <AmountDisplay amount={b.assets} abbreviated />
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <AmountDisplay amount={b.liabilities} abbreviated />
+                      </TableCell>
+                      <TableCell
+                        className={`text-right font-medium ${
+                          b.gap >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        <AmountDisplay amount={Math.abs(b.gap)} abbreviated />
+                        {b.gap < 0 ? ' (D)' : ''}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right font-medium ${
+                          b.cumulativeGap >= 0 ? 'text-green-600' : 'text-red-600'
+                        }`}
+                      >
+                        <AmountDisplay amount={Math.abs(b.cumulativeGap)} abbreviated />
+                      </TableCell>
+                      <TableCell className="text-right">{b.gapPercent.toFixed(2)}%</TableCell>
+                    </TableRow>
+                  ))}
+                  <TableRow className="border-t-2 font-semibold">
+                    <TableCell>Total</TableCell>
+                    <TableCell className="text-right">
+                      <AmountDisplay amount={totalAssets} abbreviated />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <AmountDisplay amount={totalLiabilities} abbreviated />
+                    </TableCell>
+                    <TableCell
+                      className={`text-right ${netGap >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                    >
+                      <AmountDisplay amount={Math.abs(netGap)} abbreviated />
+                    </TableCell>
+                    <TableCell />
+                    <TableCell />
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }

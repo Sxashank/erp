@@ -21,16 +21,17 @@ from app.schemas.vendor_portal.invoice import (
     InvoiceMatchingResult,
 )
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter()
 
 
-@router.get("/", response_model=VendorInvoiceListResponse)
+@router.get("/", response_model=VendorInvoiceListResponse, response_model_by_alias=True)
 async def list_invoices(
     vendor_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     status: Optional[VendorInvoiceStatus] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List invoices for vendor."""
     service = VendorInvoiceService(db)
@@ -48,13 +49,13 @@ async def list_invoices(
     )
 
 
-@router.post("/", response_model=VendorInvoiceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=VendorInvoiceResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_invoice(
     vendor_id: UUID,  # From auth middleware
     organization_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     data: VendorInvoiceCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Create a new invoice draft."""
     service = VendorInvoiceService(db)
@@ -67,10 +68,10 @@ async def create_invoice(
     return invoice
 
 
-@router.get("/{invoice_id}", response_model=VendorInvoiceResponse)
+@router.get("/{invoice_id}", response_model=VendorInvoiceResponse, response_model_by_alias=True)
 async def get_invoice(
     invoice_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get invoice details."""
     service = VendorInvoiceService(db)
@@ -78,11 +79,11 @@ async def get_invoice(
     return invoice
 
 
-@router.put("/{invoice_id}", response_model=VendorInvoiceResponse)
+@router.put("/{invoice_id}", response_model=VendorInvoiceResponse, response_model_by_alias=True)
 async def update_invoice(
     invoice_id: UUID,
     data: VendorInvoiceUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update an invoice draft."""
     service = VendorInvoiceService(db)
@@ -90,11 +91,11 @@ async def update_invoice(
     return invoice
 
 
-@router.post("/{invoice_id}/lines", response_model=VendorInvoiceLineResponse)
+@router.post("/{invoice_id}/lines", response_model=VendorInvoiceLineResponse, response_model_by_alias=True)
 async def add_invoice_line(
     invoice_id: UUID,
     data: VendorInvoiceLineCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Add line item to invoice."""
     service = VendorInvoiceService(db)
@@ -102,7 +103,7 @@ async def add_invoice_line(
     return line
 
 
-@router.post("/{invoice_id}/documents", response_model=VendorInvoiceDocumentResponse)
+@router.post("/{invoice_id}/documents", response_model=VendorInvoiceDocumentResponse, response_model_by_alias=True)
 async def upload_invoice_document(
     invoice_id: UUID,
     document_type: str,
@@ -110,7 +111,7 @@ async def upload_invoice_document(
     file: UploadFile = File(...),
     document_number: Optional[str] = None,
     document_date: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Upload document to invoice."""
     from datetime import date
@@ -141,10 +142,10 @@ async def upload_invoice_document(
     return document
 
 
-@router.post("/{invoice_id}/validate", response_model=InvoiceMatchingResult)
+@router.post("/{invoice_id}/validate", response_model=InvoiceMatchingResult, response_model_by_alias=True)
 async def validate_invoice(
     invoice_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Validate invoice using matching engine."""
     service = VendorInvoiceService(db)
@@ -152,10 +153,10 @@ async def validate_invoice(
     return result
 
 
-@router.post("/{invoice_id}/submit", response_model=VendorInvoiceResponse)
+@router.post("/{invoice_id}/submit", response_model=VendorInvoiceResponse, response_model_by_alias=True)
 async def submit_invoice(
     invoice_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Submit invoice for approval."""
     service = VendorInvoiceService(db)
@@ -164,12 +165,12 @@ async def submit_invoice(
 
 
 # Admin endpoints for invoice approval
-@router.post("/{invoice_id}/approve", response_model=VendorInvoiceResponse)
+@router.post("/{invoice_id}/approve", response_model=VendorInvoiceResponse, response_model_by_alias=True)
 async def approve_invoice(
     invoice_id: UUID,
     user_id: UUID,  # From auth middleware (approver)
     remarks: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Approve an invoice (admin)."""
     service = VendorInvoiceService(db)
@@ -177,12 +178,12 @@ async def approve_invoice(
     return invoice
 
 
-@router.post("/{invoice_id}/reject", response_model=VendorInvoiceResponse)
+@router.post("/{invoice_id}/reject", response_model=VendorInvoiceResponse, response_model_by_alias=True)
 async def reject_invoice(
     invoice_id: UUID,
     user_id: UUID,  # From auth middleware (rejector)
     reason: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Reject an invoice (admin)."""
     service = VendorInvoiceService(db)

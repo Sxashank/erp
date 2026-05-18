@@ -2,8 +2,6 @@
  * Notification Detail Page
  */
 
-import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Bell,
@@ -17,9 +15,11 @@ import {
   Trash2,
   Check,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -30,7 +30,7 @@ import {
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { notificationApi } from '@/services/notificationApi';
-import { Notification } from '@/types/notification';
+import type { Notification } from '@/types/notification';
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
   email: <Mail className="h-4 w-4" />,

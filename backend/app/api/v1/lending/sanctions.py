@@ -7,28 +7,28 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
 from app.api.deps import RequirePermissions
+from app.database import get_db
 from app.models.auth.user import User
 from app.models.lending.enums import (
-    SanctionStatus,
     ConditionType,
-)
-from app.services.lending.sanction_service import SanctionService
-from app.schemas.lending.sanction import (
-    LoanSanctionCreate,
-    LoanSanctionUpdate,
-    LoanSanctionResponse,
-    LoanSanctionListResponse,
-    LoanSanctionDetailResponse,
-    SanctionConditionCreate,
-    SanctionConditionUpdate,
-    SanctionConditionResponse,
-    LoanSecurityCreate,
-    LoanSecurityUpdate,
-    LoanSecurityResponse,
+    SanctionStatus,
 )
 from app.schemas.base import PaginatedResponse
+from app.schemas.lending.sanction import (
+    LoanSanctionCreate,
+    LoanSanctionDetailResponse,
+    LoanSanctionListResponse,
+    LoanSanctionResponse,
+    LoanSanctionUpdate,
+    LoanSecurityCreate,
+    LoanSecurityResponse,
+    LoanSecurityUpdate,
+    SanctionConditionCreate,
+    SanctionConditionResponse,
+    SanctionConditionUpdate,
+)
+from app.services.lending.sanction_service import SanctionService
 
 router = APIRouter()
 
@@ -38,16 +38,20 @@ router = APIRouter()
 # =============================================================================
 
 
-@router.get("", response_model=PaginatedResponse[LoanSanctionListResponse])
+@router.get(
+    "",
+    response_model=PaginatedResponse[LoanSanctionListResponse],
+    response_model_by_alias=True,
+)
 async def list_sanctions(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
-    search: Optional[str] = Query(None, description="Search in sanction number"),
-    entity_id: Optional[UUID] = Query(None),
-    status: Optional[SanctionStatus] = Query(None),
-    from_date: Optional[date] = Query(None),
-    to_date: Optional[date] = Query(None),
+    search: str | None = Query(None, description="Search in sanction number"),
+    entity_id: UUID | None = Query(None),
+    status: SanctionStatus | None = Query(None),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -69,7 +73,11 @@ async def list_sanctions(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/entity/{entity_id}", response_model=list[LoanSanctionListResponse])
+@router.get(
+    "/entity/{entity_id}",
+    response_model=list[LoanSanctionListResponse],
+    response_model_by_alias=True,
+)
 async def get_entity_sanctions(
     entity_id: UUID,
     include_inactive: bool = Query(False),
@@ -82,7 +90,11 @@ async def get_entity_sanctions(
     return [LoanSanctionListResponse.model_validate(s) for s in sanctions]
 
 
-@router.get("/application/{application_id}", response_model=LoanSanctionResponse)
+@router.get(
+    "/application/{application_id}",
+    response_model=Optional[LoanSanctionResponse],
+    response_model_by_alias=True,
+)
 async def get_sanction_by_application(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
@@ -98,30 +110,41 @@ async def get_sanction_by_application(
 
 @router.get("/total-sanctioned")
 async def get_total_sanctioned_amount(
-    from_date: Optional[date] = Query(None),
-    to_date: Optional[date] = Query(None),
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
     """Get total sanctioned amount for an organization."""
     service = SanctionService(db)
-    total = await service.get_total_sanctioned_amount(current_user.organization_id, from_date, to_date)
-    return {"total_sanctioned_amount": total}
+    total = await service.get_total_sanctioned_amount(
+        current_user.organization_id, from_date, to_date
+    )
+    return {"totalSanctionedAmount": total}
 
 
-@router.post("", response_model=LoanSanctionResponse)
+@router.post(
+    "",
+    response_model=LoanSanctionResponse,
+    response_model_by_alias=True,
+)
 async def create_sanction(
     data: LoanSanctionCreate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_CREATE")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new loan sanction."""
+    data.organization_id = current_user.organization_id
     service = SanctionService(db)
     sanction = await service.create_sanction(data, current_user.id)
     return LoanSanctionResponse.model_validate(sanction)
 
 
-@router.get("/{sanction_id}", response_model=LoanSanctionResponse)
+@router.get(
+    "/{sanction_id}",
+    response_model=LoanSanctionResponse,
+    response_model_by_alias=True,
+)
 async def get_sanction(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
@@ -133,7 +156,11 @@ async def get_sanction(
     return LoanSanctionResponse.model_validate(sanction)
 
 
-@router.get("/{sanction_id}/details", response_model=LoanSanctionDetailResponse)
+@router.get(
+    "/{sanction_id}/details",
+    response_model=LoanSanctionDetailResponse,
+    response_model_by_alias=True,
+)
 async def get_sanction_details(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
@@ -145,7 +172,11 @@ async def get_sanction_details(
     return LoanSanctionDetailResponse.model_validate(sanction)
 
 
-@router.put("/{sanction_id}", response_model=LoanSanctionResponse)
+@router.put(
+    "/{sanction_id}",
+    response_model=LoanSanctionResponse,
+    response_model_by_alias=True,
+)
 async def update_sanction(
     sanction_id: UUID,
     data: LoanSanctionUpdate,
@@ -158,7 +189,11 @@ async def update_sanction(
     return LoanSanctionResponse.model_validate(sanction)
 
 
-@router.post("/{sanction_id}/submit", response_model=LoanSanctionResponse)
+@router.post(
+    "/{sanction_id}/submit",
+    response_model=LoanSanctionResponse,
+    response_model_by_alias=True,
+)
 async def submit_for_approval(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
@@ -170,10 +205,14 @@ async def submit_for_approval(
     return LoanSanctionResponse.model_validate(sanction)
 
 
-@router.post("/{sanction_id}/approve", response_model=LoanSanctionResponse)
+@router.post(
+    "/{sanction_id}/approve",
+    response_model=LoanSanctionResponse,
+    response_model_by_alias=True,
+)
 async def approve_sanction(
     sanction_id: UUID,
-    remarks: Optional[str] = Query(None),
+    remarks: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_APPROVE")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -183,11 +222,15 @@ async def approve_sanction(
     return LoanSanctionResponse.model_validate(sanction)
 
 
-@router.post("/{sanction_id}/accept", response_model=LoanSanctionResponse)
+@router.post(
+    "/{sanction_id}/accept",
+    response_model=LoanSanctionResponse,
+    response_model_by_alias=True,
+)
 async def record_borrower_acceptance(
     sanction_id: UUID,
     acceptance_date: date = Query(...),
-    document_path: Optional[str] = Query(None),
+    document_path: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -216,7 +259,11 @@ async def check_disbursement_eligibility(
 # =============================================================================
 
 
-@router.get("/{sanction_id}/conditions", response_model=list[SanctionConditionResponse])
+@router.get(
+    "/{sanction_id}/conditions",
+    response_model=list[SanctionConditionResponse],
+    response_model_by_alias=True,
+)
 async def list_conditions(
     sanction_id: UUID,
     include_inactive: bool = Query(False),
@@ -229,10 +276,14 @@ async def list_conditions(
     return [SanctionConditionResponse.model_validate(c) for c in conditions]
 
 
-@router.get("/{sanction_id}/conditions/pending", response_model=list[SanctionConditionResponse])
+@router.get(
+    "/{sanction_id}/conditions/pending",
+    response_model=list[SanctionConditionResponse],
+    response_model_by_alias=True,
+)
 async def get_pending_conditions(
     sanction_id: UUID,
-    condition_type: Optional[ConditionType] = Query(None),
+    condition_type: ConditionType | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -242,7 +293,11 @@ async def get_pending_conditions(
     return [SanctionConditionResponse.model_validate(c) for c in conditions]
 
 
-@router.post("/{sanction_id}/conditions", response_model=SanctionConditionResponse)
+@router.post(
+    "/{sanction_id}/conditions",
+    response_model=SanctionConditionResponse,
+    response_model_by_alias=True,
+)
 async def add_condition(
     sanction_id: UUID,
     data: SanctionConditionCreate,
@@ -256,7 +311,11 @@ async def add_condition(
     return SanctionConditionResponse.model_validate(condition)
 
 
-@router.put("/conditions/{condition_id}", response_model=SanctionConditionResponse)
+@router.put(
+    "/conditions/{condition_id}",
+    response_model=SanctionConditionResponse,
+    response_model_by_alias=True,
+)
 async def update_condition(
     condition_id: UUID,
     data: SanctionConditionUpdate,
@@ -269,12 +328,16 @@ async def update_condition(
     return SanctionConditionResponse.model_validate(condition)
 
 
-@router.post("/conditions/{condition_id}/comply", response_model=SanctionConditionResponse)
+@router.post(
+    "/conditions/{condition_id}/comply",
+    response_model=SanctionConditionResponse,
+    response_model_by_alias=True,
+)
 async def comply_condition(
     condition_id: UUID,
     complied_on: date = Query(...),
-    remarks: Optional[str] = Query(None),
-    document_path: Optional[str] = Query(None),
+    remarks: str | None = Query(None),
+    document_path: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -286,7 +349,11 @@ async def comply_condition(
     return SanctionConditionResponse.model_validate(condition)
 
 
-@router.post("/conditions/{condition_id}/waive", response_model=SanctionConditionResponse)
+@router.post(
+    "/conditions/{condition_id}/waive",
+    response_model=SanctionConditionResponse,
+    response_model_by_alias=True,
+)
 async def waive_condition(
     condition_id: UUID,
     waiver_remarks: str = Query(...),
@@ -304,7 +371,11 @@ async def waive_condition(
 # =============================================================================
 
 
-@router.get("/{sanction_id}/securities", response_model=list[LoanSecurityResponse])
+@router.get(
+    "/{sanction_id}/securities",
+    response_model=list[LoanSecurityResponse],
+    response_model_by_alias=True,
+)
 async def list_securities(
     sanction_id: UUID,
     include_inactive: bool = Query(False),
@@ -329,7 +400,11 @@ async def get_security_summary(
     return summary
 
 
-@router.post("/{sanction_id}/securities", response_model=LoanSecurityResponse)
+@router.post(
+    "/{sanction_id}/securities",
+    response_model=LoanSecurityResponse,
+    response_model_by_alias=True,
+)
 async def add_security(
     sanction_id: UUID,
     data: LoanSecurityCreate,
@@ -343,7 +418,11 @@ async def add_security(
     return LoanSecurityResponse.model_validate(security)
 
 
-@router.put("/securities/{security_id}", response_model=LoanSecurityResponse)
+@router.put(
+    "/securities/{security_id}",
+    response_model=LoanSecurityResponse,
+    response_model_by_alias=True,
+)
 async def update_security(
     security_id: UUID,
     data: LoanSecurityUpdate,
@@ -356,7 +435,11 @@ async def update_security(
     return LoanSecurityResponse.model_validate(security)
 
 
-@router.post("/securities/{security_id}/register", response_model=LoanSecurityResponse)
+@router.post(
+    "/securities/{security_id}/register",
+    response_model=LoanSecurityResponse,
+    response_model_by_alias=True,
+)
 async def register_security(
     security_id: UUID,
     cersai_registration_id: str = Query(...),

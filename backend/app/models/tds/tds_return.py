@@ -46,6 +46,11 @@ class Quarter(str, enum.Enum):
     Q4 = "Q4"  # Jan-Mar
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    """Persist enum values exactly as defined in existing PostgreSQL enum types."""
+    return [member.value for member in enum_cls]
+
+
 class TDSReturn(BaseModel):
     """
     TDS Return for quarterly filing.
@@ -66,7 +71,7 @@ class TDSReturn(BaseModel):
 
     # Return identification
     return_type: Mapped[ReturnType] = mapped_column(
-        SQLEnum(ReturnType),
+        SQLEnum(ReturnType, name="return_type", create_type=False, values_callable=_enum_values),
         nullable=False,
         index=True,
     )
@@ -87,7 +92,7 @@ class TDSReturn(BaseModel):
         comment="Assessment year e.g. 2025-26",
     )
     quarter: Mapped[Quarter] = mapped_column(
-        SQLEnum(Quarter),
+        SQLEnum(Quarter, name="quarter", create_type=False, values_callable=_enum_values),
         nullable=False,
         index=True,
     )
@@ -102,7 +107,7 @@ class TDSReturn(BaseModel):
 
     # Status tracking
     status: Mapped[ReturnStatus] = mapped_column(
-        SQLEnum(ReturnStatus),
+        SQLEnum(ReturnStatus, name="return_status", create_type=False, values_callable=_enum_values),
         nullable=False,
         default=ReturnStatus.DRAFT,
         index=True,

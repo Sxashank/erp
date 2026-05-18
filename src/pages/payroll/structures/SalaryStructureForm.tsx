@@ -2,15 +2,16 @@
  * Salary Structure Form Page
  */
 
+import { Save, Plus, Trash2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -18,7 +19,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -27,13 +27,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { SalaryComponent } from '@/services/payrollService';
 import payrollService, {
   SalaryStructure,
-  SalaryComponent,
   SalaryStructureComponent,
 } from '@/services/payrollService';
-import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface ComponentLine {
   id?: string;
@@ -64,6 +66,10 @@ export default function SalaryStructureForm() {
     structure_code: '',
     structure_name: '',
     description: '',
+    effective_from: new Date().toISOString().split('T')[0],
+    effective_to: '',
+    payment_mode: 'BANK',
+    pay_frequency: 'MONTHLY',
     ctc_from: '',
     ctc_to: '',
     is_active: true,
@@ -104,6 +110,10 @@ export default function SalaryStructureForm() {
         structure_code: data.structure_code,
         structure_name: data.structure_name,
         description: data.description || '',
+        effective_from: data.effective_from,
+        effective_to: data.effective_to || '',
+        payment_mode: data.payment_mode || 'BANK',
+        pay_frequency: data.pay_frequency || 'MONTHLY',
         ctc_from: data.ctc_from?.toString() || '',
         ctc_to: data.ctc_to?.toString() || '',
         is_active: data.is_active,
@@ -115,13 +125,15 @@ export default function SalaryStructureForm() {
             id: c.id,
             component_id: c.component_id,
             component: c.component,
-            calculation_type: c.calculation_type,
+            calculation_type: c.calculation_type === 'FIXED' || c.calculation_type === 'FORMULA'
+              ? c.calculation_type
+              : 'PERCENTAGE',
             default_value: c.default_value?.toString() || '',
             percentage_of: c.percentage_of || '',
             percentage_value: c.percentage_value?.toString() || '',
             formula: c.formula || '',
             is_mandatory: c.is_mandatory,
-          }))
+          })),
         );
       }
     } catch (error) {
@@ -130,7 +142,7 @@ export default function SalaryStructureForm() {
         description: 'Failed to load structure',
         variant: 'destructive',
       });
-      navigate('/payroll/structures');
+      navigate('/admin/payroll/structures');
     } finally {
       setLoading(false);
     }
@@ -155,7 +167,7 @@ export default function SalaryStructureForm() {
     setComponentLines(componentLines.filter((_, i) => i !== index));
   };
 
-  const updateComponentLine = (index: number, field: string, value: any) => {
+  const updateComponentLine = (index: number, field: string, value: unknown) => {
     const updated = [...componentLines];
     updated[index] = { ...updated[index], [field]: value };
 
@@ -174,6 +186,15 @@ export default function SalaryStructureForm() {
       toast({
         title: 'Validation Error',
         description: 'Code and name are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!formData.effective_from) {
+      toast({
+        title: 'Validation Error',
+        description: 'Effective from date is required',
         variant: 'destructive',
       });
       return;
@@ -204,42 +225,39 @@ export default function SalaryStructureForm() {
 
       const payload = {
         ...formData,
+        effective_to: formData.effective_to || undefined,
         ctc_from: formData.ctc_from ? parseFloat(formData.ctc_from) : undefined,
         ctc_to: formData.ctc_to ? parseFloat(formData.ctc_to) : undefined,
         components: componentLines.map((line) => ({
           component_id: line.component_id,
           calculation_type: line.calculation_type,
-          default_value: line.default_value
-            ? parseFloat(line.default_value)
-            : undefined,
+          default_value: line.default_value ? parseFloat(line.default_value) : undefined,
           percentage_of: line.percentage_of || undefined,
-          percentage_value: line.percentage_value
-            ? parseFloat(line.percentage_value)
-            : undefined,
+          percentage_value: line.percentage_value ? parseFloat(line.percentage_value) : undefined,
           formula: line.formula || undefined,
           is_mandatory: line.is_mandatory,
         })),
       };
 
       if (isEdit && id) {
-        await payrollService.updateStructure(id, payload as any);
+        await payrollService.updateStructure(id, payload as Parameters<typeof payrollService.updateStructure>[1]);
         toast({
           title: 'Success',
           description: 'Structure updated successfully',
         });
       } else {
-        await payrollService.createStructure(payload as any);
+        await payrollService.createStructure(payload as Parameters<typeof payrollService.createStructure>[0]);
         toast({
           title: 'Success',
           description: 'Structure created successfully',
         });
       }
 
-      navigate('/payroll/structures');
-    } catch (error: any) {
+      navigate('/admin/payroll/structures');
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save structure',
+        description: getErrorMessage(error, 'Failed to save structure'),
         variant: 'destructive',
       });
     } finally {
@@ -250,27 +268,21 @@ export default function SalaryStructureForm() {
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" onClick={() => navigate('/payroll/structures')}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">
-            {isEdit ? 'Edit' : 'New'} Salary Structure
-          </h1>
-          <p className="text-muted-foreground">
-            {isEdit ? 'Update structure details' : 'Create a new salary structure'}
-          </p>
-        </div>
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title={`${isEdit ? 'Edit' : 'New'} Salary Structure`}
+        subtitle={isEdit ? 'Update structure details' : 'Create a new salary structure'}
+        breadcrumbs={[
+          { label: 'Salary Structures', to: '/admin/payroll/structures' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit}>
         <div className="space-y-6">
@@ -279,7 +291,7 @@ export default function SalaryStructureForm() {
               <CardTitle>Basic Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="structure_code">Structure Code *</Label>
                   <Input
@@ -300,9 +312,7 @@ export default function SalaryStructureForm() {
                   <Input
                     id="structure_name"
                     value={formData.structure_name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, structure_name: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, structure_name: e.target.value })}
                     placeholder="e.g., Standard Structure, Manager Structure"
                   />
                 </div>
@@ -313,24 +323,20 @@ export default function SalaryStructureForm() {
                 <Textarea
                   id="description"
                   value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Optional description for this structure"
                   rows={2}
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="ctc_from">CTC Range From</Label>
                   <Input
                     id="ctc_from"
                     type="number"
                     value={formData.ctc_from}
-                    onChange={(e) =>
-                      setFormData({ ...formData, ctc_from: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, ctc_from: e.target.value })}
                     placeholder="Minimum CTC"
                   />
                 </div>
@@ -340,11 +346,65 @@ export default function SalaryStructureForm() {
                     id="ctc_to"
                     type="number"
                     value={formData.ctc_to}
-                    onChange={(e) =>
-                      setFormData({ ...formData, ctc_to: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, ctc_to: e.target.value })}
                     placeholder="Maximum CTC"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="effective_from">Effective From *</Label>
+                  <Input
+                    id="effective_from"
+                    type="date"
+                    value={formData.effective_from}
+                    onChange={(e) => setFormData({ ...formData, effective_from: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="effective_to">Effective To</Label>
+                  <Input
+                    id="effective_to"
+                    type="date"
+                    value={formData.effective_to}
+                    onChange={(e) => setFormData({ ...formData, effective_to: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="payment_mode">Payment Mode</Label>
+                  <Select
+                    value={formData.payment_mode}
+                    onValueChange={(value) => setFormData({ ...formData, payment_mode: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="BANK">Bank</SelectItem>
+                      <SelectItem value="CASH">Cash</SelectItem>
+                      <SelectItem value="CHEQUE">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="pay_frequency">Pay Frequency</Label>
+                  <Select
+                    value={formData.pay_frequency}
+                    onValueChange={(value) => setFormData({ ...formData, pay_frequency: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="MONTHLY">Monthly</SelectItem>
+                      <SelectItem value="WEEKLY">Weekly</SelectItem>
+                      <SelectItem value="BIWEEKLY">Biweekly</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -363,7 +423,7 @@ export default function SalaryStructureForm() {
 
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <CardTitle>Components</CardTitle>
                 <Button type="button" variant="outline" onClick={addComponentLine}>
                   <Plus className="mr-2 h-4 w-4" />
@@ -386,7 +446,7 @@ export default function SalaryStructureForm() {
                 <TableBody>
                   {componentLines.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8">
+                      <TableCell colSpan={6} className="py-8 text-center">
                         No components added. Click "Add Component" to start.
                       </TableCell>
                     </TableRow>
@@ -435,11 +495,7 @@ export default function SalaryStructureForm() {
                               type="number"
                               value={line.default_value}
                               onChange={(e) =>
-                                updateComponentLine(
-                                  index,
-                                  'default_value',
-                                  e.target.value
-                                )
+                                updateComponentLine(index, 'default_value', e.target.value)
                               }
                               placeholder="Amount"
                               className="w-[120px]"
@@ -451,11 +507,7 @@ export default function SalaryStructureForm() {
                               step="0.01"
                               value={line.percentage_value}
                               onChange={(e) =>
-                                updateComponentLine(
-                                  index,
-                                  'percentage_value',
-                                  e.target.value
-                                )
+                                updateComponentLine(index, 'percentage_value', e.target.value)
                               }
                               placeholder="%"
                               className="w-[100px]"
@@ -477,11 +529,7 @@ export default function SalaryStructureForm() {
                             <Input
                               value={line.percentage_of}
                               onChange={(e) =>
-                                updateComponentLine(
-                                  index,
-                                  'percentage_of',
-                                  e.target.value
-                                )
+                                updateComponentLine(index, 'percentage_of', e.target.value)
                               }
                               placeholder="BASIC"
                               className="w-[100px]"
@@ -515,11 +563,11 @@ export default function SalaryStructureForm() {
           </Card>
         </div>
 
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="mt-6 flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/payroll/structures')}
+            onClick={() => navigate('/admin/payroll/structures')}
           >
             Cancel
           </Button>

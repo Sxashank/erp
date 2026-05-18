@@ -13,14 +13,15 @@ from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.gst.einvoice import EWayBillStatus
 from app.services.gst.ewaybill_service import EWayBillService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter(prefix="/ewaybill", tags=["E-Way Bill"])
 
@@ -194,15 +195,15 @@ class EWayBillStatistics(BaseModel):
 
 @router.post(
     "/generate",
-    response_model=EWayBillResponse,
+    response_model=EWayBillResponse, response_model_by_alias=True,
     summary="Generate E-Way Bill",
     description="Generate E-Way Bill for goods movement.",
 )
 async def generate_eway_bill(
     organization_id: UUID,
     request: GenerateEWayBillRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_CREATE")),
 ):
     """Generate E-Way Bill."""
     service = EWayBillService(db)
@@ -217,22 +218,19 @@ async def generate_eway_bill(
         )
         return _to_response(result)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/generate-from-invoice",
-    response_model=EWayBillResponse,
+    response_model=EWayBillResponse, response_model_by_alias=True,
     summary="Generate E-Way Bill from Invoice",
     description="Generate E-Way Bill from an existing sales invoice.",
 )
 async def generate_from_invoice(
     request: GenerateFromInvoiceRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_CREATE")),
 ):
     """Generate E-Way Bill from sales invoice."""
     service = EWayBillService(db)
@@ -249,23 +247,20 @@ async def generate_from_invoice(
         )
         return _to_response(result)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{eway_bill_id}/cancel",
-    response_model=EWayBillResponse,
+    response_model=EWayBillResponse, response_model_by_alias=True,
     summary="Cancel E-Way Bill",
     description="Cancel an E-Way Bill.",
 )
 async def cancel_eway_bill(
     eway_bill_id: UUID,
     request: CancelEWayBillRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.cancel")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_CANCEL")),
 ):
     """Cancel E-Way Bill."""
     service = EWayBillService(db)
@@ -278,23 +273,20 @@ async def cancel_eway_bill(
         )
         return _to_response(result)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{eway_bill_id}/update-vehicle",
-    response_model=EWayBillResponse,
+    response_model=EWayBillResponse, response_model_by_alias=True,
     summary="Update Vehicle",
     description="Update vehicle details (Part B) of E-Way Bill.",
 )
 async def update_vehicle(
     eway_bill_id: UUID,
     request: UpdateVehicleRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_UPDATE")),
 ):
     """Update vehicle details."""
     service = EWayBillService(db)
@@ -310,23 +302,20 @@ async def update_vehicle(
         )
         return _to_response(result)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{eway_bill_id}/extend",
-    response_model=EWayBillResponse,
+    response_model=EWayBillResponse, response_model_by_alias=True,
     summary="Extend Validity",
     description="Extend E-Way Bill validity.",
 )
 async def extend_validity(
     eway_bill_id: UUID,
     request: ExtendValidityRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_UPDATE")),
 ):
     """Extend E-Way Bill validity."""
     service = EWayBillService(db)
@@ -341,37 +330,31 @@ async def extend_validity(
         )
         return _to_response(result)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/{eway_bill_id}",
-    response_model=EWayBillResponse,
+    response_model=EWayBillResponse, response_model_by_alias=True,
     summary="Get E-Way Bill",
     description="Get E-Way Bill details by ID.",
 )
 async def get_eway_bill(
     eway_bill_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_READ")),
 ):
     """Get E-Way Bill details."""
     service = EWayBillService(db)
     result = await service.get_eway_bill(eway_bill_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="E-Way Bill not found",
-        )
+        raise NotFoundException(detail="E-Way Bill not found", error_code="E_WAY_BILL_NOT_FOUND")
     return _to_response(result)
 
 
 @router.get(
     "",
-    response_model=EWayBillListResponse,
+    response_model=EWayBillListResponse, response_model_by_alias=True,
     summary="List E-Way Bills",
     description="List E-Way Bills with filtering.",
 )
@@ -383,8 +366,8 @@ async def list_eway_bills(
     expiring_soon: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_READ")),
 ):
     """List E-Way Bills."""
     service = EWayBillService(db)
@@ -409,7 +392,7 @@ async def list_eway_bills(
 
 @router.get(
     "/statistics",
-    response_model=EWayBillStatistics,
+    response_model=EWayBillStatistics, response_model_by_alias=True,
     summary="Get E-Way Bill Statistics",
     description="Get E-Way Bill statistics.",
 )
@@ -417,8 +400,8 @@ async def get_statistics(
     organization_id: UUID,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_READ")),
 ):
     """Get E-Way Bill statistics."""
     service = EWayBillService(db)
@@ -438,8 +421,8 @@ async def get_statistics(
 async def check_required(
     invoice_value: float,
     supply_type: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("ewaybill.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EWAYBILL_READ")),
 ):
     """Check if E-Way Bill is required."""
     service = EWayBillService(db)

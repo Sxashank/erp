@@ -1,12 +1,12 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
@@ -17,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -24,9 +25,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ArrowLeft, Save } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
+
+const NONE_OPTION_VALUE = '__none__';
+
 const warehouseSchema = z.object({
   warehouseCode: z.string().min(1, 'Warehouse code is required').max(20),
   warehouseName: z.string().min(1, 'Warehouse name is required').max(100),
@@ -99,16 +102,16 @@ export default function WarehouseForm() {
 
   const onSubmit = (data: WarehouseFormData) => {
     logger.debug('Form submitted:', data);
-    navigate('/inventory/warehouses');
+    navigate('/admin/inventory/warehouses');
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={isEdit ? 'Edit Warehouse' : 'Create Warehouse'}
         subtitle={isEdit ? 'Update warehouse details' : 'Add a new storage location'}
         breadcrumbs={[
-          { label: 'Warehouses', to: '/inventory/warehouses' },
+          { label: 'Warehouses', to: '/admin/inventory/warehouses' },
           { label: isEdit ? 'Edit' : 'New' },
         ]}
       />
@@ -119,7 +122,7 @@ export default function WarehouseForm() {
             <CardHeader>
               <CardTitle>Basic Information</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="warehouseCode"
@@ -177,16 +180,21 @@ export default function WarehouseForm() {
                 control={form.control}
                 name="unitId"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Associated Branch</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormItem>
+                      <FormLabel>Associated Branch</FormLabel>
+                    <Select
+                      onValueChange={(value) =>
+                        field.onChange(value === NONE_OPTION_VALUE ? '' : value)
+                      }
+                      value={field.value || NONE_OPTION_VALUE}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select branch (optional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value={NONE_OPTION_VALUE}>None</SelectItem>
                         {branches.map((branch) => (
                           <SelectItem key={branch.id} value={branch.id}>
                             {branch.name}
@@ -207,11 +215,7 @@ export default function WarehouseForm() {
                     <FormItem>
                       <FormLabel>Description</FormLabel>
                       <FormControl>
-                        <Textarea
-                          placeholder="Enter warehouse description"
-                          rows={2}
-                          {...field}
-                        />
+                        <Textarea placeholder="Enter warehouse description" rows={2} {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -225,7 +229,7 @@ export default function WarehouseForm() {
             <CardHeader>
               <CardTitle>Address</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="addressLine1"
@@ -313,7 +317,7 @@ export default function WarehouseForm() {
             <CardHeader>
               <CardTitle>Contact Information</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <FormField
                 control={form.control}
                 name="contactPerson"
@@ -363,17 +367,14 @@ export default function WarehouseForm() {
               <CardTitle>Settings</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="isDefault"
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <div>
                         <FormLabel className="font-normal">Default Warehouse</FormLabel>
@@ -391,16 +392,11 @@ export default function WarehouseForm() {
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <div>
                         <FormLabel className="font-normal">Allow Negative Stock</FormLabel>
-                        <FormDescription>
-                          Allow stock to go below zero
-                        </FormDescription>
+                        <FormDescription>Allow stock to go below zero</FormDescription>
                       </div>
                     </FormItem>
                   )}
@@ -414,7 +410,7 @@ export default function WarehouseForm() {
               Cancel
             </Button>
             <Button type="submit">
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               {isEdit ? 'Update Warehouse' : 'Create Warehouse'}
             </Button>
           </div>

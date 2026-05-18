@@ -115,7 +115,7 @@ class AssetService:
 
         asset = FixedAsset(**asset_data)
         self.session.add(asset)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(asset)
 
         # Audit trail - log creation
@@ -128,7 +128,8 @@ class AssetService:
             user_id=created_by or asset.created_by,
         )
 
-        return asset
+        hydrated_asset = await self.get(asset.id)
+        return hydrated_asset or asset
 
     async def get(self, id: UUID) -> Optional[FixedAsset]:
         """Get asset by ID."""
@@ -202,7 +203,7 @@ class AssetService:
         # Increment version for optimistic locking
         increment_version(asset)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(asset)
 
         # Audit trail - log update
@@ -216,7 +217,8 @@ class AssetService:
             user_id=updated_by or asset.updated_by,
         )
 
-        return asset
+        hydrated_asset = await self.get(asset.id)
+        return hydrated_asset or asset
 
     async def delete(
         self,
@@ -238,7 +240,7 @@ class AssetService:
         asset_id = asset.id
 
         asset.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
         # Audit trail - log deletion
         await self.audit_service.log_delete(
@@ -294,7 +296,7 @@ class AssetService:
             posted_by=capitalized_by,
         )
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(asset)
 
         # Audit trail - log capitalization
@@ -310,7 +312,8 @@ class AssetService:
             change_reason=f"Asset capitalized on {data.capitalization_date or date.today()}",
         )
 
-        return asset
+        hydrated_asset = await self.get(asset.id)
+        return hydrated_asset or asset
 
     async def dispose(
         self,
@@ -359,7 +362,7 @@ class AssetService:
             posted_by=disposed_by,
         )
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(asset)
 
         # Audit trail - log disposal
@@ -375,7 +378,8 @@ class AssetService:
             change_reason=f"Asset disposed via {data.disposal_type.value} on {data.disposal_date}. {data.disposal_remarks or ''}",
         )
 
-        return asset
+        hydrated_asset = await self.get(asset.id)
+        return hydrated_asset or asset
 
     async def transfer(
         self,
@@ -409,7 +413,7 @@ class AssetService:
             transfer.created_by = transferred_by
 
         self.session.add(transfer)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transfer)
 
         # Audit trail - log transfer request
@@ -463,7 +467,7 @@ class AssetService:
         from datetime import datetime, timezone
         transfer.completed_at = datetime.now(timezone.utc)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transfer)
         return transfer
 
@@ -532,7 +536,7 @@ class AssetService:
         revaluation.voucher_id = voucher_id
 
         self.session.add(revaluation)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(revaluation)
 
         # Audit trail - log revaluation
@@ -607,7 +611,7 @@ class AssetService:
         revaluation.voucher_id = voucher_id
 
         self.session.add(revaluation)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(revaluation)
 
         # Audit trail - log impairment
@@ -842,30 +846,36 @@ class AssetService:
 
         gl_lines: List[Dict[str, Any]] = []
 
+        disposal_settlement_account = (
+            category.gl_disposal_gain_account_id
+            or category.gl_disposal_loss_account_id
+            or category.gl_asset_account_id
+        )
+
         # Dr Accumulated Depreciation (reverse the accumulated amount)
-        if category.gl_accumulated_depreciation_account_id and asset.accumulated_depreciation > 0:
+        if category.gl_accum_dep_account_id and asset.accumulated_depreciation > 0:
             gl_lines.append({
-                "account_id": category.gl_accumulated_depreciation_account_id,
+                "account_id": category.gl_accum_dep_account_id,
                 "debit_amount": asset.accumulated_depreciation,
                 "credit_amount": Decimal("0.00"),
                 "narration": f"Disposal of {asset.asset_code} - Accumulated Depreciation",
             })
 
         # Dr Bank/Cash (disposal proceeds)
-        if disposal_value > 0 and category.gl_disposal_account_id:
+        if disposal_value > 0 and disposal_settlement_account:
             gl_lines.append({
-                "account_id": category.gl_disposal_account_id,
+                "account_id": disposal_settlement_account,
                 "debit_amount": disposal_value,
                 "credit_amount": Decimal("0.00"),
                 "narration": f"Disposal proceeds of {asset.asset_code}",
             })
 
         # Dr/Cr Gain or Loss on Disposal
-        if disposal_gain_loss != 0 and category.gl_disposal_account_id:
+        if disposal_gain_loss != 0:
             if disposal_gain_loss < 0:
                 # Loss on disposal (debit)
                 gl_lines.append({
-                    "account_id": category.gl_disposal_account_id,
+                    "account_id": category.gl_disposal_loss_account_id or disposal_settlement_account,
                     "debit_amount": abs(disposal_gain_loss),
                     "credit_amount": Decimal("0.00"),
                     "narration": f"Loss on disposal of {asset.asset_code}",
@@ -873,7 +883,7 @@ class AssetService:
             else:
                 # Gain on disposal (credit)
                 gl_lines.append({
-                    "account_id": category.gl_disposal_account_id,
+                    "account_id": category.gl_disposal_gain_account_id or disposal_settlement_account,
                     "debit_amount": Decimal("0.00"),
                     "credit_amount": disposal_gain_loss,
                     "narration": f"Gain on disposal of {asset.asset_code}",
@@ -927,7 +937,9 @@ class AssetService:
         gl_lines: List[Dict[str, Any]] = []
 
         # Get or use revaluation reserve account (use disposal account as fallback)
-        revaluation_reserve_account = category.gl_disposal_account_id or category.gl_asset_account_id
+        revaluation_reserve_account = (
+            category.gl_revaluation_reserve_account_id or category.gl_asset_account_id
+        )
 
         if revaluation_type == RevaluationType.INCREASE:
             # Dr Asset Account, Cr Revaluation Reserve
@@ -973,8 +985,14 @@ class AssetService:
             unit_id=asset.location_id,
         )
 
-        # Return the voucher_id (source_id used as pseudo-voucher)
-        return asset.id if entries else None
+        if not entries:
+            return None
+
+        voucher_id = entries[0].voucher_id
+        if voucher_id is None:
+            raise ValueError("Revaluation GL posting did not produce a voucher")
+
+        return voucher_id
 
     async def _post_impairment_gl(
         self,
@@ -997,9 +1015,10 @@ class AssetService:
 
         # Use depreciation expense account for impairment loss (or disposal account)
         impairment_loss_account = (
-            category.gl_depreciation_expense_account_id or
-            category.gl_disposal_account_id or
-            category.gl_asset_account_id
+            category.gl_impairment_account_id
+            or category.gl_dep_expense_account_id
+            or category.gl_disposal_loss_account_id
+            or category.gl_asset_account_id
         )
 
         # Dr Impairment Loss, Cr Asset Account
@@ -1031,4 +1050,11 @@ class AssetService:
             unit_id=asset.location_id,
         )
 
-        return asset.id if entries else None
+        if not entries:
+            return None
+
+        voucher_id = entries[0].voucher_id
+        if voucher_id is None:
+            raise ValueError("Impairment GL posting did not produce a voucher")
+
+        return voucher_id

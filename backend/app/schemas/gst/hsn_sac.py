@@ -7,11 +7,11 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, CamelSchema
 from app.core.constants import HSNSACType
 
 
-class HSNSACBase(BaseSchema):
+class HSNSACBase(CamelSchema):
     """Base HSN/SAC schema."""
 
     code: str = Field(..., min_length=1, max_length=20)
@@ -29,7 +29,7 @@ class HSNSACCreate(HSNSACBase):
     pass
 
 
-class HSNSACUpdate(BaseSchema):
+class HSNSACUpdate(CamelSchema):
     """Schema for updating an HSN/SAC code."""
 
     description: Optional[str] = None

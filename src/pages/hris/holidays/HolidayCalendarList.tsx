@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   CalendarDays,
@@ -9,11 +7,14 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { HrisConfirmDialog } from '@/components/hris/HrisConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface HolidayCalendar {
   id: string;
   calendar_name: string;
@@ -58,6 +60,8 @@ export function HolidayCalendarList() {
   const [loading, setLoading] = useState(true);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [selectedYear, setSelectedYear] = useState<string>(new Date().getFullYear().toString());
+  const [deleteCalendarId, setDeleteCalendarId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const years = Array.from({ length: 5 }, (_, i) => (new Date().getFullYear() - 1 + i).toString());
 
@@ -71,7 +75,7 @@ export function HolidayCalendarList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -88,7 +92,7 @@ export function HolidayCalendarList() {
         });
         setCalendars(response.data.items || response.data || []);
       } catch (error) {
-        console.error('Failed to fetch holiday calendars:', error);
+        logger.error('Failed to fetch holiday calendars:', error);
       } finally {
         setLoading(false);
       }
@@ -96,13 +100,17 @@ export function HolidayCalendarList() {
     fetchCalendars();
   }, [selectedOrgId, selectedYear]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this holiday calendar?')) return;
+  const executeDelete = async () => {
+    if (!deleteCalendarId) return;
     try {
-      await hrisApi.deleteHolidayCalendar(id);
-      setCalendars(calendars.filter((c) => c.id !== id));
+      setDeleteBusy(true);
+      await hrisApi.deleteHolidayCalendar(deleteCalendarId);
+      setCalendars(calendars.filter((c) => c.id !== deleteCalendarId));
+      setDeleteCalendarId(null);
     } catch (error) {
-      console.error('Failed to delete holiday calendar:', error);
+      logger.error('Failed to delete holiday calendar:', error);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -212,7 +220,7 @@ export function HolidayCalendarList() {
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDelete(calendar.id)}
+                            onClick={() => setDeleteCalendarId(calendar.id)}
                             className="text-red-600"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -228,6 +236,18 @@ export function HolidayCalendarList() {
           )}
         </CardContent>
       </Card>
+      <HrisConfirmDialog
+        open={Boolean(deleteCalendarId)}
+        title="Delete holiday calendar"
+        description="This removes the calendar and its holidays from future HRIS scheduling. Confirm there are no attendance locks depending on it."
+        confirmLabel="Delete calendar"
+        destructive
+        busy={deleteBusy}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteCalendarId(null);
+        }}
+        onConfirm={executeDelete}
+      />
     </div>
   );
 }

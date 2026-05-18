@@ -3,21 +3,25 @@
  * View and download payslips, YTD summary
  */
 
+import { Download, FileText, TrendingUp, Loader2, Calendar, IndianRupee } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Download, FileText, TrendingUp, Loader2, Calendar, IndianRupee } from 'lucide-react';
 import { essProfileApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { Payslip, YTDSummary } from '@/types/ess';
 
+import { logger } from "@/lib/logger";
 export default function ESSPayslipsPage() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
   const [loading, setLoading] = useState(true);
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [ytdSummary, setYtdSummary] = useState<YTDSummary | null>(null);
@@ -28,13 +32,12 @@ export default function ESSPayslipsPage() {
   const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
   useEffect(() => {
-    const token = localStorage.getItem('ess_access_token');
-    if (!token) {
+    if (!accessToken) {
       navigate('/ess/login');
       return;
     }
     fetchData();
-  }, [navigate, selectedYear]);
+  }, [accessToken, navigate, selectedYear]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -46,7 +49,7 @@ export default function ESSPayslipsPage() {
       setPayslips(payslipsRes.data?.items || []);
       setYtdSummary(ytdRes.data);
     } catch (error) {
-      console.error('Failed to fetch payslips:', error);
+      logger.error('Failed to fetch payslips:', error);
     } finally {
       setLoading(false);
     }
@@ -64,7 +67,7 @@ export default function ESSPayslipsPage() {
       link.click();
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download payslip:', error);
+      logger.error('Failed to download payslip:', error);
     } finally {
       setDownloading(null);
     }

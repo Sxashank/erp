@@ -1,23 +1,45 @@
-import { useEffect } from 'react';
 import { CheckCircle, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect } from 'react';
+
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { useWizard } from '@/components/lending/wizard/WizardContext';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { useWizard } from '@/components/lending/wizard/WizardContext';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { Separator } from '@/components/ui/separator';
 
 interface Step6Props {
   applicationId?: string;
 }
 
+interface EntityProductData {
+  entityId?: string;
+  productId?: string;
+}
+
+interface LoanDetailsData {
+  requestedAmount?: number;
+  requestedTenureMonths?: number;
+  preferredInterestType?: string;
+  proposedRate?: number;
+  preferredRepaymentFrequency?: string;
+  requestedMoratoriumMonths?: number;
+  purpose?: string;
+}
+
+interface ProjectDetailsData {
+  projectName?: string;
+  projectCost?: number;
+  promoterContribution?: number;
+}
+
 export default function Step6Review({ applicationId }: Step6Props) {
   const { data, validation, setValidation } = useWizard();
 
-  const entityProductData = data['entity-product'] as Record<string, any> || {};
-  const loanDetailsData = data['loan-details'] as Record<string, any> || {};
-  const projectDetailsData = data['project-details'] as Record<string, any> || {};
+  const entityProductData = (data['entity-product'] || {}) as EntityProductData;
+  const loanDetailsData = (data['loan-details'] || {}) as LoanDetailsData;
+  const projectDetailsData = (data['project-details'] || {}) as ProjectDetailsData;
 
   // All previous steps must be valid
   const allStepsValid =
@@ -78,20 +100,18 @@ export default function Step6Review({ applicationId }: Step6Props) {
         <CardContent className="space-y-6">
           {/* Entity & Product */}
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
-              Entity & Product
-            </h4>
+            <h4 className="mb-2 text-sm font-medium text-muted-foreground">Entity & Product</h4>
             <div className="grid gap-4 md:grid-cols-2">
               <div>
                 <p className="text-sm text-muted-foreground">Entity</p>
                 <p className="font-medium">
-                  {entityProductData.entity_id ? 'Selected' : 'Not Selected'}
+                  {entityProductData.entityId ? 'Selected' : 'Not Selected'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Loan Product</p>
                 <p className="font-medium">
-                  {entityProductData.product_id ? 'Selected' : 'Not Selected'}
+                  {entityProductData.productId ? 'Selected' : 'Not Selected'}
                 </p>
               </div>
             </div>
@@ -101,48 +121,42 @@ export default function Step6Review({ applicationId }: Step6Props) {
 
           {/* Loan Details */}
           <div>
-            <h4 className="text-sm font-medium text-muted-foreground mb-2">
-              Loan Details
-            </h4>
+            <h4 className="mb-2 text-sm font-medium text-muted-foreground">Loan Details</h4>
             <div className="grid gap-4 md:grid-cols-3">
               <div>
                 <p className="text-sm text-muted-foreground">Requested Amount</p>
                 <AmountDisplay
-                  amount={loanDetailsData.requested_amount || 0}
+                  amount={loanDetailsData.requestedAmount || 0}
                   abbreviated
                   className="font-medium"
                 />
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Tenure</p>
-                <p className="font-medium">
-                  {loanDetailsData.requested_tenure_months || '-'} Months
-                </p>
+                <p className="font-medium">{loanDetailsData.requestedTenureMonths || '-'} Months</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Interest Type</p>
                 <p className="font-medium">
-                  {loanDetailsData.interest_type?.replace('_', ' ') || '-'}
+                  {loanDetailsData.preferredInterestType?.replace('_', ' ') || '-'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Proposed Rate</p>
                 <p className="font-medium">
-                  {loanDetailsData.proposed_rate
-                    ? `${loanDetailsData.proposed_rate}% p.a.`
-                    : '-'}
+                  {loanDetailsData.proposedRate ? `${loanDetailsData.proposedRate}% p.a.` : '-'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Repayment Frequency</p>
                 <p className="font-medium">
-                  {loanDetailsData.repayment_frequency?.replace('_', ' ') || '-'}
+                  {loanDetailsData.preferredRepaymentFrequency?.replace('_', ' ') || '-'}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Moratorium</p>
                 <p className="font-medium">
-                  {loanDetailsData.moratorium_months || 0} Months
+                  {loanDetailsData.requestedMoratoriumMonths || 0} Months
                 </p>
               </div>
             </div>
@@ -154,23 +168,21 @@ export default function Step6Review({ applicationId }: Step6Props) {
             )}
           </div>
 
-          {projectDetailsData.project_name && (
+          {projectDetailsData.projectName && (
             <>
               <Separator />
               {/* Project Details */}
               <div>
-                <h4 className="text-sm font-medium text-muted-foreground mb-2">
-                  Project Details
-                </h4>
+                <h4 className="mb-2 text-sm font-medium text-muted-foreground">Project Details</h4>
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
                     <p className="text-sm text-muted-foreground">Project Name</p>
-                    <p className="font-medium">{projectDetailsData.project_name}</p>
+                    <p className="font-medium">{projectDetailsData.projectName}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">Total Cost</p>
                     <AmountDisplay
-                      amount={projectDetailsData.project_cost || 0}
+                      amount={projectDetailsData.projectCost || 0}
                       abbreviated
                       className="font-medium"
                     />
@@ -178,7 +190,7 @@ export default function Step6Review({ applicationId }: Step6Props) {
                   <div>
                     <p className="text-sm text-muted-foreground">Promoter Contribution</p>
                     <AmountDisplay
-                      amount={projectDetailsData.promoter_contribution || 0}
+                      amount={projectDetailsData.promoterContribution || 0}
                       abbreviated
                       className="font-medium"
                     />
@@ -197,22 +209,22 @@ export default function Step6Review({ applicationId }: Step6Props) {
             <div className="flex items-start space-x-3">
               <Checkbox id="terms1" />
               <Label htmlFor="terms1" className="text-sm leading-relaxed">
-                I confirm that all information provided in this application is true and
-                accurate to the best of my knowledge.
+                I confirm that all information provided in this application is true and accurate to
+                the best of my knowledge.
               </Label>
             </div>
             <div className="flex items-start space-x-3">
               <Checkbox id="terms2" />
               <Label htmlFor="terms2" className="text-sm leading-relaxed">
-                I authorize SMFC to verify the information provided and conduct necessary
-                due diligence including credit bureau checks.
+                I authorize SMFC to verify the information provided and conduct necessary due
+                diligence including credit bureau checks.
               </Label>
             </div>
             <div className="flex items-start space-x-3">
               <Checkbox id="terms3" />
               <Label htmlFor="terms3" className="text-sm leading-relaxed">
-                I understand that this application is subject to approval and does not
-                constitute a commitment to lend.
+                I understand that this application is subject to approval and does not constitute a
+                commitment to lend.
               </Label>
             </div>
           </div>

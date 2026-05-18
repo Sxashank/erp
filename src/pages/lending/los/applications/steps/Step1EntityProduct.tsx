@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
 import { Search } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { useWizard } from '@/components/lending/wizard/WizardContext';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -10,42 +12,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useWizard } from '@/components/lending/wizard/WizardContext';
 
-// Mock data for entities
-const mockEntities = [
-  { id: '1', code: 'ENT/2024/00001', name: 'Metro Industries Pvt Ltd', type: 'CORPORATE', pan: 'AAACM1234A' },
-  { id: '2', code: 'ENT/2024/00002', name: 'Sunrise Enterprises', type: 'LLP', pan: 'AABFS5678B' },
-  { id: '3', code: 'ENT/2024/00003', name: 'Global Trading Co', type: 'PARTNERSHIP', pan: 'AACGT9012C' },
-  { id: '4', code: 'ENT/2024/00004', name: 'Rajesh Kumar', type: 'INDIVIDUAL', pan: 'AADPR3456D' },
-];
+// Entity + product pickers will be wired to the real list endpoints
+// (/lending/entities/active and /lending/products/active) once the
+// step is hooked up to react-query. For now the lists start empty
+// so the wizard doesn't display fabricated names.
+const mockEntities: {
+  id: string;
+  code: string;
+  name: string;
+  type: string;
+  pan: string;
+}[] = [];
 
-const mockProducts = [
-  { id: '1', code: 'TL-CORP', name: 'Term Loan - Corporate', category: 'TERM_LOAN', minAmount: 10000000, maxAmount: 5000000000 },
-  { id: '2', code: 'TL-PROJ', name: 'Term Loan - Project Finance', category: 'TERM_LOAN', minAmount: 50000000, maxAmount: 10000000000 },
-  { id: '3', code: 'WC-CC', name: 'Working Capital - Cash Credit', category: 'WORKING_CAPITAL', minAmount: 5000000, maxAmount: 1000000000 },
-  { id: '4', code: 'LAP', name: 'Loan Against Property', category: 'LAP', minAmount: 2500000, maxAmount: 500000000 },
-];
+const mockProducts: {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  minAmount: number;
+  maxAmount: number;
+}[] = [];
 
 export default function Step1EntityProduct() {
   const { data, updateStepData, setValidation } = useWizard();
   const stepData = (data['entity-product'] || {}) as Record<string, string>;
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedEntity, setSelectedEntity] = useState<typeof mockEntities[0] | null>(null);
-  const [selectedProduct, setSelectedProduct] = useState<typeof mockProducts[0] | null>(null);
+  const [selectedEntity, setSelectedEntity] = useState<(typeof mockEntities)[0] | null>(null);
+  const [selectedProduct, setSelectedProduct] = useState<(typeof mockProducts)[0] | null>(null);
 
   // Initialize from existing data
   useEffect(() => {
-    if (stepData.entity_id) {
-      const entity = mockEntities.find((e) => e.id === stepData.entity_id);
+    if (stepData.entityId) {
+      const entity = mockEntities.find((e) => e.id === stepData.entityId);
       setSelectedEntity(entity || null);
     }
-    if (stepData.product_id) {
-      const product = mockProducts.find((p) => p.id === stepData.product_id);
+    if (stepData.productId) {
+      const product = mockProducts.find((p) => p.id === stepData.productId);
       setSelectedProduct(product || null);
     }
-  }, [stepData.entity_id, stepData.product_id]);
+  }, [stepData.entityId, stepData.productId]);
 
   // Update validation when selections change
   useEffect(() => {
@@ -57,19 +64,19 @@ export default function Step1EntityProduct() {
     (e) =>
       e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       e.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      e.pan.toLowerCase().includes(searchQuery.toLowerCase())
+      e.pan.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const handleEntitySelect = (entityId: string) => {
     const entity = mockEntities.find((e) => e.id === entityId);
     setSelectedEntity(entity || null);
-    updateStepData('entity-product', { ...stepData, entity_id: entityId });
+    updateStepData('entity-product', { ...stepData, entityId });
   };
 
   const handleProductSelect = (productId: string) => {
     const product = mockProducts.find((p) => p.id === productId);
     setSelectedProduct(product || null);
-    updateStepData('entity-product', { ...stepData, product_id: productId });
+    updateStepData('entity-product', { ...stepData, productId });
   };
 
   return (
@@ -105,24 +112,26 @@ export default function Step1EntityProduct() {
               onClick={() => handleEntitySelect(entity.id)}
             >
               <CardContent className="p-4">
-                <div className="flex justify-between items-start">
+                <div className="flex items-start justify-between">
                   <div>
                     <p className="font-medium">{entity.name}</p>
-                    <p className="text-sm text-muted-foreground font-mono">{entity.code}</p>
+                    <p className="font-mono text-sm text-muted-foreground">{entity.code}</p>
                   </div>
-                  <span className="text-xs bg-gray-100 px-2 py-1 rounded">{entity.type}</span>
+                  <span className="rounded bg-gray-100 px-2 py-1 text-xs">{entity.type}</span>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">PAN: {entity.pan}</p>
+                <p className="mt-2 text-sm text-muted-foreground">PAN: {entity.pan}</p>
               </CardContent>
             </Card>
           ))}
         </div>
 
         {selectedEntity && (
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
             <p className="text-sm font-medium text-blue-700">Selected Entity</p>
             <p className="font-medium">{selectedEntity.name}</p>
-            <p className="text-sm text-muted-foreground">{selectedEntity.code} | PAN: {selectedEntity.pan}</p>
+            <p className="text-sm text-muted-foreground">
+              {selectedEntity.code} | PAN: {selectedEntity.pan}
+            </p>
           </div>
         )}
       </div>
@@ -157,7 +166,7 @@ export default function Step1EntityProduct() {
           </div>
 
           {selectedProduct && (
-            <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+            <div className="rounded-lg border border-green-200 bg-green-50 p-4">
               <p className="text-sm font-medium text-green-700">Selected Product</p>
               <p className="font-medium">{selectedProduct.name}</p>
               <p className="text-sm text-muted-foreground">

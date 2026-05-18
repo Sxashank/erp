@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import (
     Permissions,
@@ -191,11 +191,11 @@ def _get_user_role_ids(user: User) -> List[UUID]:
 # Workflow Configuration Endpoints
 # ============================================
 
-@router.post("/workflows", response_model=ApprovalWorkflowResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/workflows", response_model=ApprovalWorkflowResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_workflow(
     request: Request,
     data: ApprovalWorkflowCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_CREATE])),
 ):
@@ -206,13 +206,13 @@ async def create_workflow(
     return _workflow_to_response(workflow)
 
 
-@router.get("/workflows", response_model=dict)
+@router.get("/workflows", response_model=dict, response_model_by_alias=True)
 async def list_workflows(
     request: Request,
     organization_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_VIEW])),
 ):
@@ -229,11 +229,11 @@ async def list_workflows(
     }
 
 
-@router.get("/workflows/{workflow_id}", response_model=ApprovalWorkflowResponse)
+@router.get("/workflows/{workflow_id}", response_model=ApprovalWorkflowResponse, response_model_by_alias=True)
 async def get_workflow(
     request: Request,
     workflow_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_VIEW])),
 ):
@@ -243,12 +243,12 @@ async def get_workflow(
     return _workflow_to_response(workflow)
 
 
-@router.get("/workflows/by-type/{workflow_type}", response_model=Optional[ApprovalWorkflowResponse])
+@router.get("/workflows/by-type/{workflow_type}", response_model=Optional[ApprovalWorkflowResponse], response_model_by_alias=True)
 async def get_workflow_by_type(
     request: Request,
     workflow_type: ApprovalWorkflowType,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_VIEW])),
 ):
@@ -260,12 +260,12 @@ async def get_workflow_by_type(
     return _workflow_to_response(workflow)
 
 
-@router.put("/workflows/{workflow_id}", response_model=ApprovalWorkflowResponse)
+@router.put("/workflows/{workflow_id}", response_model=ApprovalWorkflowResponse, response_model_by_alias=True)
 async def update_workflow(
     request: Request,
     workflow_id: UUID,
     data: ApprovalWorkflowUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_UPDATE])),
 ):
@@ -276,11 +276,11 @@ async def update_workflow(
     return _workflow_to_response(workflow)
 
 
-@router.delete("/workflows/{workflow_id}", response_model=MessageResponse)
+@router.delete("/workflows/{workflow_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_workflow(
     request: Request,
     workflow_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_DELETE])),
 ):
@@ -295,7 +295,7 @@ async def delete_workflow(
 # Approval Request Endpoints
 # ============================================
 
-@router.get("/requests", response_model=dict)
+@router.get("/requests", response_model=dict, response_model_by_alias=True)
 async def list_requests(
     request: Request,
     organization_id: Optional[UUID] = None,
@@ -307,7 +307,7 @@ async def list_requests(
     date_to: Optional[datetime] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_REQUEST_VIEW])),
 ):
@@ -355,13 +355,13 @@ async def list_requests(
     }
 
 
-@router.get("/requests/pending", response_model=dict)
+@router.get("/requests/pending", response_model=dict, response_model_by_alias=True)
 async def list_pending_for_me(
     request: Request,
     organization_id: Optional[UUID] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_PENDING_VIEW])),
 ):
@@ -389,11 +389,11 @@ async def list_pending_for_me(
     }
 
 
-@router.get("/requests/{request_id}", response_model=ApprovalRequestResponse)
+@router.get("/requests/{request_id}", response_model=ApprovalRequestResponse, response_model_by_alias=True)
 async def get_request(
     request: Request,
     request_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_REQUEST_VIEW])),
 ):
@@ -404,11 +404,11 @@ async def get_request(
     return _request_to_response(approval_request, current_user.id, user_role_ids)
 
 
-@router.get("/requests/by-number/{request_number}", response_model=ApprovalRequestResponse)
+@router.get("/requests/by-number/{request_number}", response_model=ApprovalRequestResponse, response_model_by_alias=True)
 async def get_request_by_number(
     request: Request,
     request_number: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_REQUEST_VIEW])),
 ):
@@ -419,12 +419,12 @@ async def get_request_by_number(
     return _request_to_response(approval_request, current_user.id, user_role_ids)
 
 
-@router.post("/requests/{request_id}/action", response_model=ApprovalRequestResponse)
+@router.post("/requests/{request_id}/action", response_model=ApprovalRequestResponse, response_model_by_alias=True)
 async def take_action(
     request: Request,
     request_id: UUID,
     action_data: ApprovalRequestActionCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_REQUEST_APPROVE])),
 ):
@@ -442,12 +442,12 @@ async def take_action(
     return _request_to_response(approval_request, current_user.id, user_role_ids)
 
 
-@router.post("/requests/{request_id}/cancel", response_model=ApprovalRequestResponse)
+@router.post("/requests/{request_id}/cancel", response_model=ApprovalRequestResponse, response_model_by_alias=True)
 async def cancel_request(
     request: Request,
     request_id: UUID,
     comments: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_REQUEST_CANCEL])),
 ):
@@ -467,11 +467,11 @@ async def cancel_request(
 # Dashboard Endpoints
 # ============================================
 
-@router.get("/dashboard", response_model=dict)
+@router.get("/dashboard", response_model=dict, response_model_by_alias=True)
 async def get_dashboard(
     request: Request,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_PENDING_VIEW])),
 ):
@@ -492,13 +492,13 @@ async def get_dashboard(
 # Utility Endpoints
 # ============================================
 
-@router.get("/check/{workflow_type}", response_model=dict)
+@router.get("/check/{workflow_type}", response_model=dict, response_model_by_alias=True)
 async def check_approval_required(
     request: Request,
     workflow_type: ApprovalWorkflowType,
     organization_id: UUID,
     amount: float = Query(0.0, ge=0),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Check if approval is required for a transaction."""
@@ -512,12 +512,12 @@ async def check_approval_required(
     return result.model_dump()
 
 
-@router.get("/status/{entity_type}/{entity_id}", response_model=dict)
+@router.get("/status/{entity_type}/{entity_id}", response_model=dict, response_model_by_alias=True)
 async def get_entity_approval_status(
     request: Request,
     entity_type: str,
     entity_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get approval status for a specific entity."""

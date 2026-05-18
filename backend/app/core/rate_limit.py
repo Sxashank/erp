@@ -30,6 +30,8 @@ from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
+from app.config import settings
+
 
 def _key_func(request: Request) -> str:
     """Default key function: remote IP. Respects X-Forwarded-For if set by
@@ -43,7 +45,12 @@ def _key_func(request: Request) -> str:
     return get_remote_address(request)
 
 
-limiter = Limiter(key_func=_key_func)
+# In dev/test the limiter is disabled so manual probes, Playwright runs,
+# and pytest don't trip the production thresholds. Only `production`
+# (and any custom non-dev/test env) enforces the limits.
+_RATE_LIMIT_DISABLED = settings.APP_ENV in {"development", "test", "testing", "local"}
+
+limiter = Limiter(key_func=_key_func, enabled=not _RATE_LIMIT_DISABLED)
 
 
 def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:

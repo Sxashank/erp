@@ -171,6 +171,12 @@ class RecurringVoucherLog(BaseModel):
 
     __tablename__ = "fin_recurring_voucher_log"
 
+    organization_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     recurring_voucher_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("fin_recurring_voucher.id", ondelete="CASCADE"),

@@ -60,7 +60,7 @@ class FixedAsset(BaseModel):
 
     # Basic Info
     asset_code: Mapped[str] = mapped_column(
-        String(30),
+        String(60),
         nullable=False,
         comment="Unique asset code within organization",
     )
@@ -431,11 +431,13 @@ class FixedAsset(BaseModel):
     parent_asset: Mapped[Optional["FixedAsset"]] = relationship(
         "FixedAsset",
         remote_side="FixedAsset.id",
+        back_populates="components",
         foreign_keys=[parent_asset_id],
         lazy="selectin",
     )
     components: Mapped[List["FixedAsset"]] = relationship(
         "FixedAsset",
+        back_populates="parent_asset",
         foreign_keys=[parent_asset_id],
         lazy="selectin",
     )

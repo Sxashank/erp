@@ -3,8 +3,8 @@
  * Enterprise-grade status badges for lending module
  */
 
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type {
   EntityStatus,
   ApplicationStage,
@@ -27,11 +27,13 @@ const entityStatusColors: Record<EntityStatus, string> = {
 };
 
 const applicationStageColors: Record<ApplicationStage, string> = {
+  LEAD: 'bg-slate-100 text-slate-700 border-slate-300',
   APPLICATION: 'bg-blue-100 text-blue-700 border-blue-300',
   APPRAISAL: 'bg-amber-100 text-amber-700 border-amber-300',
   SANCTION: 'bg-purple-100 text-purple-700 border-purple-300',
   POST_SANCTION: 'bg-indigo-100 text-indigo-700 border-indigo-300',
   DISBURSED: 'bg-green-100 text-green-700 border-green-300',
+  CLOSED: 'bg-slate-100 text-slate-600 border-slate-300',
 };
 
 const applicationStatusColors: Record<ApplicationStatus, string> = {
@@ -48,7 +50,10 @@ const assetClassificationColors: Record<AssetClassification, string> = {
   SMA_0: 'bg-yellow-100 text-yellow-700 border-yellow-300',
   SMA_1: 'bg-amber-100 text-amber-700 border-amber-300',
   SMA_2: 'bg-orange-100 text-orange-700 border-orange-300',
+  NPA: 'bg-red-100 text-red-700 border-red-300',
+  SUBSTANDARD: 'bg-red-200 text-red-800 border-red-400',
   SUB_STANDARD: 'bg-red-200 text-red-800 border-red-400',
+  DOUBTFUL: 'bg-red-300 text-red-900 border-red-500',
   DOUBTFUL_1: 'bg-red-300 text-red-900 border-red-500',
   DOUBTFUL_2: 'bg-red-400 text-white border-red-600',
   DOUBTFUL_3: 'bg-red-500 text-white border-red-700',
@@ -56,10 +61,13 @@ const assetClassificationColors: Record<AssetClassification, string> = {
 };
 
 const loanAccountStatusColors: Record<LoanAccountStatus, string> = {
+  CREATED: 'bg-blue-100 text-blue-700 border-blue-300',
   ACTIVE: 'bg-green-100 text-green-700 border-green-300',
+  DORMANT: 'bg-yellow-100 text-yellow-700 border-yellow-300',
+  FROZEN: 'bg-orange-100 text-orange-700 border-orange-300',
   CLOSED: 'bg-slate-100 text-slate-600 border-slate-300',
-  NPA: 'bg-red-100 text-red-700 border-red-300',
   WRITTEN_OFF: 'bg-slate-200 text-slate-700 border-slate-400',
+  RECALLED: 'bg-red-100 text-red-700 border-red-300',
 };
 
 const disbursementStatusColors: Record<DisbursementStatus, string> = {
@@ -96,8 +104,15 @@ const legalCaseStatusColors: Record<LegalCaseStatus, string> = {
 
 // NACH Batch Status
 type NachBatchStatus =
-  | 'CREATED' | 'VALIDATED' | 'FILE_GENERATED' | 'SUBMITTED'
-  | 'PROCESSING' | 'RESPONSE_RECEIVED' | 'COMPLETED' | 'FAILED' | 'CANCELLED';
+  | 'CREATED'
+  | 'VALIDATED'
+  | 'FILE_GENERATED'
+  | 'SUBMITTED'
+  | 'PROCESSING'
+  | 'RESPONSE_RECEIVED'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED';
 
 const nachBatchStatusColors: Record<NachBatchStatus, string> = {
   CREATED: 'bg-slate-100 text-slate-700 border-slate-300',
@@ -113,8 +128,14 @@ const nachBatchStatusColors: Record<NachBatchStatus, string> = {
 
 // NACH Transaction Status
 type NachTransactionStatus =
-  | 'PENDING' | 'INCLUDED' | 'SUBMITTED' | 'SUCCESS'
-  | 'BOUNCED' | 'REJECTED' | 'CANCELLED' | 'RETRY_SCHEDULED';
+  | 'PENDING'
+  | 'INCLUDED'
+  | 'SUBMITTED'
+  | 'SUCCESS'
+  | 'BOUNCED'
+  | 'REJECTED'
+  | 'CANCELLED'
+  | 'RETRY_SCHEDULED';
 
 const nachTransactionStatusColors: Record<NachTransactionStatus, string> = {
   PENDING: 'bg-slate-100 text-slate-700 border-slate-300',
@@ -158,7 +179,10 @@ export function EntityStatusBadge({ status, className, size = 'md' }: StatusBadg
   const colorClass = entityStatusColors[status as EntityStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -176,7 +200,10 @@ export function RiskCategoryBadge({ status, className, size = 'md' }: StatusBadg
   const colorClass = riskCategoryColors[status] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)} Risk
     </Badge>
   );
@@ -184,10 +211,14 @@ export function RiskCategoryBadge({ status, className, size = 'md' }: StatusBadg
 
 export function ApplicationStageBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = applicationStageColors[status as ApplicationStage] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    applicationStageColors[status as ApplicationStage] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -195,10 +226,14 @@ export function ApplicationStageBadge({ status, className, size = 'md' }: Status
 
 export function ApplicationStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = applicationStatusColors[status as ApplicationStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    applicationStatusColors[status as ApplicationStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -206,10 +241,14 @@ export function ApplicationStatusBadge({ status, className, size = 'md' }: Statu
 
 export function AssetClassificationBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = assetClassificationColors[status as AssetClassification] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    assetClassificationColors[status as AssetClassification] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-semibold border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-semibold', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -217,10 +256,14 @@ export function AssetClassificationBadge({ status, className, size = 'md' }: Sta
 
 export function LoanAccountStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = loanAccountStatusColors[status as LoanAccountStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    loanAccountStatusColors[status as LoanAccountStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -228,10 +271,14 @@ export function LoanAccountStatusBadge({ status, className, size = 'md' }: Statu
 
 export function DisbursementStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = disbursementStatusColors[status as DisbursementStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    disbursementStatusColors[status as DisbursementStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -242,7 +289,10 @@ export function ReceiptStatusBadge({ status, className, size = 'md' }: StatusBad
   const colorClass = receiptStatusColors[status as ReceiptStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -253,7 +303,10 @@ export function OTSStatusBadge({ status, className, size = 'md' }: StatusBadgePr
   const colorClass = otsStatusColors[status as OTSStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -261,10 +314,14 @@ export function OTSStatusBadge({ status, className, size = 'md' }: StatusBadgePr
 
 export function LegalCaseStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = legalCaseStatusColors[status as LegalCaseStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    legalCaseStatusColors[status as LegalCaseStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -272,10 +329,14 @@ export function LegalCaseStatusBadge({ status, className, size = 'md' }: StatusB
 
 export function NachBatchStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = nachBatchStatusColors[status as NachBatchStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    nachBatchStatusColors[status as NachBatchStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -283,10 +344,14 @@ export function NachBatchStatusBadge({ status, className, size = 'md' }: StatusB
 
 export function NachTransactionStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass = nachTransactionStatusColors[status as NachTransactionStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass =
+    nachTransactionStatusColors[status as NachTransactionStatus] || 'bg-gray-100 text-gray-700';
 
   return (
-    <Badge variant="outline" className={cn('font-medium border', colorClass, sizeClasses[size], className)}>
+    <Badge
+      variant="outline"
+      className={cn('border font-medium', colorClass, sizeClasses[size], className)}
+    >
       {formatLabel(status)}
     </Badge>
   );
@@ -301,7 +366,21 @@ export function StatusBadge({
   className,
   size = 'md',
 }: {
-  type: 'entity' | 'stage' | 'application' | 'classification' | 'loan' | 'disbursement' | 'receipt' | 'ots' | 'legal' | 'nach_batch' | 'nach_transaction' | 'sanction' | 'loanAccount' | 'product';
+  type:
+    | 'entity'
+    | 'stage'
+    | 'application'
+    | 'classification'
+    | 'loan'
+    | 'disbursement'
+    | 'receipt'
+    | 'ots'
+    | 'legal'
+    | 'nach_batch'
+    | 'nach_transaction'
+    | 'sanction'
+    | 'loanAccount'
+    | 'product';
   status: string;
   className?: string;
   size?: 'sm' | 'md' | 'lg';

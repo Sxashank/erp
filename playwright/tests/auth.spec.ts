@@ -2,8 +2,8 @@
  * E2E smoke: auth. See CLAUDE.md §10.5 flow 1 + §5.11 accessibility.
  */
 
-import { expect, test } from '../fixtures/test';
 import { runAxe } from '../fixtures/axe';
+import { expect, test } from '../fixtures/test';
 
 test.describe('auth', () => {
   test('login page renders and shows the form', async ({ page, consoleGate: _ }) => {

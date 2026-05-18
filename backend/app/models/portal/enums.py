@@ -12,6 +12,36 @@ class PortalUserStatus(str, Enum):
     BLOCKED = "BLOCKED"
 
 
+class PortalRegistrationStatus(str, Enum):
+    """Borrower-portal registration approval lifecycle.
+
+    PENDING_APPROVAL — OTP verified, awaiting tenant-admin link to an
+    ``los_entity``. The portal-user row exists but ``get_portal_user``
+    rejects sessions for this status (so logged-in flows are blocked).
+
+    ACTIVE — at least one ``mst_portal_user_entity`` link exists; the
+    user can transact on those entities.
+
+    REJECTED — admin rejected the registration with a reason. Cannot
+    log in.
+    """
+
+    PENDING_APPROVAL = "PENDING_APPROVAL"
+    ACTIVE = "ACTIVE"
+    REJECTED = "REJECTED"
+
+
+class PortalActorRole(str, Enum):
+    """Integrated scheme-portal actor roles."""
+
+    SCHEME_BORROWER = "scheme_borrower"
+    SCHEME_LENDER = "scheme_lender"
+    SCHEME_SMFCL_REVIEWER = "scheme_smfcl_reviewer"
+    SCHEME_SMFCL_APPROVER = "scheme_smfcl_approver"
+    SCHEME_MINISTRY_VIEWER = "scheme_ministry_viewer"
+    SCHEME_ADMIN = "scheme_admin"
+
+
 class DeviceType(str, Enum):
     """Device types for portal access."""
 

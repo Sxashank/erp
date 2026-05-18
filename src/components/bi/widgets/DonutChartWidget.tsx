@@ -10,7 +10,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
-import { DonutChartConfig } from '@/types/bi';
+
+import type { DonutChartConfig } from '@/types/bi';
 
 interface DonutChartWidgetProps {
   config: DonutChartConfig;
@@ -44,7 +45,21 @@ const formatCompact = (value: number | undefined | null) => {
   return num.toFixed(0);
 };
 
-const CustomTooltip = ({ active, payload }: any) => {
+interface RechartsTooltipEntry {
+  color?: string;
+  name?: string;
+  value?: number | string;
+  dataKey?: string;
+  payload?: Record<string, unknown>;
+}
+
+interface RechartsTooltipProps {
+  active?: boolean;
+  payload?: RechartsTooltipEntry[];
+  label?: string | number;
+}
+
+const CustomTooltip = ({ active, payload }: RechartsTooltipProps) => {
   if (active && payload && payload.length) {
     const entry = payload[0];
     return (
@@ -52,10 +67,10 @@ const CustomTooltip = ({ active, payload }: any) => {
         <div className="flex items-center gap-2 text-sm">
           <div
             className="w-3 h-3 rounded-full"
-            style={{ backgroundColor: entry.payload.fill }}
+            style={{ backgroundColor: (entry.payload?.fill as string | undefined) ?? '#000' }}
           />
           <span className="font-medium">{entry.name}:</span>
-          <span>{formatCompact(entry.value)}</span>
+          <span>{formatCompact(Number(entry.value ?? 0))}</span>
         </div>
       </div>
     );

@@ -3,19 +3,6 @@
  * Submit and track expense reimbursement claims
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Plus,
   Receipt,
@@ -29,11 +16,29 @@ import {
   IndianRupee,
   Calendar,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { essReimbursementApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { ReimbursementClaim, ReimbursementCategory, ReimbursementSummary, ClaimStatus } from '@/types/ess';
 
+import { logger } from "@/lib/logger";
 export default function ESSReimbursementsPage() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
   const [loading, setLoading] = useState(true);
   const [claims, setClaims] = useState<ReimbursementClaim[]>([]);
   const [categories, setCategories] = useState<ReimbursementCategory[]>([]);
@@ -42,15 +47,15 @@ export default function ESSReimbursementsPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [selectedClaim, setSelectedClaim] = useState<ReimbursementClaim | null>(null);
+  const [claimPendingDelete, setClaimPendingDelete] = useState<ReimbursementClaim | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('ess_access_token');
-    if (!token) {
+    if (!accessToken) {
       navigate('/ess/login');
       return;
     }
     fetchData();
-  }, [navigate, statusFilter]);
+  }, [accessToken, navigate, statusFilter]);
 
   const fetchData = async () => {
     try {
@@ -63,7 +68,7 @@ export default function ESSReimbursementsPage() {
       setCategories(categoriesRes.data || []);
       setSummary(summaryRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -81,12 +86,13 @@ export default function ESSReimbursementsPage() {
         expense_from: formData.get('expense_from') as string,
         expense_to: formData.get('expense_to') as string,
         description: formData.get('description') as string,
+        claimed_amount: Number(formData.get('claimed_amount') || 0),
         purpose: formData.get('purpose') as string,
       });
       setCreateDialogOpen(false);
       fetchData();
     } catch (error) {
-      console.error('Failed to create claim:', error);
+      logger.error('Failed to create claim:', error);
     } finally {
       setSubmitting(false);
     }
@@ -97,17 +103,18 @@ export default function ESSReimbursementsPage() {
       await essReimbursementApi.submitClaim(claimId);
       fetchData();
     } catch (error) {
-      console.error('Failed to submit claim:', error);
+      logger.error('Failed to submit claim:', error);
     }
   };
 
-  const handleDeleteClaim = async (claimId: string) => {
-    if (!confirm('Are you sure you want to delete this draft claim?')) return;
+  const handleDeleteClaim = async () => {
+    if (!claimPendingDelete) return;
     try {
-      await essReimbursementApi.deleteClaim(claimId);
+      await essReimbursementApi.deleteClaim(claimPendingDelete.id);
+      setClaimPendingDelete(null);
       fetchData();
     } catch (error) {
-      console.error('Failed to delete claim:', error);
+      logger.error('Failed to delete claim:', error);
     }
   };
 
@@ -167,12 +174,12 @@ export default function ESSReimbursementsPage() {
                     <SelectItem value="MEDICAL">Medical</SelectItem>
                     <SelectItem value="TRAVEL">Travel</SelectItem>
                     <SelectItem value="CONVEYANCE">Conveyance</SelectItem>
+                    <SelectItem value="MOBILE">Mobile</SelectItem>
+                    <SelectItem value="INTERNET">Internet</SelectItem>
                     <SelectItem value="FOOD">Food & Meals</SelectItem>
-                    <SelectItem value="COMMUNICATION">Communication</SelectItem>
-                    <SelectItem value="BOOKS">Books & Subscriptions</SelectItem>
                     <SelectItem value="TRAINING">Training</SelectItem>
-                    <SelectItem value="WFH">Work From Home</SelectItem>
-                    <SelectItem value="MISC">Miscellaneous</SelectItem>
+                    <SelectItem value="CERTIFICATION">Certification</SelectItem>
+                    <SelectItem value="OTHER">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -185,6 +192,17 @@ export default function ESSReimbursementsPage() {
                   <Label htmlFor="expense_to">Expense To</Label>
                   <Input type="date" id="expense_to" name="expense_to" required />
                 </div>
+              </div>
+              <div>
+                <Label htmlFor="claimed_amount">Claimed Amount</Label>
+                <Input
+                  type="number"
+                  id="claimed_amount"
+                  name="claimed_amount"
+                  min="1"
+                  step="0.01"
+                  required
+                />
               </div>
               <div>
                 <Label htmlFor="description">Description</Label>
@@ -312,7 +330,7 @@ export default function ESSReimbursementsPage() {
                     <TableCell className="font-medium">{claim.claim_number}</TableCell>
                     <TableCell>{claim.claim_type}</TableCell>
                     <TableCell className="text-sm text-gray-500">
-                      {new Date(claim.expense_from).toLocaleDateString()} - {new Date(claim.expense_to).toLocaleDateString()}
+                      <DateDisplay date={claim.expense_from} /> - <DateDisplay date={claim.expense_to} />
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(claim.claimed_amount)}
@@ -333,7 +351,7 @@ export default function ESSReimbursementsPage() {
                             <Button variant="ghost" size="sm" onClick={() => handleSubmitClaim(claim.id)}>
                               <Send className="h-4 w-4 text-blue-600" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteClaim(claim.id)}>
+                            <Button variant="ghost" size="sm" onClick={() => setClaimPendingDelete(claim)}>
                               <Trash2 className="h-4 w-4 text-red-600" />
                             </Button>
                           </>
@@ -376,7 +394,7 @@ export default function ESSReimbursementsPage() {
                 <div>
                   <p className="text-sm text-gray-500">Expense Period</p>
                   <p className="font-medium">
-                    {new Date(selectedClaim.expense_from).toLocaleDateString()} - {new Date(selectedClaim.expense_to).toLocaleDateString()}
+                    <DateDisplay date={selectedClaim.expense_from} /> - <DateDisplay date={selectedClaim.expense_to} />
                   </p>
                 </div>
                 <div>
@@ -414,7 +432,7 @@ export default function ESSReimbursementsPage() {
                     <TableBody>
                       {selectedClaim.line_items.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell>{new Date(item.expense_date).toLocaleDateString()}</TableCell>
+                          <TableCell><DateDisplay date={item.expense_date} /></TableCell>
                           <TableCell>{item.description}</TableCell>
                           <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
                         </TableRow>
@@ -425,6 +443,25 @@ export default function ESSReimbursementsPage() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!claimPendingDelete} onOpenChange={(open) => !open && setClaimPendingDelete(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete Draft Claim</DialogTitle>
+            <DialogDescription>
+              This will cancel claim {claimPendingDelete?.claim_number}. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="outline" onClick={() => setClaimPendingDelete(null)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={handleDeleteClaim}>
+              Delete Claim
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

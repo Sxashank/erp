@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.bi.enums import BIModule
 from app.services.bi.chart_service import ChartService
@@ -78,13 +78,13 @@ def _to_list_response(chart) -> ChartDefinitionListResponse:
     )
 
 
-@router.get("", response_model=List[ChartDefinitionListResponse])
+@router.get("", response_model=List[ChartDefinitionListResponse], response_model_by_alias=True)
 async def list_chart_definitions(
     organization_id: Optional[UUID] = None,
     module: Optional[BIModule] = None,
     include_system: bool = True,
     current_user: User = Depends(RequirePermissions("BI_CHART_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List all chart definitions."""
     service = ChartService(db)
@@ -97,11 +97,11 @@ async def list_chart_definitions(
     return [_to_list_response(c) for c in charts]
 
 
-@router.get("/accessible", response_model=List[ChartDefinitionListResponse])
+@router.get("/accessible", response_model=List[ChartDefinitionListResponse], response_model_by_alias=True)
 async def list_accessible_charts(
     module: Optional[BIModule] = None,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List chart definitions accessible to current user's roles."""
     service = ChartService(db)
@@ -114,11 +114,11 @@ async def list_accessible_charts(
     return [_to_list_response(c) for c in charts]
 
 
-@router.post("", response_model=ChartDefinitionResponse)
+@router.post("", response_model=ChartDefinitionResponse, response_model_by_alias=True)
 async def create_chart_definition(
     data: ChartDefinitionCreate,
     current_user: User = Depends(RequirePermissions("BI_CHART_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new chart definition."""
     service = ChartService(db)
@@ -127,11 +127,11 @@ async def create_chart_definition(
     return _to_response(chart)
 
 
-@router.get("/{chart_id}", response_model=ChartDefinitionResponse)
+@router.get("/{chart_id}", response_model=ChartDefinitionResponse, response_model_by_alias=True)
 async def get_chart_definition(
     chart_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_CHART_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a chart definition by ID."""
     service = ChartService(db)
@@ -139,12 +139,12 @@ async def get_chart_definition(
     return _to_response(chart)
 
 
-@router.put("/{chart_id}", response_model=ChartDefinitionResponse)
+@router.put("/{chart_id}", response_model=ChartDefinitionResponse, response_model_by_alias=True)
 async def update_chart_definition(
     chart_id: UUID,
     data: ChartDefinitionUpdate,
     current_user: User = Depends(RequirePermissions("BI_CHART_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a chart definition."""
     service = ChartService(db)
@@ -153,11 +153,11 @@ async def update_chart_definition(
     return _to_response(chart)
 
 
-@router.delete("/{chart_id}", response_model=MessageResponse)
+@router.delete("/{chart_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_chart_definition(
     chart_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_CHART_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a chart definition."""
     service = ChartService(db)
@@ -166,12 +166,12 @@ async def delete_chart_definition(
     return MessageResponse(message="Chart definition deleted successfully", success=True)
 
 
-@router.put("/{chart_id}/role-access", response_model=ChartDefinitionResponse)
+@router.put("/{chart_id}/role-access", response_model=ChartDefinitionResponse, response_model_by_alias=True)
 async def set_chart_role_access(
     chart_id: UUID,
     data: SetChartRoleAccessRequest,
     current_user: User = Depends(RequirePermissions("BI_CHART_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Set role access for a chart definition."""
     service = ChartService(db)

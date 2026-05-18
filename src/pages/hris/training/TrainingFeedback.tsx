@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Star,
@@ -12,10 +10,13 @@ import {
   ThumbsDown,
   TrendingUp,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
   Table,
@@ -62,106 +63,18 @@ interface IndividualFeedback {
   submitted_on: string;
 }
 
-// Mock program details
-const programDetails = {
-  id: '1',
-  program_code: 'TRN-2024-004',
-  title: 'Customer Service Excellence',
-  start_date: '2024-12-15',
-  end_date: '2024-12-16',
-  trainer_name: 'Rajesh Kumar',
-};
+interface ProgramDetails {
+  id: string;
+  program_code: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  trainer_name: string;
+}
 
-// Mock feedback summary
-const feedbackSummary: FeedbackSummary = {
-  total_participants: 28,
-  feedback_received: 24,
-  response_rate: 85.7,
-  overall_rating: 4.3,
-  ratings: [
-    { category: 'Content Quality', rating: 4.5, max_rating: 5 },
-    { category: 'Trainer Effectiveness', rating: 4.6, max_rating: 5 },
-    { category: 'Training Materials', rating: 4.2, max_rating: 5 },
-    { category: 'Practical Relevance', rating: 4.1, max_rating: 5 },
-    { category: 'Facilities & Logistics', rating: 4.0, max_rating: 5 },
-  ],
-  rating_distribution: [
-    { stars: 5, count: 10 },
-    { stars: 4, count: 9 },
-    { stars: 3, count: 4 },
-    { stars: 2, count: 1 },
-    { stars: 1, count: 0 },
-  ],
-  recommend_percentage: 92,
-};
-
-// Mock individual feedback
-const individualFeedbacks: IndividualFeedback[] = [
-  {
-    id: '1',
-    employee_name: 'Rahul Sharma',
-    employee_code: 'EMP001',
-    department: 'Sales',
-    overall_rating: 5,
-    content_rating: 5,
-    trainer_rating: 5,
-    facilities_rating: 4,
-    relevance_rating: 5,
-    would_recommend: true,
-    strengths: 'Excellent trainer, practical examples, interactive sessions',
-    improvements: 'Could include more role-play exercises',
-    comments: 'Very beneficial training. The trainer made complex concepts easy to understand.',
-    submitted_on: '2024-12-16',
-  },
-  {
-    id: '2',
-    employee_name: 'Priya Patel',
-    employee_code: 'EMP002',
-    department: 'Support',
-    overall_rating: 4,
-    content_rating: 4,
-    trainer_rating: 5,
-    facilities_rating: 4,
-    relevance_rating: 4,
-    would_recommend: true,
-    strengths: 'Real-world case studies, group activities',
-    improvements: 'Duration could be extended for more practice',
-    comments: 'Good training overall. Would like more focus on handling difficult customers.',
-    submitted_on: '2024-12-16',
-  },
-  {
-    id: '3',
-    employee_name: 'Amit Kumar',
-    employee_code: 'EMP003',
-    department: 'Operations',
-    overall_rating: 4,
-    content_rating: 4,
-    trainer_rating: 4,
-    facilities_rating: 5,
-    relevance_rating: 4,
-    would_recommend: true,
-    strengths: 'Well-organized content, good venue',
-    improvements: 'More industry-specific examples needed',
-    comments: 'Informative session with good takeaways.',
-    submitted_on: '2024-12-17',
-  },
-  {
-    id: '4',
-    employee_name: 'Sneha Reddy',
-    employee_code: 'EMP004',
-    department: 'Sales',
-    overall_rating: 3,
-    content_rating: 3,
-    trainer_rating: 4,
-    facilities_rating: 3,
-    relevance_rating: 3,
-    would_recommend: false,
-    strengths: 'Trainer was knowledgeable',
-    improvements: 'Content was too basic for experienced staff',
-    comments: 'Expected more advanced topics. Good for beginners.',
-    submitted_on: '2024-12-17',
-  },
-];
+const getProgramDetails = (): ProgramDetails | null => null;
+const getFeedbackSummary = (): FeedbackSummary | null => null;
+const individualFeedbacks: IndividualFeedback[] = [];
 
 const renderStars = (rating: number) => {
   const stars = [];
@@ -184,6 +97,28 @@ const renderStars = (rating: number) => {
 export default function TrainingFeedback() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const programDetails = getProgramDetails();
+  const feedbackSummary = getFeedbackSummary();
+
+  if (!programDetails || !feedbackSummary) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Training Feedback"
+          subtitle={id ? `Program ${id}` : 'Program details unavailable'}
+          breadcrumbs={[
+            { label: 'Training', to: '/admin/hris/training' },
+            { label: 'Feedback' },
+          ]}
+        />
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Training feedback data is pending backend HRIS training endpoints.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

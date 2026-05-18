@@ -72,7 +72,7 @@ class ProductService:
             created_by=created_by,
         )
         self.session.add(rate)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rate)
         return rate
 
@@ -89,7 +89,7 @@ class ProductService:
             setattr(rate, field, value)
         rate.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rate)
         return rate
 
@@ -134,7 +134,7 @@ class ProductService:
             created_by=created_by,
         )
         self.session.add(fee)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(fee)
         return fee
 
@@ -151,7 +151,7 @@ class ProductService:
             setattr(fee, field, value)
         fee.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(fee)
         return fee
 
@@ -202,7 +202,7 @@ class ProductService:
             created_by=created_by,
         )
         self.session.add(product)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(product)
         return product
 
@@ -225,7 +225,7 @@ class ProductService:
             setattr(product, field, value)
         product.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(product)
         return product
 
@@ -293,7 +293,7 @@ class ProductService:
         if not product:
             raise NotFoundException("Loan product not found")
         product.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Product Fee Operations
@@ -316,7 +316,7 @@ class ProductService:
             created_by=created_by,
         )
         self.session.add(product_fee)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(product_fee)
         return product_fee
 
@@ -333,7 +333,7 @@ class ProductService:
             setattr(product_fee, field, value)
         product_fee.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(product_fee)
         return product_fee
 
@@ -349,7 +349,7 @@ class ProductService:
         if not product_fee:
             raise NotFoundException("Product fee not found")
         product_fee.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Document Checklist Operations
@@ -376,7 +376,7 @@ class ProductService:
             created_by=created_by,
         )
         self.session.add(checklist)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(checklist)
         return checklist
 
@@ -393,7 +393,7 @@ class ProductService:
             setattr(checklist, field, value)
         checklist.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(checklist)
         return checklist
 
@@ -429,4 +429,4 @@ class ProductService:
         if not checklist:
             raise NotFoundException("Document checklist item not found")
         checklist.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

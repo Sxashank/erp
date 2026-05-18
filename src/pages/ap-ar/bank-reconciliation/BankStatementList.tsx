@@ -1,28 +1,22 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   ArrowDownCircle,
   ArrowUpCircle,
-  Calendar,
-  Check,
-  CheckCircle,
-  Circle,
-  Download,
   FileSpreadsheet,
-  Filter,
-  Plus,
   RefreshCw,
   Search,
   Trash2,
   Upload,
   X,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -39,30 +33,43 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+import { logger } from "@/lib/logger";
 interface BankStatement {
   id: string;
-  transaction_date: string;
-  value_date: string;
-  reference_number: string | null;
+  transactionDate: string;
+  valueDate: string;
+  referenceNumber: string | null;
   description: string | null;
-  transaction_type: 'CREDIT' | 'DEBIT';
-  debit_amount: number;
-  credit_amount: number;
-  running_balance: number | null;
-  reconciliation_status: 'UNRECONCILED' | 'MATCHED' | 'PARTIALLY_MATCHED' | 'RECONCILED';
-  reconciled_amount: number;
-  unreconciled_amount: number;
+  transactionType: 'CREDIT' | 'DEBIT';
+  debitAmount: number;
+  creditAmount: number;
+  runningBalance: number | null;
+  reconciliationStatus: 'UNRECONCILED' | 'MATCHED' | 'PARTIALLY_MATCHED' | 'RECONCILED';
+  reconciledAmount: number;
+  unreconciledAmount: number;
 }
 
 interface BankAccount {
   id: string;
   code: string;
   name: string;
+}
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const apiError = error as ApiError;
+  return apiError.response?.data?.detail || fallback;
 }
 
 const reconciliationStatusColors: Record<string, string> = {
@@ -84,8 +91,7 @@ export function BankStatementList() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
-  // Get organization_id from localStorage
-  const organizationId = localStorage.getItem('organization_id') || '';
+  const organizationId = useActiveOrganizationId() || '';
 
   // State
   const [statements, setStatements] = useState<BankStatement[]>([]);
@@ -104,6 +110,7 @@ export function BankStatementList() {
   // Fetch bank accounts
   useEffect(() => {
     const fetchBankAccounts = async () => {
+      if (!organizationId) return;
       try {
         const response = await accountsApi.list({
           organization_id: organizationId,
@@ -116,23 +123,23 @@ export function BankStatementList() {
           setSelectedBankAccount(response.data.items[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch bank accounts:', error);
+        logger.error('Failed to fetch bank accounts:', error);
       }
     };
     fetchBankAccounts();
-  }, [organizationId]);
+  }, [organizationId, selectedBankAccount]);
 
   // Fetch statements
   useEffect(() => {
     const fetchStatements = async () => {
-      if (!selectedBankAccount) {
+      if (!organizationId || !selectedBankAccount) {
         setLoading(false);
         return;
       }
 
       setLoading(true);
       try {
-        const params: any = {
+        const params: Parameters<typeof bankReconciliationApi.listStatements>[0] = {
           bank_account_id: selectedBankAccount,
           organization_id: organizationId,
           skip: (page - 1) * pageSize,
@@ -159,7 +166,7 @@ export function BankStatementList() {
         setStatements(response.data.items || []);
         setTotal(response.data.total || 0);
       } catch (error) {
-        console.error('Failed to fetch statements:', error);
+        logger.error('Failed to fetch statements:', error);
         toast({
           title: 'Error',
           description: 'Failed to fetch bank statements',
@@ -170,7 +177,17 @@ export function BankStatementList() {
       }
     };
     fetchStatements();
-  }, [selectedBankAccount, selectedStatus, selectedType, searchQuery, fromDate, toDate, page, organizationId]);
+  }, [
+    selectedBankAccount,
+    selectedStatus,
+    selectedType,
+    searchQuery,
+    fromDate,
+    toDate,
+    page,
+    organizationId,
+    toast,
+  ]);
 
   // Update URL params
   useEffect(() => {
@@ -183,7 +200,16 @@ export function BankStatementList() {
     if (toDate) params.set('to_date', toDate);
     if (page > 1) params.set('page', page.toString());
     setSearchParams(params);
-  }, [selectedBankAccount, selectedStatus, selectedType, searchQuery, fromDate, toDate, page]);
+  }, [
+    selectedBankAccount,
+    selectedStatus,
+    selectedType,
+    searchQuery,
+    fromDate,
+    toDate,
+    page,
+    setSearchParams,
+  ]);
 
   const handleDeleteStatement = async (id: string) => {
     if (!confirm('Are you sure you want to delete this statement?')) return;
@@ -197,10 +223,10 @@ export function BankStatementList() {
       // Refresh list
       setStatements((prev) => prev.filter((s) => s.id !== id));
       setTotal((prev) => prev - 1);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete statement',
+        description: getErrorMessage(error, 'Failed to delete statement'),
         variant: 'destructive',
       });
     }
@@ -372,16 +398,16 @@ export function BankStatementList() {
                   {statements.map((statement) => (
                     <TableRow key={statement.id}>
                       <TableCell>
-                        {format(new Date(statement.transaction_date), 'dd/MM/yyyy')}
+                        {format(new Date(statement.transactionDate), 'dd/MM/yyyy')}
                       </TableCell>
                       <TableCell className="font-medium">
-                        {statement.reference_number || '-'}
+                        {statement.referenceNumber || '-'}
                       </TableCell>
                       <TableCell className="max-w-xs truncate">
                         {statement.description || '-'}
                       </TableCell>
                       <TableCell>
-                        {statement.transaction_type === 'CREDIT' ? (
+                        {statement.transactionType === 'CREDIT' ? (
                           <Badge variant="outline" className="bg-green-50 text-green-700">
                             <ArrowDownCircle className="mr-1 h-3 w-3" />
                             Credit
@@ -394,30 +420,30 @@ export function BankStatementList() {
                         )}
                       </TableCell>
                       <TableCell className="text-right text-red-600">
-                        {statement.debit_amount > 0 ? formatAmount(statement.debit_amount) : '-'}
+                        {statement.debitAmount > 0 ? formatAmount(statement.debitAmount) : '-'}
                       </TableCell>
                       <TableCell className="text-right text-green-600">
-                        {statement.credit_amount > 0 ? formatAmount(statement.credit_amount) : '-'}
+                        {statement.creditAmount > 0 ? formatAmount(statement.creditAmount) : '-'}
                       </TableCell>
                       <TableCell className="text-right">
-                        {statement.running_balance !== null
-                          ? formatAmount(statement.running_balance)
+                        {statement.runningBalance !== null
+                          ? formatAmount(statement.runningBalance)
                           : '-'}
                       </TableCell>
                       <TableCell>
                         <Badge
                           className={
-                            reconciliationStatusColors[statement.reconciliation_status]
+                            reconciliationStatusColors[statement.reconciliationStatus]
                           }
                         >
-                          {reconciliationStatusLabels[statement.reconciliation_status]}
+                          {reconciliationStatusLabels[statement.reconciliationStatus]}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatAmount(statement.reconciled_amount)}
+                        {formatAmount(statement.reconciledAmount)}
                       </TableCell>
                       <TableCell>
-                        {statement.reconciliation_status !== 'RECONCILED' && (
+                        {statement.reconciliationStatus !== 'RECONCILED' && (
                           <Button
                             variant="ghost"
                             size="sm"

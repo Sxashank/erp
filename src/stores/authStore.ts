@@ -49,8 +49,7 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       ...initialState,
       setTokens: (accessToken, refreshToken) => set({ accessToken, refreshToken }),
-      setUser: (user, permissions) =>
-        set({ user, permissions: new Set(permissions) }),
+      setUser: (user, permissions) => set({ user, permissions: new Set(permissions) }),
       setBootstrapping: (isBootstrapping) => set({ isBootstrapping }),
       clear: () =>
         set({
@@ -75,3 +74,57 @@ export const useAuthStore = create<AuthState>()(
 
 export const selectIsAuthenticated = (state: AuthState): boolean =>
   !!state.accessToken && !!state.user;
+
+export function isAuthStoreHydrated(): boolean {
+  return useAuthStore.persist.hasHydrated();
+}
+
+function seedTokensFromPersistedStorage(): void {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  const raw = window.localStorage.getItem('smfc-auth');
+  if (!raw) {
+    return;
+  }
+  try {
+    const parsed = JSON.parse(raw) as {
+      state?: { accessToken?: unknown; refreshToken?: unknown };
+    };
+    const nextAccessToken =
+      typeof parsed.state?.accessToken === 'string' ? parsed.state.accessToken : null;
+    const nextRefreshToken =
+      typeof parsed.state?.refreshToken === 'string' ? parsed.state.refreshToken : null;
+    if (!nextAccessToken && !nextRefreshToken) {
+      return;
+    }
+    const current = useAuthStore.getState();
+    if (current.accessToken === nextAccessToken && current.refreshToken === nextRefreshToken) {
+      return;
+    }
+    useAuthStore.setState({
+      accessToken: current.accessToken ?? nextAccessToken,
+      refreshToken: current.refreshToken ?? nextRefreshToken,
+    });
+  } catch {
+    // Ignore malformed persisted auth blobs and let bootstrap fall back to logout.
+  }
+}
+
+export async function waitForAuthStoreHydration(): Promise<void> {
+  if (useAuthStore.persist.hasHydrated()) {
+    seedTokensFromPersistedStorage();
+    return;
+  }
+  await useAuthStore.persist.rehydrate();
+  seedTokensFromPersistedStorage();
+  if (useAuthStore.persist.hasHydrated()) {
+    return;
+  }
+  await new Promise<void>((resolve) => {
+    const unsubscribe = useAuthStore.persist.onFinishHydration(() => {
+      unsubscribe();
+      resolve();
+    });
+  });
+}

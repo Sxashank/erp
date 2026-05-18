@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Building2,
   ChevronDown,
@@ -11,11 +9,13 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,6 +41,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { unitsApi, organizationsApi } from '@/services/api';
 import type { Unit, UnitTreeNode, Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 // Tree node component
 function TreeNode({
   node,
@@ -183,7 +184,7 @@ export function UnitList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -193,7 +194,7 @@ export function UnitList() {
   const fetchUnits = async (page = 1) => {
     try {
       setLoading(true);
-      const params: any = { page, page_size: 10, include_inactive: true };
+      const params: Record<string, unknown> = { page, page_size: 10, include_inactive: true };
       if (selectedOrgId) {
         params.organization_id = selectedOrgId;
       }
@@ -202,7 +203,7 @@ export function UnitList() {
       setUnits(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch units:', error);
+      logger.error('Failed to fetch units:', error);
     } finally {
       setLoading(false);
     }
@@ -219,7 +220,7 @@ export function UnitList() {
       const response = await unitsApi.getTree(selectedOrgId);
       setTreeData(response.data);
     } catch (error) {
-      console.error('Failed to fetch unit tree:', error);
+      logger.error('Failed to fetch unit tree:', error);
       setTreeData([]);
     } finally {
       setLoading(false);
@@ -245,7 +246,7 @@ export function UnitList() {
         fetchTree();
       }
     } catch (error) {
-      console.error('Failed to delete unit:', error);
+      logger.error('Failed to delete unit:', error);
     }
   };
 

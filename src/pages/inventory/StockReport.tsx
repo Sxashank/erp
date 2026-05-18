@@ -1,9 +1,22 @@
+import {
+  BarChart3,
+  Download,
+  FileText,
+  Filter,
+  Package,
+  AlertTriangle,
+  TrendingUp,
+  TrendingDown,
+  Calendar,
+  Warehouse,
+} from 'lucide-react';
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -20,18 +33,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  BarChart3,
-  Download,
-  FileText,
-  Filter,
-  Package,
-  AlertTriangle,
-  TrendingUp,
-  TrendingDown,
-  Calendar,
-  Warehouse,
-} from 'lucide-react';
+
+const ALL_OPTION_VALUE = '__all__';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -76,14 +79,14 @@ const warehouseSummary = [
 ];
 
 const warehouses = [
-  { id: '', name: 'All Warehouses' },
+  { id: ALL_OPTION_VALUE, name: 'All Warehouses' },
   { id: '1', name: 'Main Warehouse' },
   { id: '2', name: 'Branch A Store' },
   { id: '3', name: 'Branch B Store' },
 ];
 
 const categories = [
-  { id: '', name: 'All Categories' },
+  { id: ALL_OPTION_VALUE, name: 'All Categories' },
   { id: '1', name: 'Office Supplies' },
   { id: '2', name: 'IT Equipment' },
   { id: '3', name: 'Stationery' },
@@ -91,8 +94,8 @@ const categories = [
 ];
 
 export default function StockReport() {
-  const [selectedWarehouse, setSelectedWarehouse] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedWarehouse, setSelectedWarehouse] = useState(ALL_OPTION_VALUE);
+  const [selectedCategory, setSelectedCategory] = useState(ALL_OPTION_VALUE);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
 

@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -66,6 +67,10 @@ class Notification(BaseModel):
     """System-wide notification record."""
 
     __tablename__ = "sys_notification"
+    __table_args__ = (
+        Index("ix_sys_notification_org_user", "organization_id", "user_id"),
+        Index("ix_sys_notification_entity", "entity_type", "entity_id"),
+    )
 
     # Organization scope
     organization_id: Mapped[UUID] = mapped_column(
@@ -102,12 +107,12 @@ class Notification(BaseModel):
 
     # Metadata
     category: Mapped[NotificationCategory] = mapped_column(
-        Enum(NotificationCategory),
+        Enum(NotificationCategory, native_enum=False),
         default=NotificationCategory.SYSTEM,
         nullable=False,
     )
     priority: Mapped[NotificationPriority] = mapped_column(
-        Enum(NotificationPriority),
+        Enum(NotificationPriority, native_enum=False),
         default=NotificationPriority.MEDIUM,
         nullable=False,
     )
@@ -121,7 +126,7 @@ class Notification(BaseModel):
 
     # Status
     status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus),
+        Enum(NotificationStatus, native_enum=False),
         default=NotificationStatus.PENDING,
         nullable=False,
         index=True,
@@ -163,6 +168,15 @@ class NotificationPreference(BaseModel):
     """User notification preferences."""
 
     __tablename__ = "sys_notification_preference"
+    __table_args__ = (
+        Index(
+            "ix_sys_notification_preference_user_org_category",
+            "user_id",
+            "organization_id",
+            "category",
+            unique=True,
+        ),
+    )
 
     # User reference
     user_id: Mapped[UUID] = mapped_column(
@@ -181,7 +195,7 @@ class NotificationPreference(BaseModel):
 
     # Category preferences
     category: Mapped[NotificationCategory] = mapped_column(
-        Enum(NotificationCategory),
+        Enum(NotificationCategory, native_enum=False),
         nullable=False,
     )
 
@@ -235,12 +249,12 @@ class NotificationLog(BaseModel):
 
     # Delivery attempt details
     channel: Mapped[NotificationChannel] = mapped_column(
-        Enum(NotificationChannel),
+        Enum(NotificationChannel, native_enum=False),
         nullable=False,
     )
 
     status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus),
+        Enum(NotificationStatus, native_enum=False),
         nullable=False,
     )
 

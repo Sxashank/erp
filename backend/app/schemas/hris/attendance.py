@@ -5,7 +5,8 @@ from decimal import Decimal
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 from app.core.constants import (
     AttendanceStatus,
@@ -17,7 +18,7 @@ from app.core.constants import (
 # ============================================
 # Attendance Punch Schemas
 # ============================================
-class AttendancePunchBase(BaseModel):
+class AttendancePunchBase(CamelSchema):
     """Base schema for attendance punch."""
     punch_datetime: datetime
     punch_type: str = Field(..., pattern="^(IN|OUT)$")
@@ -35,7 +36,7 @@ class AttendancePunchCreate(AttendancePunchBase):
     employee_id: UUID
 
 
-class AttendancePunchBulkCreate(BaseModel):
+class AttendancePunchBulkCreate(CamelSchema):
     """Schema for bulk creating attendance punches (import)."""
     punches: List[AttendancePunchCreate]
 
@@ -48,14 +49,11 @@ class AttendancePunchResponse(AttendancePunchBase):
     is_valid: bool
     invalid_reason: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Attendance Schemas
 # ============================================
-class AttendanceBase(BaseModel):
+class AttendanceBase(CamelSchema):
     """Base schema for attendance."""
     attendance_date: date
     shift_id: Optional[UUID] = None
@@ -89,7 +87,7 @@ class AttendanceCreate(AttendanceBase):
     employee_id: UUID
 
 
-class AttendanceUpdate(BaseModel):
+class AttendanceUpdate(CamelSchema):
     """Schema for updating attendance."""
     shift_id: Optional[UUID] = None
     first_in: Optional[time] = None
@@ -116,11 +114,8 @@ class AttendanceResponse(AttendanceBase):
     shift_name: Optional[str] = None
     leave_type_name: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class AttendanceFilters(BaseModel):
+class AttendanceFilters(CamelSchema):
     """Filters for attendance list."""
     organization_id: Optional[UUID] = None
     employee_id: Optional[UUID] = None
@@ -136,7 +131,7 @@ class AttendanceFilters(BaseModel):
 # ============================================
 # Attendance Regularization Schemas
 # ============================================
-class AttendanceRegularizationBase(BaseModel):
+class AttendanceRegularizationBase(CamelSchema):
     """Base schema for attendance regularization."""
     attendance_date: date
     request_type: str = Field(..., max_length=20)  # MISSED_PUNCH, CORRECTION, ON_DUTY, WFH
@@ -155,12 +150,12 @@ class AttendanceRegularizationCreate(AttendanceRegularizationBase):
     employee_id: UUID
 
 
-class AttendanceRegularizationApprove(BaseModel):
+class AttendanceRegularizationApprove(CamelSchema):
     """Schema for approving regularization."""
     remarks: Optional[str] = None
 
 
-class AttendanceRegularizationReject(BaseModel):
+class AttendanceRegularizationReject(CamelSchema):
     """Schema for rejecting regularization."""
     reason: str = Field(..., min_length=10)
 
@@ -181,11 +176,8 @@ class AttendanceRegularizationResponse(AttendanceRegularizationBase):
     employee_name: Optional[str] = None
     employee_code: Optional[str] = None
 
-    class Config:
-        from_attributes = True
 
-
-class AttendanceRegularizationFilters(BaseModel):
+class AttendanceRegularizationFilters(CamelSchema):
     """Filters for regularization list."""
     organization_id: Optional[UUID] = None
     employee_id: Optional[UUID] = None
@@ -199,7 +191,7 @@ class AttendanceRegularizationFilters(BaseModel):
 # ============================================
 # Monthly Attendance Summary Schemas
 # ============================================
-class MonthlyAttendanceSummaryBase(BaseModel):
+class MonthlyAttendanceSummaryBase(CamelSchema):
     """Base schema for monthly attendance summary."""
     year: int
     month: int
@@ -245,21 +237,18 @@ class MonthlyAttendanceSummaryResponse(MonthlyAttendanceSummaryBase):
     employee_name: Optional[str] = None
     employee_code: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 # ============================================
 # Attendance Processing Schemas
 # ============================================
-class ProcessDailyAttendanceRequest(BaseModel):
+class ProcessDailyAttendanceRequest(CamelSchema):
     """Request schema for processing daily attendance."""
     organization_id: UUID
     attendance_date: date
     employee_ids: Optional[List[UUID]] = None  # None means all employees
 
 
-class ProcessMonthlyAttendanceRequest(BaseModel):
+class ProcessMonthlyAttendanceRequest(CamelSchema):
     """Request schema for processing monthly attendance."""
     organization_id: UUID
     year: int
@@ -267,14 +256,14 @@ class ProcessMonthlyAttendanceRequest(BaseModel):
     employee_ids: Optional[List[UUID]] = None  # None means all employees
 
 
-class LockAttendanceRequest(BaseModel):
+class LockAttendanceRequest(CamelSchema):
     """Request schema for locking attendance for payroll."""
     organization_id: UUID
     year: int
     month: int
 
 
-class AttendanceProcessingResult(BaseModel):
+class AttendanceProcessingResult(CamelSchema):
     """Result of attendance processing."""
     total_employees: int
     processed: int

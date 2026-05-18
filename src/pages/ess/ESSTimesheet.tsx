@@ -1,8 +1,11 @@
+import { Calendar, Clock, Save, Send, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -19,55 +22,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Calendar, Clock, Save, Send, ChevronLeft, ChevronRight } from 'lucide-react';
 
-// Mock data
-const projects = [
-  { id: '1', name: 'Project Alpha', code: 'ALPHA' },
-  { id: '2', name: 'Project Beta', code: 'BETA' },
-  { id: '3', name: 'Internal - Admin', code: 'ADMIN' },
-  { id: '4', name: 'Internal - Training', code: 'TRAIN' },
-  { id: '5', name: 'Leave', code: 'LEAVE' },
-];
-
-const tasks = [
-  { id: '1', name: 'Development', projectId: '1' },
-  { id: '2', name: 'Testing', projectId: '1' },
-  { id: '3', name: 'Documentation', projectId: '1' },
-  { id: '4', name: 'Code Review', projectId: '2' },
-  { id: '5', name: 'Meetings', projectId: '3' },
-  { id: '6', name: 'Training Session', projectId: '4' },
-];
+const projects: { id: string; name: string; code: string }[] = [];
+const tasks: { id: string; name: string; projectId: string }[] = [];
 
 interface TimesheetEntry {
   id: string;
   projectId: string;
   taskId: string;
-  hours: { [key: string]: number };
+  hours: Record<string, number>;
 }
 
 export default function ESSTimesheet() {
-  const [currentWeekStart, setCurrentWeekStart] = useState(new Date('2025-01-13'));
-  const [entries, setEntries] = useState<TimesheetEntry[]>([
-    {
-      id: '1',
-      projectId: '1',
-      taskId: '1',
-      hours: { '2025-01-13': 8, '2025-01-14': 7, '2025-01-15': 8, '2025-01-16': 6, '2025-01-17': 8 },
-    },
-    {
-      id: '2',
-      projectId: '1',
-      taskId: '2',
-      hours: { '2025-01-14': 1, '2025-01-16': 2 },
-    },
-    {
-      id: '3',
-      projectId: '3',
-      taskId: '5',
-      hours: { '2025-01-13': 1, '2025-01-15': 1 },
-    },
-  ]);
+  const [currentWeekStart, setCurrentWeekStart] = useState(new Date());
+  const [entries, setEntries] = useState<TimesheetEntry[]>([]);
   const [status, setStatus] = useState<'DRAFT' | 'SUBMITTED' | 'APPROVED'>('DRAFT');
 
   const getWeekDays = () => {
@@ -172,8 +140,7 @@ export default function ESSTimesheet() {
             <div className="flex items-center gap-2">
               <Calendar className="h-5 w-5 text-muted-foreground" />
               <span className="font-medium">
-                {weekDays[0].toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} -{' '}
-                {weekDays[6].toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                <DateDisplay date={weekDays[0]} /> - <DateDisplay date={weekDays[6]} />
               </span>
             </div>
             <Button variant="outline" size="icon" onClick={() => navigateWeek('next')}>
@@ -187,7 +154,7 @@ export default function ESSTimesheet() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Time Entries</CardTitle>
-          <Button variant="outline" size="sm" onClick={addNewRow} disabled={status !== 'DRAFT'}>
+          <Button variant="outline" size="sm" onClick={addNewRow} disabled>
             Add Row
           </Button>
         </CardHeader>
@@ -216,7 +183,13 @@ export default function ESSTimesheet() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {entries.map((entry) => (
+                {entries.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">
+                      Timesheet data is pending ESS timesheet endpoints. Project/task assignment and weekly entries will appear once backend support is added.
+                    </TableCell>
+                  </TableRow>
+                ) : entries.map((entry) => (
                   <TableRow key={entry.id}>
                     <TableCell>
                       <Select
@@ -339,11 +312,11 @@ export default function ESSTimesheet() {
         <div className="flex gap-4">
           {status === 'DRAFT' && (
             <>
-              <Button variant="outline">
+              <Button variant="outline" disabled>
                 <Save className="h-4 w-4 mr-2" />
                 Save Draft
               </Button>
-              <Button onClick={() => setStatus('SUBMITTED')}>
+              <Button disabled>
                 <Send className="h-4 w-4 mr-2" />
                 Submit for Approval
               </Button>

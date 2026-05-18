@@ -12,6 +12,7 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from 'react';
 
 import { bootstrap } from '@/services/auth';
+import { waitForAuthStoreHydration } from '@/stores/authStore';
 
 interface AuthProviderContextValue {
   // Reserved for future additions; kept empty to avoid accidental prop-drilling.
@@ -23,14 +24,23 @@ export function AuthProvider({ children }: { children: ReactNode }): JSX.Element
   const bootstrapped = useRef(false);
 
   useEffect(() => {
-    if (bootstrapped.current) return;
-    bootstrapped.current = true;
-    void bootstrap();
+    let cancelled = false;
+
+    async function runBootstrap(): Promise<void> {
+      await waitForAuthStoreHydration();
+      if (cancelled || bootstrapped.current) return;
+      bootstrapped.current = true;
+      await bootstrap();
+    }
+
+    void runBootstrap();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return (
-    <AuthProviderContext.Provider value={{}}>{children}</AuthProviderContext.Provider>
-  );
+  return <AuthProviderContext.Provider value={{}}>{children}</AuthProviderContext.Provider>;
 }
 
 /** @deprecated Kept for backward-compat while pages migrate to `useAuth`. */

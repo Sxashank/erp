@@ -1,11 +1,3 @@
-import { useState } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import { Checkbox } from '@/components/ui/checkbox';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   ArrowLeft,
   Lock,
@@ -18,30 +10,55 @@ import {
   Play,
   FileText,
   Calculator,
-  DollarSign,
   Shield,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 
-// Mock period data
-const periodData = {
-  id: 'FY2024-25-Q4-M1',
-  name: 'January 2025',
-  fiscalYear: 'FY 2024-25',
-  quarter: 'Q4',
-  startDate: '2025-01-01',
-  endDate: '2025-01-31',
-  status: 'OPEN',
-};
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress } from '@/components/ui/progress';
+import { financialYearsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-// Pre-close checklist items
+import { logger } from "@/lib/logger";
+interface PeriodCloseTarget {
+  id: string;
+  name: string;
+  fiscalYear: string;
+  financialYearId: string;
+  startDate: string;
+  endDate: string;
+}
+
+interface FinancialYearPeriodDto {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  is_closed?: boolean | null;
+  is_locked?: boolean | null;
+}
+
+interface FinancialYearDto {
+  id: string;
+  code?: string | null;
+  name: string;
+  is_current?: boolean | null;
+  periods?: FinancialYearPeriodDto[];
+}
+
 const checklistItems = [
   {
     id: 'pending_postings',
     category: 'GL Postings',
     title: 'Pending GL Postings',
     description: 'All GL postings must be approved or rejected',
-    status: 'WARNING',
-    count: 3,
+    status: 'PENDING',
+    count: 0,
     actionLabel: 'Review Pending',
     actionLink: '/admin/accounting/gl-postings?status=PENDING_APPROVAL',
   },
@@ -50,7 +67,7 @@ const checklistItems = [
     category: 'Bank Reconciliation',
     title: 'Bank Reconciliation Complete',
     description: 'All bank accounts must be reconciled',
-    status: 'SUCCESS',
+    status: 'PENDING',
     count: 0,
     actionLabel: 'View BRS',
     actionLink: '/admin/ap-ar/bank-reconciliation',
@@ -60,7 +77,7 @@ const checklistItems = [
     category: 'Accruals',
     title: 'Interest Accrual Posted',
     description: 'Interest accrual entries must be posted',
-    status: 'SUCCESS',
+    status: 'PENDING',
     count: 0,
     actionLabel: 'View Postings',
     actionLink: '/admin/accounting/gl-postings?type=interest_accrual',
@@ -71,7 +88,7 @@ const checklistItems = [
     title: 'Depreciation Posted',
     description: 'Fixed asset depreciation must be posted',
     status: 'PENDING',
-    count: 1,
+    count: 0,
     actionLabel: 'Run Depreciation',
     actionLink: '/admin/finance/depreciation',
   },
@@ -80,7 +97,7 @@ const checklistItems = [
     category: 'Provisions',
     title: 'NPA Provisions',
     description: 'NPA provisioning must be calculated and posted',
-    status: 'SUCCESS',
+    status: 'PENDING',
     count: 0,
     actionLabel: 'View Provisions',
     actionLink: '/admin/lending/npa',
@@ -90,8 +107,8 @@ const checklistItems = [
     category: 'Tax',
     title: 'GST Reconciliation',
     description: 'GST input/output must be reconciled',
-    status: 'WARNING',
-    count: 5,
+    status: 'PENDING',
+    count: 0,
     actionLabel: 'Reconcile GST',
     actionLink: '/admin/gst/reconciliation',
   },
@@ -100,7 +117,7 @@ const checklistItems = [
     category: 'Tax',
     title: 'TDS Compliance',
     description: 'TDS deducted must match with challans',
-    status: 'SUCCESS',
+    status: 'PENDING',
     count: 0,
     actionLabel: 'View TDS',
     actionLink: '/admin/tds/returns',
@@ -110,7 +127,7 @@ const checklistItems = [
     category: 'Reports',
     title: 'Trial Balance Verification',
     description: 'Trial balance must be verified and balanced',
-    status: 'SUCCESS',
+    status: 'PENDING',
     count: 0,
     actionLabel: 'View TB',
     actionLink: '/admin/reports/trial-balance',
@@ -121,11 +138,44 @@ export default function PeriodClose() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const isFinalClose = searchParams.get('final') === 'true';
+  const organizationId = useActiveOrganizationId();
 
   const [currentStep, setCurrentStep] = useState(1);
   const [checkedItems, setCheckedItems] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [closeProgress, setCloseProgress] = useState(0);
+  const [periodData, setPeriodData] = useState<PeriodCloseTarget | null>(null);
+
+  useEffect(() => {
+    const loadTargetPeriod = async () => {
+      if (!organizationId) return;
+      try {
+        const response = await financialYearsApi.list({
+          organization_id: organizationId,
+          page_size: 100,
+        });
+        const financialYears = (response.data.items || []) as FinancialYearDto[];
+        const currentFy = financialYears.find((fy) => fy.is_current) || financialYears[0];
+        const openPeriod = currentFy?.periods?.find((period) => !period.is_closed && !period.is_locked)
+          || currentFy?.periods?.find((period) => !period.is_closed)
+          || currentFy?.periods?.[0];
+        if (currentFy && openPeriod) {
+          setPeriodData({
+            id: openPeriod.id,
+            name: openPeriod.name,
+            fiscalYear: currentFy.code || currentFy.name,
+            financialYearId: currentFy.id,
+            startDate: openPeriod.start_date,
+            endDate: openPeriod.end_date,
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to load period close target:', error);
+      }
+    };
+
+    loadTargetPeriod();
+  }, [organizationId]);
 
   const toggleCheck = (id: string) => {
     setCheckedItems(prev =>
@@ -155,15 +205,21 @@ export default function PeriodClose() {
   const runPeriodClose = async () => {
     setIsProcessing(true);
     setCloseProgress(0);
-
-    // Simulate close process
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      setCloseProgress(i);
+    if (!periodData) {
+      setIsProcessing(false);
+      return;
     }
 
-    setIsProcessing(false);
-    setCurrentStep(3);
+    try {
+      setCloseProgress(40);
+      await financialYearsApi.closePeriod(periodData.financialYearId, periodData.id);
+      setCloseProgress(100);
+      setCurrentStep(3);
+    } catch (error) {
+      logger.error('Failed to close period:', error);
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   // Statistics
@@ -175,7 +231,7 @@ export default function PeriodClose() {
     <div className="container mx-auto py-6 space-y-6">
       <PageHeader
         title={isFinalClose ? 'Final Period Close' : 'Period Close Wizard'}
-        subtitle={`${periodData.name} (${periodData.fiscalYear})`}
+        subtitle={periodData ? `${periodData.name} (${periodData.fiscalYear})` : 'No open period loaded'}
         breadcrumbs={[
           { label: 'Periods', to: '/admin/accounting/periods' },
           { label: isFinalClose ? 'Final Close' : 'Close Wizard' },
@@ -327,7 +383,9 @@ export default function PeriodClose() {
               <>
                 <div className="p-6 bg-muted rounded-lg text-center">
                   <Lock className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-bold">Ready to Close {periodData.name}</h3>
+                  <h3 className="text-lg font-bold">
+                    Ready to Close {periodData?.name || 'Selected Period'}
+                  </h3>
                   <p className="text-muted-foreground mt-2">
                     {isFinalClose
                       ? 'This action is permanent and cannot be undone.'
@@ -364,7 +422,7 @@ export default function PeriodClose() {
                     <ArrowLeft className="h-4 w-4 mr-2" />
                     Back
                   </Button>
-                  <Button onClick={runPeriodClose}>
+                  <Button onClick={runPeriodClose} disabled={!periodData}>
                     <Play className="h-4 w-4 mr-2" />
                     Execute Close
                   </Button>
@@ -396,7 +454,7 @@ export default function PeriodClose() {
             </div>
             <h2 className="text-2xl font-bold">Period Closed Successfully</h2>
             <p className="text-muted-foreground mt-2">
-              {periodData.name} has been {isFinalClose ? 'permanently' : 'soft'} closed.
+              {periodData?.name || 'The selected period'} has been {isFinalClose ? 'permanently' : 'soft'} closed.
             </p>
 
             <div className="grid grid-cols-3 gap-4 max-w-lg mx-auto mt-8">
@@ -406,7 +464,7 @@ export default function PeriodClose() {
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <Calculator className="h-6 w-6 mx-auto text-muted-foreground" />
-                <p className="text-sm mt-2">45 Postings Archived</p>
+                <p className="text-sm mt-2">Postings Archived</p>
               </div>
               <div className="p-4 bg-muted rounded-lg">
                 <Shield className="h-6 w-6 mx-auto text-muted-foreground" />

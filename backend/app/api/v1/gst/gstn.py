@@ -11,10 +11,10 @@ Provides endpoints for GST return filing operations:
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.gst.gstn_models import (
     GSTReturnType,
@@ -41,6 +41,7 @@ from app.schemas.gst.gstn import (
     GSTR2BListResponse,
     GSTR2BSummary,
 )
+from app.core.exceptions import BadRequestException, NotFoundException, UnauthorizedException
 
 router = APIRouter(prefix="/gstn", tags=["GSTN Portal"])
 
@@ -58,8 +59,8 @@ async def request_otp(
     organization_id: UUID,
     gst_registration_id: UUID,
     request: GSTNOTPRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.session.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_SESSION_CREATE")),
 ):
     """Request OTP for GSTN authentication."""
     service = GSTNService(db)
@@ -71,16 +72,13 @@ async def request_otp(
             initiated_by=current_user.id,
         )
         if not result["success"]:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestException(
                 detail=result.get("message", "OTP request failed"),
+                error_code="BAD_REQUEST",
             )
         return result
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
@@ -91,8 +89,8 @@ async def request_otp(
 async def verify_otp(
     session_id: UUID,
     request: GSTNOTPVerify,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.session.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_SESSION_CREATE")),
 ):
     """Verify OTP and establish GSTN session."""
     service = GSTNService(db)
@@ -104,29 +102,26 @@ async def verify_otp(
             app_key=request.otp_reference,
         )
         if not result["success"]:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
+            raise UnauthorizedException(
                 detail=result.get("message", "OTP verification failed"),
+                error_code="UNAUTHORIZED",
             )
         return result
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/sessions/active",
-    response_model=Optional[GSTNSessionResponse],
+    response_model=Optional[GSTNSessionResponse], response_model_by_alias=True,
     summary="Get active GSTN session",
     description="Get currently active GSTN session for a GSTIN.",
 )
 async def get_active_session(
     organization_id: UUID,
     gstin: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.session.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_SESSION_READ")),
 ):
     """Get active GSTN session."""
     service = GSTNService(db)
@@ -142,7 +137,7 @@ async def get_active_session(
 
 @router.get(
     "/returns",
-    response_model=GSTReturnFilingListResponse,
+    response_model=GSTReturnFilingListResponse, response_model_by_alias=True,
     summary="List GST returns",
     description="List GST return filings with filtering.",
 )
@@ -154,8 +149,8 @@ async def list_returns(
     return_status: Optional[GSTReturnStatus] = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_READ")),
 ):
     """List GST return filings."""
     service = GSTNService(db)
@@ -172,23 +167,20 @@ async def list_returns(
 
 @router.get(
     "/returns/{return_id}",
-    response_model=GSTReturnFilingDetail,
+    response_model=GSTReturnFilingDetail, response_model_by_alias=True,
     summary="Get return details",
     description="Get detailed GST return filing information.",
 )
 async def get_return(
     return_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_READ")),
 ):
     """Get GST return details."""
     from app.models.gst.gstn_models import GSTReturnFiling
     filing = await db.get(GSTReturnFiling, return_id)
     if not filing:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Return not found",
-        )
+        raise NotFoundException(detail="Return not found", error_code="RETURN_NOT_FOUND")
     return GSTReturnFilingDetail.model_validate(filing)
 
 
@@ -198,14 +190,14 @@ async def get_return(
 
 @router.post(
     "/gstr1/generate",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="Generate GSTR-1",
     description="Generate GSTR-1 from sales invoices for a return period.",
 )
 async def generate_gstr1(
     request: GenerateGSTR1Request,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_CREATE")),
 ):
     """Generate GSTR-1 from sales data."""
     service = GSTNService(db)
@@ -226,23 +218,20 @@ async def generate_gstr1(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/gstr1/{return_id}/validate",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="Validate GSTR-1",
     description="Validate GSTR-1 data with GSTN.",
 )
 async def validate_gstr1(
     return_id: UUID,
     session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.submit")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_SUBMIT")),
 ):
     """Validate GSTR-1 with GSTN."""
     service = GSTNService(db)
@@ -254,23 +243,20 @@ async def validate_gstr1(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/gstr1/{return_id}/submit",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="Submit GSTR-1",
     description="Submit GSTR-1 to GSTN for filing.",
 )
 async def submit_gstr1(
     return_id: UUID,
     session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.submit")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_SUBMIT")),
 ):
     """Submit GSTR-1 to GSTN."""
     service = GSTNService(db)
@@ -282,15 +268,12 @@ async def submit_gstr1(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/gstr1/{return_id}/file",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="File GSTR-1",
     description="File GSTR-1 with EVC/DSC.",
 )
@@ -299,14 +282,14 @@ async def file_gstr1(
     session_id: UUID,
     pan: str,
     otp: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.file")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_FILE")),
 ):
     """File GSTR-1 with GSTN."""
     if not otp:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="OTP is required for filing with EVC",
+            error_code="OTP_IS_REQUIRED_FOR_FILING_WITH",
         )
 
     service = GSTNService(db)
@@ -320,10 +303,7 @@ async def file_gstr1(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # =============================================================================
@@ -332,14 +312,14 @@ async def file_gstr1(
 
 @router.post(
     "/gstr3b/generate",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="Generate GSTR-3B",
     description="Generate GSTR-3B summary for a return period.",
 )
 async def generate_gstr3b(
     request: GenerateGSTR3BRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_CREATE")),
 ):
     """Generate GSTR-3B summary."""
     service = GSTNService(db)
@@ -360,23 +340,20 @@ async def generate_gstr3b(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/gstr3b/{return_id}/validate",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="Validate GSTR-3B",
     description="Validate GSTR-3B data with GSTN.",
 )
 async def validate_gstr3b(
     return_id: UUID,
     session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.submit")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_SUBMIT")),
 ):
     """Validate GSTR-3B with GSTN."""
     service = GSTNService(db)
@@ -388,23 +365,20 @@ async def validate_gstr3b(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/gstr3b/{return_id}/submit",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="Submit GSTR-3B",
     description="Submit GSTR-3B to GSTN.",
 )
 async def submit_gstr3b(
     return_id: UUID,
     session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.submit")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_SUBMIT")),
 ):
     """Submit GSTR-3B to GSTN."""
     service = GSTNService(db)
@@ -416,15 +390,12 @@ async def submit_gstr3b(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/gstr3b/{return_id}/file",
-    response_model=GSTReturnFilingResponse,
+    response_model=GSTReturnFilingResponse, response_model_by_alias=True,
     summary="File GSTR-3B",
     description="File GSTR-3B with EVC/DSC.",
 )
@@ -433,14 +404,14 @@ async def file_gstr3b(
     session_id: UUID,
     pan: str,
     otp: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.file")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_FILE")),
 ):
     """File GSTR-3B with GSTN."""
     if not otp:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="OTP is required for filing with EVC",
+            error_code="OTP_IS_REQUIRED_FOR_FILING_WITH",
         )
 
     service = GSTNService(db)
@@ -454,10 +425,7 @@ async def file_gstr3b(
         )
         return GSTReturnFilingResponse.model_validate(filing)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # =============================================================================
@@ -472,8 +440,8 @@ async def file_gstr3b(
 async def request_filing_otp(
     session_id: UUID,
     pan: str,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.file")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_FILE")),
 ):
     """Request OTP for filing return with EVC."""
     service = GSTNService(db)
@@ -484,10 +452,7 @@ async def request_filing_otp(
         )
         return result
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
@@ -498,8 +463,8 @@ async def request_filing_otp(
 async def get_return_status_from_gstn(
     return_id: UUID,
     session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.return.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_RETURN_READ")),
 ):
     """Get return filing status from GSTN."""
     service = GSTNService(db)
@@ -509,10 +474,7 @@ async def get_return_status_from_gstn(
             session_id=session_id,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # =============================================================================
@@ -527,8 +489,8 @@ async def get_return_status_from_gstn(
 async def fetch_gstr2b(
     request: FetchGSTR2BRequest,
     session_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.gstr2b.fetch")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_GSTR2B_FETCH")),
 ):
     """Fetch GSTR-2B from GSTN."""
     service = GSTNService(db)
@@ -548,15 +510,12 @@ async def fetch_gstr2b(
         )
         return result
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/gstr2b",
-    response_model=GSTR2BListResponse,
+    response_model=GSTR2BListResponse, response_model_by_alias=True,
     summary="List GSTR-2B invoices",
     description="List fetched GSTR-2B invoice data.",
 )
@@ -568,8 +527,8 @@ async def list_gstr2b(
     is_matched: Optional[bool] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.gstr2b.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_GSTR2B_READ")),
 ):
     """List GSTR-2B invoices."""
     from sqlalchemy import select, and_, func
@@ -611,14 +570,14 @@ async def list_gstr2b(
 
 @router.post(
     "/itc-reconciliation/run",
-    response_model=ITCReconciliationSummary,
+    response_model=ITCReconciliationSummary, response_model_by_alias=True,
     summary="Run ITC reconciliation",
     description="Run ITC reconciliation between books and GSTR-2B.",
 )
 async def run_itc_reconciliation(
     request: RunITCReconciliationRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.itc.reconcile")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_ITC_RECONCILE")),
 ):
     """Run ITC reconciliation."""
     service = GSTNService(db)
@@ -637,15 +596,12 @@ async def run_itc_reconciliation(
             auto_match_threshold=request.auto_match_threshold,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/itc-mismatches",
-    response_model=ITCMismatchListResponse,
+    response_model=ITCMismatchListResponse, response_model_by_alias=True,
     summary="List ITC mismatches",
     description="List ITC mismatches from reconciliation.",
 )
@@ -657,8 +613,8 @@ async def list_itc_mismatches(
     resolution_status: Optional[ITCMismatchResolution] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.itc.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_ITC_READ")),
 ):
     """List ITC mismatches."""
     service = GSTNService(db)
@@ -675,15 +631,15 @@ async def list_itc_mismatches(
 
 @router.post(
     "/itc-mismatches/{mismatch_id}/resolve",
-    response_model=ITCMismatchResponse,
+    response_model=ITCMismatchResponse, response_model_by_alias=True,
     summary="Resolve ITC mismatch",
     description="Resolve an ITC mismatch with resolution status and notes.",
 )
 async def resolve_itc_mismatch(
     mismatch_id: UUID,
     request: ITCMismatchResolve,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.itc.resolve")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_ITC_RESOLVE")),
 ):
     """Resolve ITC mismatch."""
     service = GSTNService(db)
@@ -696,10 +652,7 @@ async def resolve_itc_mismatch(
         )
         return ITCMismatchResponse.model_validate(mismatch)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # =============================================================================
@@ -714,8 +667,8 @@ async def resolve_itc_mismatch(
 async def get_filing_statistics(
     organization_id: UUID,
     financial_year: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.statistics.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_STATISTICS_READ")),
 ):
     """Get filing statistics."""
     from sqlalchemy import select, func
@@ -753,8 +706,8 @@ async def get_filing_statistics(
 async def get_itc_statistics(
     organization_id: UUID,
     return_period: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("gstn.statistics.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("GSTN_STATISTICS_READ")),
 ):
     """Get ITC reconciliation statistics."""
     from sqlalchemy import select, func

@@ -3,11 +3,11 @@
 from uuid import UUID
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions, get_current_user
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.recurring_service import RecurringVoucherService
 from app.core.constants import RecurrenceFrequency, RecurringVoucherStatus
@@ -23,13 +23,14 @@ from app.schemas.finance.recurring_voucher import (
     UpcomingRecurringVoucher,
     RecurringVoucherStats,
 )
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
 
 @router.get(
     "",
-    response_model=RecurringVoucherListResponse,
+    response_model=RecurringVoucherListResponse, response_model_by_alias=True,
 )
 async def list_recurring_vouchers(
     organization_id: UUID,
@@ -38,7 +39,7 @@ async def list_recurring_vouchers(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List recurring voucher templates."""
     service = RecurringVoucherService(db)
@@ -53,13 +54,13 @@ async def list_recurring_vouchers(
 
 @router.get(
     "/upcoming",
-    response_model=list[UpcomingRecurringVoucher],
+    response_model=list[UpcomingRecurringVoucher], response_model_by_alias=True,
 )
 async def get_upcoming_vouchers(
     organization_id: UUID,
     days_ahead: int = Query(default=7, ge=1, le=30),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get upcoming recurring vouchers due in the next N days."""
     service = RecurringVoucherService(db)
@@ -68,12 +69,12 @@ async def get_upcoming_vouchers(
 
 @router.get(
     "/stats",
-    response_model=RecurringVoucherStats,
+    response_model=RecurringVoucherStats, response_model_by_alias=True,
 )
 async def get_recurring_stats(
     organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get statistics for recurring vouchers."""
     service = RecurringVoucherService(db)
@@ -82,33 +83,33 @@ async def get_recurring_stats(
 
 @router.get(
     "/{recurring_id}",
-    response_model=RecurringVoucherResponse,
+    response_model=RecurringVoucherResponse, response_model_by_alias=True,
 )
 async def get_recurring_voucher(
     recurring_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a recurring voucher template by ID."""
     service = RecurringVoucherService(db)
     result = await service.get_with_lines(recurring_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"Recurring voucher {recurring_id} not found",
+            error_code="RECURRING_VOUCHER_NOT_FOUND",
         )
     return result
 
 
 @router.post(
     "",
-    response_model=RecurringVoucherResponse,
+    response_model=RecurringVoucherResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_recurring_voucher(
     data: RecurringVoucherCreate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new recurring voucher template."""
     service = RecurringVoucherService(db)
@@ -117,21 +118,18 @@ async def create_recurring_voucher(
         await db.commit()
         return await service.get_with_lines(recurring.id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.put(
     "/{recurring_id}",
-    response_model=RecurringVoucherResponse,
+    response_model=RecurringVoucherResponse, response_model_by_alias=True,
 )
 async def update_recurring_voucher(
     recurring_id: UUID,
     data: RecurringVoucherUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a recurring voucher template."""
     service = RecurringVoucherService(db)
@@ -140,10 +138,7 @@ async def update_recurring_voucher(
         await db.commit()
         return await service.get_with_lines(recurring.id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.delete(
@@ -153,28 +148,28 @@ async def update_recurring_voucher(
 async def delete_recurring_voucher(
     recurring_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete (soft) a recurring voucher template."""
     service = RecurringVoucherService(db)
     success = await service.delete(recurring_id, current_user.id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"Recurring voucher {recurring_id} not found",
+            error_code="RECURRING_VOUCHER_NOT_FOUND",
         )
     await db.commit()
 
 
 @router.post(
     "/{recurring_id}/pause",
-    response_model=RecurringVoucherResponse,
+    response_model=RecurringVoucherResponse, response_model_by_alias=True,
 )
 async def pause_recurring_voucher(
     recurring_id: UUID,
     request: PauseResumeRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Pause a recurring voucher."""
     service = RecurringVoucherService(db)
@@ -183,20 +178,17 @@ async def pause_recurring_voucher(
         await db.commit()
         return await service.get_with_lines(recurring_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{recurring_id}/resume",
-    response_model=RecurringVoucherResponse,
+    response_model=RecurringVoucherResponse, response_model_by_alias=True,
 )
 async def resume_recurring_voucher(
     recurring_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Resume a paused recurring voucher."""
     service = RecurringVoucherService(db)
@@ -205,21 +197,18 @@ async def resume_recurring_voucher(
         await db.commit()
         return await service.get_with_lines(recurring_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{recurring_id}/cancel",
-    response_model=RecurringVoucherResponse,
+    response_model=RecurringVoucherResponse, response_model_by_alias=True,
 )
 async def cancel_recurring_voucher(
     recurring_id: UUID,
     request: PauseResumeRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel a recurring voucher (cannot be undone)."""
     service = RecurringVoucherService(db)
@@ -228,21 +217,18 @@ async def cancel_recurring_voucher(
         await db.commit()
         return await service.get_with_lines(recurring_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{recurring_id}/generate",
-    response_model=GenerateVoucherResponse,
+    response_model=GenerateVoucherResponse, response_model_by_alias=True,
 )
 async def generate_voucher_from_template(
     recurring_id: UUID,
     request: GenerateVoucherRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Manually generate a voucher from a recurring template."""
     service = RecurringVoucherService(db)
@@ -259,12 +245,12 @@ async def generate_voucher_from_template(
 
 @router.post(
     "/process-due",
-    response_model=list[GenerateVoucherResponse],
+    response_model=list[GenerateVoucherResponse], response_model_by_alias=True,
 )
 async def process_due_vouchers(
     organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Process all due recurring vouchers and generate vouchers."""
     service = RecurringVoucherService(db)
@@ -275,14 +261,14 @@ async def process_due_vouchers(
 
 @router.get(
     "/{recurring_id}/logs",
-    response_model=RecurringVoucherLogListResponse,
+    response_model=RecurringVoucherLogListResponse, response_model_by_alias=True,
 )
 async def get_recurring_voucher_logs(
     recurring_id: UUID,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get generation logs for a recurring voucher."""
     service = RecurringVoucherService(db)

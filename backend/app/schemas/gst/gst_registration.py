@@ -7,11 +7,11 @@ from uuid import UUID
 from pydantic import Field, field_validator
 import re
 
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, CamelSchema
 from app.core.constants import GSTRegistrationType
 
 
-class GSTRegistrationBase(BaseSchema):
+class GSTRegistrationBase(CamelSchema):
     """Base GST Registration schema."""
 
     gstin: str = Field(..., min_length=15, max_length=15)
@@ -58,7 +58,7 @@ class GSTRegistrationCreate(GSTRegistrationBase):
     e_invoice_password: Optional[str] = Field(None, max_length=100)
 
 
-class GSTRegistrationUpdate(BaseSchema):
+class GSTRegistrationUpdate(CamelSchema):
     """Schema for updating a GST registration."""
 
     legal_name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -73,7 +73,7 @@ class GSTRegistrationUpdate(BaseSchema):
     is_active: Optional[bool] = None
 
 
-class GSTRegistrationResponse(BaseSchema):
+class GSTRegistrationResponse(CamelSchema):
     """GST Registration response schema."""
 
     id: UUID

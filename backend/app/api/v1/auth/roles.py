@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, RequirePermissions
+from app.api.deps import get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.auth.role_service import RoleService
 from app.schemas.auth.role import (
@@ -25,10 +25,10 @@ router = APIRouter()
 
 
 # Permission endpoints
-@router.get("/permissions", response_model=List[PermissionResponse])
+@router.get("/permissions", response_model=List[PermissionResponse], response_model_by_alias=True)
 async def list_permissions(
     current_user: User = Depends(RequirePermissions("ROLE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all permissions.
@@ -54,10 +54,10 @@ async def list_permissions(
     ]
 
 
-@router.get("/permissions/grouped", response_model=List[PermissionGrouped])
+@router.get("/permissions/grouped", response_model=List[PermissionGrouped], response_model_by_alias=True)
 async def list_permissions_grouped(
     current_user: User = Depends(RequirePermissions("ROLE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all permissions grouped by module.
@@ -90,10 +90,10 @@ async def list_permissions_grouped(
 
 
 # Role endpoints
-@router.get("", response_model=List[RoleListResponse])
+@router.get("", response_model=List[RoleListResponse], response_model_by_alias=True)
 async def list_roles(
     current_user: User = Depends(RequirePermissions("ROLE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all roles with counts.
@@ -117,11 +117,11 @@ async def list_roles(
     ]
 
 
-@router.post("", response_model=RoleResponse)
+@router.post("", response_model=RoleResponse, response_model_by_alias=True)
 async def create_role(
     data: RoleCreate,
     current_user: User = Depends(RequirePermissions("ROLE_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new role.
@@ -133,11 +133,11 @@ async def create_role(
     return await _role_to_response(role)
 
 
-@router.get("/{role_id}", response_model=RoleResponse)
+@router.get("/{role_id}", response_model=RoleResponse, response_model_by_alias=True)
 async def get_role(
     role_id: UUID,
     current_user: User = Depends(RequirePermissions("ROLE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get role by ID with permissions.
@@ -149,12 +149,12 @@ async def get_role(
     return await _role_to_response(role)
 
 
-@router.put("/{role_id}", response_model=RoleResponse)
+@router.put("/{role_id}", response_model=RoleResponse, response_model_by_alias=True)
 async def update_role(
     role_id: UUID,
     data: RoleUpdate,
     current_user: User = Depends(RequirePermissions("ROLE_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing role.
@@ -166,11 +166,11 @@ async def update_role(
     return await _role_to_response(role)
 
 
-@router.delete("/{role_id}", response_model=MessageResponse)
+@router.delete("/{role_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_role(
     role_id: UUID,
     current_user: User = Depends(RequirePermissions("ROLE_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a role.
@@ -182,12 +182,12 @@ async def delete_role(
     return MessageResponse(message="Role deleted successfully")
 
 
-@router.put("/{role_id}/permissions", response_model=RoleResponse)
+@router.put("/{role_id}/permissions", response_model=RoleResponse, response_model_by_alias=True)
 async def set_role_permissions(
     role_id: UUID,
     data: RolePermissionUpdate,
     current_user: User = Depends(RequirePermissions("ROLE_PERMISSION_ASSIGN")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Set permissions for a role (replaces all existing permissions).

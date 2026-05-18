@@ -3,12 +3,12 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.workflow import NotificationTemplate, WorkflowEntityType
 from app.schemas.workflow.notification_template import (
@@ -19,23 +19,23 @@ from app.schemas.workflow.notification_template import (
     TemplatePreviewResponse,
 )
 from app.schemas.base import PaginatedResponse, MessageResponse
+from app.core.exceptions import ConflictException, NotFoundException
 
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[NotificationTemplateResponse])
+@router.get("", response_model=PaginatedResponse[NotificationTemplateResponse], response_model_by_alias=True)
 async def list_notification_templates(
-    organization_id: UUID = Query(...),
     entity_type: Optional[WorkflowEntityType] = Query(None),
     code: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of notification templates."""
     base_conditions = [
-        NotificationTemplate.organization_id == organization_id,
+        NotificationTemplate.organization_id == current_user.organization_id,
         NotificationTemplate.is_active == True,
     ]
 
@@ -67,31 +67,33 @@ async def list_notification_templates(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=NotificationTemplateResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=NotificationTemplateResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_notification_template(
     data: NotificationTemplateCreate,
     current_user: User = Depends(RequirePermissions("WORKFLOW_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new notification template."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     # Check for duplicate code
     existing = await db.execute(
         select(NotificationTemplate).where(
             and_(
-                NotificationTemplate.organization_id == data.organization_id,
+                NotificationTemplate.organization_id == current_user.organization_id,
                 NotificationTemplate.code == data.code,
                 NotificationTemplate.is_active == True,
             )
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ConflictException(
             detail=f"Notification template with code '{data.code}' already exists",
+            error_code="NOTIFICATION_TEMPLATE_WITH_CODE_ALREADY_EXISTS",
         )
 
     template = NotificationTemplate(
-        organization_id=data.organization_id,
+        organization_id=current_user.organization_id,
         code=data.code,
         name=data.name,
         entity_type=data.entity_type,
@@ -109,11 +111,11 @@ async def create_notification_template(
     return _template_to_response(template)
 
 
-@router.get("/{template_id}", response_model=NotificationTemplateResponse)
+@router.get("/{template_id}", response_model=NotificationTemplateResponse, response_model_by_alias=True)
 async def get_notification_template(
     template_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a notification template by ID."""
     query = select(NotificationTemplate).where(
@@ -126,21 +128,20 @@ async def get_notification_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Notification template not found",
+            error_code="NOTIFICATION_TEMPLATE_NOT_FOUND",
         )
 
     return _template_to_response(template)
 
 
-@router.get("/by-code/{code}", response_model=NotificationTemplateResponse)
+@router.get("/by-code/{code}", response_model=NotificationTemplateResponse, response_model_by_alias=True)
 async def get_notification_template_by_code(
     code: str,
-    organization_id: UUID = Query(...),
     entity_type: Optional[WorkflowEntityType] = Query(None),
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a notification template by code.
 
@@ -148,7 +149,7 @@ async def get_notification_template_by_code(
     falls back to generic template if not found.
     """
     conditions = [
-        NotificationTemplate.organization_id == organization_id,
+        NotificationTemplate.organization_id == current_user.organization_id,
         NotificationTemplate.code == code,
         NotificationTemplate.is_active == True,
     ]
@@ -171,20 +172,20 @@ async def get_notification_template_by_code(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"Notification template with code '{code}' not found",
+            error_code="NOTIFICATION_TEMPLATE_WITH_CODE_NOT_FOUND",
         )
 
     return _template_to_response(template)
 
 
-@router.put("/{template_id}", response_model=NotificationTemplateResponse)
+@router.put("/{template_id}", response_model=NotificationTemplateResponse, response_model_by_alias=True)
 async def update_notification_template(
     template_id: UUID,
     data: NotificationTemplateUpdate,
     current_user: User = Depends(RequirePermissions("WORKFLOW_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a notification template."""
     query = select(NotificationTemplate).where(
@@ -197,9 +198,9 @@ async def update_notification_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Notification template not found",
+            error_code="NOTIFICATION_TEMPLATE_NOT_FOUND",
         )
 
     # Update fields
@@ -214,11 +215,11 @@ async def update_notification_template(
     return _template_to_response(template)
 
 
-@router.delete("/{template_id}", response_model=MessageResponse)
+@router.delete("/{template_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_notification_template(
     template_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Soft delete a notification template."""
     query = select(NotificationTemplate).where(
@@ -231,9 +232,9 @@ async def delete_notification_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Notification template not found",
+            error_code="NOTIFICATION_TEMPLATE_NOT_FOUND",
         )
 
     template.soft_delete(current_user.id)
@@ -242,12 +243,12 @@ async def delete_notification_template(
     return MessageResponse(message="Notification template deleted successfully")
 
 
-@router.post("/{template_id}/preview", response_model=TemplatePreviewResponse)
+@router.post("/{template_id}/preview", response_model=TemplatePreviewResponse, response_model_by_alias=True)
 async def preview_notification_template(
     template_id: UUID,
     data: TemplatePreviewRequest,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Preview a notification template with sample context data.
 
@@ -264,9 +265,9 @@ async def preview_notification_template(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Notification template not found",
+            error_code="NOTIFICATION_TEMPLATE_NOT_FOUND",
         )
 
     # Render template with context
@@ -276,11 +277,11 @@ async def preview_notification_template(
     return TemplatePreviewResponse(subject=subject, body=body)
 
 
-@router.get("/{template_id}/variables", response_model=list[str])
+@router.get("/{template_id}/variables", response_model=list[str], response_model_by_alias=True)
 async def get_template_variables(
     template_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get the list of available variables for a notification template."""
     query = select(NotificationTemplate).where(
@@ -293,9 +294,9 @@ async def get_template_variables(
     template = result.scalar_one_or_none()
 
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Notification template not found",
+            error_code="NOTIFICATION_TEMPLATE_NOT_FOUND",
         )
 
     return template.available_variables or []

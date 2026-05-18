@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Calendar,
@@ -7,11 +5,13 @@ import {
   Play,
   RefreshCw,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -23,6 +23,7 @@ import {
 } from '@/components/ui/select';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -60,7 +61,7 @@ export function AttendanceProcess() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -73,7 +74,7 @@ export function AttendanceProcess() {
       setProcessing(true);
       setResult(null);
 
-      const params: any = {
+      const params: Record<string, unknown> = {
         organization_id: selectedOrgId,
       };
 
@@ -87,7 +88,7 @@ export function AttendanceProcess() {
         // Process each day in range
         const from = new Date(dateRangeStart);
         const to = new Date(dateRangeEnd);
-        let totalResult = {
+        const totalResult = {
           processed_count: 0,
           present_count: 0,
           absent_count: 0,
@@ -118,7 +119,7 @@ export function AttendanceProcess() {
         setResult(totalResult);
       }
     } catch (error) {
-      console.error('Failed to process attendance:', error);
+      logger.error('Failed to process attendance:', error);
       setResult({
         processed_count: 0,
         present_count: 0,
@@ -147,7 +148,7 @@ export function AttendanceProcess() {
       });
       setResult(response.data);
     } catch (error) {
-      console.error('Failed to reprocess attendance:', error);
+      logger.error('Failed to reprocess attendance:', error);
     } finally {
       setProcessing(false);
     }

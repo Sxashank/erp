@@ -2,23 +2,22 @@
 
 import asyncio
 from uuid import UUID
-from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import async_session_factory
 from app.models.workflow import (
-    WorkflowDefinition,
-    WorkflowStep,
-    ApprovalRule,
-    EscalationRule,
-    NotificationTemplate,
-    WorkflowEntityType,
-    WorkflowStepType,
     ApprovalMode,
+    ApprovalRule,
     ApproverType,
+    EscalationRule,
     EscalationType,
+    NotificationTemplate,
+    WorkflowDefinition,
+    WorkflowEntityType,
+    WorkflowStep,
+    WorkflowStepType,
 )
 
 
@@ -30,9 +29,9 @@ async def seed_workflow_definitions(
 
     # Check if workflows already exist for this organization
     result = await db.execute(
-        select(WorkflowDefinition).where(
-            WorkflowDefinition.organization_id == organization_id
-        ).limit(1)
+        select(WorkflowDefinition)
+        .where(WorkflowDefinition.organization_id == organization_id)
+        .limit(1)
     )
     if result.scalar_one_or_none():
         print(f"Workflows already exist for organization {organization_id}, skipping...")
@@ -361,6 +360,245 @@ async def seed_workflow_definitions(
     )
     db.add(vcr_rule2)
 
+    # -------------------------------------------------------------------------
+    # 5. Loan Application Review — Credit Officer → Credit Manager (≥ ₹25L).
+    #    Mirrors the §8.4 delegation band; the amount_gte gate is conservative
+    #    and aligns with the existing Officer → GM handoff.
+    # -------------------------------------------------------------------------
+    la_workflow = WorkflowDefinition(
+        organization_id=organization_id,
+        name="Loan Application Review",
+        code="LOAN_APPLICATION_REVIEW",
+        entity_type=WorkflowEntityType.LOAN_APPLICATION,
+        description="Credit underwriting review for loan applications",
+        is_default=True,
+        priority=10,
+        activation_conditions=None,
+        allow_parallel_branches=False,
+        require_comments_on_reject=True,
+        notify_initiator_on_complete=True,
+    )
+    db.add(la_workflow)
+    await db.flush()
+
+    la_step1 = WorkflowStep(
+        workflow_definition_id=la_workflow.id,
+        step_number=1,
+        name="Credit Officer Review",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.SEQUENTIAL,
+        entry_conditions=None,
+        on_approve_action="NEXT",
+        on_reject_action="REJECT",
+        allow_delegation=True,
+        sla_hours=24,
+    )
+    db.add(la_step1)
+    await db.flush()
+    db.add(
+        ApprovalRule(
+            workflow_step_id=la_step1.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="Credit Officer",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
+    la_step2 = WorkflowStep(
+        workflow_definition_id=la_workflow.id,
+        step_number=2,
+        name="Credit Manager Review",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.SEQUENTIAL,
+        entry_conditions={"amount_gte": 2500000},
+        on_approve_action="COMPLETE",
+        on_reject_action="REJECT",
+        allow_delegation=False,
+        sla_hours=48,
+    )
+    db.add(la_step2)
+    await db.flush()
+    db.add(
+        ApprovalRule(
+            workflow_step_id=la_step2.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="Credit Manager",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
+    # -------------------------------------------------------------------------
+    # 6. Loan Sanction Approval — Officer → GM → ED → CMD → Board ladder per
+    #    the delegation matrix in app/core/maker_checker.py. Thresholds are
+    #    placeholders; production deploys override via the workflow UI.
+    # -------------------------------------------------------------------------
+    ls_workflow = WorkflowDefinition(
+        organization_id=organization_id,
+        name="Loan Sanction Approval",
+        code="LOAN_SANCTION_APPROVAL",
+        entity_type=WorkflowEntityType.LOAN_SANCTION,
+        description="Delegation-banded approval for loan sanctions",
+        is_default=True,
+        priority=10,
+        activation_conditions=None,
+        allow_parallel_branches=False,
+        require_comments_on_reject=True,
+        notify_initiator_on_complete=True,
+    )
+    db.add(ls_workflow)
+    await db.flush()
+
+    ls_step1 = WorkflowStep(
+        workflow_definition_id=ls_workflow.id,
+        step_number=1,
+        name="Credit Officer Approval",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.SEQUENTIAL,
+        entry_conditions=None,
+        on_approve_action="NEXT",
+        on_reject_action="REJECT",
+        allow_delegation=True,
+        sla_hours=24,
+    )
+    db.add(ls_step1)
+    await db.flush()
+    db.add(
+        ApprovalRule(
+            workflow_step_id=ls_step1.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="Credit Officer",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
+    ls_step2 = WorkflowStep(
+        workflow_definition_id=ls_workflow.id,
+        step_number=2,
+        name="GM Approval",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.SEQUENTIAL,
+        entry_conditions={"amount_gte": 5000000},  # ≥ ₹50L
+        on_approve_action="NEXT",
+        on_reject_action="REJECT",
+        allow_delegation=True,
+        sla_hours=48,
+    )
+    db.add(ls_step2)
+    await db.flush()
+    db.add(
+        ApprovalRule(
+            workflow_step_id=ls_step2.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="GM",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
+    ls_step3 = WorkflowStep(
+        workflow_definition_id=ls_workflow.id,
+        step_number=3,
+        name="ED Approval",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.SEQUENTIAL,
+        entry_conditions={"amount_gte": 25000000},  # ≥ ₹2.5Cr
+        on_approve_action="NEXT",
+        on_reject_action="REJECT",
+        allow_delegation=False,
+        sla_hours=72,
+    )
+    db.add(ls_step3)
+    await db.flush()
+    db.add(
+        ApprovalRule(
+            workflow_step_id=ls_step3.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="ED",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
+    ls_step4 = WorkflowStep(
+        workflow_definition_id=ls_workflow.id,
+        step_number=4,
+        name="CMD / Board Approval",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.SEQUENTIAL,
+        entry_conditions={"amount_gte": 100000000},  # ≥ ₹10Cr
+        on_approve_action="COMPLETE",
+        on_reject_action="REJECT",
+        allow_delegation=False,
+        sla_hours=168,
+    )
+    db.add(ls_step4)
+    await db.flush()
+    db.add(
+        ApprovalRule(
+            workflow_step_id=ls_step4.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="CMD",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
+    # -------------------------------------------------------------------------
+    # 7. Entity Rating Approval — Credit Committee (no amount band).
+    # -------------------------------------------------------------------------
+    lr_workflow = WorkflowDefinition(
+        organization_id=organization_id,
+        name="Entity Rating Approval",
+        code="ENTITY_RATING_APPROVAL",
+        entity_type=WorkflowEntityType.LOAN_RATING,
+        description="Credit committee review of internal entity ratings",
+        is_default=True,
+        priority=10,
+        activation_conditions=None,
+        allow_parallel_branches=False,
+        require_comments_on_reject=True,
+        notify_initiator_on_complete=True,
+    )
+    db.add(lr_workflow)
+    await db.flush()
+
+    lr_step1 = WorkflowStep(
+        workflow_definition_id=lr_workflow.id,
+        step_number=1,
+        name="Credit Committee Approval",
+        step_type=WorkflowStepType.APPROVAL,
+        approval_mode=ApprovalMode.PARALLEL_ALL,
+        entry_conditions=None,
+        on_approve_action="COMPLETE",
+        on_reject_action="REJECT",
+        allow_delegation=False,
+        sla_hours=72,
+    )
+    db.add(lr_step1)
+    await db.flush()
+    # Credit Committee is modelled as a designation for seeding since ROLE
+    # requires a concrete role_id (UUID) we don't know at seed time. Admins can
+    # switch to ROLE in the workflow UI post-deployment if the org prefers it.
+    db.add(
+        ApprovalRule(
+            workflow_step_id=lr_step1.id,
+            sequence=1,
+            approver_type=ApproverType.DESIGNATION,
+            designation="Credit Committee",
+            is_mandatory=True,
+            can_self_approve=False,
+        )
+    )
+
     await db.commit()
     print(f"Created default workflow definitions for organization {organization_id}")
 
@@ -373,12 +611,14 @@ async def seed_notification_templates(
 
     # Check if templates already exist
     result = await db.execute(
-        select(NotificationTemplate).where(
-            NotificationTemplate.organization_id == organization_id
-        ).limit(1)
+        select(NotificationTemplate)
+        .where(NotificationTemplate.organization_id == organization_id)
+        .limit(1)
     )
     if result.scalar_one_or_none():
-        print(f"Notification templates already exist for organization {organization_id}, skipping...")
+        print(
+            f"Notification templates already exist for organization {organization_id}, skipping..."
+        )
         return
 
     templates = [
@@ -397,8 +637,14 @@ async def seed_notification_templates(
 <p>Please review and take appropriate action.</p>
 """,
             available_variables=[
-                "app_name", "entity_type", "entity_reference", "amount",
-                "approver_name", "initiator_name", "step_name", "due_date"
+                "app_name",
+                "entity_type",
+                "entity_reference",
+                "amount",
+                "approver_name",
+                "initiator_name",
+                "step_name",
+                "due_date",
             ],
         ),
         NotificationTemplate(
@@ -415,8 +661,13 @@ async def seed_notification_templates(
 <strong>Approved By:</strong> {approver_name}</p>
 """,
             available_variables=[
-                "app_name", "entity_type", "entity_reference", "amount",
-                "approver_name", "initiator_name", "comments"
+                "app_name",
+                "entity_type",
+                "entity_reference",
+                "amount",
+                "approver_name",
+                "initiator_name",
+                "comments",
             ],
         ),
         NotificationTemplate(
@@ -435,8 +686,13 @@ async def seed_notification_templates(
 <p>Please review the comments and make necessary corrections.</p>
 """,
             available_variables=[
-                "app_name", "entity_type", "entity_reference", "amount",
-                "approver_name", "initiator_name", "comments"
+                "app_name",
+                "entity_type",
+                "entity_reference",
+                "amount",
+                "approver_name",
+                "initiator_name",
+                "comments",
             ],
         ),
         NotificationTemplate(
@@ -455,8 +711,14 @@ async def seed_notification_templates(
 <p>Please review and take action immediately.</p>
 """,
             available_variables=[
-                "app_name", "entity_type", "entity_reference", "amount",
-                "escalate_to_name", "original_approver", "escalation_level", "pending_since"
+                "app_name",
+                "entity_type",
+                "entity_reference",
+                "amount",
+                "escalate_to_name",
+                "original_approver",
+                "escalation_level",
+                "pending_since",
             ],
         ),
     ]

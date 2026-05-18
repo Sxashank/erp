@@ -1,29 +1,12 @@
+import { AlertTriangle, CheckCircle, Clock, Eye, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Banknote,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Eye,
-  Clock,
-  Filter,
-} from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Dialog,
   DialogContent,
@@ -32,6 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -39,168 +23,178 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  useApproveDisbursement,
+  useDisbursements,
+  useRejectDisbursement,
+  useVerifyDisbursementConditions,
+} from '@/hooks/lending/useDisbursements';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { formatCurrency, formatDate } from '@/lib/utils';
-
-// Mock data
-const pendingDisbursements = [
-  {
-    id: '1',
-    disbursement_number: 'SMFC/LA/2025/00146/D001',
-    loan_account: 'SMFC/LA/2025/00146',
-    entity: 'Metro Logistics Pvt Ltd',
-    product: 'Term Loan',
-    requested_amount: 10000000,
-    sanctioned_amount: 25000000,
-    already_disbursed: 0,
-    scheduled_date: '2025-01-16',
-    created_date: '2025-01-14',
-    created_by: 'John Smith',
-    beneficiary_name: 'Metro Logistics Pvt Ltd',
-    beneficiary_account: '5555666677',
-    beneficiary_ifsc: 'SBIN0009999',
-    beneficiary_bank: 'State Bank of India',
-    disbursement_mode: 'RTGS',
-    status: 'PENDING_APPROVAL',
-    purpose: 'Working capital requirement',
-    conditions_verified: true,
-    documents_complete: true,
-    security_coverage: 125,
-  },
-  {
-    id: '2',
-    disbursement_number: 'SMFC/LA/2025/00147/D001',
-    loan_account: 'SMFC/LA/2025/00147',
-    entity: 'Eastern Trading Company',
-    product: 'Working Capital',
-    requested_amount: 15000000,
-    sanctioned_amount: 30000000,
-    already_disbursed: 5000000,
-    scheduled_date: '2025-01-17',
-    created_date: '2025-01-15',
-    created_by: 'Sarah Wilson',
-    beneficiary_name: 'Eastern Trading Pvt Ltd',
-    beneficiary_account: '9876543210',
-    beneficiary_ifsc: 'HDFC0001234',
-    beneficiary_bank: 'HDFC Bank',
-    disbursement_mode: 'NEFT',
-    status: 'VERIFIED',
-    purpose: 'Machinery purchase',
-    conditions_verified: true,
-    documents_complete: true,
-    security_coverage: 110,
-  },
-  {
-    id: '3',
-    disbursement_number: 'SMFC/LA/2025/00150/D001',
-    loan_account: 'SMFC/LA/2025/00150',
-    entity: 'Southern Exports',
-    product: 'Export Finance',
-    requested_amount: 8000000,
-    sanctioned_amount: 20000000,
-    already_disbursed: 10000000,
-    scheduled_date: '2025-01-18',
-    created_date: '2025-01-15',
-    created_by: 'Mike Johnson',
-    beneficiary_name: 'Southern Exports Ltd',
-    beneficiary_account: '1122334455',
-    beneficiary_ifsc: 'ICIC0005678',
-    beneficiary_bank: 'ICICI Bank',
-    disbursement_mode: 'RTGS',
-    status: 'PENDING_APPROVAL',
-    purpose: 'Export order financing',
-    conditions_verified: false,
-    documents_complete: true,
-    security_coverage: 95,
-  },
-];
+import type { DisbursementListItem } from '@/services/lending/disbursementApi';
 
 export default function DisbursementApproval() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const { data, isLoading } = useDisbursements({ status: 'PENDING', pageSize: 100 });
+  const verifyMutation = useVerifyDisbursementConditions();
+  const approveMutation = useApproveDisbursement();
+  const rejectMutation = useRejectDisbursement();
+  const pendingDisbursements = data?.items ?? [];
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [isApproveDialogOpen, setIsApproveDialogOpen] = useState(false);
   const [isRejectDialogOpen, setIsRejectDialogOpen] = useState(false);
-  const [currentItem, setCurrentItem] = useState<typeof pendingDisbursements[0] | null>(null);
+  const [currentItem, setCurrentItem] = useState<DisbursementListItem | null>(null);
   const [approvedAmount, setApprovedAmount] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [remarks, setRemarks] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isBulkApproving, setIsBulkApproving] = useState(false);
 
   const handleSelectAll = (checked: boolean) => {
-    if (checked) {
-      setSelectedItems(pendingDisbursements.map((d) => d.id));
-    } else {
-      setSelectedItems([]);
-    }
+    setSelectedItems(checked ? pendingDisbursements.map((d) => d.id) : []);
   };
 
   const handleSelectItem = (id: string, checked: boolean) => {
-    if (checked) {
-      setSelectedItems([...selectedItems, id]);
-    } else {
-      setSelectedItems(selectedItems.filter((item) => item !== id));
-    }
+    setSelectedItems((items) =>
+      checked ? [...items, id] : items.filter((item) => item !== id),
+    );
   };
 
-  const openApproveDialog = (item: typeof pendingDisbursements[0]) => {
+  const openApproveDialog = (item: DisbursementListItem) => {
     setCurrentItem(item);
-    setApprovedAmount(item.requested_amount.toString());
+    setApprovedAmount(item.requestedAmount);
     setRemarks('');
     setIsApproveDialogOpen(true);
   };
 
-  const openRejectDialog = (item: typeof pendingDisbursements[0]) => {
+  const openRejectDialog = (item: DisbursementListItem) => {
     setCurrentItem(item);
     setRejectionReason('');
     setRemarks('');
     setIsRejectDialogOpen(true);
   };
 
+  const verifyAndApprove = async (item: DisbursementListItem, amount?: string, note?: string) => {
+    await verifyMutation.mutateAsync({
+      disbursementId: item.id,
+      verificationNotes: note || 'Manual pre-disbursement conditions verified during approval',
+    });
+    return approveMutation.mutateAsync({
+      disbursementId: item.id,
+      ...(amount ? { approvedAmount: amount } : {}),
+      ...(note ? { remarks: note } : {}),
+    });
+  };
+
   const handleApprove = async () => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsLoading(false);
-    setIsApproveDialogOpen(false);
-    // Would refresh the list in real implementation
+    if (!currentItem) return;
+    try {
+      const result = await verifyAndApprove(currentItem, approvedAmount, remarks);
+      toast({
+        title: 'Disbursement approved',
+        description: `${currentItem.disbursementReference} is now ${result.status.toLowerCase()}.`,
+      });
+      setIsApproveDialogOpen(false);
+      setSelectedItems((items) => items.filter((id) => id !== currentItem.id));
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
   const handleReject = async () => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-    setIsLoading(false);
-    setIsRejectDialogOpen(false);
-    // Would refresh the list in real implementation
+    if (!currentItem) return;
+    try {
+      const reasonText = remarks ? `${rejectionReason}: ${remarks}` : rejectionReason;
+      await rejectMutation.mutateAsync({
+        disbursementId: currentItem.id,
+        rejectionReason: reasonText,
+      });
+      toast({
+        title: 'Disbursement rejected',
+        description: `${currentItem.disbursementReference} has been rejected.`,
+      });
+      setIsRejectDialogOpen(false);
+      setSelectedItems((items) => items.filter((id) => id !== currentItem.id));
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
   const handleBulkApprove = async () => {
     if (selectedItems.length === 0) return;
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setSelectedItems([]);
+    setIsBulkApproving(true);
+    let approved = 0;
+    let failed = 0;
+    let lastError: unknown = null;
+
+    for (const id of selectedItems) {
+      const item = pendingDisbursements.find((d) => d.id === id);
+      if (!item) continue;
+      try {
+        await verifyAndApprove(item);
+        approved += 1;
+      } catch (err) {
+        failed += 1;
+        lastError = err;
+      }
+    }
+
+    setIsBulkApproving(false);
+    if (failed === 0) {
+      toast({
+        title: 'Bulk approval complete',
+        description: `${approved} disbursement${approved === 1 ? '' : 's'} approved.`,
+      });
+      setSelectedItems([]);
+    } else if (approved === 0 && lastError) {
+      showErrorToast(lastError, toast);
+    } else {
+      toast({
+        title: 'Bulk approval partially complete',
+        description: `${approved} approved, ${failed} failed. Review the failed items.`,
+        variant: 'destructive',
+      });
+    }
   };
 
-  const totalPendingAmount = pendingDisbursements.reduce((sum, d) => sum + d.requested_amount, 0);
+  const totalPendingAmount = pendingDisbursements.reduce(
+    (sum, d) => sum + Number(d.requestedAmount),
+    0,
+  );
   const selectedAmount = pendingDisbursements
     .filter((d) => selectedItems.includes(d.id))
-    .reduce((sum, d) => sum + d.requested_amount, 0);
+    .reduce((sum, d) => sum + Number(d.requestedAmount), 0);
+  const isMutating =
+    approveMutation.isPending || verifyMutation.isPending || rejectMutation.isPending;
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Disbursement Approval"
-        subtitle="Review and approve pending disbursement requests"
+        subtitle="Verify manual pre-disbursement conditions and approve pending requests"
         actions={
           selectedItems.length > 0 ? (
-            <Button onClick={handleBulkApprove} disabled={isLoading}>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              Approve Selected ({selectedItems.length})
+            <Button onClick={handleBulkApprove} disabled={isBulkApproving || isMutating}>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              {isBulkApproving
+                ? `Approving ${selectedItems.length}...`
+                : `Approve Selected (${selectedItems.length})`}
             </Button>
           ) : undefined
         }
       />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -232,25 +226,22 @@ export default function DisbursementApproval() {
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Requiring Attention
+              Manual Verification
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-500">
-              {pendingDisbursements.filter((d) => !d.conditions_verified || d.security_coverage < 100).length}
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Incomplete conditions or low coverage
-            </p>
+            <div className="text-3xl font-bold text-orange-500">{selectedItems.length}</div>
+            <p className="text-xs text-muted-foreground">Verified before approval is posted</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Pending Disbursements Table */}
       <Card>
         <CardHeader>
           <CardTitle>Pending Disbursement Requests</CardTitle>
-          <CardDescription>Review each request before approval</CardDescription>
+          <CardDescription>
+            Approval performs manual condition verification first, then records approval.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <Table>
@@ -258,18 +249,20 @@ export default function DisbursementApproval() {
               <TableRow>
                 <TableHead className="w-10">
                   <Checkbox
-                    checked={selectedItems.length === pendingDisbursements.length}
+                    checked={
+                      pendingDisbursements.length > 0 &&
+                      selectedItems.length === pendingDisbursements.length
+                    }
                     onCheckedChange={handleSelectAll}
                   />
                 </TableHead>
-                <TableHead>Request Details</TableHead>
-                <TableHead>Entity / Product</TableHead>
+                <TableHead>Request</TableHead>
+                <TableHead>Loan Account</TableHead>
+                <TableHead>Entity</TableHead>
                 <TableHead className="text-right">Requested</TableHead>
-                <TableHead className="text-right">Sanctioned</TableHead>
                 <TableHead>Beneficiary</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Checks</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -284,83 +277,31 @@ export default function DisbursementApproval() {
                     />
                   </TableCell>
                   <TableCell>
-                    <div className="font-mono text-sm">{disbursement.disbursement_number}</div>
+                    <div className="font-mono text-sm">{disbursement.disbursementReference}</div>
                     <div className="text-xs text-muted-foreground">
-                      Created: {formatDate(disbursement.created_date)} by {disbursement.created_by}
+                      Requested: {formatDate(disbursement.requestDate)}
                     </div>
                   </TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {disbursement.loanAccountNumber ?? '—'}
+                  </TableCell>
+                  <TableCell>{disbursement.entityName ?? '—'}</TableCell>
+                  <TableCell className="text-right font-bold">
+                    {formatCurrency(Number(disbursement.requestedAmount))}
+                  </TableCell>
+                  <TableCell>{disbursement.beneficiaryName}</TableCell>
                   <TableCell>
-                    <div className="font-medium">{disbursement.entity}</div>
-                    <div className="text-xs text-muted-foreground">{disbursement.product}</div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="font-bold">{formatCurrency(disbursement.requested_amount)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {disbursement.disbursement_mode}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div>{formatCurrency(disbursement.sanctioned_amount)}</div>
-                    <div className="text-xs text-muted-foreground">
-                      Disbursed: {formatCurrency(disbursement.already_disbursed)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">{disbursement.beneficiary_name}</div>
-                    <div className="text-xs text-muted-foreground font-mono">
-                      {disbursement.beneficiary_account}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {disbursement.beneficiary_bank}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant={disbursement.status === 'VERIFIED' ? 'default' : 'outline'}
-                      className="flex items-center gap-1 w-fit"
-                    >
-                      {disbursement.status === 'VERIFIED' ? (
-                        <CheckCircle className="h-3 w-3" />
-                      ) : (
-                        <Clock className="h-3 w-3" />
-                      )}
-                      {disbursement.status === 'VERIFIED' ? 'Verified' : 'Pending'}
+                    <Badge variant="outline" className="flex w-fit items-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      Pending
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1">
-                        {disbursement.conditions_verified ? (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="h-3 w-3 text-orange-500" />
-                        )}
-                        <span className="text-xs">Conditions</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {disbursement.documents_complete ? (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="h-3 w-3 text-orange-500" />
-                        )}
-                        <span className="text-xs">Documents</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {disbursement.security_coverage >= 100 ? (
-                          <CheckCircle className="h-3 w-3 text-green-600" />
-                        ) : (
-                          <AlertTriangle className="h-3 w-3 text-orange-500" />
-                        )}
-                        <span className="text-xs">Coverage: {disbursement.security_coverage}%</span>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
+                    <div className="flex justify-end gap-1">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => navigate(`/lending/disbursements/${disbursement.id}`)}
+                        onClick={() => navigate(`/admin/lending/disbursements/${disbursement.id}`)}
                       >
                         <Eye className="h-4 w-4" />
                       </Button>
@@ -387,29 +328,35 @@ export default function DisbursementApproval() {
             </TableBody>
           </Table>
 
-          {pendingDisbursements.length === 0 && (
-            <div className="text-center py-12 text-muted-foreground">
-              <CheckCircle className="h-12 w-12 mx-auto mb-4 opacity-50" />
+          {isLoading && (
+            <div className="py-12 text-center text-muted-foreground">
+              <Clock className="mx-auto mb-4 h-12 w-12 opacity-50" />
+              <p>Loading pending disbursements...</p>
+            </div>
+          )}
+
+          {!isLoading && pendingDisbursements.length === 0 && (
+            <div className="py-12 text-center text-muted-foreground">
+              <CheckCircle className="mx-auto mb-4 h-12 w-12 opacity-50" />
               <p>No pending disbursements for approval</p>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Approve Dialog */}
       <Dialog open={isApproveDialogOpen} onOpenChange={setIsApproveDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Approve Disbursement</DialogTitle>
             <DialogDescription>
-              {currentItem?.disbursement_number} - {currentItem?.entity}
+              {currentItem?.disbursementReference} - {currentItem?.entityName ?? 'Borrower'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Requested Amount</label>
               <p className="text-2xl font-bold">
-                {formatCurrency(currentItem?.requested_amount || 0)}
+                {formatCurrency(Number(currentItem?.requestedAmount ?? 0))}
               </p>
             </div>
             <div>
@@ -417,19 +364,19 @@ export default function DisbursementApproval() {
               <Input
                 type="number"
                 value={approvedAmount}
-                onChange={(e) => setApprovedAmount(e.target.value)}
-                max={currentItem?.requested_amount}
+                onChange={(event) => setApprovedAmount(event.target.value)}
+                max={currentItem?.requestedAmount}
               />
-              <p className="text-xs text-muted-foreground mt-1">
-                You can approve a lower amount if needed
+              <p className="mt-1 text-xs text-muted-foreground">
+                Manual condition verification is recorded before approval.
               </p>
             </div>
             <div>
               <label className="text-sm font-medium">Remarks</label>
               <Textarea
-                placeholder="Add any remarks for the approval"
+                placeholder="Add approval or condition-verification remarks"
                 value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
+                onChange={(event) => setRemarks(event.target.value)}
               />
             </div>
           </div>
@@ -437,28 +384,27 @@ export default function DisbursementApproval() {
             <Button variant="outline" onClick={() => setIsApproveDialogOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={handleApprove} disabled={isLoading}>
-              <CheckCircle className="h-4 w-4 mr-2" />
-              {isLoading ? 'Approving...' : 'Approve'}
+            <Button onClick={handleApprove} disabled={isMutating}>
+              <CheckCircle className="mr-2 h-4 w-4" />
+              {isMutating ? 'Approving...' : 'Verify & Approve'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Reject Dialog */}
       <Dialog open={isRejectDialogOpen} onOpenChange={setIsRejectDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Reject Disbursement</DialogTitle>
             <DialogDescription>
-              {currentItem?.disbursement_number} - {currentItem?.entity}
+              {currentItem?.disbursementReference} - {currentItem?.entityName ?? 'Borrower'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <label className="text-sm font-medium">Requested Amount</label>
               <p className="text-2xl font-bold">
-                {formatCurrency(currentItem?.requested_amount || 0)}
+                {formatCurrency(Number(currentItem?.requestedAmount ?? 0))}
               </p>
             </div>
             <div>
@@ -482,7 +428,7 @@ export default function DisbursementApproval() {
               <Textarea
                 placeholder="Provide detailed reason for rejection"
                 value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
+                onChange={(event) => setRemarks(event.target.value)}
               />
             </div>
           </div>
@@ -493,10 +439,10 @@ export default function DisbursementApproval() {
             <Button
               variant="destructive"
               onClick={handleReject}
-              disabled={isLoading || !rejectionReason}
+              disabled={rejectMutation.isPending || !rejectionReason}
             >
-              <XCircle className="h-4 w-4 mr-2" />
-              {isLoading ? 'Rejecting...' : 'Reject'}
+              <AlertTriangle className="mr-2 h-4 w-4" />
+              {rejectMutation.isPending ? 'Rejecting...' : 'Reject'}
             </Button>
           </DialogFooter>
         </DialogContent>

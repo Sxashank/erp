@@ -73,7 +73,7 @@ class VendorASNService:
         for line_data in data.lines:
             await self._add_asn_line(asn.id, line_data)
 
-        await self.session.commit()
+        await self.session.flush()
 
         return await self.asn_repo.get_with_details(asn.id)
 
@@ -106,7 +106,7 @@ class VendorASNService:
             for line_data in data.lines:
                 await self._add_asn_line(asn_id, line_data)
 
-        await self.session.commit()
+        await self.session.flush()
 
         return await self.asn_repo.get_with_details(asn_id)
 
@@ -146,7 +146,7 @@ class VendorASNService:
         asn.dispatched_by_id = user_id
         asn.dispatched_at = datetime.utcnow()
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send notification to buyer
 
@@ -178,7 +178,7 @@ class VendorASNService:
             update_data["status"] = ASNStatus.IN_TRANSIT
 
         asn = await self.asn_repo.update(asn, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return asn
 
@@ -203,7 +203,7 @@ class VendorASNService:
         asn.actual_delivery_date = delivery_date or date.today()
         asn.delivery_remarks = remarks
 
-        await self.session.commit()
+        await self.session.flush()
 
         return asn
 
@@ -232,7 +232,7 @@ class VendorASNService:
         asn.cancelled_at = datetime.utcnow()
         asn.cancellation_reason = reason
 
-        await self.session.commit()
+        await self.session.flush()
 
         return asn
 
@@ -297,7 +297,7 @@ class VendorASNService:
             raise ValidationException("Only draft ASNs can be modified")
 
         line = await self._add_asn_line(asn_id, data)
-        await self.session.commit()
+        await self.session.flush()
 
         return line
 
@@ -325,7 +325,7 @@ class VendorASNService:
 
         update_data = data.model_dump(exclude_unset=True)
         line = await self.line_repo.update(line, update_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return line
 
@@ -351,7 +351,7 @@ class VendorASNService:
             raise NotFoundException("ASN line not found")
 
         await self.line_repo.soft_delete(line_id)
-        await self.session.commit()
+        await self.session.flush()
 
     async def get_po_lines_for_asn(
         self,

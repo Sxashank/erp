@@ -2,13 +2,23 @@
  * Fixed Deposit List Page
  */
 
+import { Plus, Eye, Search, Filter } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Eye, Search, Filter } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -17,25 +27,20 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, {
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type {
   FixedDeposit,
   FDStatus,
   FDProduct,
 } from '@/services/fixedDepositService';
-import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import fixedDepositService from '@/services/fixedDepositService';
 
-const STATUS_OPTIONS: { value: FDStatus | ''; label: string }[] = [
-  { value: '', label: 'All Status' },
+import { logger } from "@/lib/logger";
+const ALL_FILTER_VALUE = '__all__';
+
+const STATUS_OPTIONS: { value: FDStatus | typeof ALL_FILTER_VALUE; label: string }[] = [
+  { value: ALL_FILTER_VALUE, label: 'All Status' },
   { value: 'DRAFT', label: 'Draft' },
   { value: 'PENDING_APPROVAL', label: 'Pending Approval' },
   { value: 'ACTIVE', label: 'Active' },
@@ -63,19 +68,21 @@ export default function FDList() {
   const [products, setProducts] = useState<FDProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<FDStatus | ''>('');
-  const [productFilter, setProductFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState<FDStatus | typeof ALL_FILTER_VALUE>(
+    ALL_FILTER_VALUE,
+  );
+  const [productFilter, setProductFilter] = useState(ALL_FILTER_VALUE);
   const [total, setTotal] = useState(0);
 
   const organizationId = useRequiredActiveOrganizationId();
 
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [organizationId]);
 
   useEffect(() => {
     loadFDs();
-  }, [statusFilter, productFilter]);
+  }, [organizationId, statusFilter, productFilter]);
 
   const loadProducts = async () => {
     try {
@@ -85,7 +92,7 @@ export default function FDList() {
       });
       setProducts(response.items);
     } catch (error) {
-      console.error('Failed to load products', error);
+      logger.error('Failed to load products', error);
     }
   };
 
@@ -94,8 +101,8 @@ export default function FDList() {
       setLoading(true);
       const response = await fixedDepositService.listDeposits({
         organization_id: organizationId,
-        status: statusFilter || undefined,
-        product_id: productFilter || undefined,
+        status: statusFilter === ALL_FILTER_VALUE ? undefined : statusFilter,
+        product_id: productFilter === ALL_FILTER_VALUE ? undefined : productFilter,
       });
       setFDs(response.items);
       setTotal(response.total);
@@ -132,7 +139,7 @@ export default function FDList() {
         actions={
           <Button onClick={() => navigate('/admin/fixed-deposits/new')}>
             <Plus className="mr-2 h-4 w-4" />
-            New FD
+            New Fixed Deposit
           </Button>
         }
       />
@@ -150,7 +157,10 @@ export default function FDList() {
               />
             </div>
             <div className="flex gap-2">
-              <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as FDStatus | '')}>
+              <Select
+                value={statusFilter}
+                onValueChange={(v) => setStatusFilter(v as FDStatus | typeof ALL_FILTER_VALUE)}
+              >
                 <SelectTrigger className="w-[180px]">
                   <SelectValue placeholder="All Status" />
                 </SelectTrigger>
@@ -167,7 +177,7 @@ export default function FDList() {
                   <SelectValue placeholder="All Products" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Products</SelectItem>
+                  <SelectItem value={ALL_FILTER_VALUE}>All Products</SelectItem>
                   {products.map((product) => (
                     <SelectItem key={product.id} value={product.id}>
                       {product.product_name}
@@ -226,7 +236,7 @@ export default function FDList() {
                     <TableCell>{fd.interest_rate.toFixed(2)}%</TableCell>
                     <TableCell>{fd.tenure_days} days</TableCell>
                     <TableCell>
-                      {new Date(fd.maturity_date).toLocaleDateString()}
+                      <DateDisplay date={fd.maturity_date} />
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {formatCurrency(fd.maturity_amount)}

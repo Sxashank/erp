@@ -113,7 +113,7 @@ class CollateralService:
             security.valuation_report_path = valuation_details.get("report_path")
 
         self.db.add(security)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(security)
 
         return security
@@ -177,7 +177,7 @@ class CollateralService:
 
         security.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(security)
 
         return security
@@ -240,7 +240,7 @@ class CollateralService:
         security.released_to = release_to
         security.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(security)
 
         return security
@@ -298,7 +298,7 @@ class CollateralService:
         old_security.release_reason = f"Substituted: {substitution_reason}"
         old_security.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(old_security)
         await self.db.refresh(new_security)
 
@@ -508,7 +508,7 @@ class CollateralService:
         security.existing_charge_reference = charge_reference
         security.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(security)
 
         return security
@@ -557,7 +557,7 @@ class CollateralService:
         security.status = SecurityStatus.ACTIVE
         security.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(security)
 
         return security

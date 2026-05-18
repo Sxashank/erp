@@ -183,6 +183,262 @@ jobs:
           path: playwright-report/
           retention-days: 14
 
+  e2e-taxation:
+    name: E2E taxation (Playwright + live backend)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: smfc
+          POSTGRES_PASSWORD: smfc_secret
+          POSTGRES_DB: smfc_erp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smfc -d smfc_erp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@127.0.0.1:5432/smfc_erp
+      REDIS_URL: redis://127.0.0.1:6379/0
+      JWT_SECRET_KEY: ci-taxation-secret
+      APP_ENV: development
+      DEBUG: 'false'
+      PLAYWRIGHT_API_BASE: http://127.0.0.1:8001/api/v1
+      PLAYWRIGHT_LIVE_BACKEND: '1'
+      PLAYWRIGHT_USE_BUILD: '1'
+      UAT_ADMIN_USERNAME: krishna
+      UAT_ADMIN_PASSWORD: ChangeMe123!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pnpm install --frozen-lockfile
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - run: cd backend && alembic upgrade head
+      - run: cd backend && python scripts/seed_data.py
+      - run: |
+          cd backend
+          uvicorn app.main:app --host 0.0.0.0 --port 8001 > /tmp/tax-backend.log 2>&1 &
+          echo $! > /tmp/tax-backend.pid
+      - run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8001/health > /tmp/tax-backend-health.json; then
+              cat /tmp/tax-backend-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/tax-backend.log
+          exit 1
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:e2e:tax
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-taxation
+          path: playwright-report/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: taxation-backend-log
+          path: /tmp/tax-backend.log
+          retention-days: 14
+
+  e2e-accounting:
+    name: E2E accounting (Playwright + live backend)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: smfc
+          POSTGRES_PASSWORD: smfc_secret
+          POSTGRES_DB: smfc_erp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smfc -d smfc_erp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@127.0.0.1:5432/smfc_erp
+      REDIS_URL: redis://127.0.0.1:6379/0
+      JWT_SECRET_KEY: ci-accounting-secret
+      APP_ENV: development
+      DEBUG: 'false'
+      PLAYWRIGHT_API_BASE: http://127.0.0.1:8001/api/v1
+      PLAYWRIGHT_LIVE_BACKEND: '1'
+      PLAYWRIGHT_USE_BUILD: '1'
+      UAT_ADMIN_USERNAME: krishna
+      UAT_ADMIN_PASSWORD: ChangeMe123!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pnpm install --frozen-lockfile
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - run: cd backend && alembic upgrade head
+      - run: cd backend && python scripts/seed_data.py
+      - run: |
+          cd backend
+          uvicorn app.main:app --host 0.0.0.0 --port 8001 > /tmp/accounting-backend.log 2>&1 &
+          echo $! > /tmp/accounting-backend.pid
+      - run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8001/health > /tmp/accounting-backend-health.json; then
+              cat /tmp/accounting-backend-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/accounting-backend.log
+          exit 1
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:e2e:accounting
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-accounting
+          path: playwright-report/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: accounting-backend-log
+          path: /tmp/accounting-backend.log
+          retention-days: 14
+
+  e2e-lending:
+    name: E2E lending (Playwright + live backend)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: smfc
+          POSTGRES_PASSWORD: smfc_secret
+          POSTGRES_DB: smfc_erp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U smfc -d smfc_erp"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@127.0.0.1:5432/smfc_erp
+      REDIS_URL: redis://127.0.0.1:6379/0
+      JWT_SECRET_KEY: ci-lending-secret
+      APP_ENV: development
+      DEBUG: 'false'
+      PLAYWRIGHT_API_BASE: http://127.0.0.1:8001/api/v1
+      PLAYWRIGHT_LIVE_BACKEND: '1'
+      PLAYWRIGHT_USE_BUILD: '1'
+      UAT_ADMIN_USERNAME: krishna
+      UAT_ADMIN_PASSWORD: ChangeMe123!
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: backend/requirements-dev.txt
+      - run: pnpm install --frozen-lockfile
+      - run: pip install -r backend/requirements.txt -r backend/requirements-dev.txt
+      - run: cd backend && alembic upgrade head
+      - run: cd backend && python scripts/seed_data.py
+      - run: cd backend && python scripts/seed_uat_manual_lending.py
+      - run: |
+          cd backend
+          uvicorn app.main:app --host 0.0.0.0 --port 8001 > /tmp/lending-backend.log 2>&1 &
+          echo $! > /tmp/lending-backend.pid
+      - run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8001/health > /tmp/lending-backend-health.json; then
+              cat /tmp/lending-backend-health.json
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/lending-backend.log
+          exit 1
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm build
+      - run: pnpm test:e2e:lending
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-lending
+          path: playwright-report/
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: lending-backend-log
+          path: /tmp/lending-backend.log
+          retention-days: 14
+
   dependency-audit:
     name: Dependency audit (non-blocking for now)
     runs-on: ubuntu-latest

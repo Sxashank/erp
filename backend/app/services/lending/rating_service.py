@@ -2,44 +2,41 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import ConflictException, NotFoundException, ValidationException
+from app.models.lending.enums import (
+    RatingGrade,
+    RatingStatus,
+    RiskCategoryType,
+)
 from app.models.lending.rating import (
+    EntityRating,
+    RatingMatrix,
+    RatingScoreDetail,
     RiskCategory,
     RiskParameter,
-    RatingMatrix,
-    EntityRating,
-    RatingScoreDetail,
 )
-from app.models.lending.enums import (
-    RiskCategoryType,
-    RatingGrade,
-    RatingType,
-    RatingStatus,
+from app.repositories.lending.entity_repo import EntityRepository
+from app.repositories.lending.rating_repo import (
+    EntityRatingRepository,
+    RatingMatrixRepository,
+    RatingScoreDetailRepository,
+    RiskCategoryRepository,
+    RiskParameterRepository,
 )
 from app.schemas.lending.rating import (
+    EntityRatingCreate,
+    EntityRatingUpdate,
+    RatingMatrixCreate,
+    RatingMatrixUpdate,
     RiskCategoryCreate,
     RiskCategoryUpdate,
     RiskParameterCreate,
     RiskParameterUpdate,
-    RatingMatrixCreate,
-    RatingMatrixUpdate,
-    EntityRatingCreate,
-    EntityRatingUpdate,
-    RatingScoreDetailCreate,
 )
-from app.repositories.lending.rating_repo import (
-    RiskCategoryRepository,
-    RiskParameterRepository,
-    RatingMatrixRepository,
-    EntityRatingRepository,
-    RatingScoreDetailRepository,
-)
-from app.repositories.lending.entity_repo import EntityRepository
-from app.core.exceptions import NotFoundException, ConflictException, ValidationException
 
 
 class RatingService:
@@ -78,7 +75,7 @@ class RatingService:
             created_by=created_by,
         )
         self.session.add(category)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(category)
         return category
 
@@ -92,9 +89,7 @@ class RatingService:
 
         # Validate weightage if being updated
         if data.weightage is not None:
-            current_total = await self.category_repo.get_total_weightage(
-                category.organization_id
-            )
+            current_total = await self.category_repo.get_total_weightage(category.organization_id)
             new_total = current_total - float(category.weightage) + float(data.weightage)
             if new_total > 100:
                 raise ValidationException(
@@ -106,7 +101,7 @@ class RatingService:
             setattr(category, field, value)
         category.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(category)
         return category
 
@@ -117,9 +112,7 @@ class RatingService:
             raise NotFoundException("Risk category not found")
         return category
 
-    async def get_risk_category_with_parameters(
-        self, id: UUID
-    ) -> RiskCategory:
+    async def get_risk_category_with_parameters(self, id: UUID) -> RiskCategory:
         """Get risk category with its parameters."""
         category = await self.category_repo.get_with_parameters(id)
         if not category:
@@ -132,8 +125,8 @@ class RatingService:
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        category_type: Optional[RiskCategoryType] = None,
-    ) -> Tuple[List[RiskCategory], int]:
+        category_type: RiskCategoryType | None = None,
+    ) -> tuple[list[RiskCategory], int]:
         """Get all risk categories."""
         return await self.category_repo.get_all_by_organization(
             organization_id=organization_id,
@@ -158,7 +151,9 @@ class RatingService:
 
         existing = await self.parameter_repo.get_by_code(data.code, data.risk_category_id)
         if existing:
-            raise ConflictException(f"Parameter with code '{data.code}' already exists in this category")
+            raise ConflictException(
+                f"Parameter with code '{data.code}' already exists in this category"
+            )
 
         # Validate weightage
         current_total = await self.parameter_repo.get_total_weightage(data.risk_category_id)
@@ -172,7 +167,7 @@ class RatingService:
             created_by=created_by,
         )
         self.session.add(parameter)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(parameter)
         return parameter
 
@@ -199,13 +194,13 @@ class RatingService:
             setattr(parameter, field, value)
         parameter.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(parameter)
         return parameter
 
     async def get_parameters_by_category(
         self, risk_category_id: UUID, include_inactive: bool = False
-    ) -> List[RiskParameter]:
+    ) -> list[RiskParameter]:
         """Get all parameters for a risk category."""
         return await self.parameter_repo.get_by_category(risk_category_id, include_inactive)
 
@@ -220,14 +215,16 @@ class RatingService:
         # Check if grade already exists
         existing = await self.matrix_repo.get_by_grade(data.organization_id, data.grade)
         if existing:
-            raise ConflictException(f"Rating matrix entry for grade '{data.grade.value}' already exists")
+            raise ConflictException(
+                f"Rating matrix entry for grade '{data.grade.value}' already exists"
+            )
 
         matrix = RatingMatrix(
             **data.model_dump(),
             created_by=created_by,
         )
         self.session.add(matrix)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(matrix)
         return matrix
 
@@ -244,21 +241,17 @@ class RatingService:
             setattr(matrix, field, value)
         matrix.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(matrix)
         return matrix
 
     async def get_all_rating_matrix(
         self, organization_id: UUID, include_inactive: bool = False
-    ) -> List[RatingMatrix]:
+    ) -> list[RatingMatrix]:
         """Get all rating matrix entries."""
-        return await self.matrix_repo.get_all_by_organization(
-            organization_id, include_inactive
-        )
+        return await self.matrix_repo.get_all_by_organization(organization_id, include_inactive)
 
-    async def get_grade_for_score(
-        self, organization_id: UUID, score: float
-    ) -> Optional[RatingGrade]:
+    async def get_grade_for_score(self, organization_id: UUID, score: float) -> RatingGrade | None:
         """Get rating grade for a given score."""
         return await self.matrix_repo.get_grade_for_score(organization_id, score)
 
@@ -275,14 +268,10 @@ class RatingService:
             raise NotFoundException("Entity not found")
 
         # Generate reference number
-        reference_number = await self.rating_repo.generate_reference_number(
-            entity.organization_id
-        )
+        reference_number = await self.rating_repo.generate_reference_number(entity.organization_id)
 
         # Calculate total score from score details
-        total_score = sum(
-            float(detail.weighted_score) for detail in data.score_details
-        )
+        total_score = sum(float(detail.weighted_score) for detail in data.score_details)
 
         # Get proposed grade based on score
         proposed_grade = await self.matrix_repo.get_grade_for_score(
@@ -317,7 +306,7 @@ class RatingService:
             )
             self.session.add(detail)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rating)
         return rating
 
@@ -337,13 +326,11 @@ class RatingService:
             setattr(rating, field, value)
         rating.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rating)
         return rating
 
-    async def submit_rating_for_approval(
-        self, id: UUID, submitted_by: UUID
-    ) -> EntityRating:
+    async def submit_rating_for_approval(self, id: UUID, submitted_by: UUID) -> EntityRating:
         """Submit rating for approval."""
         rating = await self.rating_repo.get(id)
         if not rating:
@@ -360,6 +347,8 @@ class RatingService:
         # workflow uses a fixed rating-committee routing configured on
         # the workflow_code. See CLAUDE.md §8.4.
         from app.core.maker_checker import build_workflow_request
+        from app.models.workflow.enums import WorkflowEntityType
+        from app.services.workflow.workflow_engine import WorkflowEngine
 
         self._pending_workflow_request = build_workflow_request(
             workflow_code="ENTITY_RATING_APPROVAL",
@@ -369,7 +358,21 @@ class RatingService:
             organization_id=rating.organization_id,
         )
 
-        await self.session.commit()
+        # Dispatch. Gracefully skip if no WorkflowDefinition is seeded yet.
+        try:
+            workflow_instance = await WorkflowEngine(self.session).start_workflow(
+                entity_type=WorkflowEntityType.LOAN_RATING,
+                entity_id=rating.id,
+                entity_reference=getattr(rating, "rating_reference", str(rating.id)),
+                organization_id=rating.organization_id,
+                context={"proposed_grade": getattr(rating, "proposed_grade", None)},
+                started_by=submitted_by,
+            )
+            rating.workflow_instance_id = workflow_instance.id
+        except NotFoundException:
+            pass
+
+        await self.session.flush()
         await self.session.refresh(rating)
         return rating
 
@@ -377,11 +380,11 @@ class RatingService:
         self,
         id: UUID,
         approved_by: UUID,
-        approved_grade: Optional[RatingGrade] = None,
-        override_reason: Optional[str] = None,
-        remarks: Optional[str] = None,
-        valid_from: Optional[date] = None,
-        valid_till: Optional[date] = None,
+        approved_grade: RatingGrade | None = None,
+        override_reason: str | None = None,
+        remarks: str | None = None,
+        valid_from: date | None = None,
+        valid_till: date | None = None,
     ) -> EntityRating:
         """Approve an entity rating."""
         rating = await self.rating_repo.get(id)
@@ -395,7 +398,9 @@ class RatingService:
         final_grade = approved_grade or rating.proposed_grade
         if approved_grade and approved_grade != rating.proposed_grade:
             if not override_reason:
-                raise ValidationException("Override reason is required when changing the proposed grade")
+                raise ValidationException(
+                    "Override reason is required when changing the proposed grade"
+                )
             rating.grade_override_reason = override_reason
 
         rating.approved_grade = final_grade
@@ -412,13 +417,11 @@ class RatingService:
         if entity:
             entity.internal_rating = final_grade.value
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rating)
         return rating
 
-    async def reject_rating(
-        self, id: UUID, rejected_by: UUID, remarks: str
-    ) -> EntityRating:
+    async def reject_rating(self, id: UUID, rejected_by: UUID, remarks: str) -> EntityRating:
         """Reject an entity rating."""
         rating = await self.rating_repo.get(id)
         if not rating:
@@ -431,7 +434,7 @@ class RatingService:
         rating.approver_remarks = remarks
         rating.updated_by = rejected_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rating)
         return rating
 
@@ -442,9 +445,7 @@ class RatingService:
             raise NotFoundException("Entity rating not found")
         return rating
 
-    async def get_entity_rating_with_details(
-        self, id: UUID
-    ) -> EntityRating:
+    async def get_entity_rating_with_details(self, id: UUID) -> EntityRating:
         """Get entity rating with score details."""
         rating = await self.rating_repo.get_with_details(id)
         if not rating:
@@ -453,18 +454,16 @@ class RatingService:
 
     async def get_entity_ratings(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityRating]:
+    ) -> list[EntityRating]:
         """Get all ratings for an entity."""
         return await self.rating_repo.get_by_entity(entity_id, include_inactive)
 
     async def get_current_rating(
-        self, entity_id: UUID, as_of_date: Optional[date] = None
-    ) -> Optional[EntityRating]:
+        self, entity_id: UUID, as_of_date: date | None = None
+    ) -> EntityRating | None:
         """Get current valid rating for an entity."""
         return await self.rating_repo.get_current_rating(entity_id, as_of_date)
 
-    async def get_pending_approval_ratings(
-        self, organization_id: UUID
-    ) -> List[EntityRating]:
+    async def get_pending_approval_ratings(self, organization_id: UUID) -> list[EntityRating]:
         """Get all ratings pending approval."""
         return await self.rating_repo.get_pending_approval(organization_id)

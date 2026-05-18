@@ -10,8 +10,21 @@ export type EntityStatus = 'PROSPECT' | 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
 export type RiskCategory = 'LOW' | 'MEDIUM' | 'HIGH';
 export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'C' | 'D';
 
-export type ApplicationStage = 'APPLICATION' | 'APPRAISAL' | 'SANCTION' | 'POST_SANCTION' | 'DISBURSED';
-export type ApplicationStatus = 'DRAFT' | 'SUBMITTED' | 'UNDER_REVIEW' | 'SANCTIONED' | 'REJECTED' | 'WITHDRAWN';
+export type ApplicationStage =
+  | 'LEAD'
+  | 'APPLICATION'
+  | 'APPRAISAL'
+  | 'SANCTION'
+  | 'POST_SANCTION'
+  | 'DISBURSED'
+  | 'CLOSED';
+export type ApplicationStatus =
+  | 'DRAFT'
+  | 'SUBMITTED'
+  | 'UNDER_REVIEW'
+  | 'SANCTIONED'
+  | 'REJECTED'
+  | 'WITHDRAWN';
 
 export type InterestType = 'FIXED' | 'FLOATING';
 export type RepaymentFrequency = 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY' | 'BULLET';
@@ -19,10 +32,27 @@ export type RepaymentMode = 'EMI' | 'STRUCTURED' | 'BULLET' | 'BALLOON' | 'STEP_
 export type DayCountConvention = 'ACT_365' | 'ACT_360' | 'THIRTY_360';
 
 export type AssetClassification =
-  | 'STANDARD' | 'SMA_0' | 'SMA_1' | 'SMA_2'
-  | 'SUB_STANDARD' | 'DOUBTFUL_1' | 'DOUBTFUL_2' | 'DOUBTFUL_3' | 'LOSS';
+  | 'STANDARD'
+  | 'SMA_0'
+  | 'SMA_1'
+  | 'SMA_2'
+  | 'NPA'
+  | 'SUBSTANDARD'
+  | 'SUB_STANDARD'
+  | 'DOUBTFUL'
+  | 'DOUBTFUL_1'
+  | 'DOUBTFUL_2'
+  | 'DOUBTFUL_3'
+  | 'LOSS';
 
-export type LoanAccountStatus = 'ACTIVE' | 'CLOSED' | 'NPA' | 'WRITTEN_OFF';
+export type LoanAccountStatus =
+  | 'CREATED'
+  | 'ACTIVE'
+  | 'DORMANT'
+  | 'FROZEN'
+  | 'CLOSED'
+  | 'WRITTEN_OFF'
+  | 'RECALLED';
 export type DisbursementStatus = 'PENDING' | 'APPROVED' | 'PROCESSED' | 'REJECTED';
 export type ReceiptMode = 'CASH' | 'CHEQUE' | 'NEFT' | 'RTGS' | 'IMPS' | 'UPI' | 'NACH' | 'OTHER';
 export type ReceiptStatus = 'PENDING' | 'ALLOCATED' | 'PARTIAL' | 'REVERSED';
@@ -31,47 +61,61 @@ export type OTSStatus = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'SETTL
 export type LegalCaseType = 'SARFAESI' | 'DRT' | 'NCLT' | 'CIVIL' | 'CRIMINAL' | 'ARBITRATION';
 export type LegalCaseStatus = 'FILED' | 'PENDING' | 'HEARING' | 'DISPOSED' | 'APPEALED' | 'CLOSED';
 
-export type LenderType = 'BANK' | 'DFI' | 'NCD' | 'CP' | 'ECB' | 'SUBORDINATE_DEBT';
+export type LenderType =
+  | 'BANK'
+  | 'DFI'
+  | 'MF'
+  | 'NCD'
+  | 'CP'
+  | 'ECB'
+  | 'SECURITIZATION'
+  | 'SUBORDINATED_DEBT'
+  | 'OTHER';
 export type BorrowingStatus = 'ACTIVE' | 'CLOSED' | 'PREPAID';
 
 // ============== ENTITY/BORROWER ==============
 
 export interface Entity {
-  entity_id: string;
-  organization_id: string;
-  entity_code: string;
-  entity_type: EntityType;
-  legal_name: string;
-  trade_name?: string;
+  id: string;
+  organizationId: string;
+  entityCode: string;
+  entityType: EntityType;
+  legalName: string;
+  tradeName?: string;
   cin?: string;
   pan: string;
   gstin?: string;
   tan?: string;
-  ckyc_number?: string;
-  constitution_date?: string;
-  date_of_incorporation?: string;
-  internal_rating?: CreditRating;
-  risk_category: RiskCategory;
-  relationship_manager_id?: string;
-  relationship_manager_name?: string;
+  ckycNumber?: string;
+  constitutionDate?: string;
+  dateOfIncorporation?: string;
+  internalRating?: CreditRating;
+  riskCategory: RiskCategory;
+  relationshipManagerId?: string;
+  relationshipManagerName?: string;
   status: EntityStatus;
   remarks?: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 
   // Related data
   contacts?: EntityContact[];
   addresses?: EntityAddress[];
-  bank_accounts?: EntityBankAccount[];
+  bankAccounts?: EntityBankAccount[];
   relations?: EntityRelation[];
   financials?: EntityFinancial[];
-  kyc_documents?: EntityKYCDocument[];
+  kycDocuments?: EntityKYCDocument[];
 }
 
 export interface EntityContact {
-  contact_id: string;
-  entity_id: string;
-  contact_type: 'DIRECTOR' | 'PROMOTER' | 'AUTHORIZED_SIGNATORY' | 'KEY_PERSON' | 'GUARANTOR';
+  id: string;
+  entityId: string;
+  contactType:
+    | 'DIRECTOR'
+    | 'PROMOTER'
+    | 'AUTHORIZED_SIGNATORY'
+    | 'KEY_MANAGERIAL_PERSON'
+    | 'GUARANTOR';
   name: string;
   designation?: string;
   din?: string;
@@ -79,139 +123,144 @@ export interface EntityContact {
   phone?: string;
   mobile?: string;
   email?: string;
-  is_primary: boolean;
-  created_at: string;
+  isPrimary: boolean;
+  createdAt: string;
 }
 
 export interface EntityAddress {
-  address_id: string;
-  entity_id: string;
-  address_type: 'REGISTERED' | 'CORRESPONDENCE' | 'PLANT' | 'WAREHOUSE' | 'BRANCH';
-  address_line1: string;
-  address_line2?: string;
+  id: string;
+  entityId: string;
+  addressType: 'REGISTERED' | 'CORRESPONDENCE' | 'PLANT' | 'WAREHOUSE' | 'BRANCH' | 'PROJECT_SITE';
+  addressLine1: string;
+  addressLine2?: string;
   city: string;
   state: string;
+  stateCode?: string;
   pincode: string;
   country: string;
-  is_primary: boolean;
+  isVerified?: boolean;
+  isPrimary?: boolean;
 }
 
 export interface EntityBankAccount {
-  bank_account_id: string;
-  entity_id: string;
-  bank_name: string;
-  branch_name: string;
-  account_number: string;
-  ifsc_code: string;
-  account_type: 'CURRENT' | 'SAVINGS' | 'CC' | 'OD';
-  is_primary: boolean;
-  is_verified: boolean;
-  account_holder_name?: string;
+  id: string;
+  entityId: string;
+  bankName: string;
+  branchName?: string;
+  accountNumber: string;
+  ifscCode: string;
+  accountType: 'CURRENT' | 'SAVINGS' | 'CC' | 'OD';
+  isPrimary: boolean;
+  isVerified: boolean;
+  accountHolderName?: string;
 }
 
 export interface EntityRelation {
-  relation_id: string;
-  entity_id: string;
-  related_entity_id?: string;
-  relation_type: 'PROMOTER' | 'GUARANTOR' | 'GROUP_COMPANY' | 'SUBSIDIARY' | 'ASSOCIATE';
+  id: string;
+  entityId: string;
+  relatedEntityId?: string;
+  relationType: 'PROMOTER' | 'GUARANTOR' | 'GROUP_COMPANY' | 'SUBSIDIARY' | 'ASSOCIATE';
   name: string;
   pan?: string;
-  share_percentage?: number;
+  sharePercentage?: number;
   remarks?: string;
 }
 
 export interface EntityFinancial {
-  financial_id: string;
-  entity_id: string;
-  financial_year: string;
-  audited: boolean;
+  id: string;
+  entityId: string;
+  financialYear: string;
+  isAudited: boolean;
+  auditStatus?: string;
 
   // Balance Sheet
-  total_assets?: number;
-  fixed_assets?: number;
-  current_assets?: number;
-  total_liabilities?: number;
-  net_worth?: number;
-  long_term_debt?: number;
-  short_term_debt?: number;
+  totalAssets?: number;
+  fixedAssets?: number;
+  currentAssets?: number;
+  totalLiabilities?: number;
+  netWorth?: number;
+  longTermDebt?: number;
+  shortTermDebt?: number;
 
   // P&L
   revenue?: number;
-  operating_profit?: number;
-  profit_before_tax?: number;
-  profit_after_tax?: number;
+  operatingProfit?: number;
+  profitBeforeTax?: number;
+  profitAfterTax?: number;
   ebitda?: number;
-  net_profit?: number;
-  total_debt?: number;
+  netProfit?: number;
+  totalDebt?: number;
   depreciation?: number;
-  interest_expense?: number;
+  interestExpense?: number;
+  taxExpense?: number;
 
   // Additional
-  pbt?: number;
-  tax?: number;
-  current_liabilities?: number;
+  currentLiabilities?: number;
 
   // Ratios
-  current_ratio?: number;
-  debt_equity_ratio?: number;
+  currentRatio?: number;
+  debtEquityRatio?: number;
   dscr?: number;
-  interest_coverage?: number;
+  interestCoverage?: number;
 
-  created_at: string;
+  createdAt: string;
 }
 
 export interface EntityKYCDocument {
-  kyc_document_id: string;
-  entity_id: string;
-  document_type: string;
-  document_number?: string;
-  issue_date?: string;
-  expiry_date?: string;
-  file_path?: string;
-  file_name?: string;
-  verification_status: 'PENDING' | 'VERIFIED' | 'REJECTED';
-  verified_by?: string;
-  verified_at?: string;
+  id: string;
+  entityId: string;
+  documentTypeId: string;
+  documentName?: string;
+  documentNumber?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  filePath?: string;
+  fileName?: string;
+  verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'EXPIRED' | 'RESUBMISSION_REQUIRED';
+  verifiedBy?: string;
+  verifiedAt?: string;
   remarks?: string;
-  uploaded_at?: string;
+  createdAt?: string;
 }
 
 // ============== LOAN PRODUCT ==============
 
 export interface LoanProduct {
-  product_id: string;
-  organization_id: string;
-  product_code: string;
-  product_name: string;
-  product_category: 'TERM_LOAN' | 'WORKING_CAPITAL' | 'PROJECT_FINANCE' | 'LAP' | 'VEHICLE' | 'EQUIPMENT';
+  id: string;
+  organizationId: string;
+  code: string;
+  name: string;
+  category: 'TERM_LOAN' | 'WORKING_CAPITAL' | 'PROJECT_FINANCE' | 'LAP' | 'VEHICLE' | 'EQUIPMENT';
+  subCategory?: string | null;
 
   // Limits
-  min_amount: number;
-  max_amount: number;
-  min_tenure_months: number;
-  max_tenure_months: number;
+  minAmount: number | string;
+  maxAmount: number | string;
+  minTenureMonths: number;
+  maxTenureMonths: number;
+  defaultTenureMonths?: number | null;
 
   // Interest
-  interest_type: InterestType;
-  base_rate_type?: string;
-  min_spread_bps?: number;
-  max_spread_bps?: number;
-  default_spread_bps?: number;
+  interestType: InterestType;
+  baseRateId?: string | null;
+  minSpreadBps?: number;
+  maxSpreadBps?: number;
+  defaultSpreadBps?: number;
 
   // Repayment
-  repayment_mode: RepaymentMode;
-  repayment_frequency: RepaymentFrequency;
-  day_count_convention: DayCountConvention;
+  defaultRepaymentMode: RepaymentMode;
+  defaultRepaymentFrequency: RepaymentFrequency;
+  dayCountConvention: DayCountConvention;
 
   // Other
-  moratorium_allowed: boolean;
-  max_moratorium_months?: number;
-  prepayment_allowed: boolean;
-  prepayment_charges_percent?: number;
+  allowsMoratorium: boolean;
+  maxMoratoriumMonths?: number | null;
+  allowsPrepayment: boolean;
+  prepaymentLockInMonths?: number | null;
 
-  is_active: boolean;
-  created_at: string;
-  updated_at: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string | null;
 
   // Related
   fees?: ProductFee[];
@@ -219,73 +268,104 @@ export interface LoanProduct {
 }
 
 export interface ProductFee {
-  product_fee_id: string;
-  product_id: string;
-  fee_type: 'PROCESSING' | 'DOCUMENTATION' | 'PREPAYMENT' | 'FORECLOSURE' | 'LATE_PAYMENT' | 'BOUNCE' | 'OTHER';
-  fee_name: string;
-  calculation_type: 'PERCENTAGE' | 'FLAT' | 'SLAB';
-  percentage_value?: number;
-  flat_value?: number;
-  min_value?: number;
-  max_value?: number;
-  is_gst_applicable: boolean;
+  id: string;
+  productId: string;
+  feeMasterId: string;
+  isMandatory: boolean;
+  isWaivable: boolean;
+  maxWaiverPercentage: number | string;
+  overrideCalculationType?: 'PERCENTAGE' | 'FLAT' | 'SLAB' | null;
+  overrideRate?: number | string | null;
+  overrideAmount?: number | string | null;
+  overrideMinAmount?: number | string | null;
+  overrideMaxAmount?: number | string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 }
 
 export interface DocumentChecklist {
-  checklist_id: string;
-  product_id: string;
-  document_name: string;
-  document_category: 'KYC' | 'FINANCIAL' | 'LEGAL' | 'SECURITY' | 'OTHER';
-  is_mandatory: boolean;
-  entity_type_applicable: EntityType[];
+  id: string;
+  productId: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  category: 'KYC' | 'FINANCIAL' | 'LEGAL' | 'SECURITY' | 'OTHER';
+  requiredAtStage: string;
+  isMandatory: boolean;
+  isMandatoryForDisbursement: boolean;
+  applicableEntityTypes?: EntityType[] | null;
+  applicableConditions?: Record<string, unknown> | null;
+  hasExpiry: boolean;
+  validityMonths?: number | null;
+  renewalAlertDays?: number | null;
+  allowedFileTypes: string[];
+  maxFileSizeMb: number;
+  minFileCount: number;
+  maxFileCount: number;
+  requiresVerification: boolean;
+  verificationInstructions?: string | null;
+  sampleDocumentPath?: string | null;
+  helpText?: string | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 }
 
 // ============== LOAN APPLICATION ==============
 
 export interface LoanApplication {
-  application_id: string;
-  organization_id: string;
-  application_number: string;
-  entity_id: string;
-  entity_name?: string;
-  product_id: string;
-  product_name?: string;
+  id: string;
+  organizationId: string;
+  applicationNumber: string;
+  entityId: string;
+  entityName?: string | null;
+  productId: string;
+  productName?: string | null;
 
   // Loan Details
-  requested_amount: number;
-  approved_amount?: number;
-  requested_tenure_months: number;
-  approved_tenure_months?: number;
+  requestedAmount: number | string;
+  approvedAmount?: number | string | null;
+  requestedTenureMonths: number;
+  approvedTenureMonths?: number | null;
   purpose: string;
+  detailedPurpose?: string | null;
 
   // Project Details (for Project Finance)
-  project_name?: string;
-  project_cost?: number;
-  promoter_contribution?: number;
-  bank_finance?: number;
-  project_start_date?: string;
-  project_end_date?: string;
+  isProjectFinance?: boolean;
+  projectName?: string | null;
+  projectCost?: number | string | null;
+  promoterContribution?: number | string | null;
+  promoterContributionPct?: number | string | null;
+  bankFinance?: number | string | null;
+  otherFinance?: number | string | null;
+  projectLocation?: string | null;
+  projectStartDate?: string | null;
+  projectCompletionDate?: string | null;
 
   // Status
   stage: ApplicationStage;
   status: ApplicationStatus;
 
   // Interest
-  interest_type?: InterestType;
-  proposed_rate?: number;
-  moratorium_months?: number;
-  repayment_frequency?: RepaymentFrequency;
+  preferredInterestType?: InterestType;
+  proposedRate?: number | string | null;
+  requestedMoratoriumMonths?: number;
+  preferredRepaymentFrequency?: RepaymentFrequency;
+  preferredRepaymentMode?: RepaymentMode;
 
   // Workflow
-  workflow_instance_id?: string;
-  current_approver?: string;
+  workflowInstanceId?: string | null;
+  currentApprover?: string | null;
 
   // Timestamps
-  application_date: string;
-  submitted_at?: string;
-  sanctioned_at?: string;
-  created_at: string;
-  updated_at: string;
+  applicationDate?: string;
+  submittedAt?: string | null;
+  sanctionedAt?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
 
   // Related
   documents?: ApplicationDocument[];
@@ -295,27 +375,62 @@ export interface LoanApplication {
 }
 
 export interface ApplicationDocument {
-  document_id: string;
-  application_id: string;
-  checklist_id?: string;
-  document_name: string;
-  file_path?: string;
-  file_name?: string;
-  uploaded_at?: string;
-  verification_status: 'PENDING' | 'VERIFIED' | 'REJECTED';
-  remarks?: string;
+  id: string;
+  applicationId: string;
+  checklistItemId?: string | null;
+  documentCode: string;
+  documentName: string;
+  documentDescription?: string | null;
+  fileName: string;
+  dmsDocumentId?: string | null;
+  filePath: string;
+  fileSizeBytes?: number | null;
+  fileMimeType?: string | null;
+  fileHash?: string | null;
+  documentDate?: string | null;
+  expiryDate?: string | null;
+  uploadDate?: string | null;
+  status: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'WAIVED';
+  isMandatory: boolean;
+  isWaived: boolean;
+  waiverReason?: string | null;
+  waiverApprovedBy?: string | null;
+  verifiedById?: string | null;
+  verifiedAt?: string | null;
+  verificationRemarks?: string | null;
+  rejectionReason?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 }
 
 export interface ApplicationFee {
-  fee_id: string;
-  application_id: string;
-  fee_type: string;
-  fee_name: string;
-  calculated_amount: number;
-  gst_amount: number;
-  total_amount: number;
-  paid_amount: number;
-  status: 'PENDING' | 'PARTIAL' | 'PAID' | 'WAIVED';
+  id: string;
+  applicationId: string;
+  feeMasterId: string;
+  feeCode: string;
+  feeName: string;
+  calculatedAmount: number | string;
+  approvedAmount: number | string;
+  waiverAmount: number | string;
+  waiverPercentage: number | string;
+  cgstAmount: number | string;
+  sgstAmount: number | string;
+  igstAmount: number | string;
+  totalAmount: number | string;
+  status: 'PENDING' | 'COLLECTED' | 'WAIVED' | 'DEDUCTED' | 'REFUNDED';
+  collectionMode?: string | null;
+  collectionDate?: string | null;
+  collectionReference?: string | null;
+  waiverApprovedBy?: string | null;
+  waiverReason?: string | null;
+  deductedFromDisbursement: boolean;
+  disbursementId?: string | null;
+  invoiceNumber?: string | null;
+  invoiceDate?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 }
 
 export interface LoanSecurity {
@@ -325,7 +440,15 @@ export interface LoanSecurity {
   loan_account_id?: string;
 
   security_type: 'PRIMARY' | 'COLLATERAL';
-  nature: 'PROPERTY' | 'FIXED_DEPOSIT' | 'RECEIVABLES' | 'INVENTORY' | 'EQUIPMENT' | 'SHARES' | 'GUARANTEE' | 'OTHER';
+  nature:
+    | 'PROPERTY'
+    | 'FIXED_DEPOSIT'
+    | 'RECEIVABLES'
+    | 'INVENTORY'
+    | 'EQUIPMENT'
+    | 'SHARES'
+    | 'GUARANTEE'
+    | 'OTHER';
   description: string;
 
   // Valuation
@@ -354,77 +477,185 @@ export interface LoanSecurity {
 }
 
 export interface ProjectMilestone {
-  milestone_id: string;
-  application_id: string;
-  milestone_name: string;
-  milestone_sequence: number;
-  description?: string;
-  expected_completion_date?: string;
-  actual_completion_date?: string;
-  disbursement_percent: number;
-  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'DELAYED';
+  id: string;
+  applicationId: string;
+  milestoneNumber: number;
+  milestoneName: string;
+  milestoneDescription?: string | null;
+  expectedDate: string;
+  actualDate?: string | null;
+  delayDays?: number | null;
+  disbursementPercentage: number | string;
+  disbursementAmount?: number | string | null;
+  cumulativeDisbursementPct?: number | string | null;
+  equityContributionRequired?: number | string | null;
+  equityContributionVerified: boolean;
+  status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'DELAYED' | 'WAIVED';
+  verificationCriteria?: string | null;
+  verificationDocuments?: Record<string, unknown>[] | null;
+  verifiedById?: string | null;
+  verifiedAt?: string | null;
+  verificationRemarks?: string | null;
+  remarks?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 }
 
 // ============== LOAN SANCTION ==============
 
 export interface LoanSanction {
-  sanction_id: string;
-  organization_id: string;
-  sanction_number: string;
-  application_id: string;
-  entity_id: string;
-  entity_name?: string;
-  product_id: string;
-  product_name?: string;
+  id: string;
+  organizationId: string;
+  sanctionNumber: string;
+  applicationId: string;
+  entityId: string;
+  entityName?: string | null;
+  productId: string;
+  productName?: string | null;
+  requestedAmount: number | string;
 
   // Sanctioned Terms
-  sanctioned_amount: number;
-  tenure_months: number;
-  moratorium_months: number;
+  sanctionedAmount: number | string;
+  tenureMonths: number;
+  moratoriumMonths: number;
+  moratoriumType?: string | null;
 
   // Interest
-  interest_type: InterestType;
-  base_rate_id?: string;
-  base_rate_name?: string;
-  spread_bps: number;
-  effective_rate: number;
-  rate_reset_frequency?: RepaymentFrequency;
+  interestType: InterestType;
+  baseRateId?: string | null;
+  baseRateAtSanction?: number | string | null;
+  baseRateName?: string | null;
+  spreadBps: number;
+  effectiveRate: number | string;
+  rateResetFrequency?: string | null;
+  firstRateResetDate?: string | null;
+  penalInterestRate: number | string;
 
   // Repayment
-  repayment_mode: RepaymentMode;
-  repayment_frequency: RepaymentFrequency;
-  day_count_convention: DayCountConvention;
-  repayment_start_date: string;
-  maturity_date: string;
+  repaymentMode: RepaymentMode;
+  repaymentFrequency: RepaymentFrequency;
+  dayCountConvention: DayCountConvention;
+  repaymentStartDate?: string | null;
+  maturityDate?: string | null;
 
-  // Status
-  sanction_date: string;
-  validity_date: string;
-  status: 'DRAFT' | 'PENDING_ACCEPTANCE' | 'ACCEPTED' | 'EXPIRED' | 'CANCELLED';
-  accepted_at?: string;
+  // Disbursement and validity
+  disbursementType: string;
+  maxTranches: number;
+  sanctionDate: string;
+  validityDate: string;
+  firstDisbursementDeadline?: string | null;
+  sanctionLetterPath?: string | null;
+  agreementDraftPath?: string | null;
 
-  // Workflow
-  sanctioned_by?: string;
-  approval_authority?: string;
+  // Workflow and status
+  status: SanctionStatus;
+  workflowInstanceId?: string | null;
+  approvedById?: string | null;
+  approvedAt?: string | null;
+  approvalAuthority?: string | null;
+  approvalReference?: string | null;
+  acceptedAt?: string | null;
 
-  created_at: string;
-  updated_at: string;
+  // Prepayment terms
+  allowsPrepayment: boolean;
+  prepaymentLockInMonths: number;
+  prepaymentPenaltyRate: number | string;
+  allowsForeclosure: boolean;
+  foreclosurePenaltyRate: number | string;
+
+  specialTerms?: string | null;
+  remarks?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 
   // Related
   conditions?: SanctionCondition[];
-  securities?: LoanSecurity[];
+  securities?: SanctionSecurity[];
 }
 
+export type SanctionStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'ACTIVE'
+  | 'ACCEPTED'
+  | 'EXPIRED'
+  | 'CANCELLED'
+  | 'SUPERSEDED';
+
 export interface SanctionCondition {
-  condition_id: string;
-  sanction_id: string;
-  condition_type: 'PRE_DISBURSEMENT' | 'POST_DISBURSEMENT' | 'GENERAL';
-  condition_text: string;
-  due_date?: string;
-  is_mandatory: boolean;
-  status: 'PENDING' | 'COMPLIED' | 'WAIVED' | 'OVERDUE';
-  complied_at?: string;
-  remarks?: string;
+  id: string;
+  sanctionId: string;
+  conditionNumber?: number | null;
+  conditionCode?: string | null;
+  conditionType: 'PRE_DISBURSEMENT' | 'POST_DISBURSEMENT' | 'ONGOING' | 'EVENT_BASED';
+  category: 'LEGAL' | 'FINANCIAL' | 'SECURITY' | 'REGULATORY' | 'OPERATIONAL' | 'PROJECT';
+  description: string;
+  detailedRequirement?: string | null;
+  dueDate?: string | null;
+  isTimeBound: boolean;
+  daysFromDisbursement?: number | null;
+  frequency?: string | null;
+  nextComplianceDate?: string | null;
+  isMandatory: boolean;
+  blocksDisbursement: boolean;
+  isWaivable: boolean;
+  waiverAuthority?: string | null;
+  complianceStatus: 'PENDING' | 'COMPLIED' | 'WAIVED' | 'DEFERRED' | 'NOT_APPLICABLE';
+  complianceDate?: string | null;
+  complianceRemarks?: string | null;
+  complianceVerifiedBy?: string | null;
+  waiverDate?: string | null;
+  waiverReason?: string | null;
+  waiverApprovedBy?: string | null;
+  deferralDate?: string | null;
+  deferralReason?: string | null;
+  deferralApprovedBy?: string | null;
+  requiredDocuments?: Record<string, unknown>[] | null;
+  uploadedDocuments?: Record<string, unknown>[] | null;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
+}
+
+export interface SanctionSecurity {
+  id: string;
+  sanctionId: string;
+  securityNumber?: number | null;
+  securityCode?: string | null;
+  securityCategory: 'PRIMARY' | 'COLLATERAL' | 'GUARANTEE';
+  securityType: string;
+  chargeType: string;
+  description: string;
+  detailedDescription?: string | null;
+  propertyAddress?: string | null;
+  propertyAreaSqft?: number | string | null;
+  surveyNumber?: string | null;
+  propertyType?: string | null;
+  ownerName?: string | null;
+  ownerRelationship?: string | null;
+  isThirdParty: boolean;
+  thirdPartyEntityId?: string | null;
+  declaredValue?: number | string | null;
+  marketValue?: number | string | null;
+  forcedSaleValue?: number | string | null;
+  acceptableValue: number | string;
+  marginPercentage: number | string;
+  netValue: number | string;
+  valuationDate?: string | null;
+  valuerName?: string | null;
+  valuerFirm?: string | null;
+  valuationReportPath?: string | null;
+  nextValuationDate?: string | null;
+  status: string;
+  cersaiId?: string | null;
+  cersaiRegistrationDate?: string | null;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
 }
 
 // ============== LOAN ACCOUNT ==============
@@ -750,6 +981,23 @@ export interface Lender {
   created_at: string;
 }
 
+export interface LenderListItem {
+  id: string;
+  lenderCode: string;
+  lenderName: string;
+  lenderType: LenderType;
+  status: string;
+  externalRating: string | null;
+  ratingAgency: string | null;
+  totalSanctionLimit: string | null;
+  availableLimit: string | null;
+  contactPerson: string | null;
+  contactEmail: string | null;
+  contactPhone: string | null;
+  pan: string | null;
+  rbiRegistration: string | null;
+}
+
 export interface Borrowing {
   borrowing_id: string;
   organization_id: string;
@@ -852,37 +1100,36 @@ export interface LendingKPIs {
 
 export interface EntityFilters {
   search?: string;
-  entity_type?: EntityType;
+  entityType?: EntityType;
   status?: EntityStatus;
-  risk_category?: RiskCategory;
-  relationship_manager_id?: string;
+  riskCategory?: RiskCategory;
+  relationshipManagerId?: string;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface ApplicationFilters {
   search?: string;
-  entity_id?: string;
-  product_id?: string;
+  entityId?: string;
+  productId?: string;
   stage?: ApplicationStage;
   status?: ApplicationStatus;
-  date_from?: string;
-  date_to?: string;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface LoanAccountFilters {
   search?: string;
-  entity_id?: string;
-  product_id?: string;
-  asset_classification?: AssetClassification;
+  entityId?: string;
+  productId?: string;
   status?: LoanAccountStatus;
-  branch_id?: string;
-  dpd_from?: number;
-  dpd_to?: number;
+  assetClassification?: AssetClassification;
+  dpdFrom?: number;
+  dpdTo?: number;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface CollectionFilters {
@@ -933,13 +1180,13 @@ export interface LegalCaseFilters {
 
 export interface DisbursementFilters {
   search?: string;
-  loan_account_id?: string;
-  entity_id?: string;
+  loanAccountId?: string;
+  entityId?: string;
   status?: string;
-  date_from?: string;
-  date_to?: string;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface ReceiptFilters {
@@ -956,13 +1203,13 @@ export interface ReceiptFilters {
 
 export interface SanctionFilters {
   search?: string;
-  entity_id?: string;
-  application_id?: string;
+  entityId?: string;
+  applicationId?: string;
   status?: string;
-  date_from?: string;
-  date_to?: string;
+  dateFrom?: string;
+  dateTo?: string;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface LenderFilters {
@@ -995,30 +1242,42 @@ export interface PaginatedResponse<T> {
 // ============== API REQUEST TYPES ==============
 
 export interface CreateEntityRequest {
-  entity_type: EntityType;
-  legal_name: string;
-  trade_name?: string;
+  entityType: EntityType;
+  legalName: string;
+  tradeName?: string;
   cin?: string;
   pan: string;
   gstin?: string;
   tan?: string;
-  constitution_date?: string;
-  risk_category?: RiskCategory;
-  relationship_manager_id?: string;
+  constitutionDate?: string;
+  riskCategory?: RiskCategory;
+  relationshipManagerId?: string;
   remarks?: string;
 }
 
 export interface CreateApplicationRequest {
-  entity_id: string;
-  product_id: string;
-  requested_amount: number;
-  requested_tenure_months: number;
+  entityId: string;
+  productId: string;
+  requestedAmount: number;
+  requestedTenureMonths: number;
   purpose: string;
-  project_name?: string;
-  project_cost?: number;
-  promoter_contribution?: number;
-  interest_type?: InterestType;
-  proposed_rate?: number;
+  detailedPurpose?: string;
+  isProjectFinance?: boolean;
+  projectName?: string;
+  projectCost?: number;
+  promoterContribution?: number;
+  promoterContributionPct?: number;
+  bankFinance?: number;
+  otherFinance?: number;
+  projectLocation?: string;
+  projectStartDate?: string;
+  projectCompletionDate?: string;
+  preferredInterestType?: InterestType;
+  proposedRate?: number;
+  requestedMoratoriumMonths?: number;
+  preferredRepaymentFrequency?: RepaymentFrequency;
+  preferredRepaymentMode?: RepaymentMode;
+  remarks?: string;
 }
 
 export interface CreateReceiptRequest {

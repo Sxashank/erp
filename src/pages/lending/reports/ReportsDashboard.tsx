@@ -1,4 +1,3 @@
-import { useNavigate } from 'react-router-dom';
 import {
   BarChart3,
   PieChart,
@@ -12,9 +11,11 @@ import {
   Calendar,
   ArrowRight,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 interface ReportCategory {
   title: string;

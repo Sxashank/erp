@@ -212,13 +212,118 @@ export interface FDMaturityProjection {
   projected_maturity_amount: number;
   tds_estimate: number;
   net_maturity_amount: number;
-  schedule: Array<{
+  schedule: {
     period_from: string;
     period_to: string;
     days: number;
     principal: number;
     interest: number;
-  }>;
+  }[];
+}
+
+function toNumber(value: number | string | null | undefined): number {
+  if (typeof value === 'number') {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function toOptionalNumber(value: number | string | null | undefined): number | undefined {
+  if (value === null || value === undefined || value === '') {
+    return undefined;
+  }
+  return toNumber(value);
+}
+
+function normalizeInterestSlab(slab: FDInterestSlab): FDInterestSlab {
+  return {
+    ...slab,
+    min_amount: toOptionalNumber(slab.min_amount),
+    max_amount: toOptionalNumber(slab.max_amount),
+    interest_rate: toNumber(slab.interest_rate),
+  };
+}
+
+function normalizeProduct(product: FDProduct): FDProduct {
+  return {
+    ...product,
+    min_amount: toNumber(product.min_amount),
+    max_amount: toOptionalNumber(product.max_amount),
+    premature_penalty_rate: toOptionalNumber(product.premature_penalty_rate),
+    max_loan_percentage: toOptionalNumber(product.max_loan_percentage),
+    loan_interest_premium: toOptionalNumber(product.loan_interest_premium),
+    tds_threshold: toNumber(product.tds_threshold),
+    interest_slabs: product.interest_slabs.map(normalizeInterestSlab),
+  };
+}
+
+function normalizeNominee(nominee: FDNominee): FDNominee {
+  return {
+    ...nominee,
+    share_percentage: toNumber(nominee.share_percentage),
+  };
+}
+
+function normalizeTransaction(transaction: FDTransaction): FDTransaction {
+  return {
+    ...transaction,
+    debit_amount: toNumber(transaction.debit_amount),
+    credit_amount: toNumber(transaction.credit_amount),
+    balance: toNumber(transaction.balance),
+  };
+}
+
+function normalizeAccrual(accrual: FDInterestAccrual): FDInterestAccrual {
+  return {
+    ...accrual,
+    principal_amount: toNumber(accrual.principal_amount),
+    interest_rate: toNumber(accrual.interest_rate),
+    interest_amount: toNumber(accrual.interest_amount),
+    cumulative_interest: toNumber(accrual.cumulative_interest),
+  };
+}
+
+function normalizeDeposit(deposit: FixedDeposit): FixedDeposit {
+  return {
+    ...deposit,
+    deposit_amount: toNumber(deposit.deposit_amount),
+    interest_rate: toNumber(deposit.interest_rate),
+    maturity_amount: toNumber(deposit.maturity_amount),
+    accrued_interest: toNumber(deposit.accrued_interest),
+    paid_interest: toNumber(deposit.paid_interest),
+    tds_deducted: toNumber(deposit.tds_deducted),
+    closure_amount: toOptionalNumber(deposit.closure_amount),
+    nominees: deposit.nominees.map(normalizeNominee),
+  };
+}
+
+function normalizeSummary(summary: FDSummary): FDSummary {
+  return {
+    ...summary,
+    total_deposit_amount: toNumber(summary.total_deposit_amount),
+    total_maturity_amount: toNumber(summary.total_maturity_amount),
+  };
+}
+
+function normalizeProjection(projection: FDMaturityProjection): FDMaturityProjection {
+  return {
+    ...projection,
+    deposit_amount: toNumber(projection.deposit_amount),
+    interest_rate: toNumber(projection.interest_rate),
+    projected_interest: toNumber(projection.projected_interest),
+    projected_maturity_amount: toNumber(projection.projected_maturity_amount),
+    tds_estimate: toNumber(projection.tds_estimate),
+    net_maturity_amount: toNumber(projection.net_maturity_amount),
+    schedule: projection.schedule.map((item) => ({
+      ...item,
+      principal: toNumber(item.principal),
+      interest: toNumber(item.interest),
+    })),
+  };
 }
 
 // Service class
@@ -232,22 +337,25 @@ class FixedDepositService {
     limit?: number;
   }): Promise<{ items: FDProduct[]; total: number }> {
     const response = await api.get('/fixed-deposits/products', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: response.data.items.map(normalizeProduct),
+    };
   }
 
   async getProduct(id: string): Promise<FDProduct> {
     const response = await api.get(`/fixed-deposits/products/${id}`);
-    return response.data;
+    return normalizeProduct(response.data);
   }
 
   async createProduct(data: Partial<FDProduct>): Promise<FDProduct> {
     const response = await api.post('/fixed-deposits/products', data);
-    return response.data;
+    return normalizeProduct(response.data);
   }
 
   async updateProduct(id: string, data: Partial<FDProduct>): Promise<FDProduct> {
     const response = await api.put(`/fixed-deposits/products/${id}`, data);
-    return response.data;
+    return normalizeProduct(response.data);
   }
 
   async deleteProduct(id: string): Promise<void> {
@@ -263,7 +371,7 @@ class FixedDepositService {
       `/fixed-deposits/products/${productId}/slabs`,
       data
     );
-    return response.data;
+    return normalizeInterestSlab(response.data);
   }
 
   async updateInterestSlab(
@@ -271,7 +379,7 @@ class FixedDepositService {
     data: Partial<FDInterestSlab>
   ): Promise<FDInterestSlab> {
     const response = await api.put(`/fixed-deposits/products/slabs/${slabId}`, data);
-    return response.data;
+    return normalizeInterestSlab(response.data);
   }
 
   async deleteInterestSlab(slabId: string): Promise<void> {
@@ -296,7 +404,10 @@ class FixedDepositService {
         },
       }
     );
-    return response.data;
+    return {
+      ...response.data,
+      interest_rate: toNumber(response.data.interest_rate),
+    };
   }
 
   // ============== Fixed Deposits ==============
@@ -312,17 +423,20 @@ class FixedDepositService {
     limit?: number;
   }): Promise<{ items: FixedDeposit[]; total: number }> {
     const response = await api.get('/fixed-deposits/deposits', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: response.data.items.map(normalizeDeposit),
+    };
   }
 
   async getDeposit(id: string): Promise<FixedDeposit> {
     const response = await api.get(`/fixed-deposits/deposits/${id}`);
-    return response.data;
+    return normalizeDeposit(response.data);
   }
 
   async createDeposit(data: Partial<FixedDeposit>): Promise<FixedDeposit> {
     const response = await api.post('/fixed-deposits/deposits', data);
-    return response.data;
+    return normalizeDeposit(response.data);
   }
 
   async updateDeposit(
@@ -330,14 +444,14 @@ class FixedDepositService {
     data: Partial<FixedDeposit>
   ): Promise<FixedDeposit> {
     const response = await api.put(`/fixed-deposits/deposits/${id}`, data);
-    return response.data;
+    return normalizeDeposit(response.data);
   }
 
   async approveDeposit(id: string, userId: string): Promise<FixedDeposit> {
     const response = await api.post(`/fixed-deposits/deposits/${id}/approve`, null, {
       params: { user_id: userId },
     });
-    return response.data;
+    return normalizeDeposit(response.data);
   }
 
   async closeDeposit(
@@ -351,7 +465,7 @@ class FixedDepositService {
     }
   ): Promise<FixedDeposit> {
     const response = await api.post(`/fixed-deposits/deposits/${id}/close`, data);
-    return response.data;
+    return normalizeDeposit(response.data);
   }
 
   async renewDeposit(
@@ -365,7 +479,7 @@ class FixedDepositService {
     }
   ): Promise<FixedDeposit> {
     const response = await api.post(`/fixed-deposits/deposits/${id}/renew`, data);
-    return response.data;
+    return normalizeDeposit(response.data);
   }
 
   // Summary
@@ -373,13 +487,13 @@ class FixedDepositService {
     const response = await api.get('/fixed-deposits/deposits/summary', {
       params: { organization_id: organizationId },
     });
-    return response.data;
+    return normalizeSummary(response.data);
   }
 
   // Projection
   async getProjection(fdId: string): Promise<FDMaturityProjection> {
     const response = await api.get(`/fixed-deposits/deposits/${fdId}/projection`);
-    return response.data;
+    return normalizeProjection(response.data);
   }
 
   // Nominees
@@ -388,7 +502,7 @@ class FixedDepositService {
       `/fixed-deposits/deposits/${fdId}/nominees`,
       data
     );
-    return response.data;
+    return normalizeNominee(response.data);
   }
 
   async removeNominee(nomineeId: string): Promise<void> {
@@ -398,13 +512,13 @@ class FixedDepositService {
   // Transactions
   async getTransactions(fdId: string): Promise<FDTransaction[]> {
     const response = await api.get(`/fixed-deposits/deposits/${fdId}/transactions`);
-    return response.data;
+    return response.data.map(normalizeTransaction);
   }
 
   // Accruals
   async getAccruals(fdId: string): Promise<FDInterestAccrual[]> {
     const response = await api.get(`/fixed-deposits/deposits/${fdId}/accruals`);
-    return response.data;
+    return response.data.map(normalizeAccrual);
   }
 
   // Interest Operations
@@ -415,7 +529,10 @@ class FixedDepositService {
     const response = await api.post('/fixed-deposits/deposits/interest/accrue', null, {
       params: { organization_id: organizationId, accrual_date: accrualDate },
     });
-    return response.data;
+    return {
+      ...response.data,
+      total_interest: toNumber(response.data.total_interest),
+    };
   }
 
   async processInterestPayout(
@@ -425,7 +542,10 @@ class FixedDepositService {
     const response = await api.post('/fixed-deposits/deposits/interest/payout', null, {
       params: { organization_id: organizationId, payout_date: payoutDate },
     });
-    return response.data;
+    return {
+      ...response.data,
+      total_payout: toNumber(response.data.total_payout),
+    };
   }
 }
 

@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 # from app.core.permissions import RequirePermissions
 from app.core.responses import PaginatedResponse
 from app.models.auth.user import User
@@ -35,6 +35,7 @@ from app.services.ap_ar.bank_reconciliation_service import (
     BankReconciliationService
 )
 from app.services.finance.account_service import AccountService
+from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/bank-reconciliation", tags=["Bank Reconciliation"])
 
@@ -49,7 +50,7 @@ router = APIRouter(prefix="/bank-reconciliation", tags=["Bank Reconciliation"])
 )
 async def import_bank_statements(
     data: BankStatementImport,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """Import bank statements from parsed data."""
@@ -80,7 +81,7 @@ async def parse_csv_statement(
     balance_column: str = Form("Balance"),
     cheque_column: str = Form("Cheque No"),
     utr_column: str = Form("UTR"),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> list[dict]:
     """Parse a CSV file and return parsed rows for preview."""
     content = await file.read()
@@ -104,7 +105,7 @@ async def parse_csv_statement(
 
 @router.get(
     "/statements",
-    response_model=PaginatedResponse[BankStatementListResponse],
+    response_model=PaginatedResponse[BankStatementListResponse], response_model_by_alias=True,
     summary="List bank statements",
 
 )
@@ -118,7 +119,7 @@ async def list_bank_statements(
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> PaginatedResponse[BankStatementListResponse]:
     """List bank statements with filters."""
     service = BankStatementService(db)
@@ -145,20 +146,20 @@ async def list_bank_statements(
 
 @router.get(
     "/statements/{statement_id}",
-    response_model=BankStatementResponse,
+    response_model=BankStatementResponse, response_model_by_alias=True,
     summary="Get bank statement",
 
 )
 async def get_bank_statement(
     statement_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> BankStatementResponse:
     """Get a bank statement by ID."""
     service = BankStatementService(db)
     statement = await service.get_statement(statement_id)
     if not statement:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Bank statement not found")
+        raise NotFoundException(detail="Bank statement not found", error_code="BANK_STATEMENT_NOT_FOUND")
     return BankStatementResponse.model_validate(statement)
 
 
@@ -169,7 +170,7 @@ async def get_bank_statement(
 )
 async def delete_bank_statement(
     statement_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """Delete a bank statement (soft delete)."""
@@ -183,13 +184,13 @@ async def delete_bank_statement(
 
 @router.post(
     "/match",
-    response_model=BankStatementMatchResponse,
+    response_model=BankStatementMatchResponse, response_model_by_alias=True,
     summary="Match statement with voucher",
 
 )
 async def match_statement_with_voucher(
     data: BankStatementMatchCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> BankStatementMatchResponse:
     """Match a bank statement entry with a voucher."""
@@ -205,7 +206,7 @@ async def match_statement_with_voucher(
 )
 async def unmatch_statement(
     match_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> dict:
     """Remove a match between statement and voucher."""
     service = BankReconciliationService(db)
@@ -227,7 +228,7 @@ async def auto_match_statements(
     match_by_cheque: bool = Query(True, description="Match by cheque number"),
     match_by_utr: bool = Query(True, description="Match by UTR number"),
     match_by_amount_only: bool = Query(True, description="Fall back to amount-only matching"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> dict:
     """
@@ -267,7 +268,7 @@ async def auto_match_statements(
 
 @router.get(
     "/workspace",
-    response_model=ReconciliationWorkspaceResponse,
+    response_model=ReconciliationWorkspaceResponse, response_model_by_alias=True,
     summary="Get reconciliation workspace",
 
 )
@@ -275,7 +276,7 @@ async def get_reconciliation_workspace(
     bank_account_id: UUID,
     from_date: date,
     to_date: date,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> ReconciliationWorkspaceResponse:
     """Get all data needed for reconciliation workspace."""
     # Get bank account name
@@ -283,7 +284,7 @@ async def get_reconciliation_workspace(
     account = await account_service.get_account(bank_account_id)
     if not account:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Bank account not found")
+        raise NotFoundException(detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND")
 
     service = BankReconciliationService(db)
     return await service.get_reconciliation_workspace(
@@ -299,7 +300,7 @@ async def get_reconciliation_workspace(
 
 @router.get(
     "",
-    response_model=PaginatedResponse[BankReconciliationResponse],
+    response_model=PaginatedResponse[BankReconciliationResponse], response_model_by_alias=True,
     summary="List reconciliations",
 
 )
@@ -311,7 +312,7 @@ async def list_reconciliations(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> PaginatedResponse[BankReconciliationResponse]:
     """List bank reconciliations with filters."""
     service = BankReconciliationService(db)
@@ -336,13 +337,13 @@ async def list_reconciliations(
 
 @router.post(
     "",
-    response_model=BankReconciliationResponse,
+    response_model=BankReconciliationResponse, response_model_by_alias=True,
     summary="Create reconciliation",
 
 )
 async def create_reconciliation(
     data: BankReconciliationCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> BankReconciliationResponse:
     """Create a new bank reconciliation session."""
@@ -353,32 +354,32 @@ async def create_reconciliation(
 
 @router.get(
     "/{reconciliation_id}",
-    response_model=BankReconciliationResponse,
+    response_model=BankReconciliationResponse, response_model_by_alias=True,
     summary="Get reconciliation",
 
 )
 async def get_reconciliation(
     reconciliation_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> BankReconciliationResponse:
     """Get a reconciliation by ID."""
     service = BankReconciliationService(db)
     recon = await service.get_reconciliation(reconciliation_id)
     if not recon:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Reconciliation not found")
+        raise NotFoundException(detail="Reconciliation not found", error_code="RECONCILIATION_NOT_FOUND")
     return BankReconciliationResponse.model_validate(recon)
 
 
 @router.get(
     "/latest/{bank_account_id}",
-    response_model=Optional[BankReconciliationResponse],
+    response_model=Optional[BankReconciliationResponse], response_model_by_alias=True,
     summary="Get latest reconciliation",
 
 )
 async def get_latest_reconciliation(
     bank_account_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> Optional[BankReconciliationResponse]:
     """Get the latest reconciliation for a bank account."""
     service = BankReconciliationService(db)
@@ -390,14 +391,14 @@ async def get_latest_reconciliation(
 
 @router.put(
     "/{reconciliation_id}",
-    response_model=BankReconciliationResponse,
+    response_model=BankReconciliationResponse, response_model_by_alias=True,
     summary="Update reconciliation",
 
 )
 async def update_reconciliation(
     reconciliation_id: UUID,
     data: BankReconciliationUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> BankReconciliationResponse:
     """Update a bank reconciliation."""
@@ -408,13 +409,13 @@ async def update_reconciliation(
 
 @router.post(
     "/{reconciliation_id}/complete",
-    response_model=BankReconciliationResponse,
+    response_model=BankReconciliationResponse, response_model_by_alias=True,
     summary="Complete reconciliation",
 
 )
 async def complete_reconciliation(
     reconciliation_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user)
 ) -> BankReconciliationResponse:
     """Complete a bank reconciliation."""
@@ -428,7 +429,7 @@ async def complete_reconciliation(
 
 @router.get(
     "/report/brs",
-    response_model=BRSReportResponse,
+    response_model=BRSReportResponse, response_model_by_alias=True,
     summary="Generate BRS report",
 
 )
@@ -441,7 +442,7 @@ async def generate_brs_report(
     statement_closing_balance: Decimal,
     book_opening_balance: Decimal,
     book_closing_balance: Decimal,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db_with_tenant)
 ) -> BRSReportResponse:
     """Generate Bank Reconciliation Statement report."""
     # Get bank account name
@@ -449,7 +450,7 @@ async def generate_brs_report(
     account = await account_service.get_account(bank_account_id)
     if not account:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Bank account not found")
+        raise NotFoundException(detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND")
 
     service = BankReconciliationService(db)
     return await service.generate_brs_report(

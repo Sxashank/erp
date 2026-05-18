@@ -1,10 +1,12 @@
+import { Plus, Search, Edit, Trash2, FolderTree } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Link, useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -13,7 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Edit, Trash2, FolderTree } from 'lucide-react';
 
 // Mock data
 const categories = [
@@ -81,24 +82,23 @@ const categories = [
 
 export default function ItemCategoryList() {
   const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
 
   const filteredCategories = categories.filter(
     (cat) =>
       cat.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      cat.name.toLowerCase().includes(searchTerm.toLowerCase())
+      cat.name.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Item Categories"
         subtitle="Manage item category hierarchy"
         actions={
-          <Button asChild>
-            <Link to="/inventory/categories/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Category
-            </Link>
+          <Button onClick={() => navigate('/admin/inventory/categories/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Category
           </Button>
         }
       />
@@ -107,7 +107,7 @@ export default function ItemCategoryList() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
             <Input
               placeholder="Search categories..."
               value={searchTerm}
@@ -177,7 +177,7 @@ export default function ItemCategoryList() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/inventory/categories/${cat.id}/edit`}>
+                        <Link to={`/admin/inventory/categories/${cat.id}/edit`}>
                           <Edit className="h-4 w-4" />
                         </Link>
                       </Button>

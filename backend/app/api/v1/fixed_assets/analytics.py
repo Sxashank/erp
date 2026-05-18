@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import select, func, and_, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions, AssetStatus, AssetType
 from app.core.permissions import PermissionChecker
@@ -88,12 +88,12 @@ class FAKPIResponse(BaseSchema):
     overdue_maintenance_count: int
 
 
-@router.get("/dashboard", response_model=FADashboardResponse)
+@router.get("/dashboard", response_model=FADashboardResponse, response_model_by_alias=True)
 async def get_fa_dashboard(
     request: Request,
     organization_id: UUID,
     as_on_date: Optional[date] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -428,12 +428,12 @@ async def get_fa_dashboard(
     )
 
 
-@router.get("/kpis", response_model=FAKPIResponse)
+@router.get("/kpis", response_model=FAKPIResponse, response_model_by_alias=True)
 async def get_fa_kpis(
     request: Request,
     organization_id: UUID,
     as_on_date: Optional[date] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -584,12 +584,12 @@ async def get_fa_kpis(
     )
 
 
-@router.get("/asset-composition", response_model=dict)
+@router.get("/asset-composition", response_model=dict, response_model_by_alias=True)
 async def get_asset_composition(
     request: Request,
     organization_id: UUID,
     group_by: str = Query("category", description="category, type, location, status"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -679,12 +679,12 @@ async def get_asset_composition(
     }
 
 
-@router.get("/depreciation-trend", response_model=dict)
+@router.get("/depreciation-trend", response_model=dict, response_model_by_alias=True)
 async def get_depreciation_trend(
     request: Request,
     organization_id: UUID,
     months: int = Query(12, ge=1, le=36),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -724,11 +724,11 @@ async def get_depreciation_trend(
     }
 
 
-@router.get("/alerts/all", response_model=dict)
+@router.get("/alerts/all", response_model=dict, response_model_by_alias=True)
 async def get_all_alerts(
     request: Request,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):

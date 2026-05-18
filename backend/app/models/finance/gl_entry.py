@@ -17,7 +17,7 @@ from sqlalchemy import (
     Enum as SQLEnum,
     Index,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, ENUM as PGEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -28,6 +28,28 @@ if TYPE_CHECKING:
     from app.models.finance.voucher import Voucher, VoucherLine
     from app.models.finance.account import Account
     from app.models.finance.financial_year import FinancialYear, FinancialPeriod
+
+
+GL_ENTRY_TYPE_ENUM = PGEnum(
+    GLEntryType,
+    name="gl_entry_type",
+    create_type=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+)
+
+GL_ENTRY_SOURCE_TYPE_ENUM = PGEnum(
+    GLEntrySourceType,
+    name="gl_entry_source_type",
+    create_type=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+)
+
+PARTY_TYPE_ENUM = PGEnum(
+    PartyType,
+    name="party_type",
+    create_type=False,
+    values_callable=lambda enum_cls: [member.value for member in enum_cls],
+)
 
 
 class GLEntry(BaseModel):
@@ -71,13 +93,13 @@ class GLEntry(BaseModel):
 
     # Entry type and source
     entry_type: Mapped[GLEntryType] = mapped_column(
-        SQLEnum(GLEntryType),
+        GL_ENTRY_TYPE_ENUM,
         nullable=False,
         default=GLEntryType.NORMAL,
         comment="Type of GL entry - NORMAL, REVERSAL, OPENING, CLOSING, ADJUSTMENT",
     )
     source_type: Mapped[GLEntrySourceType] = mapped_column(
-        SQLEnum(GLEntrySourceType),
+        GL_ENTRY_SOURCE_TYPE_ENUM,
         nullable=False,
         default=GLEntrySourceType.MANUAL,
         comment="Source of this entry",
@@ -126,7 +148,12 @@ class GLEntry(BaseModel):
         comment="Credit amount (positive means credit)",
     )
     balance_type: Mapped[BalanceType] = mapped_column(
-        SQLEnum(BalanceType),
+        SQLEnum(
+            BalanceType,
+            name="balance_type",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=False,
         comment="DR or CR indicating the side of this entry",
     )
@@ -159,7 +186,7 @@ class GLEntry(BaseModel):
 
     # Party/Sub-ledger information
     party_type: Mapped[Optional[PartyType]] = mapped_column(
-        SQLEnum(PartyType),
+        PARTY_TYPE_ENUM,
         nullable=True,
         comment="Type of party - CUSTOMER, VENDOR, EMPLOYEE",
     )
@@ -265,7 +292,12 @@ class GLEntry(BaseModel):
         comment="Running balance after this entry (for statements)",
     )
     running_balance_type: Mapped[Optional[BalanceType]] = mapped_column(
-        SQLEnum(BalanceType),
+        SQLEnum(
+            BalanceType,
+            name="balance_type",
+            create_type=False,
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
         nullable=True,
         comment="Running balance type DR/CR",
     )

@@ -3,8 +3,6 @@
  * Advanced search for documents with filters
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Search,
   Filter,
@@ -20,26 +18,22 @@ import {
   SlidersHorizontal,
   RefreshCw,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Pagination,
   PaginationContent,
@@ -48,10 +42,19 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@/components/ui/pagination';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { documentApi, tagApi, folderApi } from '@/services/dmsApi';
-import type { DMSDocument, DMSTag, DMSFolder, DocumentSearchParams } from '@/types/dms';
+import type { DMSDocument, DMSTag, DMSFolder, DocumentSearchParams, FolderTreeNode } from '@/types/dms';
 import { formatFileSize, DOCUMENT_TYPES } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
 export default function DocumentSearch() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -92,10 +95,10 @@ export default function DocumentSearch() {
         setTags(tagsData.items);
 
         // Flatten folder tree
-        const flattenTree = (nodes: any[], level = 0): DMSFolder[] => {
+        const flattenTree = (nodes: FolderTreeNode[], level = 0): DMSFolder[] => {
           let result: DMSFolder[] = [];
           for (const node of nodes) {
-            result.push({ ...node, level } as DMSFolder);
+            result.push({ ...node, level } as unknown as DMSFolder);
             if (node.children?.length) {
               result = result.concat(flattenTree(node.children, level + 1));
             }
@@ -104,7 +107,7 @@ export default function DocumentSearch() {
         };
         setFolders(flattenTree(foldersData));
       } catch (error) {
-        console.error('Failed to load filter options:', error);
+        logger.error('Failed to load filter options:', error);
       }
     };
     loadOptions();
@@ -122,7 +125,7 @@ export default function DocumentSearch() {
       setResults(response.items);
       setTotal(response.total);
     } catch (error) {
-      console.error('Search failed:', error);
+      logger.error('Search failed:', error);
     } finally {
       setLoading(false);
     }
@@ -439,7 +442,7 @@ export default function DocumentSearch() {
                           {doc.document_type}
                         </Badge>
                       )}
-                      <span>{new Date(doc.created_at).toLocaleDateString()}</span>
+                      <DateDisplay date={doc.created_at} />
                     </div>
                     {doc.description && (
                       <p className="text-sm text-muted-foreground mt-2 line-clamp-1">

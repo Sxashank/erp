@@ -1,10 +1,11 @@
 """Base Pydantic schemas and utilities."""
 
 from datetime import datetime
-from typing import Generic, List, Optional, TypeVar
+from typing import Generic, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 class BaseSchema(BaseModel):
@@ -17,18 +18,42 @@ class BaseSchema(BaseModel):
     )
 
 
+class CamelSchema(BaseModel):
+    """Response schema that emits camelCase on the wire.
+
+    Inherit from this (instead of ``BaseSchema``) on response models the
+    frontend consumes directly so React pages can use ``account.loanAccountNumber``
+    without a per-field mapper. Field names stay snake_case in Python — only
+    the JSON serialisation uses camelCase aliases.
+
+    Endpoints returning a ``CamelSchema`` must pass
+    ``response_model_by_alias=True`` to the route decorator so FastAPI
+    serialises using the alias.
+
+    Input also accepts both snake_case (canonical Python name) and
+    camelCase (alias) because ``populate_by_name=True``.
+    """
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True,
+        alias_generator=to_camel,
+        str_strip_whitespace=True,
+    )
+
+
 class TimestampSchema(BaseSchema):
     """Schema with timestamp fields."""
 
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
 
 class AuditSchema(TimestampSchema):
     """Schema with full audit fields."""
 
-    created_by: Optional[UUID] = None
-    updated_by: Optional[UUID] = None
+    created_by: UUID | None = None
+    updated_by: UUID | None = None
     is_active: bool = True
     version: int = 1
 
@@ -77,7 +102,7 @@ T = TypeVar("T")
 class PaginatedResponse(BaseSchema, Generic[T]):
     """Paginated response wrapper."""
 
-    items: List[T]
+    items: list[T]
     total: int
     page: int
     page_size: int
@@ -86,7 +111,7 @@ class PaginatedResponse(BaseSchema, Generic[T]):
     @classmethod
     def create(
         cls,
-        items: List[T],
+        items: list[T],
         total: int,
         page: int,
         page_size: int,
@@ -107,4 +132,4 @@ class MessageResponse(BaseSchema):
 
     message: str
     success: bool = True
-    data: Optional[dict] = None
+    data: dict | None = None

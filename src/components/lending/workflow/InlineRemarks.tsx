@@ -4,10 +4,11 @@
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { Textarea } from '@/components/ui/textarea';
+
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { cn } from '@/lib/utils';
 
 export interface InlineRemarksProps {
   value: string;

@@ -2,29 +2,12 @@
  * Dashboard Edit Page - dashboard builder with drag-drop widgets
  */
 
+import { Plus, Save, Loader2, Eye, Settings } from 'lucide-react';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Save, Loader2, Eye, Settings } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+
+import { DashboardGrid } from '@/components/bi/DashboardGrid';
+import { PageHeader } from '@/components/common/PageHeader';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,9 +18,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biDashboardApi, biWidgetApi, biChartApi } from '@/services/biApi';
-import {
+import { logger } from "@/lib/logger";
+import type {
   Dashboard,
   DashboardUpdate,
   DashboardWidget,
@@ -46,7 +50,7 @@ import {
   ChartDefinitionListItem,
   WidgetType,
 } from '@/types/bi';
-import { DashboardGrid } from '@/components/bi/DashboardGrid';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const WIDGET_TYPES: { value: WidgetType; label: string }[] = [
   { value: 'KPI_CARD', label: 'KPI Card' },
@@ -95,7 +99,7 @@ export function DashboardEdit() {
       const response = await biDashboardApi.get(id);
       setDashboard(response.data);
     } catch (error) {
-      console.error('Error fetching dashboard:', error);
+      logger.error('Error fetching dashboard:', error);
       toast({
         title: 'Error',
         description: 'Failed to load dashboard',
@@ -111,7 +115,7 @@ export function DashboardEdit() {
       const response = await biChartApi.getAccessible();
       setCharts(response.data);
     } catch (error) {
-      console.error('Error fetching charts:', error);
+      logger.error('Error fetching charts:', error);
     }
   };
 
@@ -145,7 +149,7 @@ export function DashboardEdit() {
       setPendingLayouts([]);
       fetchDashboard();
     } catch (error) {
-      console.error('Error saving layout:', error);
+      logger.error('Error saving layout:', error);
       toast({
         title: 'Error',
         description: 'Failed to save layout',
@@ -170,7 +174,7 @@ export function DashboardEdit() {
       setAddingWidget(true);
 
       // Calculate position for new widget
-      const maxY = Math.max(0, ...((dashboard?.widgets || []).map((w) => w.grid_y + w.grid_h)));
+      const maxY = Math.max(0, ...(dashboard?.widgets || []).map((w) => w.grid_y + w.grid_h));
 
       await biWidgetApi.create(id, {
         ...newWidget,
@@ -188,11 +192,11 @@ export function DashboardEdit() {
       setWidgetDrawerOpen(false);
       setNewWidget({ widget_type: 'KPI_CARD', grid_w: 4, grid_h: 3 });
       fetchDashboard();
-    } catch (error: any) {
-      console.error('Error adding widget:', error);
+    } catch (error: unknown) {
+      logger.error('Error adding widget:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to add widget',
+        description: getErrorMessage(error, 'Failed to add widget'),
         variant: 'destructive',
       });
     } finally {
@@ -213,7 +217,7 @@ export function DashboardEdit() {
       setDeleteWidget(null);
       fetchDashboard();
     } catch (error) {
-      console.error('Error deleting widget:', error);
+      logger.error('Error deleting widget:', error);
       toast({
         title: 'Error',
         description: 'Failed to delete widget',
@@ -237,7 +241,7 @@ export function DashboardEdit() {
       setSettingsOpen(false);
       fetchDashboard();
     } catch (error) {
-      console.error('Error saving settings:', error);
+      logger.error('Error saving settings:', error);
       toast({
         title: 'Error',
         description: 'Failed to save settings',
@@ -250,7 +254,7 @@ export function DashboardEdit() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -258,13 +262,9 @@ export function DashboardEdit() {
 
   if (!dashboard) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-muted-foreground">Dashboard not found</p>
-        <Button
-          variant="outline"
-          className="mt-4"
-          onClick={() => navigate('/admin/bi/dashboards')}
-        >
+        <Button variant="outline" className="mt-4" onClick={() => navigate('/admin/bi/dashboards')}>
           Back to Dashboards
         </Button>
       </div>
@@ -273,40 +273,38 @@ export function DashboardEdit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/bi/dashboards')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">{dashboard.name}</h1>
-            <p className="text-muted-foreground">
-              Edit dashboard layout and widgets
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setSettingsOpen(true)}>
-            <Settings className="h-4 w-4 mr-2" />
-            Settings
-          </Button>
-          <Button variant="outline" onClick={() => navigate(`/admin/bi/dashboards/${id}`)}>
-            <Eye className="h-4 w-4 mr-2" />
-            Preview
-          </Button>
-          <Button onClick={() => setWidgetDrawerOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Widget
-          </Button>
-          {pendingLayouts.length > 0 && (
-            <Button onClick={handleSaveLayout} disabled={saving}>
-              {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              <Save className="h-4 w-4 mr-2" />
-              Save Layout
+      <PageHeader
+        title={dashboard.name}
+        subtitle="Edit dashboard layout and widgets"
+        breadcrumbs={[
+          { label: 'Dashboards', to: '/admin/bi/dashboards' },
+          { label: dashboard.name, to: `/admin/bi/dashboards/${id}` },
+          { label: 'Edit' },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setSettingsOpen(true)}>
+              <Settings className="mr-2 h-4 w-4" />
+              Settings
             </Button>
-          )}
-        </div>
-      </div>
+            <Button variant="outline" onClick={() => navigate(`/admin/bi/dashboards/${id}`)}>
+              <Eye className="mr-2 h-4 w-4" />
+              Preview
+            </Button>
+            <Button onClick={() => setWidgetDrawerOpen(true)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Widget
+            </Button>
+            {pendingLayouts.length > 0 && (
+              <Button onClick={handleSaveLayout} disabled={saving}>
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Save className="mr-2 h-4 w-4" />
+                Save Layout
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       <Card>
         <CardContent className="pt-6">
@@ -315,7 +313,9 @@ export function DashboardEdit() {
             isEditing={true}
             autoRefresh={false}
             onLayoutChange={handleLayoutChange}
-            onWidgetEdit={(widget) => navigate(`/admin/bi/dashboards/${id}/widgets/${widget.id}/edit`)}
+            onWidgetEdit={(widget) =>
+              navigate(`/admin/bi/dashboards/${id}/widgets/${widget.id}/edit`)
+            }
             onWidgetDelete={setDeleteWidget}
           />
         </CardContent>
@@ -326,9 +326,7 @@ export function DashboardEdit() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Add Widget</SheetTitle>
-            <SheetDescription>
-              Add a new widget to your dashboard
-            </SheetDescription>
+            <SheetDescription>Add a new widget to your dashboard</SheetDescription>
           </SheetHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -355,7 +353,9 @@ export function DashboardEdit() {
               <Label>Widget Type *</Label>
               <Select
                 value={newWidget.widget_type}
-                onValueChange={(value) => setNewWidget({ ...newWidget, widget_type: value as WidgetType })}
+                onValueChange={(value) =>
+                  setNewWidget({ ...newWidget, widget_type: value as WidgetType })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select widget type" />
@@ -374,7 +374,9 @@ export function DashboardEdit() {
               <Label>Chart Definition (Optional)</Label>
               <Select
                 value={newWidget.chart_definition_id || ''}
-                onValueChange={(value) => setNewWidget({ ...newWidget, chart_definition_id: value || undefined })}
+                onValueChange={(value) =>
+                  setNewWidget({ ...newWidget, chart_definition_id: value || undefined })
+                }
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select a chart" />
@@ -420,7 +422,7 @@ export function DashboardEdit() {
                 Cancel
               </Button>
               <Button onClick={handleAddWidget} disabled={addingWidget}>
-                {addingWidget && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {addingWidget && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add Widget
               </Button>
             </div>
@@ -433,9 +435,7 @@ export function DashboardEdit() {
         <SheetContent>
           <SheetHeader>
             <SheetTitle>Dashboard Settings</SheetTitle>
-            <SheetDescription>
-              Configure dashboard settings
-            </SheetDescription>
+            <SheetDescription>Configure dashboard settings</SheetDescription>
           </SheetHeader>
           <DashboardSettingsForm
             dashboard={dashboard}
@@ -452,8 +452,8 @@ export function DashboardEdit() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Widget</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the widget "{deleteWidget?.title}"?
-              This action cannot be undone.
+              Are you sure you want to delete the widget "{deleteWidget?.title}"? This action cannot
+              be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -463,7 +463,7 @@ export function DashboardEdit() {
               disabled={deletingWidget}
               className="bg-red-600 hover:bg-red-700"
             >
-              {deletingWidget && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deletingWidget && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -518,9 +518,7 @@ function DashboardSettingsForm({
       <div className="flex items-center justify-between">
         <div>
           <Label>Default Dashboard</Label>
-          <p className="text-sm text-muted-foreground">
-            Set as organization default
-          </p>
+          <p className="text-sm text-muted-foreground">Set as organization default</p>
         </div>
         <Switch
           checked={formData.is_default || false}
@@ -531,9 +529,7 @@ function DashboardSettingsForm({
       <div className="flex items-center justify-between">
         <div>
           <Label>Public Dashboard</Label>
-          <p className="text-sm text-muted-foreground">
-            Visible to all users
-          </p>
+          <p className="text-sm text-muted-foreground">Visible to all users</p>
         </div>
         <Switch
           checked={formData.is_public || false}
@@ -544,9 +540,7 @@ function DashboardSettingsForm({
       <div className="flex items-center justify-between">
         <div>
           <Label>Auto Refresh</Label>
-          <p className="text-sm text-muted-foreground">
-            Refresh widgets automatically
-          </p>
+          <p className="text-sm text-muted-foreground">Refresh widgets automatically</p>
         </div>
         <Switch
           checked={formData.auto_refresh || false}
@@ -562,7 +556,9 @@ function DashboardSettingsForm({
             type="number"
             min={10}
             value={formData.refresh_interval_seconds || 60}
-            onChange={(e) => setFormData({ ...formData, refresh_interval_seconds: parseInt(e.target.value) })}
+            onChange={(e) =>
+              setFormData({ ...formData, refresh_interval_seconds: parseInt(e.target.value) })
+            }
           />
         </div>
       )}
@@ -572,7 +568,7 @@ function DashboardSettingsForm({
           Cancel
         </Button>
         <Button onClick={() => onSave(formData)} disabled={saving}>
-          {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save Settings
         </Button>
       </div>

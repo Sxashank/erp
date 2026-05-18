@@ -8,30 +8,30 @@ Handles:
 - FnF calculation including gratuity, leave encashment, recoveries
 """
 
-from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from typing import List, Optional, Tuple, Dict, Any
+import builtins
+from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.hris.employee import Employee
+from app.models.hris.leave import LeaveBalance
 from app.models.hris.separation import (
-    Separation,
-    SeparationType,
-    SeparationStatus,
-    ResignationReason,
     ClearanceChecklist,
-    SeparationClearance,
     ClearanceStatus,
     FnFSettlement,
     FnFStatus,
+    ResignationReason,
+    Separation,
+    SeparationClearance,
+    SeparationStatus,
+    SeparationType,
 )
-from app.models.hris.leave import LeaveBalance, LeaveEncashment
 from app.models.payroll.salary_component import EmployeeSalary, EmployeeSalaryComponent
-
 
 # Constants
 GRATUITY_YEARS_REQUIRED = Decimal("5")
@@ -53,9 +53,9 @@ class SeparationService:
         employee_id: UUID,
         separation_type: SeparationType,
         requested_last_working_date: date,
-        reason_category: Optional[ResignationReason] = None,
-        reason_detail: Optional[str] = None,
-        resignation_letter_path: Optional[str] = None,
+        reason_category: ResignationReason | None = None,
+        reason_detail: str | None = None,
+        resignation_letter_path: str | None = None,
         created_by: UUID = None,
     ) -> Separation:
         """
@@ -84,11 +84,13 @@ class SeparationService:
             select(Separation).where(
                 and_(
                     Separation.employee_id == employee_id,
-                    Separation.status.notin_([
-                        SeparationStatus.COMPLETED,
-                        SeparationStatus.WITHDRAWN,
-                        SeparationStatus.REJECTED,
-                    ]),
+                    Separation.status.notin_(
+                        [
+                            SeparationStatus.COMPLETED,
+                            SeparationStatus.WITHDRAWN,
+                            SeparationStatus.REJECTED,
+                        ]
+                    ),
                     Separation.is_active == True,
                 )
             )
@@ -111,7 +113,7 @@ class SeparationService:
             created_by=created_by,
         )
         self.db.add(separation)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(separation)
 
         return separation
@@ -121,7 +123,7 @@ class SeparationService:
         separation_id: UUID,
         approved_last_working_date: date,
         approved_by: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> Separation:
         """
         Approve separation and set final last working date.
@@ -135,12 +137,20 @@ class SeparationService:
         Returns:
             Updated Separation object
         """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         separation = await self.get(separation_id)
         if not separation:
             raise ValueError(f"Separation {separation_id} not found")
 
         if separation.status not in [SeparationStatus.INITIATED, SeparationStatus.PENDING_APPROVAL]:
             raise ValueError(f"Separation cannot be approved in status: {separation.status}")
+
+        # §8.4: initiator (the employee OR HR who filed) cannot approve.
+        ensure_maker_is_not_checker(
+            maker_user_id=separation.created_by,
+            checker_user_id=approved_by,
+        )
 
         # Calculate notice period served
         notice_served = (approved_last_working_date - separation.initiation_date).days
@@ -159,7 +169,7 @@ class SeparationService:
         # Initialize clearance items
         await self._initialize_clearance(separation)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(separation)
 
         return separation
@@ -180,7 +190,7 @@ class SeparationService:
         separation.approved_by = rejected_by
         separation.approved_at = datetime.utcnow()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(separation)
 
         return separation
@@ -189,7 +199,7 @@ class SeparationService:
         self,
         separation_id: UUID,
         withdrawn_by: UUID,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> Separation:
         """Withdraw a separation request (by employee)."""
         separation = await self.get(separation_id)
@@ -203,12 +213,12 @@ class SeparationService:
         if reason:
             separation.remarks = f"Withdrawn: {reason}"
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(separation)
 
         return separation
 
-    async def get(self, separation_id: UUID) -> Optional[Separation]:
+    async def get(self, separation_id: UUID) -> Separation | None:
         """Get separation by ID with related data."""
         result = await self.db.execute(
             select(Separation)
@@ -224,14 +234,14 @@ class SeparationService:
     async def list(
         self,
         organization_id: UUID,
-        status: Optional[SeparationStatus] = None,
-        separation_type: Optional[SeparationType] = None,
-        employee_id: Optional[UUID] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        status: SeparationStatus | None = None,
+        separation_type: SeparationType | None = None,
+        employee_id: UUID | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
         skip: int = 0,
         limit: int = 50,
-    ) -> Tuple[List[Separation], int]:
+    ) -> tuple[list[Separation], int]:
         """List separations with filters."""
         query = select(Separation).where(
             and_(
@@ -267,12 +277,14 @@ class SeparationService:
         """Initialize clearance items for a separation."""
         # Get clearance checklist for organization
         result = await self.db.execute(
-            select(ClearanceChecklist).where(
+            select(ClearanceChecklist)
+            .where(
                 and_(
                     ClearanceChecklist.organization_id == separation.organization_id,
                     ClearanceChecklist.is_active == True,
                 )
-            ).order_by(ClearanceChecklist.display_order)
+            )
+            .order_by(ClearanceChecklist.display_order)
         )
         checklist_items = result.scalars().all()
 
@@ -288,7 +300,7 @@ class SeparationService:
         # Update separation status to clearance if all approvals done
         separation.status = SeparationStatus.NOTICE_PERIOD
 
-    async def _get_employee(self, employee_id: UUID) -> Optional[Employee]:
+    async def _get_employee(self, employee_id: UUID) -> Employee | None:
         """Get employee with related data."""
         result = await self.db.execute(
             select(Employee)
@@ -312,9 +324,9 @@ class ClearanceService:
         status: ClearanceStatus,
         cleared_by: UUID,
         has_recovery: bool = False,
-        recovery_amount: Optional[Decimal] = None,
-        recovery_description: Optional[str] = None,
-        remarks: Optional[str] = None,
+        recovery_amount: Decimal | None = None,
+        recovery_description: str | None = None,
+        remarks: str | None = None,
     ) -> SeparationClearance:
         """Update clearance item status."""
         result = await self.db.execute(
@@ -332,7 +344,7 @@ class ClearanceService:
         clearance.recovery_description = recovery_description
         clearance.remarks = remarks
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(clearance)
 
         # Check if all clearances are done
@@ -340,7 +352,7 @@ class ClearanceService:
 
         return clearance
 
-    async def get_clearance_status(self, separation_id: UUID) -> Dict[str, Any]:
+    async def get_clearance_status(self, separation_id: UUID) -> dict[str, Any]:
         """Get overall clearance status for a separation."""
         result = await self.db.execute(
             select(SeparationClearance)
@@ -350,9 +362,15 @@ class ClearanceService:
         clearances = result.scalars().all()
 
         total = len(clearances)
-        cleared = sum(1 for c in clearances if c.status in [ClearanceStatus.CLEARED, ClearanceStatus.NOT_APPLICABLE])
+        cleared = sum(
+            1
+            for c in clearances
+            if c.status in [ClearanceStatus.CLEARED, ClearanceStatus.NOT_APPLICABLE]
+        )
         pending = sum(1 for c in clearances if c.status == ClearanceStatus.PENDING)
-        recovery_pending = sum(1 for c in clearances if c.status == ClearanceStatus.RECOVERY_PENDING)
+        recovery_pending = sum(
+            1 for c in clearances if c.status == ClearanceStatus.RECOVERY_PENDING
+        )
         total_recovery = sum(c.recovery_amount or Decimal("0") for c in clearances)
 
         return {
@@ -379,13 +397,11 @@ class ClearanceService:
         """Check if all clearance items are complete and update separation status."""
         status = await self.get_clearance_status(separation_id)
         if status["is_complete"]:
-            result = await self.db.execute(
-                select(Separation).where(Separation.id == separation_id)
-            )
+            result = await self.db.execute(select(Separation).where(Separation.id == separation_id))
             separation = result.scalar_one_or_none()
             if separation and separation.status == SeparationStatus.CLEARANCE:
                 separation.status = SeparationStatus.FNF_PENDING
-                await self.db.commit()
+                await self.db.flush()
 
 
 class FnFService:
@@ -400,8 +416,8 @@ class FnFService:
         calculated_by: UUID,
         include_gratuity: bool = True,
         include_leave_encashment: bool = True,
-        additional_earnings: Optional[Dict[str, Decimal]] = None,
-        additional_deductions: Optional[Dict[str, Decimal]] = None,
+        additional_earnings: dict[str, Decimal] | None = None,
+        additional_deductions: dict[str, Decimal] | None = None,
     ) -> FnFSettlement:
         """
         Calculate Full & Final settlement for a separation.
@@ -441,7 +457,9 @@ class FnFService:
             raise ValueError(f"Separation {separation_id} not found")
 
         employee = separation.employee
-        last_working_date = separation.approved_last_working_date or separation.requested_last_working_date
+        last_working_date = (
+            separation.approved_last_working_date or separation.requested_last_working_date
+        )
 
         # Get active salary
         salary = await self._get_active_salary(employee.id)
@@ -482,9 +500,7 @@ class FnFService:
 
         # 3. Calculate gratuity
         if include_gratuity:
-            gratuity, is_eligible = self._calculate_gratuity(
-                basic_salary, years_of_service
-            )
+            gratuity, is_eligible = self._calculate_gratuity(basic_salary, years_of_service)
             fnf.gratuity_amount = gratuity
             fnf.gratuity_years = years_of_service
             fnf.gratuity_eligible = is_eligible
@@ -494,9 +510,9 @@ class FnFService:
         # 4. Calculate notice recovery
         if separation.notice_period_shortfall > 0 and not separation.is_notice_buyout:
             daily_salary = gross_monthly / Decimal("30")
-            fnf.notice_recovery = (daily_salary * Decimal(str(separation.notice_period_shortfall))).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
+            fnf.notice_recovery = (
+                daily_salary * Decimal(str(separation.notice_period_shortfall))
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             fnf.notice_shortfall_days = separation.notice_period_shortfall
 
         # 5. Calculate clearance recovery
@@ -545,16 +561,35 @@ class FnFService:
         if existing_fnf:
             # Update existing
             for attr in [
-                "pending_salary", "leave_encashment", "leave_encashment_days",
-                "gratuity_amount", "gratuity_years", "gratuity_eligible",
-                "gratuity_basic_salary", "gratuity_calculation_method",
-                "bonus_amount", "pending_reimbursements", "other_earnings",
-                "other_earnings_detail", "total_earnings", "notice_recovery",
-                "notice_shortfall_days", "advance_recovery", "loan_recovery",
-                "asset_recovery", "clearance_recovery", "other_deductions",
-                "other_deductions_detail", "tds_amount", "total_deductions",
-                "net_payable", "calculation_details", "calculated_by",
-                "calculated_at", "status", "last_working_date",
+                "pending_salary",
+                "leave_encashment",
+                "leave_encashment_days",
+                "gratuity_amount",
+                "gratuity_years",
+                "gratuity_eligible",
+                "gratuity_basic_salary",
+                "gratuity_calculation_method",
+                "bonus_amount",
+                "pending_reimbursements",
+                "other_earnings",
+                "other_earnings_detail",
+                "total_earnings",
+                "notice_recovery",
+                "notice_shortfall_days",
+                "advance_recovery",
+                "loan_recovery",
+                "asset_recovery",
+                "clearance_recovery",
+                "other_deductions",
+                "other_deductions_detail",
+                "tds_amount",
+                "total_deductions",
+                "net_payable",
+                "calculation_details",
+                "calculated_by",
+                "calculated_at",
+                "status",
+                "last_working_date",
             ]:
                 setattr(existing_fnf, attr, getattr(fnf, attr))
             fnf = existing_fnf
@@ -564,7 +599,7 @@ class FnFService:
         # Update separation status
         separation.status = SeparationStatus.FNF_CALCULATED
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fnf)
 
         return fnf
@@ -573,15 +608,26 @@ class FnFService:
         self,
         fnf_id: UUID,
         approved_by: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> FnFSettlement:
-        """Approve FnF settlement."""
+        """Approve FnF settlement.
+
+        §8.4 maker-checker: the user who calculated the FnF cannot also
+        approve it — FnF involves real cash disbursement.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         fnf = await self.get(fnf_id)
         if not fnf:
             raise ValueError(f"FnF Settlement {fnf_id} not found")
 
         if fnf.status != FnFStatus.CALCULATED:
             raise ValueError(f"FnF cannot be approved in status: {fnf.status}")
+
+        ensure_maker_is_not_checker(
+            maker_user_id=fnf.created_by,
+            checker_user_id=approved_by,
+        )
 
         fnf.status = FnFStatus.APPROVED
         fnf.approved_by = approved_by
@@ -592,7 +638,7 @@ class FnFService:
         # Update separation status
         fnf.separation.status = SeparationStatus.FNF_APPROVED
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fnf)
 
         return fnf
@@ -630,40 +676,42 @@ class FnFService:
         # Update separation status
         fnf.separation.status = SeparationStatus.FNF_PAID
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(fnf)
 
         return fnf
 
-    async def get(self, fnf_id: UUID) -> Optional[FnFSettlement]:
+    async def get(self, fnf_id: UUID) -> FnFSettlement | None:
         """Get FnF settlement by ID."""
         result = await self.db.execute(
             select(FnFSettlement)
             .options(
-                selectinload(FnFSettlement.separation)
-                .selectinload(Separation.employee),
+                selectinload(FnFSettlement.separation).selectinload(Separation.employee),
             )
             .where(FnFSettlement.id == fnf_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_by_separation(self, separation_id: UUID) -> Optional[FnFSettlement]:
+    async def get_by_separation(self, separation_id: UUID) -> FnFSettlement | None:
         """Get FnF settlement by separation ID."""
         result = await self.db.execute(
             select(FnFSettlement)
             .options(
-                selectinload(FnFSettlement.separation)
-                .selectinload(Separation.employee),
+                selectinload(FnFSettlement.separation).selectinload(Separation.employee),
             )
             .where(FnFSettlement.separation_id == separation_id)
         )
         return result.scalar_one_or_none()
 
-    async def _get_active_salary(self, employee_id: UUID) -> Optional[EmployeeSalary]:
+    async def _get_active_salary(self, employee_id: UUID) -> EmployeeSalary | None:
         """Get employee's active salary."""
         result = await self.db.execute(
             select(EmployeeSalary)
-            .options(selectinload(EmployeeSalary.components).selectinload(EmployeeSalaryComponent.component))
+            .options(
+                selectinload(EmployeeSalary.components).selectinload(
+                    EmployeeSalaryComponent.component
+                )
+            )
             .where(
                 and_(
                     EmployeeSalary.employee_id == employee_id,
@@ -708,7 +756,7 @@ class FnFService:
         self,
         employee_id: UUID,
         basic_salary: Decimal,
-    ) -> Tuple[Decimal, Decimal]:
+    ) -> tuple[Decimal, Decimal]:
         """
         Calculate leave encashment amount.
 
@@ -747,7 +795,7 @@ class FnFService:
         self,
         basic_salary: Decimal,
         years_of_service: Decimal,
-    ) -> Tuple[Decimal, bool]:
+    ) -> tuple[Decimal, bool]:
         """
         Calculate gratuity amount.
 
@@ -767,10 +815,10 @@ class FnFService:
 
         # Gratuity formula: (15/26) × basic × years
         gratuity = (
-            Decimal(str(GRATUITY_FORMULA_DAYS)) /
-            Decimal(str(GRATUITY_DIVISOR)) *
-            basic_salary *
-            years_of_service
+            Decimal(str(GRATUITY_FORMULA_DAYS))
+            / Decimal(str(GRATUITY_DIVISOR))
+            * basic_salary
+            * years_of_service
         ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         # Cap at maximum limit
@@ -794,7 +842,7 @@ class FnFService:
         self,
         total_earnings: Decimal,
         gratuity_amount: Decimal,
-        pan_number: Optional[str],
+        pan_number: str | None,
     ) -> Decimal:
         """
         Calculate TDS on FnF.
@@ -817,9 +865,7 @@ class FnFService:
             # Standard rate (10%) - should use actual tax computation
             tds_rate = Decimal("0.10")
 
-        tds = (taxable_earnings * tds_rate).quantize(
-            Decimal("0.01"), rounding=ROUND_HALF_UP
-        )
+        tds = (taxable_earnings * tds_rate).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         return max(Decimal("0"), tds)
 
@@ -835,7 +881,7 @@ class ClearanceChecklistService:
         organization_id: UUID,
         checklist_code: str,
         checklist_item: str,
-        department_id: Optional[UUID] = None,
+        department_id: UUID | None = None,
         is_mandatory: bool = True,
         can_have_recovery: bool = False,
         display_order: int = 0,
@@ -853,7 +899,7 @@ class ClearanceChecklistService:
             created_by=created_by,
         )
         self.db.add(checklist)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(checklist)
         return checklist
 
@@ -861,7 +907,7 @@ class ClearanceChecklistService:
         self,
         organization_id: UUID,
         active_only: bool = True,
-    ) -> List[ClearanceChecklist]:
+    ) -> list[ClearanceChecklist]:
         """List clearance checklist items."""
         query = select(ClearanceChecklist).where(
             ClearanceChecklist.organization_id == organization_id
@@ -873,7 +919,7 @@ class ClearanceChecklistService:
         result = await self.db.execute(query)
         return result.scalars().all()
 
-    async def get(self, checklist_id: UUID) -> Optional[ClearanceChecklist]:
+    async def get(self, checklist_id: UUID) -> ClearanceChecklist | None:
         """Get checklist item by ID."""
         result = await self.db.execute(
             select(ClearanceChecklist).where(ClearanceChecklist.id == checklist_id)
@@ -883,14 +929,14 @@ class ClearanceChecklistService:
     async def update(
         self,
         checklist_id: UUID,
-        checklist_item: Optional[str] = None,
-        department_id: Optional[UUID] = None,
-        is_mandatory: Optional[bool] = None,
-        can_have_recovery: Optional[bool] = None,
-        display_order: Optional[int] = None,
-        is_active: Optional[bool] = None,
+        checklist_item: str | None = None,
+        department_id: UUID | None = None,
+        is_mandatory: bool | None = None,
+        can_have_recovery: bool | None = None,
+        display_order: int | None = None,
+        is_active: bool | None = None,
         updated_by: UUID = None,
-    ) -> Optional[ClearanceChecklist]:
+    ) -> ClearanceChecklist | None:
         """Update a clearance checklist item."""
         checklist = await self.get(checklist_id)
         if not checklist:
@@ -911,7 +957,7 @@ class ClearanceChecklistService:
 
         checklist.updated_by = updated_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(checklist)
         return checklist
 
@@ -919,7 +965,7 @@ class ClearanceChecklistService:
         self,
         organization_id: UUID,
         created_by: UUID,
-    ) -> List[ClearanceChecklist]:
+    ) -> builtins.list[ClearanceChecklist]:
         """Seed default clearance checklist items for an organization."""
         default_items = [
             ("IT", "Laptop/Desktop/Mobile returned", True, True, 1),

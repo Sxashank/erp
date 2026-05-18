@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.account_service import AccountService
 from app.schemas.finance.account import (
@@ -21,16 +21,15 @@ from app.core.constants import AccountType
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[AccountResponse])
+@router.get("", response_model=PaginatedResponse[AccountResponse], response_model_by_alias=True)
 async def list_accounts(
-    organization_id: UUID = Query(...),
     account_group_id: Optional[UUID] = Query(None),
     account_type: Optional[AccountType] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of accounts.
@@ -44,12 +43,12 @@ async def list_accounts(
         total = len(accounts)
         accounts = accounts[skip:skip + page_size]
     elif account_type:
-        accounts = await service.get_by_type(organization_id, account_type)
+        accounts = await service.get_by_type(current_user.organization_id, account_type)
         total = len(accounts)
         accounts = accounts[skip:skip + page_size]
     else:
         accounts, total = await service.get_all(
-            organization_id, skip, page_size, include_inactive
+            current_user.organization_id, skip, page_size, include_inactive
         )
 
     items = [_account_to_response(a) for a in accounts]
@@ -57,11 +56,11 @@ async def list_accounts(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=AccountResponse)
+@router.post("", response_model=AccountResponse, response_model_by_alias=True)
 async def create_account(
     data: AccountCreate,
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new account.
@@ -73,61 +72,58 @@ async def create_account(
     return _account_to_response(account)
 
 
-@router.get("/search", response_model=List[AccountResponse])
+@router.get("/search", response_model=List[AccountResponse], response_model_by_alias=True)
 async def search_accounts(
-    organization_id: UUID = Query(...),
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=50),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Search accounts by code or name.
     Requires FIN_COA_VIEW permission.
     """
     service = AccountService(db)
-    accounts = await service.search(organization_id, q, limit)
+    accounts = await service.search(current_user.organization_id, q, limit)
 
     return [_account_to_response(a) for a in accounts]
 
 
-@router.get("/banks", response_model=List[AccountResponse])
+@router.get("/banks", response_model=List[AccountResponse], response_model_by_alias=True)
 async def get_bank_accounts(
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all bank accounts.
     Requires FIN_COA_VIEW permission.
     """
     service = AccountService(db)
-    accounts = await service.get_bank_accounts(organization_id)
+    accounts = await service.get_bank_accounts(current_user.organization_id)
 
     return [_account_to_response(a) for a in accounts]
 
 
-@router.get("/cash", response_model=List[AccountResponse])
+@router.get("/cash", response_model=List[AccountResponse], response_model_by_alias=True)
 async def get_cash_accounts(
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all cash accounts.
     Requires FIN_COA_VIEW permission.
     """
     service = AccountService(db)
-    accounts = await service.get_cash_accounts(organization_id)
+    accounts = await service.get_cash_accounts(current_user.organization_id)
 
     return [_account_to_response(a) for a in accounts]
 
 
-@router.get("/{account_id}", response_model=AccountResponse)
+@router.get("/{account_id}", response_model=AccountResponse, response_model_by_alias=True)
 async def get_account(
     account_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get account by ID.
@@ -139,12 +135,12 @@ async def get_account(
     return _account_to_response(account)
 
 
-@router.put("/{account_id}", response_model=AccountResponse)
+@router.put("/{account_id}", response_model=AccountResponse, response_model_by_alias=True)
 async def update_account(
     account_id: UUID,
     data: AccountUpdate,
     current_user: User = Depends(RequirePermissions("FIN_COA_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an account.
@@ -156,11 +152,11 @@ async def update_account(
     return _account_to_response(account)
 
 
-@router.delete("/{account_id}", response_model=MessageResponse)
+@router.delete("/{account_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_account(
     account_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete an account.

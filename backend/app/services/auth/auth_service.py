@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 from uuid import UUID
 
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -27,6 +28,7 @@ from app.core.exceptions import (
     PasswordExpiredException,
 )
 from app.models.auth.user import User
+from app.models.auth.role import Role, UserRole
 from app.models.auth.session import UserSession
 from app.repositories.auth.user_repo import UserRepository, UserSessionRepository
 from app.schemas.auth.token import Token, LoginRequest, UserBasicInfo
@@ -134,7 +136,7 @@ class AuthService:
             revoked = await self.session_repo.revoke_token_family(
                 session.token_family, reason=REPLAY_REASON
             )
-            await self.session.commit()
+            await self.session.flush()
             raise UnauthorizedException(
                 f"Refresh-token replay detected; revoked {revoked} sessions"
             )
@@ -151,15 +153,15 @@ class AuthService:
         session.last_used_at = datetime.now(timezone.utc)
 
         # Get user permissions
-        permissions = await self.user_repo.get_user_permissions(user.id)
-        roles = [ur.role.code for ur in user.user_roles if ur.is_valid]
+        roles = await self._get_valid_role_codes(user.id)
+        permissions = set(await self.user_repo.get_user_permissions(user.id)) | set(roles)
 
         # Create new access token
         access_token = create_access_token(
             subject=str(user.id),
             additional_claims={
                 "roles": roles,
-                "permissions": list(permissions),
+                "permissions": sorted(permissions),
             },
         )
 
@@ -173,7 +175,7 @@ class AuthService:
                 email=user.email,
                 full_name=user.full_name,
                 roles=roles,
-                permissions=list(permissions),
+                permissions=sorted(permissions),
             ),
         )
 
@@ -306,16 +308,18 @@ class AuthService:
         user_agent: Optional[str] = None,
     ) -> Token:
         """Create access and refresh tokens for user."""
-        # Get user permissions and roles
-        permissions = await self.user_repo.get_user_permissions(user.id)
-        roles = [ur.role.code for ur in user.user_roles if ur.is_valid]
+        # Get user permissions and roles. Keep this as explicit async queries
+        # rather than ORM relationship traversal; token creation is called from
+        # auth endpoints where lazy loading can raise MissingGreenlet.
+        roles = await self._get_valid_role_codes(user.id)
+        permissions = set(await self.user_repo.get_user_permissions(user.id)) | set(roles)
 
         # Create access token
         access_token = create_access_token(
             subject=str(user.id),
             additional_claims={
                 "roles": roles,
-                "permissions": list(permissions),
+                "permissions": sorted(permissions),
             },
         )
 
@@ -350,9 +354,28 @@ class AuthService:
                 email=user.email,
                 full_name=user.full_name,
                 roles=roles,
-                permissions=list(permissions),
+                permissions=sorted(permissions),
             ),
         )
+
+    async def _get_valid_role_codes(self, user_id: UUID) -> list[str]:
+        """Return active role codes without relying on async ORM lazy loading."""
+        now = datetime.now(timezone.utc)
+        query = (
+            select(Role.code)
+            .distinct()
+            .join(UserRole, UserRole.role_id == Role.id)
+            .where(
+                and_(
+                    UserRole.user_id == user_id,
+                    UserRole.effective_from <= now,
+                    or_(UserRole.effective_to.is_(None), UserRole.effective_to >= now),
+                )
+            )
+            .order_by(Role.code)
+        )
+        result = await self.session.execute(query)
+        return list(result.scalars().all())
 
     def _hash_token(self, token: str) -> str:
         """Hash a token for secure storage."""

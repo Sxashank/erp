@@ -2,25 +2,24 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import Field, model_validator
 
 from app.models.ap_ar.payment import (
-    PaymentType,
+    ChequeStatus,
+    DocumentType,
     PartyType,
     PaymentMode,
     PaymentStatus,
-    ChequeStatus,
-    DocumentType,
+    PaymentType,
 )
-
+from app.schemas.base import CamelSchema
 
 # ============ Payment Allocation Schemas ============
 
 
-class PaymentAllocationBase(BaseModel):
+class PaymentAllocationBase(CamelSchema):
     """Base schema for payment allocation."""
 
     document_type: DocumentType
@@ -33,7 +32,7 @@ class PaymentAllocationBase(BaseModel):
     allocation_date: date
 
 
-class PaymentAllocationCreate(BaseModel):
+class PaymentAllocationCreate(CamelSchema):
     """Schema for creating payment allocation."""
 
     document_type: DocumentType
@@ -46,30 +45,27 @@ class PaymentAllocationResponse(PaymentAllocationBase):
 
     id: UUID
 
-    class Config:
-        from_attributes = True
-
 
 # ============ Payment Schemas ============
 
 
-class PaymentBase(BaseModel):
+class PaymentBase(CamelSchema):
     """Base schema for payment."""
 
     payment_date: date
     payment_type: PaymentType
     party_type: PartyType
-    vendor_id: Optional[UUID] = None
-    customer_id: Optional[UUID] = None
-    unit_id: Optional[UUID] = None
+    vendor_id: UUID | None = None
+    customer_id: UUID | None = None
+    unit_id: UUID | None = None
 
     payment_mode: PaymentMode
-    bank_account_id: Optional[UUID] = None
-    cash_account_id: Optional[UUID] = None
+    bank_account_id: UUID | None = None
+    cash_account_id: UUID | None = None
 
     amount: Decimal = Field(..., gt=0)
     tds_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
-    tds_section_id: Optional[UUID] = None
+    tds_section_id: UUID | None = None
     tds_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     discount_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
     write_off_amount: Decimal = Field(default=Decimal("0.00"), ge=0)
@@ -77,13 +73,13 @@ class PaymentBase(BaseModel):
     exchange_rate: Decimal = Field(default=Decimal("1.000000"), gt=0)
 
     # Cheque details
-    cheque_number: Optional[str] = Field(None, max_length=20)
-    cheque_date: Optional[date] = None
-    cheque_bank_name: Optional[str] = Field(None, max_length=100)
-    cheque_branch: Optional[str] = Field(None, max_length=100)
+    cheque_number: str | None = Field(None, max_length=20)
+    cheque_date: date | None = None
+    cheque_bank_name: str | None = Field(None, max_length=100)
+    cheque_branch: str | None = Field(None, max_length=100)
 
-    reference_number: Optional[str] = Field(None, max_length=100)
-    narration: Optional[str] = None
+    reference_number: str | None = Field(None, max_length=100)
+    narration: str | None = None
 
     @model_validator(mode="after")
     def validate_party(self) -> "PaymentBase":
@@ -140,45 +136,45 @@ class PaymentCreate(PaymentBase):
         return self
 
 
-class PaymentUpdate(BaseModel):
+class PaymentUpdate(CamelSchema):
     """Schema for updating payment (only draft payments)."""
 
-    payment_date: Optional[date] = None
-    payment_type: Optional[PaymentType] = None
-    party_type: Optional[PartyType] = None
-    vendor_id: Optional[UUID] = None
-    customer_id: Optional[UUID] = None
-    unit_id: Optional[UUID] = None
+    payment_date: date | None = None
+    payment_type: PaymentType | None = None
+    party_type: PartyType | None = None
+    vendor_id: UUID | None = None
+    customer_id: UUID | None = None
+    unit_id: UUID | None = None
 
-    payment_mode: Optional[PaymentMode] = None
-    bank_account_id: Optional[UUID] = None
-    cash_account_id: Optional[UUID] = None
+    payment_mode: PaymentMode | None = None
+    bank_account_id: UUID | None = None
+    cash_account_id: UUID | None = None
 
-    amount: Optional[Decimal] = Field(None, gt=0)
-    tds_amount: Optional[Decimal] = Field(None, ge=0)
-    tds_section_id: Optional[UUID] = None
-    tds_rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    discount_amount: Optional[Decimal] = Field(None, ge=0)
-    write_off_amount: Optional[Decimal] = Field(None, ge=0)
+    amount: Decimal | None = Field(None, gt=0)
+    tds_amount: Decimal | None = Field(None, ge=0)
+    tds_section_id: UUID | None = None
+    tds_rate: Decimal | None = Field(None, ge=0, le=100)
+    discount_amount: Decimal | None = Field(None, ge=0)
+    write_off_amount: Decimal | None = Field(None, ge=0)
 
-    cheque_number: Optional[str] = Field(None, max_length=20)
-    cheque_date: Optional[date] = None
-    cheque_bank_name: Optional[str] = Field(None, max_length=100)
-    cheque_branch: Optional[str] = Field(None, max_length=100)
+    cheque_number: str | None = Field(None, max_length=20)
+    cheque_date: date | None = None
+    cheque_bank_name: str | None = Field(None, max_length=100)
+    cheque_branch: str | None = Field(None, max_length=100)
 
-    reference_number: Optional[str] = Field(None, max_length=100)
-    narration: Optional[str] = None
+    reference_number: str | None = Field(None, max_length=100)
+    narration: str | None = None
 
-    allocations: Optional[list[PaymentAllocationCreate]] = None
+    allocations: list[PaymentAllocationCreate] | None = None
 
 
-class ChequeStatusUpdate(BaseModel):
+class ChequeStatusUpdate(CamelSchema):
     """Schema for updating cheque status."""
 
     cheque_status: ChequeStatus
-    cleared_date: Optional[date] = None
-    bounced_date: Optional[date] = None
-    bounced_reason: Optional[str] = Field(None, max_length=200)
+    cleared_date: date | None = None
+    bounced_date: date | None = None
+    bounced_reason: str | None = Field(None, max_length=200)
 
     @model_validator(mode="after")
     def validate_status_fields(self) -> "ChequeStatusUpdate":
@@ -193,7 +189,7 @@ class ChequeStatusUpdate(BaseModel):
         return self
 
 
-class PaymentResponse(BaseModel):
+class PaymentResponse(CamelSchema):
     """Response schema for payment."""
 
     id: UUID
@@ -201,18 +197,18 @@ class PaymentResponse(BaseModel):
     payment_date: date
     payment_type: PaymentType
     party_type: PartyType
-    vendor_id: Optional[UUID]
-    customer_id: Optional[UUID]
+    vendor_id: UUID | None
+    customer_id: UUID | None
     organization_id: UUID
-    unit_id: Optional[UUID]
+    unit_id: UUID | None
 
     payment_mode: PaymentMode
-    bank_account_id: Optional[UUID]
-    cash_account_id: Optional[UUID]
+    bank_account_id: UUID | None
+    cash_account_id: UUID | None
 
     amount: Decimal
     tds_amount: Decimal
-    tds_section_id: Optional[UUID]
+    tds_section_id: UUID | None
     tds_rate: Decimal
     discount_amount: Decimal
     write_off_amount: Decimal
@@ -220,44 +216,41 @@ class PaymentResponse(BaseModel):
     currency_code: str
     exchange_rate: Decimal
 
-    cheque_number: Optional[str]
-    cheque_date: Optional[date]
-    cheque_bank_name: Optional[str]
-    cheque_branch: Optional[str]
-    cheque_status: Optional[ChequeStatus]
-    cheque_cleared_date: Optional[date]
-    cheque_bounced_date: Optional[date]
-    cheque_bounced_reason: Optional[str]
+    cheque_number: str | None
+    cheque_date: date | None
+    cheque_bank_name: str | None
+    cheque_branch: str | None
+    cheque_status: ChequeStatus | None
+    cheque_cleared_date: date | None
+    cheque_bounced_date: date | None
+    cheque_bounced_reason: str | None
 
-    reference_number: Optional[str]
-    narration: Optional[str]
+    reference_number: str | None
+    narration: str | None
 
     status: PaymentStatus
-    submitted_at: Optional[datetime]
-    approved_at: Optional[datetime]
-    cancelled_at: Optional[datetime]
-    cancellation_reason: Optional[str]
+    submitted_at: datetime | None
+    approved_at: datetime | None
+    cancelled_at: datetime | None
+    cancellation_reason: str | None
 
-    voucher_id: Optional[UUID]
+    voucher_id: UUID | None
     is_posted: bool
-    posted_at: Optional[datetime]
+    posted_at: datetime | None
 
     # Computed
     allocated_amount: Decimal
     unallocated_amount: Decimal
 
     # Related names
-    vendor_name: Optional[str] = None
-    customer_name: Optional[str] = None
-    bank_account_name: Optional[str] = None
-    cash_account_name: Optional[str] = None
-    tds_section_code: Optional[str] = None
+    vendor_name: str | None = None
+    customer_name: str | None = None
+    bank_account_name: str | None = None
+    cash_account_name: str | None = None
+    tds_section_code: str | None = None
 
     created_at: datetime
-    updated_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
+    updated_at: datetime | None
 
 
 class PaymentDetailResponse(PaymentResponse):
@@ -265,11 +258,8 @@ class PaymentDetailResponse(PaymentResponse):
 
     allocations: list[PaymentAllocationResponse] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
 
-
-class PaymentListResponse(BaseModel):
+class PaymentListResponse(CamelSchema):
     """Response schema for payment list."""
 
     id: UUID
@@ -277,50 +267,41 @@ class PaymentListResponse(BaseModel):
     payment_date: date
     payment_type: PaymentType
     party_type: PartyType
-    party_name: Optional[str]
+    party_name: str | None
     payment_mode: PaymentMode
     amount: Decimal
     net_amount: Decimal
     status: PaymentStatus
-    cheque_status: Optional[ChequeStatus]
+    cheque_status: ChequeStatus | None
     is_posted: bool
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class PendingChequeResponse(BaseModel):
+class PendingChequeResponse(CamelSchema):
     """Response schema for pending cheques."""
 
     id: UUID
     payment_number: str
     payment_date: date
     party_type: PartyType
-    party_name: Optional[str]
+    party_name: str | None
     cheque_number: str
     cheque_date: date
-    cheque_bank_name: Optional[str]
+    cheque_bank_name: str | None
     amount: Decimal
     cheque_status: ChequeStatus
     days_pending: int
 
-    class Config:
-        from_attributes = True
 
-
-class OutstandingDocumentResponse(BaseModel):
+class OutstandingDocumentResponse(CamelSchema):
     """Response schema for outstanding documents for allocation."""
 
     document_type: DocumentType
     document_id: UUID
     document_number: str
     document_date: date
-    due_date: Optional[date]
+    due_date: date | None
     total_amount: Decimal
     paid_amount: Decimal
     outstanding_amount: Decimal
     days_overdue: int
-
-    class Config:
-        from_attributes = True

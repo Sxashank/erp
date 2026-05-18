@@ -1,15 +1,9 @@
+import { format } from 'date-fns';
+import { ExternalLink, FileText, Printer, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { format } from 'date-fns';
-import {
-  ArrowLeft,
-  Download,
-  ExternalLink,
-  FileText,
-  Printer,
-  RefreshCw,
-} from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import {
   Table,
   TableBody,
@@ -29,38 +24,39 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+import { logger } from "@/lib/logger";
 interface BRSReportItem {
   id: string;
   date: string;
   reference: string;
   description: string | null;
   amount: number;
-  item_type: string;
+  itemType: string;
 }
 
 interface BRSReportData {
-  bank_account_id: string;
-  bank_account_name: string;
-  reconciliation_date: string;
-  from_date: string;
-  to_date: string;
-  statement_opening_balance: number;
-  statement_closing_balance: number;
-  book_opening_balance: number;
-  book_closing_balance: number;
-  deposits_in_transit: BRSReportItem[];
-  outstanding_cheques: BRSReportItem[];
-  credits_in_bank_not_books: BRSReportItem[];
-  debits_in_bank_not_books: BRSReportItem[];
-  total_deposits_in_transit: number;
-  total_outstanding_cheques: number;
-  total_credits_not_in_books: number;
-  total_debits_not_in_books: number;
-  reconciled_balance: number;
+  bankAccountId: string;
+  bankAccountName: string;
+  reconciliationDate: string;
+  fromDate: string;
+  toDate: string;
+  statementOpeningBalance: number;
+  statementClosingBalance: number;
+  bookOpeningBalance: number;
+  bookClosingBalance: number;
+  depositsInTransit: BRSReportItem[];
+  outstandingCheques: BRSReportItem[];
+  creditsInBankNotBooks: BRSReportItem[];
+  debitsInBankNotBooks: BRSReportItem[];
+  totalDepositsInTransit: number;
+  totalOutstandingCheques: number;
+  totalCreditsNotInBooks: number;
+  totalDebitsNotInBooks: number;
+  reconciledBalance: number;
   difference: number;
 }
 
@@ -70,27 +66,40 @@ interface BankAccount {
   name: string;
 }
 
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const apiError = error as ApiError;
+  return apiError.response?.data?.detail || fallback;
+}
+
 export function BRSReport() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const organizationId = localStorage.getItem('organization_id') || '';
+  const organizationId = useActiveOrganizationId() || '';
 
   // State
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [selectedBankAccount, setSelectedBankAccount] = useState(
-    searchParams.get('bank_account_id') || ''
+    searchParams.get('bank_account_id') || '',
   );
   const [reconciliationDate, setReconciliationDate] = useState(
-    searchParams.get('reconciliation_date') || format(new Date(), 'yyyy-MM-dd')
+    searchParams.get('reconciliation_date') || format(new Date(), 'yyyy-MM-dd'),
   );
   const [fromDate, setFromDate] = useState(
     searchParams.get('from_date') ||
-      format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd')
+      format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd'),
   );
   const [toDate, setToDate] = useState(
-    searchParams.get('to_date') || format(new Date(), 'yyyy-MM-dd')
+    searchParams.get('to_date') || format(new Date(), 'yyyy-MM-dd'),
   );
   const [statementOpeningBalance, setStatementOpeningBalance] = useState('0');
   const [statementClosingBalance, setStatementClosingBalance] = useState('0');
@@ -102,6 +111,7 @@ export function BRSReport() {
   // Fetch bank accounts
   useEffect(() => {
     const fetchBankAccounts = async () => {
+      if (!organizationId) return;
       try {
         const response = await accountsApi.list({
           organization_id: organizationId,
@@ -113,11 +123,11 @@ export function BRSReport() {
           setSelectedBankAccount(response.data.items[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch bank accounts:', error);
+        logger.error('Failed to fetch bank accounts:', error);
       }
     };
     fetchBankAccounts();
-  }, [organizationId]);
+  }, [organizationId, selectedBankAccount]);
 
   // Generate report
   const generateReport = async () => {
@@ -143,10 +153,10 @@ export function BRSReport() {
         book_closing_balance: parseFloat(bookClosingBalance) || 0,
       });
       setReportData(response.data);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to generate report',
+        description: getErrorMessage(error, 'Failed to generate report'),
         variant: 'destructive',
       });
     } finally {
@@ -169,33 +179,35 @@ export function BRSReport() {
   const handleDrillDown = (item: BRSReportItem) => {
     // For book entries (deposits in transit, outstanding cheques), navigate to voucher
     // For bank entries (credits/debits not in books), navigate to reconciliation
-    if (item.item_type === 'DEPOSIT_IN_TRANSIT' || item.item_type === 'OUTSTANDING_CHEQUE') {
+    if (item.itemType === 'DEPOSIT_IN_TRANSIT' || item.itemType === 'OUTSTANDING_CHEQUE') {
       navigate(`/admin/finance/vouchers/${item.id}`);
     } else {
       // Navigate to bank reconciliation with focus on the statement
-      navigate(`/admin/ap-ar/bank-reconciliation?bank_account_id=${selectedBankAccount}&from_date=${fromDate}&to_date=${toDate}`);
+      navigate(
+        `/admin/ap-ar/bank-reconciliation?bank_account_id=${selectedBankAccount}&from_date=${fromDate}&to_date=${toDate}`,
+      );
     }
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 print:hidden">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">Bank Reconciliation Statement</h1>
-          <p className="text-sm text-slate-500">
-            Generate BRS report for a bank account
-          </p>
-        </div>
-        {reportData && (
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        )}
+      <div className="print:hidden">
+        <PageHeader
+          title="Bank Reconciliation Statement"
+          subtitle="Generate BRS report for a bank account"
+          breadcrumbs={[
+            { label: 'Bank Reconciliation', to: '/admin/ap-ar/bank-reconciliation' },
+            { label: 'BRS Report' },
+          ]}
+          actions={
+            reportData ? (
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* Parameters */}
@@ -230,19 +242,11 @@ export function BRSReport() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="flex items-end">
               <Button onClick={generateReport} disabled={loading} className="w-full">
@@ -303,14 +307,12 @@ export function BRSReport() {
           <CardHeader className="text-center">
             <CardTitle className="text-xl">Bank Reconciliation Statement</CardTitle>
             <CardDescription>
-              <p className="font-medium">{reportData.bank_account_name}</p>
+              <p className="font-medium">{reportData.bankAccountName}</p>
               <p>
-                Period: {format(new Date(reportData.from_date), 'dd/MM/yyyy')} to{' '}
-                {format(new Date(reportData.to_date), 'dd/MM/yyyy')}
+                Period: {format(new Date(reportData.fromDate), 'dd/MM/yyyy')} to{' '}
+                {format(new Date(reportData.toDate), 'dd/MM/yyyy')}
               </p>
-              <p>
-                As on: {format(new Date(reportData.reconciliation_date), 'dd/MM/yyyy')}
-              </p>
+              <p>As on: {format(new Date(reportData.reconciliationDate), 'dd/MM/yyyy')}</p>
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -322,13 +324,13 @@ export function BRSReport() {
                   <div className="flex justify-between">
                     <span>Opening Balance:</span>
                     <span className="font-medium">
-                      {formatAmount(reportData.statement_opening_balance)}
+                      {formatAmount(reportData.statementOpeningBalance)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Closing Balance:</span>
                     <span className="font-medium">
-                      {formatAmount(reportData.statement_closing_balance)}
+                      {formatAmount(reportData.statementClosingBalance)}
                     </span>
                   </div>
                 </div>
@@ -339,13 +341,13 @@ export function BRSReport() {
                   <div className="flex justify-between">
                     <span>Opening Balance:</span>
                     <span className="font-medium">
-                      {formatAmount(reportData.book_opening_balance)}
+                      {formatAmount(reportData.bookOpeningBalance)}
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Closing Balance:</span>
                     <span className="font-medium">
-                      {formatAmount(reportData.book_closing_balance)}
+                      {formatAmount(reportData.bookClosingBalance)}
                     </span>
                   </div>
                 </div>
@@ -353,7 +355,7 @@ export function BRSReport() {
             </div>
 
             {/* Deposits in Transit */}
-            {reportData.deposits_in_transit.length > 0 && (
+            {reportData.depositsInTransit.length > 0 && (
               <div>
                 <h3 className="mb-2 font-semibold">
                   Add: Deposits in Transit (In Books, Not in Bank)
@@ -368,29 +370,25 @@ export function BRSReport() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.deposits_in_transit.map((item) => (
+                    {reportData.depositsInTransit.map((item) => (
                       <TableRow
                         key={item.id}
-                        className="cursor-pointer hover:bg-green-100 transition-colors"
+                        className="cursor-pointer transition-colors hover:bg-green-100"
                         onClick={() => handleDrillDown(item)}
                       >
-                        <TableCell>
-                          {format(new Date(item.date), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell className="text-blue-600 flex items-center gap-1">
+                        <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="flex items-center gap-1 text-blue-600">
                           {item.reference}
                           <ExternalLink className="h-3 w-3" />
                         </TableCell>
                         <TableCell>{item.description}</TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(item.amount)}
-                        </TableCell>
+                        <TableCell className="text-right">{formatAmount(item.amount)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-slate-50 font-medium">
                       <TableCell colSpan={3}>Total Deposits in Transit</TableCell>
                       <TableCell className="text-right">
-                        {formatAmount(reportData.total_deposits_in_transit)}
+                        {formatAmount(reportData.totalDepositsInTransit)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -399,7 +397,7 @@ export function BRSReport() {
             )}
 
             {/* Outstanding Cheques */}
-            {reportData.outstanding_cheques.length > 0 && (
+            {reportData.outstandingCheques.length > 0 && (
               <div>
                 <h3 className="mb-2 font-semibold">
                   Less: Outstanding Cheques (In Books, Not in Bank)
@@ -414,29 +412,25 @@ export function BRSReport() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.outstanding_cheques.map((item) => (
+                    {reportData.outstandingCheques.map((item) => (
                       <TableRow
                         key={item.id}
-                        className="cursor-pointer hover:bg-red-100 transition-colors"
+                        className="cursor-pointer transition-colors hover:bg-red-100"
                         onClick={() => handleDrillDown(item)}
                       >
-                        <TableCell>
-                          {format(new Date(item.date), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell className="text-blue-600 flex items-center gap-1">
+                        <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="flex items-center gap-1 text-blue-600">
                           {item.reference}
                           <ExternalLink className="h-3 w-3" />
                         </TableCell>
                         <TableCell>{item.description}</TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(item.amount)}
-                        </TableCell>
+                        <TableCell className="text-right">{formatAmount(item.amount)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-slate-50 font-medium">
                       <TableCell colSpan={3}>Total Outstanding Cheques</TableCell>
                       <TableCell className="text-right">
-                        {formatAmount(reportData.total_outstanding_cheques)}
+                        {formatAmount(reportData.totalOutstandingCheques)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -445,11 +439,9 @@ export function BRSReport() {
             )}
 
             {/* Credits in Bank Not in Books */}
-            {reportData.credits_in_bank_not_books.length > 0 && (
+            {reportData.creditsInBankNotBooks.length > 0 && (
               <div>
-                <h3 className="mb-2 font-semibold">
-                  Add: Credits in Bank, Not in Books
-                </h3>
+                <h3 className="mb-2 font-semibold">Add: Credits in Bank, Not in Books</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -460,29 +452,25 @@ export function BRSReport() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.credits_in_bank_not_books.map((item) => (
+                    {reportData.creditsInBankNotBooks.map((item) => (
                       <TableRow
                         key={item.id}
-                        className="cursor-pointer hover:bg-blue-100 transition-colors"
+                        className="cursor-pointer transition-colors hover:bg-blue-100"
                         onClick={() => handleDrillDown(item)}
                       >
-                        <TableCell>
-                          {format(new Date(item.date), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell className="text-blue-600 flex items-center gap-1">
+                        <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="flex items-center gap-1 text-blue-600">
                           {item.reference}
                           <ExternalLink className="h-3 w-3" />
                         </TableCell>
                         <TableCell>{item.description}</TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(item.amount)}
-                        </TableCell>
+                        <TableCell className="text-right">{formatAmount(item.amount)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-slate-50 font-medium">
                       <TableCell colSpan={3}>Total Credits Not in Books</TableCell>
                       <TableCell className="text-right">
-                        {formatAmount(reportData.total_credits_not_in_books)}
+                        {formatAmount(reportData.totalCreditsNotInBooks)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -491,11 +479,9 @@ export function BRSReport() {
             )}
 
             {/* Debits in Bank Not in Books */}
-            {reportData.debits_in_bank_not_books.length > 0 && (
+            {reportData.debitsInBankNotBooks.length > 0 && (
               <div>
-                <h3 className="mb-2 font-semibold">
-                  Less: Debits in Bank, Not in Books
-                </h3>
+                <h3 className="mb-2 font-semibold">Less: Debits in Bank, Not in Books</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -506,29 +492,25 @@ export function BRSReport() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {reportData.debits_in_bank_not_books.map((item) => (
+                    {reportData.debitsInBankNotBooks.map((item) => (
                       <TableRow
                         key={item.id}
-                        className="cursor-pointer hover:bg-amber-100 transition-colors"
+                        className="cursor-pointer transition-colors hover:bg-amber-100"
                         onClick={() => handleDrillDown(item)}
                       >
-                        <TableCell>
-                          {format(new Date(item.date), 'dd/MM/yyyy')}
-                        </TableCell>
-                        <TableCell className="text-blue-600 flex items-center gap-1">
+                        <TableCell>{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell>
+                        <TableCell className="flex items-center gap-1 text-blue-600">
                           {item.reference}
                           <ExternalLink className="h-3 w-3" />
                         </TableCell>
                         <TableCell>{item.description}</TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(item.amount)}
-                        </TableCell>
+                        <TableCell className="text-right">{formatAmount(item.amount)}</TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-slate-50 font-medium">
                       <TableCell colSpan={3}>Total Debits Not in Books</TableCell>
                       <TableCell className="text-right">
-                        {formatAmount(reportData.total_debits_not_in_books)}
+                        {formatAmount(reportData.totalDebitsNotInBooks)}
                       </TableCell>
                     </TableRow>
                   </TableBody>
@@ -543,48 +525,46 @@ export function BRSReport() {
                 <div className="flex justify-between">
                   <span>Balance as per Books:</span>
                   <span className="font-medium">
-                    {formatAmount(reportData.book_closing_balance)}
+                    {formatAmount(reportData.bookClosingBalance)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Add: Deposits in Transit:</span>
                   <span className="font-medium">
-                    {formatAmount(reportData.total_deposits_in_transit)}
+                    {formatAmount(reportData.totalDepositsInTransit)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Less: Outstanding Cheques:</span>
                   <span className="font-medium">
-                    ({formatAmount(reportData.total_outstanding_cheques)})
+                    ({formatAmount(reportData.totalOutstandingCheques)})
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Add: Credits in Bank (Not in Books):</span>
                   <span className="font-medium">
-                    {formatAmount(reportData.total_credits_not_in_books)}
+                    {formatAmount(reportData.totalCreditsNotInBooks)}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span>Less: Debits in Bank (Not in Books):</span>
                   <span className="font-medium">
-                    ({formatAmount(reportData.total_debits_not_in_books)})
+                    ({formatAmount(reportData.totalDebitsNotInBooks)})
                   </span>
                 </div>
                 <Separator className="my-2" />
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Reconciled Balance:</span>
-                  <span>{formatAmount(reportData.reconciled_balance)}</span>
+                  <span>{formatAmount(reportData.reconciledBalance)}</span>
                 </div>
                 <div className="flex justify-between text-lg font-semibold">
                   <span>Balance as per Bank Statement:</span>
-                  <span>{formatAmount(reportData.statement_closing_balance)}</span>
+                  <span>{formatAmount(reportData.statementClosingBalance)}</span>
                 </div>
                 <Separator className="my-2" />
                 <div
                   className={`flex justify-between text-lg font-bold ${
-                    Math.abs(reportData.difference) < 1
-                      ? 'text-green-600'
-                      : 'text-red-600'
+                    Math.abs(reportData.difference) < 1 ? 'text-green-600' : 'text-red-600'
                   }`}
                 >
                   <span>Difference:</span>

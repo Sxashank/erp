@@ -5,21 +5,13 @@
  * Supports filtering by entity, FI type, and date range.
  */
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  ArrowLeft,
   Search,
-  Filter,
   Building2,
   CreditCard,
-  TrendingUp,
-  TrendingDown,
   DollarSign,
-  Calendar,
   Download,
-  ChevronRight,
   RefreshCw,
   Wallet,
   PiggyBank,
@@ -27,12 +19,16 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
 } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Select,
   SelectContent,
@@ -40,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -48,69 +45,15 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/tabs';
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/hooks/use-toast';
-
-// Types
-interface BankAccount {
-  id: string;
-  fetch_session_id: string;
-  consent_id: string;
-  entity_id: string | null;
-  entity_name: string | null;
-  fi_type: string;
-  fip_id: string;
-  fip_name: string;
-  link_ref_number: string;
-  masked_account_number: string;
-  account_type: string;
-  ifsc_code: string;
-  bank_name: string;
-  branch: string | null;
-  holder_name: string;
-  nominee: string | null;
-  current_balance: number;
-  available_balance: number | null;
-  currency: string;
-  balance_as_on: string;
-  transactions_count: number;
-  fetched_at: string;
-}
-
-interface Transaction {
-  id: string;
-  txn_id: string;
-  txn_type: string;
-  mode: string;
-  amount: number;
-  current_balance: number | null;
-  txn_date: string;
-  value_date: string | null;
-  narration: string;
-  reference: string | null;
-  category: string | null;
-}
-
-interface PaginationInfo {
-  page: number;
-  page_size: number;
-  total: number;
-  total_pages: number;
-}
+  useAAAccountTransactions,
+  useAABankAccounts,
+} from '@/hooks/lending/useAABankAccounts';
+import type { BankAccount } from '@/services/lending/aaApi';
 
 // Format currency
-const formatCurrency = (amount: number, currency: string = 'INR') => {
+const formatCurrency = (amount: number, currency = 'INR') => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: currency,
@@ -154,130 +97,67 @@ const getFiTypeBadge = (fiType: string) => {
 export default function FetchedDataPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { toast } = useToast();
 
-  // State
-  const [loading, setLoading] = useState(true);
-  const [accounts, setAccounts] = useState<BankAccount[]>([]);
-  const [pagination, setPagination] = useState<PaginationInfo>({
-    page: 1,
-    page_size: 20,
-    total: 0,
-    total_pages: 0,
-  });
+  const [page, setPage] = useState(1);
+  const pageSize = 20;
 
   // Selected account for transactions view
   const [selectedAccount, setSelectedAccount] = useState<BankAccount | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loadingTransactions, setLoadingTransactions] = useState(false);
-  const [txnPagination, setTxnPagination] = useState<PaginationInfo>({
-    page: 1,
-    page_size: 50,
-    total: 0,
-    total_pages: 0,
-  });
+  const [txnPage, setTxnPage] = useState(1);
+  const txnPageSize = 50;
 
   // Filters
   const [filters, setFilters] = useState({
     search: searchParams.get('search') || '',
-    fi_type: searchParams.get('fi_type') || '',
-    entity_id: searchParams.get('entity_id') || '',
-    organization_id: searchParams.get('organization_id') || '',
+    fiType: searchParams.get('fi_type') || '',
+    entityId: searchParams.get('entity_id') || '',
+    organizationId: searchParams.get('organization_id') || '',
   });
 
-  // Summary stats
-  const [stats, setStats] = useState({
-    total_accounts: 0,
-    total_balance: 0,
-    unique_banks: 0,
-    total_transactions: 0,
+  const accountsQuery = useAABankAccounts({
+    organizationId: filters.organizationId || undefined,
+    entityId: filters.entityId || undefined,
+    fiType: filters.fiType || undefined,
+    page,
+    pageSize,
   });
+  const transactionsQuery = useAAAccountTransactions(
+    selectedAccount?.id,
+    { page: txnPage, pageSize: txnPageSize },
+  );
 
-  // Fetch bank accounts
-  const fetchAccounts = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', pagination.page.toString());
-      params.set('page_size', pagination.page_size.toString());
-      if (filters.organization_id) params.set('organization_id', filters.organization_id);
-      if (filters.entity_id) params.set('entity_id', filters.entity_id);
-      if (filters.fi_type) params.set('fi_type', filters.fi_type);
+  const accounts = accountsQuery.data?.items ?? [];
+  const transactions = transactionsQuery.data?.items ?? [];
 
-      const response = await fetch(`/api/v1/lending/aa/bank-accounts?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch accounts');
+  const totalAccounts = accountsQuery.data?.total ?? 0;
+  const totalPages = accountsQuery.data
+    ? Math.max(1, Math.ceil(accountsQuery.data.total / pageSize))
+    : 0;
+  const txnTotalPages = transactionsQuery.data
+    ? Math.max(1, Math.ceil(transactionsQuery.data.total / txnPageSize))
+    : 0;
 
-      const data = await response.json();
-      setAccounts(data.items || []);
-      setPagination(prev => ({
-        ...prev,
-        total: data.total || 0,
-        total_pages: data.total_pages || 0,
-      }));
+  // Summary stats — derived from the current page of accounts (matches the
+  // pre-rewrite behaviour, where stats reflected the most recent fetch).
+  const stats = useMemo(() => {
+    const uniqueBanks = new Set(accounts.map((a) => a.bankName));
+    return {
+      totalAccounts,
+      totalBalance: accounts.reduce((sum, a) => sum + (a.currentBalance || 0), 0),
+      uniqueBanks: uniqueBanks.size,
+      totalTransactions: accounts.reduce((sum, a) => sum + (a.transactionsCount || 0), 0),
+    };
+  }, [accounts, totalAccounts]);
 
-      // Calculate stats
-      const uniqueBanks = new Set(data.items?.map((a: BankAccount) => a.bank_name) || []);
-      setStats({
-        total_accounts: data.total || 0,
-        total_balance: data.items?.reduce((sum: number, a: BankAccount) => sum + (a.current_balance || 0), 0) || 0,
-        unique_banks: uniqueBanks.size,
-        total_transactions: data.items?.reduce((sum: number, a: BankAccount) => sum + (a.transactions_count || 0), 0) || 0,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load bank accounts.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetch transactions for selected account
-  const fetchTransactions = async (accountId: string, page: number = 1) => {
-    setLoadingTransactions(true);
-    try {
-      const params = new URLSearchParams();
-      params.set('page', page.toString());
-      params.set('page_size', '50');
-
-      const response = await fetch(`/api/v1/lending/aa/bank-accounts/${accountId}/transactions?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch transactions');
-
-      const data = await response.json();
-      setTransactions(data.items || []);
-      setTxnPagination({
-        page,
-        page_size: 50,
-        total: data.total || 0,
-        total_pages: data.total_pages || 0,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load transactions.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoadingTransactions(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchAccounts();
-  }, [pagination.page, filters.fi_type, filters.entity_id, filters.organization_id]);
-
-  // Handle account selection
   const handleAccountSelect = (account: BankAccount) => {
     setSelectedAccount(account);
-    fetchTransactions(account.id);
+    setTxnPage(1);
   };
 
   // Handle filter changes
   const handleFilterChange = (key: string, value: string) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-    setPagination(prev => ({ ...prev, page: 1 }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
+    setPage(1);
 
     // Update URL params
     const params = new URLSearchParams(searchParams);
@@ -289,11 +169,13 @@ export default function FetchedDataPage() {
     setSearchParams(params);
   };
 
-  if (loading && accounts.length === 0) {
+  const loadingTransactions = transactionsQuery.isLoading || transactionsQuery.isFetching;
+
+  if (accountsQuery.isLoading && accounts.length === 0) {
     return (
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto space-y-6 py-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
@@ -304,33 +186,43 @@ export default function FetchedDataPage() {
     );
   }
 
-  return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/lending/aa/consents')}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Fetched Financial Data</h1>
-            <p className="text-sm text-muted-foreground">
-              Bank accounts and transactions from Account Aggregator
-            </p>
-          </div>
-        </div>
-        <Button variant="outline" onClick={fetchAccounts}>
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Refresh
-        </Button>
+  if (accountsQuery.isError && accounts.length === 0) {
+    return (
+      <div className="container mx-auto space-y-6 py-6">
+        <ErrorState
+          title="Could not load bank accounts"
+          error={accountsQuery.error}
+          onRetry={() => accountsQuery.refetch()}
+        />
       </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Fetched Financial Data"
+        subtitle="Bank accounts and transactions from Account Aggregator"
+        breadcrumbs={[
+          { label: 'AA Consents', to: '/admin/lending/aa/consents' },
+          { label: 'Fetched Data' },
+        ]}
+        actions={
+          <Button
+            variant="outline"
+            onClick={() => accountsQuery.refetch()}
+            disabled={accountsQuery.isFetching}
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${accountsQuery.isFetching ? 'animate-spin' : ''}`}
+            />
+            Refresh
+          </Button>
+        }
+      />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total Accounts</CardDescription>
@@ -338,7 +230,7 @@ export default function FetchedDataPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{stats.total_accounts}</span>
+              <span className="text-2xl font-bold">{stats.totalAccounts}</span>
             </div>
           </CardContent>
         </Card>
@@ -350,7 +242,7 @@ export default function FetchedDataPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{formatCurrency(stats.total_balance)}</span>
+              <span className="text-2xl font-bold">{formatCurrency(stats.totalBalance)}</span>
             </div>
           </CardContent>
         </Card>
@@ -362,7 +254,7 @@ export default function FetchedDataPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <Building2 className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{stats.unique_banks}</span>
+              <span className="text-2xl font-bold">{stats.uniqueBanks}</span>
             </div>
           </CardContent>
         </Card>
@@ -374,7 +266,7 @@ export default function FetchedDataPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{stats.total_transactions}</span>
+              <span className="text-2xl font-bold">{stats.totalTransactions}</span>
             </div>
           </CardContent>
         </Card>
@@ -384,8 +276,10 @@ export default function FetchedDataPage() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-end gap-4">
-            <div className="flex-1 min-w-[200px]">
-              <Label htmlFor="search" className="sr-only">Search</Label>
+            <div className="min-w-[200px] flex-1">
+              <Label htmlFor="search" className="sr-only">
+                Search
+              </Label>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -399,16 +293,20 @@ export default function FetchedDataPage() {
             </div>
 
             <div className="w-[180px]">
-              <Label htmlFor="fi_type" className="sr-only">FI Type</Label>
+              <Label htmlFor="fi_type" className="sr-only">
+                FI Type
+              </Label>
               <Select
-                value={filters.fi_type}
-                onValueChange={(value) => handleFilterChange('fi_type', value)}
+                value={filters.fiType || '__all__'}
+                onValueChange={(value) =>
+                  handleFilterChange('fiType', value === '__all__' ? '' : value)
+                }
               >
                 <SelectTrigger id="fi_type">
                   <SelectValue placeholder="All FI Types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All FI Types</SelectItem>
+                  <SelectItem value="__all__">All FI Types</SelectItem>
                   <SelectItem value="DEPOSIT">Deposit</SelectItem>
                   <SelectItem value="TERM_DEPOSIT">Term Deposit</SelectItem>
                   <SelectItem value="RECURRING_DEPOSIT">Recurring Deposit</SelectItem>
@@ -426,19 +324,19 @@ export default function FetchedDataPage() {
       </Card>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Accounts List */}
-        <div className="lg:col-span-1 space-y-4">
+        <div className="space-y-4 lg:col-span-1">
           <h2 className="text-lg font-semibold">Bank Accounts</h2>
           {accounts.length === 0 ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-12">
-                <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
+                <CreditCard className="mb-4 h-12 w-12 text-muted-foreground" />
                 <p className="text-muted-foreground">No accounts found</p>
                 <Button
                   variant="outline"
                   className="mt-4"
-                  onClick={() => navigate('/lending/aa/consents')}
+                  onClick={() => navigate('/admin/lending/aa/consents')}
                 >
                   View Consents
                 </Button>
@@ -457,24 +355,22 @@ export default function FetchedDataPage() {
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3">
-                        <div className="p-2 rounded-full bg-muted">
-                          {getAccountTypeIcon(account.account_type)}
+                        <div className="rounded-full bg-muted p-2">
+                          {getAccountTypeIcon(account.accountType)}
                         </div>
                         <div>
-                          <p className="font-medium text-sm">{account.bank_name}</p>
-                          <p className="text-xs text-muted-foreground font-mono">
-                            {account.masked_account_number}
+                          <p className="text-sm font-medium">{account.bankName}</p>
+                          <p className="font-mono text-xs text-muted-foreground">
+                            {account.maskedAccountNumber}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            {account.holder_name}
-                          </p>
+                          <p className="text-xs text-muted-foreground">{account.holderName}</p>
                         </div>
                       </div>
                       <div className="text-right">
-                        <p className="font-semibold text-sm">
-                          {formatCurrency(account.current_balance, account.currency)}
+                        <p className="text-sm font-semibold">
+                          {formatCurrency(account.currentBalance, account.currency)}
                         </p>
-                        {getFiTypeBadge(account.fi_type)}
+                        {getFiTypeBadge(account.fiType)}
                       </div>
                     </div>
                   </CardContent>
@@ -484,24 +380,24 @@ export default function FetchedDataPage() {
           )}
 
           {/* Pagination */}
-          {pagination.total_pages > 1 && (
+          {totalPages > 1 && (
             <div className="flex items-center justify-between pt-4">
               <Button
                 variant="outline"
                 size="sm"
-                disabled={pagination.page <= 1}
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page - 1 }))}
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
               >
                 Previous
               </Button>
               <span className="text-sm text-muted-foreground">
-                Page {pagination.page} of {pagination.total_pages}
+                Page {page} of {totalPages}
               </span>
               <Button
                 variant="outline"
                 size="sm"
-                disabled={pagination.page >= pagination.total_pages}
-                onClick={() => setPagination(prev => ({ ...prev, page: prev.page + 1 }))}
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
               >
                 Next
               </Button>
@@ -517,19 +413,19 @@ export default function FetchedDataPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <CardTitle className="flex items-center gap-2">
-                      {getAccountTypeIcon(selectedAccount.account_type)}
-                      {selectedAccount.bank_name}
+                      {getAccountTypeIcon(selectedAccount.accountType)}
+                      {selectedAccount.bankName}
                     </CardTitle>
                     <CardDescription>
-                      {selectedAccount.masked_account_number} • {selectedAccount.ifsc_code}
+                      {selectedAccount.maskedAccountNumber} • {selectedAccount.ifscCode}
                     </CardDescription>
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold">
-                      {formatCurrency(selectedAccount.current_balance, selectedAccount.currency)}
+                      {formatCurrency(selectedAccount.currentBalance, selectedAccount.currency)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      as on {format(new Date(selectedAccount.balance_as_on), 'dd MMM yyyy')}
+                      as on {format(new Date(selectedAccount.balanceAsOn), 'dd MMM yyyy')}
                     </p>
                   </div>
                 </div>
@@ -538,7 +434,7 @@ export default function FetchedDataPage() {
                 <Tabs defaultValue="transactions">
                   <TabsList>
                     <TabsTrigger value="transactions">
-                      Transactions ({selectedAccount.transactions_count})
+                      Transactions ({selectedAccount.transactionsCount})
                     </TabsTrigger>
                     <TabsTrigger value="details">Account Details</TabsTrigger>
                   </TabsList>
@@ -551,8 +447,8 @@ export default function FetchedDataPage() {
                         <Skeleton className="h-12" />
                       </div>
                     ) : transactions.length === 0 ? (
-                      <div className="text-center py-8">
-                        <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <div className="py-8 text-center">
+                        <BarChart3 className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
                         <p className="text-muted-foreground">No transactions found</p>
                       </div>
                     ) : (
@@ -571,14 +467,17 @@ export default function FetchedDataPage() {
                             {transactions.map((txn) => (
                               <TableRow key={txn.id}>
                                 <TableCell className="text-xs">
-                                  {format(new Date(txn.txn_date), 'dd MMM yyyy')}
+                                  {format(new Date(txn.txnDate), 'dd MMM yyyy')}
                                 </TableCell>
                                 <TableCell>
-                                  <p className="text-sm truncate max-w-[200px]" title={txn.narration}>
+                                  <p
+                                    className="max-w-[200px] truncate text-sm"
+                                    title={txn.narration}
+                                  >
                                     {txn.narration}
                                   </p>
                                   {txn.reference && (
-                                    <p className="text-xs text-muted-foreground font-mono">
+                                    <p className="font-mono text-xs text-muted-foreground">
                                       {txn.reference}
                                     </p>
                                   )}
@@ -589,10 +488,12 @@ export default function FetchedDataPage() {
                                   </Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
-                                  <span className={`flex items-center justify-end gap-1 font-medium ${
-                                    txn.txn_type === 'CREDIT' ? 'text-green-600' : 'text-red-600'
-                                  }`}>
-                                    {txn.txn_type === 'CREDIT' ? (
+                                  <span
+                                    className={`flex items-center justify-end gap-1 font-medium ${
+                                      txn.txnType === 'CREDIT' ? 'text-green-600' : 'text-red-600'
+                                    }`}
+                                  >
+                                    {txn.txnType === 'CREDIT' ? (
                                       <ArrowDownLeft className="h-3 w-3" />
                                     ) : (
                                       <ArrowUpRight className="h-3 w-3" />
@@ -601,8 +502,8 @@ export default function FetchedDataPage() {
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right text-sm">
-                                  {txn.current_balance != null
-                                    ? formatCurrency(txn.current_balance)
+                                  {txn.currentBalance != null
+                                    ? formatCurrency(txn.currentBalance)
                                     : '-'}
                                 </TableCell>
                               </TableRow>
@@ -611,24 +512,24 @@ export default function FetchedDataPage() {
                         </Table>
 
                         {/* Transaction Pagination */}
-                        {txnPagination.total_pages > 1 && (
-                          <div className="flex items-center justify-between mt-4">
+                        {txnTotalPages > 1 && (
+                          <div className="mt-4 flex items-center justify-between">
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={txnPagination.page <= 1}
-                              onClick={() => fetchTransactions(selectedAccount.id, txnPagination.page - 1)}
+                              disabled={txnPage <= 1}
+                              onClick={() => setTxnPage((p) => Math.max(1, p - 1))}
                             >
                               Previous
                             </Button>
                             <span className="text-sm text-muted-foreground">
-                              Page {txnPagination.page} of {txnPagination.total_pages}
+                              Page {txnPage} of {txnTotalPages}
                             </span>
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={txnPagination.page >= txnPagination.total_pages}
-                              onClick={() => fetchTransactions(selectedAccount.id, txnPagination.page + 1)}
+                              disabled={txnPage >= txnTotalPages}
+                              onClick={() => setTxnPage((p) => p + 1)}
                             >
                               Next
                             </Button>
@@ -642,15 +543,17 @@ export default function FetchedDataPage() {
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-sm text-muted-foreground">Account Type</p>
-                        <p className="font-medium">{selectedAccount.account_type}</p>
+                        <p className="font-medium">{selectedAccount.accountType}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">FI Type</p>
-                        <p className="font-medium">{selectedAccount.fi_type}</p>
+                        <p className="font-medium">{selectedAccount.fiType}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">FIP Name</p>
-                        <p className="font-medium">{selectedAccount.fip_name || selectedAccount.fip_id}</p>
+                        <p className="font-medium">
+                          {selectedAccount.fipName || selectedAccount.fipId}
+                        </p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Branch</p>
@@ -658,7 +561,7 @@ export default function FetchedDataPage() {
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Account Holder</p>
-                        <p className="font-medium">{selectedAccount.holder_name}</p>
+                        <p className="font-medium">{selectedAccount.holderName}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Nominee</p>
@@ -667,21 +570,24 @@ export default function FetchedDataPage() {
                       <div>
                         <p className="text-sm text-muted-foreground">Available Balance</p>
                         <p className="font-medium">
-                          {selectedAccount.available_balance != null
-                            ? formatCurrency(selectedAccount.available_balance, selectedAccount.currency)
+                          {selectedAccount.availableBalance != null
+                            ? formatCurrency(
+                                selectedAccount.availableBalance,
+                                selectedAccount.currency,
+                              )
                             : '-'}
                         </p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Fetched At</p>
                         <p className="font-medium">
-                          {format(new Date(selectedAccount.fetched_at), 'dd MMM yyyy HH:mm')}
+                          {format(new Date(selectedAccount.fetchedAt), 'dd MMM yyyy HH:mm')}
                         </p>
                       </div>
-                      {selectedAccount.entity_name && (
+                      {selectedAccount.entityName && (
                         <div className="col-span-2">
                           <p className="text-sm text-muted-foreground">Linked Entity</p>
-                          <p className="font-medium">{selectedAccount.entity_name}</p>
+                          <p className="font-medium">{selectedAccount.entityName}</p>
                         </div>
                       )}
                     </div>
@@ -692,7 +598,7 @@ export default function FetchedDataPage() {
           ) : (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-24">
-                <CreditCard className="h-16 w-16 text-muted-foreground mb-4" />
+                <CreditCard className="mb-4 h-16 w-16 text-muted-foreground" />
                 <p className="text-lg font-medium">Select an account</p>
                 <p className="text-sm text-muted-foreground">
                   Choose a bank account from the list to view details and transactions

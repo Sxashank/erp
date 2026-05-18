@@ -4,9 +4,11 @@
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
+
 import { formatIndianCurrency } from './AmountDisplay';
+
+import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 export interface AmountInputProps
   extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> {

@@ -1,6 +1,8 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Laptop, Monitor, Smartphone, Key, Car, Package } from 'lucide-react';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -9,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Laptop, Monitor, Smartphone, Key, Car, Package } from 'lucide-react';
+
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -19,75 +21,20 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-// Mock data
-const assets = [
-  {
-    id: '1',
-    assetCode: 'LAP-2024-0156',
-    name: 'Dell Latitude 5540',
-    category: 'Laptop',
-    serialNumber: 'DLTD5540X9876',
-    assignedDate: '2024-03-15',
-    condition: 'GOOD',
-    value: 85000,
-    warranty: '2027-03-14',
-    icon: 'Laptop',
-  },
-  {
-    id: '2',
-    assetCode: 'MON-2024-0089',
-    name: 'Dell 27" Monitor',
-    category: 'Monitor',
-    serialNumber: 'DLMN27X5432',
-    assignedDate: '2024-03-15',
-    condition: 'GOOD',
-    value: 25000,
-    warranty: '2026-03-14',
-    icon: 'Monitor',
-  },
-  {
-    id: '3',
-    assetCode: 'MOB-2024-0234',
-    name: 'iPhone 14 Pro',
-    category: 'Mobile',
-    serialNumber: 'AP14PROX7654',
-    assignedDate: '2024-06-01',
-    condition: 'GOOD',
-    value: 129900,
-    warranty: '2025-05-31',
-    icon: 'Smartphone',
-  },
-  {
-    id: '4',
-    assetCode: 'KEY-2024-0045',
-    name: 'Office Drawer Key',
-    category: 'Keys',
-    serialNumber: 'KEY-FL3-D12',
-    assignedDate: '2024-03-10',
-    condition: 'GOOD',
-    value: 50,
-    warranty: null,
-    icon: 'Key',
-  },
-  {
-    id: '5',
-    assetCode: 'VEH-2023-0012',
-    name: 'Company Car - Honda City',
-    category: 'Vehicle',
-    serialNumber: 'MH02AB1234',
-    assignedDate: '2023-08-15',
-    condition: 'GOOD',
-    value: 1200000,
-    warranty: '2026-08-14',
-    icon: 'Car',
-  },
-];
+interface AssignedAsset {
+  id: string;
+  assetCode: string;
+  name: string;
+  category: string;
+  serialNumber: string;
+  assignedDate: string;
+  condition: string;
+  value: number;
+  warranty: string | null;
+  icon: string;
+}
 
-const assetSummary = [
-  { category: 'IT Equipment', count: 3, value: 239900 },
-  { category: 'Keys & Access', count: 1, value: 50 },
-  { category: 'Vehicle', count: 1, value: 1200000 },
-];
+const assets: AssignedAsset[] = [];
 
 export default function ESSAssetList() {
   const getAssetIcon = (iconName: string) => {
@@ -159,7 +106,9 @@ export default function ESSAssetList() {
                 <Laptop className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold">3</div>
+                <div className="text-2xl font-bold">
+                  {assets.filter((asset) => ['Laptop', 'Monitor', 'Mobile'].includes(asset.category)).length}
+                </div>
                 <div className="text-sm text-muted-foreground">IT Equipment</div>
               </div>
             </div>
@@ -172,7 +121,9 @@ export default function ESSAssetList() {
                 <Car className="h-6 w-6 text-purple-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold">1</div>
+                <div className="text-2xl font-bold">
+                  {assets.filter((asset) => asset.category === 'Vehicle').length}
+                </div>
                 <div className="text-sm text-muted-foreground">Vehicle</div>
               </div>
             </div>
@@ -207,7 +158,13 @@ export default function ESSAssetList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {assets.map((asset) => (
+              {assets.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    Asset assignment data is pending backend ESS asset endpoints. Once fixed-asset custody is exposed to ESS, assigned assets will appear here.
+                  </TableCell>
+                </TableRow>
+              ) : assets.map((asset) => (
                 <TableRow key={asset.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">

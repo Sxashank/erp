@@ -1,29 +1,26 @@
 """Loan Product repositories for the lending module."""
 
 from datetime import date
-from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.lending.product import (
-    LoanProduct,
-    InterestRate,
-    InterestRateHistory,
-    FeeMaster,
-    ProductFee,
-    DocumentChecklist,
-)
 from app.models.lending.enums import (
-    ProductCategory,
-    InterestType,
-    FeeType,
-    FeeCollectionStage,
-    DocumentCategory,
     DocumentStage,
     EntityType,
+    FeeCollectionStage,
+    FeeType,
+    InterestType,
+    ProductCategory,
+)
+from app.models.lending.product import (
+    DocumentChecklist,
+    FeeMaster,
+    InterestRate,
+    LoanProduct,
+    ProductFee,
 )
 from app.repositories.base import BaseRepository
 
@@ -34,9 +31,7 @@ class InterestRateRepository(BaseRepository[InterestRate]):
     def __init__(self, session: AsyncSession):
         super().__init__(InterestRate, session)
 
-    async def get_by_code(
-        self, code: str, organization_id: UUID
-    ) -> Optional[InterestRate]:
+    async def get_by_code(self, code: str, organization_id: UUID) -> InterestRate | None:
         """Get interest rate by code."""
         query = select(InterestRate).where(
             and_(
@@ -54,12 +49,10 @@ class InterestRateRepository(BaseRepository[InterestRate]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        effective_date: Optional[date] = None,
-    ) -> Tuple[List[InterestRate], int]:
+        effective_date: date | None = None,
+    ) -> tuple[list[InterestRate], int]:
         """Get all interest rates for an organization."""
-        base_query = select(InterestRate).where(
-            InterestRate.organization_id == organization_id
-        )
+        base_query = select(InterestRate).where(InterestRate.organization_id == organization_id)
 
         if not include_inactive:
             base_query = base_query.where(InterestRate.is_active == True)
@@ -88,8 +81,8 @@ class InterestRateRepository(BaseRepository[InterestRate]):
         return items, total
 
     async def get_current_rate(
-        self, rate_id: UUID, as_of_date: Optional[date] = None
-    ) -> Optional[InterestRate]:
+        self, rate_id: UUID, as_of_date: date | None = None
+    ) -> InterestRate | None:
         """Get current rate as of a specific date."""
         if as_of_date is None:
             as_of_date = date.today()
@@ -115,9 +108,7 @@ class FeeMasterRepository(BaseRepository[FeeMaster]):
     def __init__(self, session: AsyncSession):
         super().__init__(FeeMaster, session)
 
-    async def get_by_code(
-        self, code: str, organization_id: UUID
-    ) -> Optional[FeeMaster]:
+    async def get_by_code(self, code: str, organization_id: UUID) -> FeeMaster | None:
         """Get fee master by code."""
         query = select(FeeMaster).where(
             and_(
@@ -135,12 +126,10 @@ class FeeMasterRepository(BaseRepository[FeeMaster]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        fee_type: Optional[FeeType] = None,
-    ) -> Tuple[List[FeeMaster], int]:
+        fee_type: FeeType | None = None,
+    ) -> tuple[list[FeeMaster], int]:
         """Get all fee masters for an organization."""
-        base_query = select(FeeMaster).where(
-            FeeMaster.organization_id == organization_id
-        )
+        base_query = select(FeeMaster).where(FeeMaster.organization_id == organization_id)
 
         if not include_inactive:
             base_query = base_query.where(FeeMaster.is_active == True)
@@ -164,7 +153,7 @@ class FeeMasterRepository(BaseRepository[FeeMaster]):
         self,
         organization_id: UUID,
         fee_type: FeeType,
-    ) -> List[FeeMaster]:
+    ) -> list[FeeMaster]:
         """Get all fee masters of a specific type."""
         query = select(FeeMaster).where(
             and_(
@@ -185,7 +174,7 @@ class ProductFeeRepository(BaseRepository[ProductFee]):
 
     async def get_by_product(
         self, product_id: UUID, include_inactive: bool = False
-    ) -> List[ProductFee]:
+    ) -> list[ProductFee]:
         """Get all fees for a product."""
         query = select(ProductFee).where(ProductFee.product_id == product_id)
         if not include_inactive:
@@ -195,7 +184,7 @@ class ProductFeeRepository(BaseRepository[ProductFee]):
 
     async def get_by_stage(
         self, product_id: UUID, collection_stage: FeeCollectionStage
-    ) -> List[ProductFee]:
+    ) -> list[ProductFee]:
         """Get fees for a product at a specific collection stage."""
         query = select(ProductFee).where(
             and_(
@@ -207,9 +196,7 @@ class ProductFeeRepository(BaseRepository[ProductFee]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_mandatory_fees(
-        self, product_id: UUID
-    ) -> List[ProductFee]:
+    async def get_mandatory_fees(self, product_id: UUID) -> list[ProductFee]:
         """Get mandatory fees for a product."""
         query = select(ProductFee).where(
             and_(
@@ -228,9 +215,7 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
     def __init__(self, session: AsyncSession):
         super().__init__(DocumentChecklist, session)
 
-    async def get_by_code(
-        self, document_code: str, product_id: UUID
-    ) -> Optional[DocumentChecklist]:
+    async def get_by_code(self, document_code: str, product_id: UUID) -> DocumentChecklist | None:
         """Get document checklist by code within a product."""
         query = select(DocumentChecklist).where(
             and_(
@@ -244,16 +229,12 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
 
     async def get_by_product(
         self, product_id: UUID, include_inactive: bool = False
-    ) -> List[DocumentChecklist]:
+    ) -> list[DocumentChecklist]:
         """Get all document checklist items for a product."""
-        query = select(DocumentChecklist).where(
-            DocumentChecklist.product_id == product_id
-        )
+        query = select(DocumentChecklist).where(DocumentChecklist.product_id == product_id)
         if not include_inactive:
             query = query.where(DocumentChecklist.is_active == True)
-        query = query.order_by(
-            DocumentChecklist.stage, DocumentChecklist.display_order
-        )
+        query = query.order_by(DocumentChecklist.stage, DocumentChecklist.display_order)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
@@ -261,8 +242,8 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
         self,
         product_id: UUID,
         stage: DocumentStage,
-        entity_type: Optional[EntityType] = None,
-    ) -> List[DocumentChecklist]:
+        entity_type: EntityType | None = None,
+    ) -> list[DocumentChecklist]:
         """Get document checklist for a specific stage."""
         query = select(DocumentChecklist).where(
             and_(
@@ -284,9 +265,9 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
     async def get_mandatory_documents(
         self,
         product_id: UUID,
-        stage: Optional[DocumentStage] = None,
-        entity_type: Optional[EntityType] = None,
-    ) -> List[DocumentChecklist]:
+        stage: DocumentStage | None = None,
+        entity_type: EntityType | None = None,
+    ) -> list[DocumentChecklist]:
         """Get mandatory documents for a product."""
         query = select(DocumentChecklist).where(
             and_(
@@ -314,9 +295,7 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
     def __init__(self, session: AsyncSession):
         super().__init__(LoanProduct, session)
 
-    async def get_by_code(
-        self, code: str, organization_id: UUID
-    ) -> Optional[LoanProduct]:
+    async def get_by_code(self, code: str, organization_id: UUID) -> LoanProduct | None:
         """Get loan product by code."""
         query = select(LoanProduct).where(
             and_(
@@ -328,7 +307,7 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_with_details(self, product_id: UUID) -> Optional[LoanProduct]:
+    async def get_with_details(self, product_id: UUID) -> LoanProduct | None:
         """Get loan product with fees and document checklist."""
         query = (
             select(LoanProduct)
@@ -353,14 +332,12 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        category: Optional[ProductCategory] = None,
-        interest_type: Optional[InterestType] = None,
-    ) -> Tuple[List[LoanProduct], int]:
+        search: str | None = None,
+        category: ProductCategory | None = None,
+        interest_type: InterestType | None = None,
+    ) -> tuple[list[LoanProduct], int]:
         """Get all loan products for an organization with filters."""
-        base_query = select(LoanProduct).where(
-            LoanProduct.organization_id == organization_id
-        )
+        base_query = select(LoanProduct).where(LoanProduct.organization_id == organization_id)
 
         if not include_inactive:
             base_query = base_query.where(LoanProduct.is_active == True)
@@ -385,8 +362,14 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         total_result = await self.session.execute(count_query)
         total = total_result.scalar() or 0
 
-        # Get paginated results
-        query = base_query.order_by(LoanProduct.code).offset(skip).limit(limit)
+        # Get paginated results — eager-load base_rate so the list response
+        # can surface base_rate_value without N+1 queries.
+        query = (
+            base_query.options(selectinload(LoanProduct.base_rate))
+            .order_by(LoanProduct.code)
+            .offset(skip)
+            .limit(limit)
+        )
         result = await self.session.execute(query)
         items = list(result.scalars().all())
 
@@ -395,8 +378,8 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
     async def get_active_products(
         self,
         organization_id: UUID,
-        category: Optional[ProductCategory] = None,
-    ) -> List[LoanProduct]:
+        category: ProductCategory | None = None,
+    ) -> list[LoanProduct]:
         """Get all active loan products for dropdown lists."""
         query = select(LoanProduct).where(
             and_(
@@ -416,9 +399,9 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         self,
         organization_id: UUID,
         entity_type: EntityType,
-        amount: Optional[float] = None,
-        tenure_months: Optional[int] = None,
-    ) -> List[LoanProduct]:
+        amount: float | None = None,
+        tenure_months: int | None = None,
+    ) -> list[LoanProduct]:
         """Get products that meet eligibility criteria."""
         query = select(LoanProduct).where(
             and_(

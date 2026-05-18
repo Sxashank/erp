@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.masters.organization_address_service import OrganizationAddressService
 from app.schemas.masters.organization_address import (
@@ -49,13 +49,13 @@ def _to_response(address) -> OrganizationAddressResponse:
     )
 
 
-@router.get("/{org_id}/addresses", response_model=List[OrganizationAddressResponse])
+@router.get("/{org_id}/addresses", response_model=List[OrganizationAddressResponse], response_model_by_alias=True)
 async def list_organization_addresses(
     org_id: UUID,
     address_type: str = Query(None),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("MASTER_ORG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all addresses for an organization.
@@ -70,12 +70,12 @@ async def list_organization_addresses(
     return [_to_response(a) for a in addresses]
 
 
-@router.post("/{org_id}/addresses", response_model=OrganizationAddressResponse)
+@router.post("/{org_id}/addresses", response_model=OrganizationAddressResponse, response_model_by_alias=True)
 async def create_organization_address(
     org_id: UUID,
     data: OrganizationAddressCreate,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_ADDRESS_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new address for an organization.
@@ -88,12 +88,12 @@ async def create_organization_address(
     return _to_response(address)
 
 
-@router.get("/{org_id}/addresses/{address_id}", response_model=OrganizationAddressResponse)
+@router.get("/{org_id}/addresses/{address_id}", response_model=OrganizationAddressResponse, response_model_by_alias=True)
 async def get_organization_address(
     org_id: UUID,
     address_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get a specific address.
@@ -104,13 +104,13 @@ async def get_organization_address(
     return _to_response(address)
 
 
-@router.put("/{org_id}/addresses/{address_id}", response_model=OrganizationAddressResponse)
+@router.put("/{org_id}/addresses/{address_id}", response_model=OrganizationAddressResponse, response_model_by_alias=True)
 async def update_organization_address(
     org_id: UUID,
     address_id: UUID,
     data: OrganizationAddressUpdate,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_ADDRESS_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing address.
@@ -121,12 +121,12 @@ async def update_organization_address(
     return _to_response(address)
 
 
-@router.delete("/{org_id}/addresses/{address_id}", response_model=MessageResponse)
+@router.delete("/{org_id}/addresses/{address_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_organization_address(
     org_id: UUID,
     address_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_ADDRESS_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete an address.
@@ -137,12 +137,12 @@ async def delete_organization_address(
     return MessageResponse(message="Address deleted successfully")
 
 
-@router.post("/{org_id}/addresses/{address_id}/set-primary", response_model=OrganizationAddressResponse)
+@router.post("/{org_id}/addresses/{address_id}/set-primary", response_model=OrganizationAddressResponse, response_model_by_alias=True)
 async def set_primary_address(
     org_id: UUID,
     address_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_ADDRESS_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Set an address as primary.

@@ -1,17 +1,38 @@
-import { useState } from 'react';
+/**
+ * Stress Testing page — parametric v1.
+ *
+ * Lets a treasury user run the four standard stress scenarios:
+ *   1. Rate shock +200 bps  (NII impact, IRS Gap math)
+ *   2. Rate shock -200 bps
+ *   3. NPA shock +5%        (5% migrate Standard → Substandard)
+ *   4. Combined macro       (1 + 3)
+ *
+ * Math is parametric — no Monte Carlo, no portfolio revaluation engine.
+ * Honest scope for v1 (CLAUDE.md §1 quality bar: do not fabricate).
+ *
+ * Routed at /admin/treasury/stress-test in src/App.tsx.
+ *
+ * UI contract:
+ *   - <PageHeader> with breadcrumbs + a "Run Stress Test" action.
+ *   - On click, all 4 scenarios run via `useRunAllStressScenarios`.
+ *   - First render (no results) shows an <EmptyState> CTA prompting "Run".
+ *   - While running, shows a <SkeletonTable>.
+ *   - On failure, shows an <ErrorState> with the canonical envelope.
+ *   - On success, renders 4 status cards + a detail Table.
+ */
+
+import { ArrowLeft, Loader2, AlertTriangle, Play } from 'lucide-react';
+import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { SkeletonTable } from '@/components/common/SkeletonTable';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -20,442 +41,257 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  ArrowLeft,
-  AlertTriangle,
-  TrendingDown,
-  BarChart3,
-  Play,
-  Download,
-  RefreshCw,
-} from 'lucide-react';
+import { useRunAllStressScenarios } from '@/hooks/lending/useStressTest';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { cn } from '@/lib/utils';
+import type { ScenarioResult, ScenarioStatus } from '@/services/lending/stressTestApi';
 
-const formatCurrency = (value: number) => {
-  if (value >= 10000000) {
-    return `₹${(value / 10000000).toFixed(2)} Cr`;
-  }
-  if (value >= 100000) {
-    return `₹${(value / 100000).toFixed(2)} L`;
-  }
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
+/** Map a stress status to a StatusPill-compatible value + variant hint. */
+const STATUS_LABEL: Record<ScenarioStatus, string> = {
+  PASS: 'Pass',
+  WARN: 'Warn',
+  FAIL: 'Fail',
 };
 
-// Predefined stress scenarios
-const stressScenarios = [
-  {
-    id: 'mild',
-    name: 'Mild Stress',
-    description: 'Economic slowdown with 10% credit deterioration',
-    assumptions: {
-      interestRateShock: 50, // bps
-      creditLoss: 10, // %
-      liquidityStress: 15, // %
-      marketDecline: 5, // %
-    },
-  },
-  {
-    id: 'moderate',
-    name: 'Moderate Stress',
-    description: 'Recession scenario with significant asset quality deterioration',
-    assumptions: {
-      interestRateShock: 100,
-      creditLoss: 25,
-      liquidityStress: 30,
-      marketDecline: 15,
-    },
-  },
-  {
-    id: 'severe',
-    name: 'Severe Stress',
-    description: 'Global financial crisis type scenario',
-    assumptions: {
-      interestRateShock: 200,
-      creditLoss: 50,
-      liquidityStress: 50,
-      marketDecline: 30,
-    },
-  },
-];
+/** Decimal-string → number for display only (never for math). */
+function toNumber(value: string | null | undefined): number {
+  if (value === null || value === undefined || value === '') return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
 
-// Stress test results
-const stressResults = {
-  mild: {
-    capitalRatio: { base: 18.5, stressed: 16.2, change: -2.3, minimum: 11.5, compliant: true },
-    nii: { base: 85000000, stressed: 78500000, change: -7.6 },
-    npa: { base: 2.5, stressed: 4.2, change: 1.7 },
-    lcr: { base: 125, stressed: 110, change: -15, minimum: 100, compliant: true },
-    profit: { base: 45000000, stressed: 32000000, change: -28.9 },
-  },
-  moderate: {
-    capitalRatio: { base: 18.5, stressed: 13.8, change: -4.7, minimum: 11.5, compliant: true },
-    nii: { base: 85000000, stressed: 68000000, change: -20 },
-    npa: { base: 2.5, stressed: 8.5, change: 6.0 },
-    lcr: { base: 125, stressed: 95, change: -30, minimum: 100, compliant: false },
-    profit: { base: 45000000, stressed: 12000000, change: -73.3 },
-  },
-  severe: {
-    capitalRatio: { base: 18.5, stressed: 10.2, change: -8.3, minimum: 11.5, compliant: false },
-    nii: { base: 85000000, stressed: 51000000, change: -40 },
-    npa: { base: 2.5, stressed: 15.0, change: 12.5 },
-    lcr: { base: 125, stressed: 72, change: -53, minimum: 100, compliant: false },
-    profit: { base: 45000000, stressed: -25000000, change: -155.6 },
-  },
-};
+/** Format a percentage decimal-string (e.g. "12.34") as "12.34%". */
+function formatPct(value: string | null | undefined, digits = 2): string {
+  const n = toNumber(value);
+  return `${n.toFixed(digits)}%`;
+}
 
-// Historical stress test runs
-const stressHistory = [
-  { date: '2025-01-15', scenario: 'Moderate Stress', capital: 13.8, lcr: 95, status: 'Completed' },
-  { date: '2025-01-01', scenario: 'Severe Stress', capital: 10.5, lcr: 75, status: 'Completed' },
-  { date: '2024-12-15', scenario: 'Mild Stress', capital: 16.5, lcr: 112, status: 'Completed' },
-  { date: '2024-12-01', scenario: 'Moderate Stress', capital: 14.2, lcr: 98, status: 'Completed' },
-];
+function formatBps(bps: number): string {
+  const sign = bps > 0 ? '+' : '';
+  return `${sign}${bps} bps`;
+}
 
-export default function StressTest() {
-  const [selectedScenario, setSelectedScenario] = useState('moderate');
-  const [isRunning, setIsRunning] = useState(false);
+function statusToneClass(status: ScenarioStatus): string {
+  switch (status) {
+    case 'PASS':
+      return 'border-green-200 bg-green-50';
+    case 'WARN':
+      return 'border-amber-200 bg-amber-50';
+    case 'FAIL':
+      return 'border-red-200 bg-red-50';
+  }
+}
 
-  const currentScenario = stressScenarios.find(s => s.id === selectedScenario);
-  const results = stressResults[selectedScenario as keyof typeof stressResults];
+/** Local PASS/WARN/FAIL pill — the canonical StatusBadge enum doesn't
+ *  include stress-test statuses yet. See CLAUDE.md §5.8 — when a domain
+ *  status is reused across pages, promote this to a `StressStatusBadge`
+ *  under `src/components/lending/common/`.
+ */
+function StressStatusPill({ status }: { status: ScenarioStatus }): JSX.Element {
+  const toneClass: Record<ScenarioStatus, string> = {
+    PASS: 'bg-green-100 text-green-800 border-green-300',
+    WARN: 'bg-amber-100 text-amber-800 border-amber-300',
+    FAIL: 'bg-red-100 text-red-800 border-red-300',
+  };
+  return (
+    <Badge
+      variant="outline"
+      className={cn('border px-2.5 py-0.5 text-xs font-medium', toneClass[status])}
+    >
+      {STATUS_LABEL[status]}
+    </Badge>
+  );
+}
 
-  const runStressTest = () => {
-    setIsRunning(true);
-    setTimeout(() => setIsRunning(false), 2000);
+interface ResultCardProps {
+  result: ScenarioResult;
+}
+
+function ResultCard({ result }: ResultCardProps): JSX.Element {
+  const o = result.outputs;
+  return (
+    <Card className={statusToneClass(result.status)}>
+      <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
+        <div className="min-w-0">
+          <CardTitle className="text-base font-semibold">{result.name}</CardTitle>
+          <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{result.description}</p>
+        </div>
+        <StressStatusPill status={result.status} />
+      </CardHeader>
+      <CardContent className="space-y-2 pt-2 text-sm">
+        <div className="flex items-baseline justify-between">
+          <span className="text-muted-foreground">Post-stress CRAR</span>
+          <span className="font-semibold tabular-nums">{formatPct(o.postStressCrar)}</span>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-muted-foreground">CRAR change</span>
+          <span className="font-medium tabular-nums">{formatBps(o.crarDeltaBps)}</span>
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-muted-foreground">NII impact</span>
+          <AmountDisplay amount={toNumber(o.niiImpact)} compact />
+        </div>
+        <div className="flex items-baseline justify-between">
+          <span className="text-muted-foreground">Provision impact</span>
+          <AmountDisplay amount={toNumber(o.provisionImpact)} compact />
+        </div>
+        {o.breachMinimumCrar && (
+          <p className="mt-2 flex items-start gap-1 text-xs text-red-700">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+            Below RBI minimum CRAR ({formatPct(o.minimumCrarRequired, 0)}).
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export default function StressTest(): JSX.Element {
+  const { toast } = useToast();
+  const runAll = useRunAllStressScenarios();
+
+  const results: ScenarioResult[] = useMemo(() => runAll.data?.results ?? [], [runAll.data]);
+
+  const handleRun = (): void => {
+    runAll.mutate(
+      {},
+      {
+        onError: (err) => showErrorToast(err, toast),
+      },
+    );
   };
 
+  // ----- Three required UI states (CLAUDE.md §5.7) ------------------------
+  // - Loading:  SkeletonTable while the mutation is pending on first run.
+  // - Empty:    EmptyState with CTA when no run has happened yet.
+  // - Error:    ErrorState if the run fails.
+
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="space-y-6">
       <PageHeader
         title="Stress Testing"
-        subtitle="Scenario-based stress testing and capital adequacy analysis"
-        breadcrumbs={[
-          { label: 'Risk Dashboard', to: '/admin/treasury/risk-dashboard' },
-          { label: 'Stress Testing' },
-        ]}
+        subtitle="Parametric impact of rate / credit / combined shocks on CRAR, NII, and provisioning"
+        breadcrumbs={[{ label: 'Treasury', to: '/admin/treasury' }, { label: 'Stress Testing' }]}
         actions={
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Export Report
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="ghost" asChild>
+              <Link to="/admin/treasury">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Treasury
+              </Link>
+            </Button>
+            <Button onClick={handleRun} disabled={runAll.isPending}>
+              {runAll.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+              ) : (
+                <Play className="mr-2 h-4 w-4" aria-hidden />
+              )}
+              {runAll.isPending ? 'Running…' : 'Run Stress Test'}
+            </Button>
+          </div>
         }
       />
 
-      {/* Scenario Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Stress Scenario</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap items-center gap-4">
-            <Select value={selectedScenario} onValueChange={setSelectedScenario}>
-              <SelectTrigger className="w-64">
-                <SelectValue placeholder="Select scenario" />
-              </SelectTrigger>
-              <SelectContent>
-                {stressScenarios.map((scenario) => (
-                  <SelectItem key={scenario.id} value={scenario.id}>
-                    {scenario.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button onClick={runStressTest} disabled={isRunning}>
-              {isRunning ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Running...
-                </>
-              ) : (
-                <>
-                  <Play className="h-4 w-4 mr-2" />
+      {/* Loading — first run, no data yet */}
+      {runAll.isPending && !runAll.data && (
+        <Card>
+          <CardContent className="py-6">
+            <SkeletonTable rows={4} columns={6} />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Error */}
+      {runAll.isError && !runAll.isPending && (
+        <ErrorState title="Stress test failed" error={runAll.error} onRetry={handleRun} />
+      )}
+
+      {/* Empty — never run */}
+      {!runAll.isPending && !runAll.isError && results.length === 0 && (
+        <Card>
+          <CardContent className="py-12">
+            <EmptyState
+              icon={AlertTriangle}
+              title="No stress test results yet"
+              subtitle="Run the four standard scenarios (±200 bps rate shock, +5% NPA migration, and a combined macro shock) to see the impact on CRAR, NII, and provisioning."
+              action={
+                <Button onClick={handleRun} disabled={runAll.isPending}>
+                  {runAll.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" aria-hidden />
+                  )}
                   Run Stress Test
-                </>
-              )}
-            </Button>
+                </Button>
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Success — results */}
+      {results.length > 0 && !runAll.isPending && (
+        <>
+          {/* Per-scenario status cards */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {results.map((r) => (
+              <ResultCard key={r.scenarioId} result={r} />
+            ))}
           </div>
 
-          {currentScenario && (
-            <div className="mt-4 p-4 bg-muted rounded-lg">
-              <p className="font-medium">{currentScenario.name}</p>
-              <p className="text-sm text-muted-foreground mt-1">{currentScenario.description}</p>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4">
-                <div>
-                  <p className="text-xs text-muted-foreground">Interest Rate Shock</p>
-                  <p className="font-medium">+{currentScenario.assumptions.interestRateShock} bps</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Credit Loss Increase</p>
-                  <p className="font-medium">+{currentScenario.assumptions.creditLoss}%</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Liquidity Stress</p>
-                  <p className="font-medium">-{currentScenario.assumptions.liquidityStress}%</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Market Decline</p>
-                  <p className="font-medium">-{currentScenario.assumptions.marketDecline}%</p>
-                </div>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Results Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Capital Ratio</div>
-            <div className={`text-2xl font-bold mt-1 ${results.capitalRatio.compliant ? 'text-green-600' : 'text-red-600'}`}>
-              {results.capitalRatio.stressed}%
-            </div>
-            <div className="flex items-center gap-1 text-sm text-red-500">
-              <TrendingDown className="h-3 w-3" />
-              {results.capitalRatio.change}%
-            </div>
-            <Badge variant={results.capitalRatio.compliant ? 'default' : 'destructive'} className="mt-2">
-              {results.capitalRatio.compliant ? 'Compliant' : 'Breach'}
-            </Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">LCR</div>
-            <div className={`text-2xl font-bold mt-1 ${results.lcr.compliant ? 'text-green-600' : 'text-red-600'}`}>
-              {results.lcr.stressed}%
-            </div>
-            <div className="flex items-center gap-1 text-sm text-red-500">
-              <TrendingDown className="h-3 w-3" />
-              {results.lcr.change}%
-            </div>
-            <Badge variant={results.lcr.compliant ? 'default' : 'destructive'} className="mt-2">
-              {results.lcr.compliant ? 'Compliant' : 'Breach'}
-            </Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Stressed NPA</div>
-            <div className="text-2xl font-bold mt-1 text-red-600">{results.npa.stressed}%</div>
-            <div className="flex items-center gap-1 text-sm text-red-500">
-              +{results.npa.change}%
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Stressed NII</div>
-            <div className="text-2xl font-bold mt-1">{formatCurrency(results.nii.stressed)}</div>
-            <div className="flex items-center gap-1 text-sm text-red-500">
-              <TrendingDown className="h-3 w-3" />
-              {results.nii.change}%
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Stressed Profit</div>
-            <div className={`text-2xl font-bold mt-1 ${results.profit.stressed >= 0 ? '' : 'text-red-600'}`}>
-              {formatCurrency(results.profit.stressed)}
-            </div>
-            <div className="flex items-center gap-1 text-sm text-red-500">
-              <TrendingDown className="h-3 w-3" />
-              {Math.abs(results.profit.change)}%
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Detailed Results */}
-      <Tabs defaultValue="comparison" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="comparison">Base vs Stressed</TabsTrigger>
-          <TabsTrigger value="sensitivity">Sensitivity Analysis</TabsTrigger>
-          <TabsTrigger value="history">Historical Runs</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="comparison">
+          {/* Detail comparison table */}
           <Card>
             <CardHeader>
-              <CardTitle>Base Case vs Stressed Comparison</CardTitle>
-              <CardDescription>Impact analysis for {currentScenario?.name}</CardDescription>
+              <CardTitle className="text-base font-semibold">Scenario detail</CardTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                As of {runAll.data?.asOfDate ?? 'today'} · provisioning rates from{' '}
+                <code className="rounded bg-muted px-1 py-0.5 text-xs">
+                  {results[0]?.inputs.provisioningRateSource ?? '—'}
+                </code>
+              </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Metric</TableHead>
-                    <TableHead className="text-right">Base Case</TableHead>
-                    <TableHead className="text-right">Stressed</TableHead>
-                    <TableHead className="text-right">Change</TableHead>
-                    <TableHead className="text-right">Minimum</TableHead>
-                    <TableHead className="text-center">Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">Capital Adequacy Ratio</TableCell>
-                    <TableCell className="text-right">{results.capitalRatio.base}%</TableCell>
-                    <TableCell className="text-right font-bold">{results.capitalRatio.stressed}%</TableCell>
-                    <TableCell className="text-right text-red-500">{results.capitalRatio.change}%</TableCell>
-                    <TableCell className="text-right">{results.capitalRatio.minimum}%</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={results.capitalRatio.compliant ? 'default' : 'destructive'}>
-                        {results.capitalRatio.compliant ? 'Pass' : 'Fail'}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Liquidity Coverage Ratio</TableCell>
-                    <TableCell className="text-right">{results.lcr.base}%</TableCell>
-                    <TableCell className="text-right font-bold">{results.lcr.stressed}%</TableCell>
-                    <TableCell className="text-right text-red-500">{results.lcr.change}%</TableCell>
-                    <TableCell className="text-right">{results.lcr.minimum}%</TableCell>
-                    <TableCell className="text-center">
-                      <Badge variant={results.lcr.compliant ? 'default' : 'destructive'}>
-                        {results.lcr.compliant ? 'Pass' : 'Fail'}
-                      </Badge>
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Net Interest Income</TableCell>
-                    <TableCell className="text-right">{formatCurrency(results.nii.base)}</TableCell>
-                    <TableCell className="text-right font-bold">{formatCurrency(results.nii.stressed)}</TableCell>
-                    <TableCell className="text-right text-red-500">{results.nii.change}%</TableCell>
-                    <TableCell className="text-right">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Gross NPA Ratio</TableCell>
-                    <TableCell className="text-right">{results.npa.base}%</TableCell>
-                    <TableCell className="text-right font-bold">{results.npa.stressed}%</TableCell>
-                    <TableCell className="text-right text-red-500">+{results.npa.change}%</TableCell>
-                    <TableCell className="text-right">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Net Profit</TableCell>
-                    <TableCell className="text-right">{formatCurrency(results.profit.base)}</TableCell>
-                    <TableCell className={`text-right font-bold ${results.profit.stressed < 0 ? 'text-red-600' : ''}`}>
-                      {formatCurrency(results.profit.stressed)}
-                    </TableCell>
-                    <TableCell className="text-right text-red-500">{results.profit.change}%</TableCell>
-                    <TableCell className="text-right">-</TableCell>
-                    <TableCell className="text-center">-</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-
-              {!results.capitalRatio.compliant || !results.lcr.compliant ? (
-                <div className="mt-6 p-4 bg-red-50 rounded-lg">
-                  <div className="flex items-start gap-2">
-                    <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-red-800">Regulatory Breach Warning</p>
-                      <p className="text-sm text-red-700 mt-1">
-                        Under the {currentScenario?.name.toLowerCase()} scenario, regulatory minimums would be breached.
-                        Management action and contingency plans should be reviewed.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-6 p-4 bg-green-50 rounded-lg">
-                  <p className="text-sm text-green-800">
-                    All regulatory ratios remain compliant under the {currentScenario?.name.toLowerCase()} scenario.
-                    Capital buffers are sufficient to absorb stressed losses.
-                  </p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="sensitivity">
-          <Card>
-            <CardHeader>
-              <CardTitle>Sensitivity Analysis</CardTitle>
-              <CardDescription>Impact of key risk factors on capital ratio</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Risk Factor</TableHead>
-                    <TableHead className="text-right">+50 bps</TableHead>
-                    <TableHead className="text-right">+100 bps</TableHead>
-                    <TableHead className="text-right">+150 bps</TableHead>
-                    <TableHead className="text-right">+200 bps</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="font-medium">Interest Rate Shock</TableCell>
-                    <TableCell className="text-right">17.8%</TableCell>
-                    <TableCell className="text-right">17.2%</TableCell>
-                    <TableCell className="text-right">16.5%</TableCell>
-                    <TableCell className="text-right">15.8%</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Credit Loss (+% of NPA)</TableCell>
-                    <TableCell className="text-right">18.0%</TableCell>
-                    <TableCell className="text-right">17.5%</TableCell>
-                    <TableCell className="text-right">17.0%</TableCell>
-                    <TableCell className="text-right">16.5%</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Market Value Decline</TableCell>
-                    <TableCell className="text-right">18.2%</TableCell>
-                    <TableCell className="text-right">17.9%</TableCell>
-                    <TableCell className="text-right">17.6%</TableCell>
-                    <TableCell className="text-right">17.3%</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="font-medium">Operational Loss</TableCell>
-                    <TableCell className="text-right">18.4%</TableCell>
-                    <TableCell className="text-right">18.3%</TableCell>
-                    <TableCell className="text-right">18.2%</TableCell>
-                    <TableCell className="text-right">18.1%</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="history">
-          <Card>
-            <CardHeader>
-              <CardTitle>Historical Stress Test Runs</CardTitle>
-              <CardDescription>Previous stress test executions and results</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Run Date</TableHead>
                     <TableHead>Scenario</TableHead>
-                    <TableHead className="text-right">Capital Ratio</TableHead>
-                    <TableHead className="text-right">LCR</TableHead>
+                    <TableHead className="text-right">Pre-CRAR</TableHead>
+                    <TableHead className="text-right">Post-CRAR</TableHead>
+                    <TableHead className="text-right">Δ CRAR</TableHead>
+                    <TableHead className="text-right">NII Impact</TableHead>
+                    <TableHead className="text-right">Provision Impact</TableHead>
+                    <TableHead className="text-right">Pre-NPA</TableHead>
+                    <TableHead className="text-right">Post-NPA</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {stressHistory.map((run, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-medium">{run.date}</TableCell>
-                      <TableCell>{run.scenario}</TableCell>
-                      <TableCell className={`text-right ${run.capital < 11.5 ? 'text-red-600' : ''}`}>
-                        {run.capital}%
+                  {results.map((r) => (
+                    <TableRow key={r.scenarioId}>
+                      <TableCell className="font-medium">{r.name}</TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatPct(r.outputs.preStressCrar)}
                       </TableCell>
-                      <TableCell className={`text-right ${run.lcr < 100 ? 'text-red-600' : ''}`}>
-                        {run.lcr}%
+                      <TableCell className="text-right tabular-nums">
+                        {formatPct(r.outputs.postStressCrar)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatBps(r.outputs.crarDeltaBps)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <AmountDisplay amount={toNumber(r.outputs.niiImpact)} compact />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        <AmountDisplay amount={toNumber(r.outputs.provisionImpact)} compact />
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatPct(r.outputs.preStressNpaRatio)}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatPct(r.outputs.postStressNpaRatio)}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">{run.status}</Badge>
+                        <StressStatusPill status={r.status} />
                       </TableCell>
                     </TableRow>
                   ))}
@@ -463,8 +299,8 @@ export default function StressTest() {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
-      </Tabs>
+        </>
+      )}
     </div>
   );
 }

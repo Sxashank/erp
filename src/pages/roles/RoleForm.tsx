@@ -1,18 +1,19 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Check, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Textarea } from '@/components/ui/textarea';
 import { rolesApi } from '@/services/api';
 import type { RoleCreate, RoleUpdate, Role, Permission } from '@/types';
 
+import { logger } from "@/lib/logger";
 interface PermissionGroup {
   module: string;
   permissions: Permission[];
@@ -60,7 +61,7 @@ export function RoleForm() {
       );
       setPermissionGroups(groups);
     } catch (error) {
-      console.error('Failed to fetch permissions:', error);
+      logger.error('Failed to fetch permissions:', error);
       // Fallback to flat list
       try {
         const response = await rolesApi.getPermissions();
@@ -75,7 +76,7 @@ export function RoleForm() {
         );
         setPermissionGroups(groups);
       } catch (e) {
-        console.error('Failed to fetch permissions (fallback):', e);
+        logger.error('Failed to fetch permissions (fallback):', e);
       }
     }
   };
@@ -94,7 +95,7 @@ export function RoleForm() {
       });
       setSelectedPermissions(role.permissions.map((p) => p.id));
     } catch (error) {
-      console.error('Failed to fetch role:', error);
+      logger.error('Failed to fetch role:', error);
     } finally {
       setLoading(false);
     }
@@ -116,7 +117,7 @@ export function RoleForm() {
       }
       navigate('/admin/roles');
     } catch (error) {
-      console.error('Failed to save role:', error);
+      logger.error('Failed to save role:', error);
     } finally {
       setSubmitting(false);
     }

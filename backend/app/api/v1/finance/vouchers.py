@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.voucher_service import VoucherService
 from app.schemas.finance.voucher import (
@@ -27,9 +27,8 @@ from app.core.constants import VoucherStatus, VoucherClass
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[VoucherResponse])
+@router.get("", response_model=PaginatedResponse[VoucherResponse], response_model_by_alias=True)
 async def list_vouchers(
-    organization_id: UUID = Query(...),
     status: Optional[VoucherStatus] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
@@ -38,7 +37,7 @@ async def list_vouchers(
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of vouchers.
@@ -49,15 +48,15 @@ async def list_vouchers(
 
     if status:
         vouchers, total = await service.get_by_status(
-            organization_id, status, skip, page_size
+            current_user.organization_id, status, skip, page_size
         )
     elif from_date and to_date:
         vouchers, total = await service.get_by_date_range(
-            organization_id, from_date, to_date, voucher_class, skip, page_size
+            current_user.organization_id, from_date, to_date, voucher_class, skip, page_size
         )
     else:
         vouchers, total = await service.get_all(
-            organization_id, skip, page_size, include_inactive
+            current_user.organization_id, skip, page_size, include_inactive
         )
 
     items = [_voucher_to_response(v) for v in vouchers]
@@ -65,11 +64,11 @@ async def list_vouchers(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=VoucherDetailResponse)
+@router.post("", response_model=VoucherDetailResponse, response_model_by_alias=True)
 async def create_voucher(
     data: VoucherCreate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new voucher.
@@ -84,13 +83,12 @@ async def create_voucher(
     return _voucher_to_detail_response(voucher)
 
 
-@router.get("/pending-approval", response_model=List[VoucherResponse])
+@router.get("/pending-approval", response_model=List[VoucherResponse], response_model_by_alias=True)
 async def list_pending_approval(
-    organization_id: UUID = Query(...),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get vouchers pending approval.
@@ -98,16 +96,16 @@ async def list_pending_approval(
     """
     service = VoucherService(db)
     skip = (page - 1) * page_size
-    vouchers = await service.get_pending_approval(organization_id, skip, page_size)
+    vouchers = await service.get_pending_approval(current_user.organization_id, skip, page_size)
 
     return [_voucher_to_response(v) for v in vouchers]
 
 
-@router.get("/{voucher_id}", response_model=VoucherDetailResponse)
+@router.get("/{voucher_id}", response_model=VoucherDetailResponse, response_model_by_alias=True)
 async def get_voucher(
     voucher_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get voucher by ID with lines.
@@ -119,12 +117,12 @@ async def get_voucher(
     return _voucher_to_detail_response(voucher)
 
 
-@router.put("/{voucher_id}", response_model=VoucherDetailResponse)
+@router.put("/{voucher_id}", response_model=VoucherDetailResponse, response_model_by_alias=True)
 async def update_voucher(
     voucher_id: UUID,
     data: VoucherUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update a draft voucher.
@@ -139,11 +137,11 @@ async def update_voucher(
     return _voucher_to_detail_response(voucher)
 
 
-@router.post("/{voucher_id}/submit", response_model=VoucherResponse)
+@router.post("/{voucher_id}/submit", response_model=VoucherResponse, response_model_by_alias=True)
 async def submit_voucher(
     voucher_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Submit a voucher for approval.
@@ -155,12 +153,12 @@ async def submit_voucher(
     return _voucher_to_response(voucher)
 
 
-@router.post("/{voucher_id}/approve", response_model=VoucherResponse)
+@router.post("/{voucher_id}/approve", response_model=VoucherResponse, response_model_by_alias=True)
 async def approve_voucher(
     voucher_id: UUID,
     data: Optional[VoucherApprovalRequest] = None,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Approve a voucher.
@@ -173,12 +171,12 @@ async def approve_voucher(
     return _voucher_to_response(voucher)
 
 
-@router.post("/{voucher_id}/reject", response_model=VoucherResponse)
+@router.post("/{voucher_id}/reject", response_model=VoucherResponse, response_model_by_alias=True)
 async def reject_voucher(
     voucher_id: UUID,
     data: VoucherRejectRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Reject a voucher.
@@ -190,11 +188,11 @@ async def reject_voucher(
     return _voucher_to_response(voucher)
 
 
-@router.post("/{voucher_id}/post", response_model=VoucherResponse)
+@router.post("/{voucher_id}/post", response_model=VoucherResponse, response_model_by_alias=True)
 async def post_voucher(
     voucher_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_POST")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Post an approved voucher to the ledger.
@@ -206,12 +204,12 @@ async def post_voucher(
     return _voucher_to_response(voucher)
 
 
-@router.post("/{voucher_id}/cancel", response_model=VoucherResponse)
+@router.post("/{voucher_id}/cancel", response_model=VoucherResponse, response_model_by_alias=True)
 async def cancel_voucher(
     voucher_id: UUID,
     data: VoucherCancelRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CANCEL")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Cancel a voucher.
@@ -223,11 +221,11 @@ async def cancel_voucher(
     return _voucher_to_response(voucher)
 
 
-@router.delete("/{voucher_id}", response_model=MessageResponse)
+@router.delete("/{voucher_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_voucher(
     voucher_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a draft voucher.

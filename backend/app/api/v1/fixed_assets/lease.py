@@ -4,10 +4,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -29,6 +29,7 @@ from app.schemas.fixed_assets.lease import (
 )
 from app.schemas.base import MessageResponse
 from app.services.fixed_assets.lease_service import LeaseService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -128,7 +129,7 @@ def _schedule_to_response(schedule) -> LeasePaymentScheduleResponse:
 # Lease CRUD Endpoints
 # ============================================
 
-@router.get("", response_model=LeaseListResponse)
+@router.get("", response_model=LeaseListResponse, response_model_by_alias=True)
 async def list_leases(
     request: Request,
     organization_id: UUID,
@@ -136,7 +137,7 @@ async def list_leases(
     lease_type: Optional[LeaseType] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -154,11 +155,11 @@ async def list_leases(
     )
 
 
-@router.get("/{lease_id}", response_model=LeaseResponse)
+@router.get("/{lease_id}", response_model=LeaseResponse, response_model_by_alias=True)
 async def get_lease(
     request: Request,
     lease_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -166,18 +167,15 @@ async def get_lease(
     service = LeaseService(db)
     lease = await service.get_lease(lease_id)
     if not lease:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Lease not found",
-        )
+        raise NotFoundException(detail="Lease not found", error_code="LEASE_NOT_FOUND")
     return _lease_to_response(lease)
 
 
-@router.post("", response_model=LeaseResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LeaseResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_lease(
     request: Request,
     data: LeaseCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CREATE])),
 ):
@@ -193,18 +191,15 @@ async def create_lease(
         lease = await service.create_lease(data, created_by=current_user.id)
         return _lease_to_response(lease)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/{lease_id}", response_model=LeaseResponse)
+@router.put("/{lease_id}", response_model=LeaseResponse, response_model_by_alias=True)
 async def update_lease(
     request: Request,
     lease_id: UUID,
     data: LeaseUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -216,28 +211,22 @@ async def update_lease(
     try:
         lease = await service.update_lease(lease_id, data, updated_by=current_user.id)
         if not lease:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Lease not found",
-            )
+            raise NotFoundException(detail="Lease not found", error_code="LEASE_NOT_FOUND")
         return _lease_to_response(lease)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Lifecycle Endpoints
 # ============================================
 
-@router.post("/{lease_id}/activate", response_model=LeaseResponse)
+@router.post("/{lease_id}/activate", response_model=LeaseResponse, response_model_by_alias=True)
 async def activate_lease(
     request: Request,
     lease_id: UUID,
     data: Optional[LeaseActivate] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_CAPITALIZE])),
 ):
@@ -255,18 +244,15 @@ async def activate_lease(
         )
         return _lease_to_response(lease)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/{lease_id}/terminate", response_model=LeaseResponse)
+@router.post("/{lease_id}/terminate", response_model=LeaseResponse, response_model_by_alias=True)
 async def terminate_lease(
     request: Request,
     lease_id: UUID,
     data: LeaseTerminate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_DISPOSE])),
 ):
@@ -285,18 +271,15 @@ async def terminate_lease(
         )
         return _lease_to_response(lease)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/{lease_id}/modify", response_model=LeaseResponse)
+@router.post("/{lease_id}/modify", response_model=LeaseResponse, response_model_by_alias=True)
 async def modify_lease(
     request: Request,
     lease_id: UUID,
     data: LeaseModificationCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -315,22 +298,19 @@ async def modify_lease(
         )
         return _lease_to_response(lease)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Payment Schedule Endpoints
 # ============================================
 
-@router.get("/{lease_id}/schedule", response_model=List[LeasePaymentScheduleResponse])
+@router.get("/{lease_id}/schedule", response_model=List[LeasePaymentScheduleResponse], response_model_by_alias=True)
 async def get_payment_schedule(
     request: Request,
     lease_id: UUID,
     unpaid_only: bool = Query(False, description="Show only unpaid installments"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -343,12 +323,12 @@ async def get_payment_schedule(
     return [_schedule_to_response(s) for s in schedules]
 
 
-@router.post("/schedule/{schedule_id}/record-payment", response_model=LeasePaymentScheduleResponse)
+@router.post("/schedule/{schedule_id}/record-payment", response_model=LeasePaymentScheduleResponse, response_model_by_alias=True)
 async def record_payment(
     request: Request,
     schedule_id: UUID,
     data: LeasePaymentRecord,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -367,18 +347,15 @@ async def record_payment(
         )
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/upcoming-payments", response_model=List[dict])
+@router.get("/upcoming-payments", response_model=List[dict], response_model_by_alias=True)
 async def get_upcoming_payments(
     request: Request,
     organization_id: UUID,
     days: int = Query(30, ge=1, le=365, description="Days to look ahead"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -391,12 +368,12 @@ async def get_upcoming_payments(
 # Interest and Depreciation Posting
 # ============================================
 
-@router.post("/post-interest", response_model=dict)
+@router.post("/post-interest", response_model=dict, response_model_by_alias=True)
 async def post_interest(
     request: Request,
     data: InterestPostingRequest,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
 ):
@@ -416,12 +393,12 @@ async def post_interest(
     return result
 
 
-@router.post("/post-depreciation", response_model=dict)
+@router.post("/post-depreciation", response_model=dict, response_model_by_alias=True)
 async def post_roua_depreciation(
     request: Request,
     data: DepreciationPostingRequest,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
 ):
@@ -444,12 +421,12 @@ async def post_roua_depreciation(
 # Reports and Analytics
 # ============================================
 
-@router.get("/summary", response_model=LeaseSummaryResponse)
+@router.get("/summary", response_model=LeaseSummaryResponse, response_model_by_alias=True)
 async def get_lease_summary(
     request: Request,
     organization_id: UUID,
     as_on_date: Optional[date] = Query(None, description="As on date (defaults to today)"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -466,12 +443,12 @@ async def get_lease_summary(
     return await service.get_lease_summary(organization_id, as_on_date)
 
 
-@router.get("/disclosure", response_model=LeaseDisclosureResponse)
+@router.get("/disclosure", response_model=LeaseDisclosureResponse, response_model_by_alias=True)
 async def get_disclosure_report(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):

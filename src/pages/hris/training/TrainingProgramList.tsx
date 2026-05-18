@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Plus,
@@ -14,19 +12,20 @@ import {
   XCircle,
   PlayCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -35,11 +34,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatDate } from '@/lib/utils';
 
 type TrainingStatus = 'DRAFT' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
@@ -64,107 +65,15 @@ interface TrainingProgram {
   cost_per_participant: number;
 }
 
-// Mock data
-const trainingSummary = {
-  total_programs: 45,
-  scheduled: 12,
-  in_progress: 5,
-  completed: 25,
-  total_participants: 320,
-};
+const trainingPrograms: TrainingProgram[] = [];
 
-const trainingPrograms: TrainingProgram[] = [
-  {
-    id: '1',
-    program_code: 'TRN-2024-001',
-    title: 'Leadership Excellence Program',
-    description: 'Develop leadership skills for mid-level managers',
-    category: 'Leadership',
-    mode: 'CLASSROOM',
-    trainer_name: 'Dr. Anand Verma',
-    trainer_type: 'EXTERNAL',
-    start_date: '2025-01-15',
-    end_date: '2025-01-17',
-    duration_hours: 24,
-    location: 'Training Center - Mumbai',
-    max_participants: 25,
-    enrolled_count: 22,
-    status: 'SCHEDULED',
-    cost_per_participant: 15000,
-  },
-  {
-    id: '2',
-    program_code: 'TRN-2024-002',
-    title: 'Advanced Excel & Data Analysis',
-    description: 'Master advanced Excel features and data analytics',
-    category: 'Technical',
-    mode: 'VIRTUAL',
-    trainer_name: 'Priya Sharma',
-    trainer_type: 'INTERNAL',
-    start_date: '2025-01-10',
-    end_date: '2025-01-12',
-    duration_hours: 16,
-    location: 'Online - Microsoft Teams',
-    max_participants: 50,
-    enrolled_count: 45,
-    status: 'IN_PROGRESS',
-    cost_per_participant: 0,
-  },
-  {
-    id: '3',
-    program_code: 'TRN-2024-003',
-    title: 'Compliance & Regulatory Training',
-    description: 'Annual mandatory compliance training for all employees',
-    category: 'Compliance',
-    mode: 'E_LEARNING',
-    trainer_name: 'System Generated',
-    trainer_type: 'INTERNAL',
-    start_date: '2025-01-01',
-    end_date: '2025-01-31',
-    duration_hours: 4,
-    location: 'E-Learning Portal',
-    max_participants: 500,
-    enrolled_count: 380,
-    status: 'IN_PROGRESS',
-    cost_per_participant: 0,
-  },
-  {
-    id: '4',
-    program_code: 'TRN-2024-004',
-    title: 'Customer Service Excellence',
-    description: 'Enhance customer handling and service delivery skills',
-    category: 'Soft Skills',
-    mode: 'WORKSHOP',
-    trainer_name: 'Rajesh Kumar',
-    trainer_type: 'EXTERNAL',
-    start_date: '2024-12-15',
-    end_date: '2024-12-16',
-    duration_hours: 12,
-    location: 'Training Center - Delhi',
-    max_participants: 30,
-    enrolled_count: 28,
-    status: 'COMPLETED',
-    cost_per_participant: 8000,
-  },
-  {
-    id: '5',
-    program_code: 'TRN-2024-005',
-    title: 'Project Management Fundamentals',
-    description: 'Introduction to project management methodologies',
-    category: 'Management',
-    mode: 'CLASSROOM',
-    trainer_name: 'Amit Patel',
-    trainer_type: 'INTERNAL',
-    start_date: '2025-02-01',
-    end_date: '2025-02-03',
-    duration_hours: 20,
-    location: 'Training Center - Mumbai',
-    max_participants: 20,
-    enrolled_count: 8,
-    status: 'SCHEDULED',
-    cost_per_participant: 5000,
-  },
-];
+const trainingSummary = {
+  total_programs: trainingPrograms.length,
+  scheduled: trainingPrograms.filter((program) => program.status === 'SCHEDULED').length,
+  in_progress: trainingPrograms.filter((program) => program.status === 'IN_PROGRESS').length,
+  completed: trainingPrograms.filter((program) => program.status === 'COMPLETED').length,
+  total_participants: trainingPrograms.reduce((sum, program) => sum + program.enrolled_count, 0),
+};
 
 const getStatusBadge = (status: TrainingStatus) => {
   const config: Record<TrainingStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode; label: string }> = {
@@ -378,7 +287,14 @@ export default function TrainingProgramList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredPrograms.map((program) => (
+              {filteredPrograms.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                    Training program data is pending backend HRIS training endpoints.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredPrograms.map((program) => (
                 <TableRow key={program.id}>
                   <TableCell>
                     <div>
@@ -461,7 +377,8 @@ export default function TrainingProgramList() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

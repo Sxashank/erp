@@ -8,7 +8,9 @@ from uuid import UUID, uuid4
 
 import pytest
 import pytest_asyncio
-from sqlalchemy import text
+from sqlalchemy import ARRAY, text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -26,6 +28,18 @@ from app.core.constants import (
 
 # Test database URL (in-memory SQLite for unit tests)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@compiles(JSONB, "sqlite")
+def compile_jsonb_sqlite(_type, _compiler, **_kw):
+    """Allow PostgreSQL JSONB columns to compile under SQLite test metadata."""
+    return "JSON"
+
+
+@compiles(ARRAY, "sqlite")
+def compile_array_sqlite(_type, _compiler, **_kw):
+    """Allow ARRAY columns to compile under SQLite test metadata."""
+    return "JSON"
 
 
 @pytest.fixture(scope="session")
@@ -77,6 +91,7 @@ async def test_organization(session: AsyncSession) -> Organization:
     org = Organization(
         id=uuid4(),
         name="Test Organization",
+        legal_name="Test Organization Private Limited",
         code="TESTORG",
         pan="AAAAA0000A",
         gstin="27AAAAA0000A1Z5",
@@ -95,10 +110,10 @@ async def test_user(session: AsyncSession, test_organization: Organization) -> U
     user = User(
         id=uuid4(),
         organization_id=test_organization.id,
+        username="testuser",
         email="testuser@example.com",
+        full_name="Test User",
         password_hash="hashed_password",
-        first_name="Test",
-        last_name="User",
         is_active=True,
     )
     session.add(user)

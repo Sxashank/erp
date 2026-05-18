@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Plus,
@@ -13,19 +11,20 @@ import {
   FileText,
   Calculator,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -34,121 +33,50 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { useToast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
+import { hrisApi } from '@/services/api';
 
-type SeparationType = 'RESIGNATION' | 'TERMINATION' | 'RETIREMENT' | 'ABSCONDING' | 'DEATH';
-type SeparationStatus = 'INITIATED' | 'CLEARANCE_PENDING' | 'FNF_PENDING' | 'APPROVED' | 'COMPLETED' | 'WITHDRAWN';
+type SeparationType = 'RESIGNATION' | 'TERMINATION' | 'RETIREMENT' | 'ABSCONDING' | 'DEATH' | 'VRS' | 'CONTRACT_END';
+type SeparationStatus =
+  | 'INITIATED'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'NOTICE_PERIOD'
+  | 'CLEARANCE'
+  | 'FNF_PENDING'
+  | 'FNF_CALCULATED'
+  | 'FNF_APPROVED'
+  | 'FNF_PAID'
+  | 'COMPLETED'
+  | 'WITHDRAWN'
+  | 'REJECTED';
 
 interface Separation {
   id: string;
   employee_id: string;
-  employee_code: string;
-  employee_name: string;
-  department: string;
-  designation: string;
+  employee_code?: string;
+  employee_name?: string;
   separation_type: SeparationType;
   status: SeparationStatus;
-  notice_date: string;
-  last_working_date: string;
-  actual_relieving_date?: string;
-  reason: string;
-  initiated_by: string;
-  clearance_progress: number;
+  initiation_date: string;
+  requested_last_working_date?: string;
+  approved_last_working_date?: string;
+  actual_last_working_date?: string;
+  notice_period_days: number;
+  notice_period_served: number;
+  notice_period_shortfall: number;
+  is_notice_buyout: boolean;
+  reason_category?: string;
+  remarks?: string;
 }
-
-// Mock data
-const separationSummary = {
-  total: 24,
-  in_progress: 8,
-  clearance_pending: 5,
-  fnf_pending: 3,
-  completed: 8,
-};
-
-const separations: Separation[] = [
-  {
-    id: '1',
-    employee_id: 'emp-001',
-    employee_code: 'EMP001',
-    employee_name: 'Rahul Sharma',
-    department: 'Engineering',
-    designation: 'Senior Developer',
-    separation_type: 'RESIGNATION',
-    status: 'CLEARANCE_PENDING',
-    notice_date: '2024-12-01',
-    last_working_date: '2024-12-31',
-    reason: 'Better opportunity',
-    initiated_by: 'Self',
-    clearance_progress: 60,
-  },
-  {
-    id: '2',
-    employee_id: 'emp-002',
-    employee_code: 'EMP002',
-    employee_name: 'Priya Patel',
-    department: 'Finance',
-    designation: 'Accountant',
-    separation_type: 'RESIGNATION',
-    status: 'FNF_PENDING',
-    notice_date: '2024-11-15',
-    last_working_date: '2024-12-15',
-    actual_relieving_date: '2024-12-15',
-    reason: 'Personal reasons',
-    initiated_by: 'Self',
-    clearance_progress: 100,
-  },
-  {
-    id: '3',
-    employee_id: 'emp-003',
-    employee_code: 'EMP003',
-    employee_name: 'Amit Kumar',
-    department: 'Operations',
-    designation: 'Manager',
-    separation_type: 'RETIREMENT',
-    status: 'INITIATED',
-    notice_date: '2024-10-01',
-    last_working_date: '2025-01-31',
-    reason: 'Superannuation',
-    initiated_by: 'HR',
-    clearance_progress: 0,
-  },
-  {
-    id: '4',
-    employee_id: 'emp-004',
-    employee_code: 'EMP004',
-    employee_name: 'Sneha Reddy',
-    department: 'HR',
-    designation: 'Executive',
-    separation_type: 'TERMINATION',
-    status: 'COMPLETED',
-    notice_date: '2024-11-01',
-    last_working_date: '2024-11-01',
-    actual_relieving_date: '2024-11-01',
-    reason: 'Policy violation',
-    initiated_by: 'Management',
-    clearance_progress: 100,
-  },
-  {
-    id: '5',
-    employee_id: 'emp-005',
-    employee_code: 'EMP005',
-    employee_name: 'Vikram Singh',
-    department: 'Sales',
-    designation: 'Associate',
-    separation_type: 'ABSCONDING',
-    status: 'INITIATED',
-    notice_date: '2024-12-10',
-    last_working_date: '2024-12-10',
-    reason: 'Absent without notice for 10+ days',
-    initiated_by: 'HR',
-    clearance_progress: 20,
-  },
-];
 
 const getTypeBadge = (type: SeparationType) => {
   const config: Record<SeparationType, { color: string; label: string }> = {
@@ -157,6 +85,8 @@ const getTypeBadge = (type: SeparationType) => {
     RETIREMENT: { color: 'bg-purple-100 text-purple-800', label: 'Retirement' },
     ABSCONDING: { color: 'bg-orange-100 text-orange-800', label: 'Absconding' },
     DEATH: { color: 'bg-gray-100 text-gray-800', label: 'Death' },
+    VRS: { color: 'bg-indigo-100 text-indigo-800', label: 'VRS' },
+    CONTRACT_END: { color: 'bg-slate-100 text-slate-700', label: 'Contract End' },
   };
   return (
     <Badge variant="secondary" className={config[type].color}>
@@ -168,11 +98,17 @@ const getTypeBadge = (type: SeparationType) => {
 const getStatusBadge = (status: SeparationStatus) => {
   const config: Record<SeparationStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode; label: string }> = {
     INITIATED: { variant: 'outline', icon: <Clock className="h-3 w-3 mr-1" />, label: 'Initiated' },
-    CLEARANCE_PENDING: { variant: 'secondary', icon: <AlertTriangle className="h-3 w-3 mr-1" />, label: 'Clearance Pending' },
+    PENDING_APPROVAL: { variant: 'secondary', icon: <Clock className="h-3 w-3 mr-1" />, label: 'Pending Approval' },
+    NOTICE_PERIOD: { variant: 'secondary', icon: <Clock className="h-3 w-3 mr-1" />, label: 'Notice Period' },
+    CLEARANCE: { variant: 'secondary', icon: <AlertTriangle className="h-3 w-3 mr-1" />, label: 'Clearance' },
     FNF_PENDING: { variant: 'secondary', icon: <Calculator className="h-3 w-3 mr-1" />, label: 'F&F Pending' },
+    FNF_CALCULATED: { variant: 'secondary', icon: <Calculator className="h-3 w-3 mr-1" />, label: 'F&F Calculated' },
+    FNF_APPROVED: { variant: 'default', icon: <CheckCircle className="h-3 w-3 mr-1" />, label: 'F&F Approved' },
+    FNF_PAID: { variant: 'default', icon: <CheckCircle className="h-3 w-3 mr-1" />, label: 'F&F Paid' },
     APPROVED: { variant: 'default', icon: <CheckCircle className="h-3 w-3 mr-1" />, label: 'Approved' },
     COMPLETED: { variant: 'default', icon: <CheckCircle className="h-3 w-3 mr-1" />, label: 'Completed' },
     WITHDRAWN: { variant: 'destructive', icon: <XCircle className="h-3 w-3 mr-1" />, label: 'Withdrawn' },
+    REJECTED: { variant: 'destructive', icon: <XCircle className="h-3 w-3 mr-1" />, label: 'Rejected' },
   };
   const cfg = config[status];
   return (
@@ -183,21 +119,65 @@ const getStatusBadge = (status: SeparationStatus) => {
   );
 };
 
+const getClearanceProgress = (status: SeparationStatus) => {
+  if (['COMPLETED', 'FNF_PAID'].includes(status)) return 100;
+  if (['FNF_APPROVED', 'FNF_CALCULATED', 'FNF_PENDING'].includes(status)) return 85;
+  if (status === 'CLEARANCE') return 50;
+  if (['APPROVED', 'NOTICE_PERIOD'].includes(status)) return 30;
+  if (status === 'INITIATED' || status === 'PENDING_APPROVAL') return 10;
+  return 0;
+};
+
 export default function SeparationList() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const [separations, setSeparations] = useState<Separation[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  const filteredSeparations = separations.filter((s) => {
+  useEffect(() => {
+    let mounted = true;
+    const loadSeparations = async () => {
+      setIsLoading(true);
+      try {
+        const response = await hrisApi.listSeparations({ limit: 100 });
+        if (!mounted) return;
+        setSeparations(response.data.items || []);
+      } catch (error) {
+        if (!mounted) return;
+        toast({
+          title: 'Unable to load separations',
+          description: 'Check your HRIS separation permissions and retry.',
+          variant: 'destructive',
+        });
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+    loadSeparations();
+    return () => {
+      mounted = false;
+    };
+  }, [toast]);
+
+  const filteredSeparations = useMemo(() => separations.filter((s) => {
     const matchesSearch =
-      s.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.employee_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.department.toLowerCase().includes(searchTerm.toLowerCase());
+      (s.employee_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (s.employee_code || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesType = typeFilter === 'all' || s.separation_type === typeFilter;
     const matchesStatus = statusFilter === 'all' || s.status === statusFilter;
     return matchesSearch && matchesType && matchesStatus;
-  });
+  }), [searchTerm, separations, statusFilter, typeFilter]);
+
+  const separationSummary = useMemo(() => ({
+    total: separations.length,
+    in_progress: separations.filter((s) => !['COMPLETED', 'WITHDRAWN', 'REJECTED'].includes(s.status)).length,
+    clearance_pending: separations.filter((s) => s.status === 'CLEARANCE').length,
+    fnf_pending: separations.filter((s) => ['FNF_PENDING', 'FNF_CALCULATED'].includes(s.status)).length,
+    completed: separations.filter((s) => ['COMPLETED', 'FNF_PAID'].includes(s.status)).length,
+  }), [separations]);
 
   return (
     <div className="space-y-6">
@@ -306,6 +286,9 @@ export default function SeparationList() {
                 <SelectItem value="TERMINATION">Termination</SelectItem>
                 <SelectItem value="RETIREMENT">Retirement</SelectItem>
                 <SelectItem value="ABSCONDING">Absconding</SelectItem>
+                <SelectItem value="DEATH">Death</SelectItem>
+                <SelectItem value="VRS">VRS</SelectItem>
+                <SelectItem value="CONTRACT_END">Contract End</SelectItem>
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -315,11 +298,15 @@ export default function SeparationList() {
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="INITIATED">Initiated</SelectItem>
-                <SelectItem value="CLEARANCE_PENDING">Clearance Pending</SelectItem>
+                <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
+                <SelectItem value="NOTICE_PERIOD">Notice Period</SelectItem>
+                <SelectItem value="CLEARANCE">Clearance</SelectItem>
                 <SelectItem value="FNF_PENDING">F&F Pending</SelectItem>
+                <SelectItem value="FNF_CALCULATED">F&F Calculated</SelectItem>
                 <SelectItem value="APPROVED">Approved</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>
                 <SelectItem value="WITHDRAWN">Withdrawn</SelectItem>
+                <SelectItem value="REJECTED">Rejected</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -340,7 +327,7 @@ export default function SeparationList() {
             <TableHeader>
               <TableRow>
                 <TableHead>Employee</TableHead>
-                <TableHead>Department</TableHead>
+                <TableHead>Reason</TableHead>
                 <TableHead>Type</TableHead>
                 <TableHead>Notice Date</TableHead>
                 <TableHead>Last Working Day</TableHead>
@@ -350,28 +337,46 @@ export default function SeparationList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredSeparations.map((sep) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                    Loading separation records...
+                  </TableCell>
+                </TableRow>
+              ) : filteredSeparations.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
+                    No separation records found.
+                  </TableCell>
+                </TableRow>
+              ) : filteredSeparations.map((sep) => {
+                const clearanceProgress = getClearanceProgress(sep.status);
+                const lastWorkingDate =
+                  sep.approved_last_working_date || sep.requested_last_working_date;
+                return (
                 <TableRow key={sep.id}>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{sep.employee_name}</div>
-                      <div className="text-xs text-muted-foreground">{sep.employee_code}</div>
+                      <div className="font-medium">{sep.employee_name || 'Employee'}</div>
+                      <div className="text-xs text-muted-foreground">{sep.employee_code || sep.employee_id}</div>
                     </div>
                   </TableCell>
                   <TableCell>
                     <div>
-                      <div className="text-sm">{sep.department}</div>
-                      <div className="text-xs text-muted-foreground">{sep.designation}</div>
+                      <div className="text-sm">{sep.reason_category?.replace(/_/g, ' ') || '—'}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {sep.is_notice_buyout ? 'Notice buyout' : `${sep.notice_period_days} day notice`}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>{getTypeBadge(sep.separation_type)}</TableCell>
-                  <TableCell>{formatDate(sep.notice_date)}</TableCell>
+                  <TableCell>{formatDate(sep.initiation_date)}</TableCell>
                   <TableCell>
                     <div>
-                      <div className="text-sm">{formatDate(sep.last_working_date)}</div>
-                      {sep.actual_relieving_date && (
+                      <div className="text-sm">{lastWorkingDate ? formatDate(lastWorkingDate) : '—'}</div>
+                      {sep.actual_last_working_date && (
                         <div className="text-xs text-green-600">
-                          Relieved: {formatDate(sep.actual_relieving_date)}
+                          Relieved: {formatDate(sep.actual_last_working_date)}
                         </div>
                       )}
                     </div>
@@ -380,12 +385,12 @@ export default function SeparationList() {
                     <div className="w-24">
                       <div className="flex items-center justify-between text-xs mb-1">
                         <span>Progress</span>
-                        <span>{sep.clearance_progress}%</span>
+                        <span>{clearanceProgress}%</span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2">
                         <div
                           className="bg-blue-600 h-2 rounded-full"
-                          style={{ width: `${sep.clearance_progress}%` }}
+                          style={{ width: `${clearanceProgress}%` }}
                         />
                       </div>
                     </div>
@@ -411,7 +416,7 @@ export default function SeparationList() {
                           <FileText className="h-4 w-4 mr-2" />
                           Clearance Checklist
                         </DropdownMenuItem>
-                        {(sep.status === 'FNF_PENDING' || sep.status === 'CLEARANCE_PENDING') && (
+                        {(['FNF_PENDING', 'FNF_CALCULATED', 'FNF_APPROVED', 'FNF_PAID', 'CLEARANCE'] as SeparationStatus[]).includes(sep.status) && (
                           <DropdownMenuItem
                             onClick={() => navigate(`/admin/hris/separation/${sep.id}/fnf`)}
                           >
@@ -423,7 +428,8 @@ export default function SeparationList() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
         </CardContent>

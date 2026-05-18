@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   Calendar,
@@ -13,11 +11,13 @@ import {
   Shield,
   Upload,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,6 +44,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { organizationsApi } from '@/services/api';
 import type { Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 interface InsurancePolicy {
   id: string;
   policy_number: string;
@@ -80,7 +81,6 @@ interface InsuranceClaim {
 }
 
 export function InsuranceList() {
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('policies');
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
@@ -110,7 +110,7 @@ export function InsuranceList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
@@ -176,7 +176,7 @@ export function InsuranceList() {
       ];
       setPolicies(mockPolicies);
     } catch (error) {
-      console.error('Failed to fetch policies:', error);
+      logger.error('Failed to fetch policies:', error);
     } finally {
       setLoading(false);
     }
@@ -227,7 +227,7 @@ export function InsuranceList() {
       ];
       setClaims(mockClaims);
     } catch (error) {
-      console.error('Failed to fetch claims:', error);
+      logger.error('Failed to fetch claims:', error);
     }
   };
 
@@ -239,13 +239,6 @@ export function InsuranceList() {
     }).format(amount);
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
 
   const getPolicyStatusBadge = (status: string, daysToExpiry: number) => {
     if (status === 'EXPIRED') {
@@ -288,9 +281,9 @@ export function InsuranceList() {
               <Upload className="mr-2 h-4 w-4" />
               Import Policies
             </Button>
-            <Button onClick={() => navigate('/admin/fixed-assets/insurance/new')}>
+            <Button disabled>
               <Plus className="mr-2 h-4 w-4" />
-              Add Policy
+              Policy Setup Deferred
             </Button>
           </div>
         }
@@ -396,8 +389,8 @@ export function InsuranceList() {
                 <div className="flex flex-col items-center justify-center py-8">
                   <Shield className="mb-4 h-12 w-12 text-slate-300" />
                   <p className="text-sm text-slate-500">No insurance policies found</p>
-                  <Button variant="link" onClick={() => navigate('/admin/fixed-assets/insurance/new')}>
-                    Add your first policy
+                  <Button variant="link" disabled>
+                    Policy setup deferred in this release
                   </Button>
                 </div>
               ) : (
@@ -429,8 +422,8 @@ export function InsuranceList() {
                         <TableCell className="text-right">{formatCurrency(policy.premium_amount)}</TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <p>{formatDate(policy.start_date)}</p>
-                            <p className="text-slate-500">to {formatDate(policy.end_date)}</p>
+                            <p><DateDisplay date={policy.start_date} /></p>
+                            <p className="text-slate-500">to <DateDisplay date={policy.end_date} /></p>
                           </div>
                         </TableCell>
                         <TableCell>{policy.assets_covered} assets</TableCell>
@@ -465,9 +458,9 @@ export function InsuranceList() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Insurance Claims</CardTitle>
-                <Button onClick={() => navigate('/admin/fixed-assets/insurance/claims/new')}>
+                <Button disabled>
                   <Plus className="mr-2 h-4 w-4" />
-                  File New Claim
+                  Claim Workflow Deferred
                 </Button>
               </div>
             </CardHeader>
@@ -503,7 +496,7 @@ export function InsuranceList() {
                             <p className="text-sm text-slate-500">{claim.asset_name}</p>
                           </div>
                         </TableCell>
-                        <TableCell>{formatDate(claim.incident_date)}</TableCell>
+                        <TableCell><DateDisplay date={claim.incident_date} /></TableCell>
                         <TableCell>
                           <Badge variant="outline">{claim.claim_type.replace('_', ' ')}</Badge>
                         </TableCell>

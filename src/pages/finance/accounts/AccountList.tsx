@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { BookOpen, Edit, FileText, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +31,7 @@ import { accountsApi, organizationsApi } from '@/services/api';
 import type { Account, Organization, PaginatedResponse } from '@/types';
 import { ACCOUNT_TYPES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function AccountList() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -40,17 +41,7 @@ export function AccountList() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 });
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchAccounts();
-    }
-  }, [selectedOrgId, selectedType]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
@@ -59,15 +50,15 @@ export function AccountList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchAccounts = async (page = 1) => {
+  const fetchAccounts = useCallback(async (page = 1) => {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Parameters<typeof accountsApi.list>[0] = {
         organization_id: selectedOrgId,
         page,
         page_size: 20,
@@ -81,11 +72,21 @@ export function AccountList() {
       setAccounts(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch accounts:', error);
+      logger.error('Failed to fetch accounts:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedOrgId, selectedType]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchAccounts();
+    }
+  }, [fetchAccounts, selectedOrgId, selectedType]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this account?')) return;
@@ -93,7 +94,7 @@ export function AccountList() {
       await accountsApi.delete(id);
       fetchAccounts(pagination.page);
     } catch (error) {
-      console.error('Failed to delete account:', error);
+      logger.error('Failed to delete account:', error);
     }
   };
 

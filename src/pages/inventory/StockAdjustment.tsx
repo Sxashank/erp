@@ -1,13 +1,23 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  ArrowLeft,
+  Save,
+  Plus,
+  Trash2,
+  ClipboardCheck,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+} from 'lucide-react';
+import { useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -17,6 +27,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -32,9 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, Plus, Trash2, ClipboardCheck, TrendingUp, TrendingDown, Minus } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const adjustmentLineSchema = z.object({
   itemId: z.string().min(1, 'Item is required'),
@@ -145,7 +154,7 @@ export default function StockAdjustment() {
 
   const onSubmit = (data: StockAdjustmentFormData) => {
     logger.debug('Stock Adjustment submitted:', data);
-    navigate('/inventory/dashboard');
+    navigate('/admin/inventory/dashboard');
   };
 
   const summary = fields.reduce(
@@ -163,7 +172,7 @@ export default function StockAdjustment() {
       }
       return acc;
     },
-    { increaseCount: 0, increaseValue: 0, decreaseCount: 0, decreaseValue: 0 }
+    { increaseCount: 0, increaseValue: 0, decreaseCount: 0, decreaseValue: 0 },
   );
 
   const getAdjustmentIcon = (type: string) => {
@@ -180,7 +189,11 @@ export default function StockAdjustment() {
   const getAdjustmentBadge = (type: string, qty: number) => {
     switch (type) {
       case 'INCREASE':
-        return <Badge variant="default" className="bg-green-500">+{qty}</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-500">
+            +{qty}
+          </Badge>
+        );
       case 'DECREASE':
         return <Badge variant="destructive">{qty}</Badge>;
       default:
@@ -189,14 +202,11 @@ export default function StockAdjustment() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Stock Adjustment"
         subtitle="Adjust inventory based on physical count or write-offs"
-        breadcrumbs={[
-          { label: 'Inventory', to: '/inventory' },
-          { label: 'Adjustment' },
-        ]}
+        breadcrumbs={[{ label: 'Inventory', to: '/admin/inventory' }, { label: 'Adjustment' }]}
       />
 
       <Form {...form}>
@@ -205,7 +215,7 @@ export default function StockAdjustment() {
             <CardHeader>
               <CardTitle>Adjustment Details</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <FormField
                 control={form.control}
                 name="warehouseId"
@@ -342,7 +352,13 @@ export default function StockAdjustment() {
                   disabled={!form.watch('warehouseId')}
                 >
                   <SelectTrigger className="max-w-md">
-                    <SelectValue placeholder={form.watch('warehouseId') ? "Select item to adjust" : "Select warehouse first"} />
+                    <SelectValue
+                      placeholder={
+                        form.watch('warehouseId')
+                          ? 'Select item to adjust'
+                          : 'Select warehouse first'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {items.map((item) => (
@@ -353,7 +369,7 @@ export default function StockAdjustment() {
                   </SelectContent>
                 </Select>
                 <Button type="button" onClick={addItem} disabled={!selectedItem}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
               </div>
@@ -376,7 +392,8 @@ export default function StockAdjustment() {
                   <TableBody>
                     {fields.map((field, index) => {
                       const adjustmentQty = form.watch(`lines.${index}.adjustmentQty`) || 0;
-                      const adjustmentType = form.watch(`lines.${index}.adjustmentType`) || 'NO_CHANGE';
+                      const adjustmentType =
+                        form.watch(`lines.${index}.adjustmentType`) || 'NO_CHANGE';
                       const valueImpact = adjustmentQty * field.unitCost;
 
                       return (
@@ -390,7 +407,9 @@ export default function StockAdjustment() {
                               min="0"
                               className="w-32"
                               value={form.watch(`lines.${index}.physicalQty`)}
-                              onChange={(e) => updateAdjustment(index, parseInt(e.target.value) || 0)}
+                              onChange={(e) =>
+                                updateAdjustment(index, parseInt(e.target.value) || 0)
+                              }
                             />
                           </TableCell>
                           <TableCell className="text-center">
@@ -406,7 +425,9 @@ export default function StockAdjustment() {
                               maximumFractionDigits: 0,
                             })}
                           </TableCell>
-                          <TableCell className={`text-right font-medium ${valueImpact < 0 ? 'text-red-500' : valueImpact > 0 ? 'text-green-500' : ''}`}>
+                          <TableCell
+                            className={`text-right font-medium ${valueImpact < 0 ? 'text-red-500' : valueImpact > 0 ? 'text-green-500' : ''}`}
+                          >
                             {valueImpact !== 0 && (valueImpact > 0 ? '+' : '')}
                             {valueImpact.toLocaleString('en-IN', {
                               style: 'currency',
@@ -439,42 +460,46 @@ export default function StockAdjustment() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="py-8 text-center text-muted-foreground">
                   No items added. Select a warehouse and add items to adjust.
                 </div>
               )}
 
               {fields.length > 0 && (
                 <div className="flex justify-end gap-4">
-                  <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                  <div className="rounded-lg border border-green-200 bg-green-50 p-4">
                     <div className="text-sm text-green-700">Increase</div>
                     <div className="text-lg font-bold text-green-700">
                       {summary.increaseCount} items
                     </div>
                     <div className="text-sm text-green-600">
-                      +{summary.increaseValue.toLocaleString('en-IN', {
+                      +
+                      {summary.increaseValue.toLocaleString('en-IN', {
                         style: 'currency',
                         currency: 'INR',
                         maximumFractionDigits: 0,
                       })}
                     </div>
                   </div>
-                  <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4">
                     <div className="text-sm text-red-700">Decrease</div>
                     <div className="text-lg font-bold text-red-700">
                       {summary.decreaseCount} items
                     </div>
                     <div className="text-sm text-red-600">
-                      -{summary.decreaseValue.toLocaleString('en-IN', {
+                      -
+                      {summary.decreaseValue.toLocaleString('en-IN', {
                         style: 'currency',
                         currency: 'INR',
                         maximumFractionDigits: 0,
                       })}
                     </div>
                   </div>
-                  <div className="bg-muted p-4 rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <div className="text-sm text-muted-foreground">Net Impact</div>
-                    <div className={`text-lg font-bold ${summary.increaseValue - summary.decreaseValue >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <div
+                      className={`text-lg font-bold ${summary.increaseValue - summary.decreaseValue >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                    >
                       {(summary.increaseValue - summary.decreaseValue).toLocaleString('en-IN', {
                         style: 'currency',
                         currency: 'INR',
@@ -492,7 +517,7 @@ export default function StockAdjustment() {
               Cancel
             </Button>
             <Button type="submit" disabled={fields.length === 0}>
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               Submit Adjustment
             </Button>
           </div>

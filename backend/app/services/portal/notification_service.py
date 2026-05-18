@@ -3,26 +3,37 @@
 Handles notifications, messages, and support tickets.
 """
 
+import json
 import secrets
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any, List, Tuple
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, and_, or_, func, update
+from sqlalchemy import and_, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.portal.communication import (
-    PortalNotification,
-    PortalMessage,
-    PortalTicket,
     PortalAnnouncement,
+    PortalMessage,
+    PortalNotification,
+    PortalTicket,
 )
 from app.models.portal.enums import (
     NotificationChannel,
     NotificationPriority,
-    TicketStatus,
-    TicketPriority,
+    PortalUserStatus,
     TicketCategory,
+    TicketPriority,
+    TicketStatus,
+)
+from app.models.portal.portal_user import PortalUser
+from app.models.portal.portal_user_entity import PortalUserEntity
+from app.services.notification.communication_service import (
+    Channel,
+    DispatchStatus,
+    Recipient,
+    communication_service,
 )
 
 
@@ -53,11 +64,11 @@ class PortalNotificationService:
         notification_type: str,
         channel: NotificationChannel = NotificationChannel.IN_APP,
         priority: NotificationPriority = NotificationPriority.MEDIUM,
-        action_url: Optional[str] = None,
-        action_data: Optional[str] = None,
-        reference_type: Optional[str] = None,
-        reference_id: Optional[UUID] = None,
-        expires_at: Optional[datetime] = None,
+        action_url: str | None = None,
+        action_data: dict[str, Any] | None = None,
+        reference_type: str | None = None,
+        reference_id: UUID | None = None,
+        expires_at: datetime | None = None,
     ) -> PortalNotification:
         """Create a notification for a user."""
         notification = PortalNotification(
@@ -75,9 +86,19 @@ class PortalNotificationService:
             expires_at=expires_at,
         )
         self.db.add(notification)
+        await self.db.flush()
 
-        # Send push notification if applicable
-        if channel in [NotificationChannel.PUSH, NotificationChannel.SMS, NotificationChannel.EMAIL]:
+        if channel == NotificationChannel.IN_APP:
+            notification.is_sent = True
+            notification.sent_at = datetime.utcnow()
+            notification.delivery_status = "IN_APP"
+            return notification
+
+        if channel in [
+            NotificationChannel.PUSH,
+            NotificationChannel.SMS,
+            NotificationChannel.EMAIL,
+        ]:
             await self._send_notification(notification)
 
         return notification
@@ -85,15 +106,13 @@ class PortalNotificationService:
     async def get_notifications(
         self,
         user_id: UUID,
-        is_read: Optional[bool] = None,
-        notification_type: Optional[str] = None,
+        is_read: bool | None = None,
+        notification_type: str | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Get notifications for a user."""
-        stmt = select(PortalNotification).where(
-            PortalNotification.user_id == user_id
-        )
+        stmt = select(PortalNotification).where(PortalNotification.user_id == user_id)
 
         if is_read is not None:
             stmt = stmt.where(PortalNotification.is_read == is_read)
@@ -127,8 +146,8 @@ class PortalNotificationService:
                 "title": n.title,
                 "body": n.body,
                 "notification_type": n.notification_type,
-                "channel": n.channel.value,
-                "priority": n.priority.value,
+                "channel": n.channel.value if hasattr(n.channel, "value") else n.channel,
+                "priority": n.priority.value if hasattr(n.priority, "value") else n.priority,
                 "action_url": n.action_url,
                 "is_read": n.is_read,
                 "created_at": n.created_at.isoformat(),
@@ -191,6 +210,90 @@ class PortalNotificationService:
         result = await self.db.execute(stmt)
         return result.scalar()
 
+    async def notify_entity_borrowers(
+        self,
+        *,
+        organization_id: UUID,
+        entity_id: UUID,
+        title: str,
+        body: str,
+        notification_type: str,
+        action_url: str | None = None,
+        reference_type: str | None = None,
+        reference_id: UUID | None = None,
+        priority: NotificationPriority = NotificationPriority.MEDIUM,
+    ) -> int:
+        """Create one in-app notification per active borrower linked to an entity."""
+        stmt = (
+            select(PortalUser.id)
+            .join(
+                PortalUserEntity,
+                PortalUserEntity.portal_user_id == PortalUser.id,
+            )
+            .where(
+                PortalUser.organization_id == organization_id,
+                PortalUser.status == PortalUserStatus.ACTIVE.value,
+                PortalUser.deleted_at.is_(None),
+                PortalUserEntity.entity_id == entity_id,
+                PortalUserEntity.organization_id == organization_id,
+                PortalUserEntity.is_link_active.is_(True),
+                PortalUserEntity.deleted_at.is_(None),
+            )
+        )
+        user_ids = [row[0] for row in (await self.db.execute(stmt)).all()]
+        for user_id in user_ids:
+            await self.create_notification(
+                organization_id=organization_id,
+                user_id=user_id,
+                title=title,
+                body=body,
+                notification_type=notification_type,
+                channel=NotificationChannel.IN_APP,
+                priority=priority,
+                action_url=action_url,
+                reference_type=reference_type,
+                reference_id=reference_id,
+            )
+        return len(user_ids)
+
+    async def notify_roles(
+        self,
+        *,
+        organization_id: UUID,
+        actor_roles: list[str],
+        title: str,
+        body: str,
+        notification_type: str,
+        action_url: str | None = None,
+        reference_type: str | None = None,
+        reference_id: UUID | None = None,
+        priority: NotificationPriority = NotificationPriority.MEDIUM,
+    ) -> int:
+        """Create one in-app notification per active internal actor role."""
+        if not actor_roles:
+            return 0
+        stmt = select(PortalUser.id).where(
+            PortalUser.organization_id == organization_id,
+            PortalUser.actor_role.in_(actor_roles),
+            PortalUser.status == PortalUserStatus.ACTIVE.value,
+            PortalUser.deleted_at.is_(None),
+        )
+        user_ids = [row[0] for row in (await self.db.execute(stmt)).all()]
+        for user_id in user_ids:
+            await self.create_notification(
+                organization_id=organization_id,
+                user_id=user_id,
+                title=title,
+                body=body,
+                notification_type=notification_type,
+                channel=NotificationChannel.IN_APP,
+                priority=priority,
+                action_url=action_url,
+                reference_type=reference_type,
+                reference_id=reference_id,
+            )
+        return len(user_ids)
+
     # =========================================================================
     # Messages
     # =========================================================================
@@ -199,13 +302,13 @@ class PortalNotificationService:
         self,
         organization_id: UUID,
         user_id: UUID,
-        subject: Optional[str],
+        subject: str | None,
         body: str,
-        thread_id: Optional[UUID] = None,
-        parent_message_id: Optional[UUID] = None,
-        reference_type: Optional[str] = None,
-        reference_id: Optional[UUID] = None,
-        attachment_ids: Optional[List[UUID]] = None,
+        thread_id: UUID | None = None,
+        parent_message_id: UUID | None = None,
+        reference_type: str | None = None,
+        reference_id: UUID | None = None,
+        attachment_ids: list[UUID] | None = None,
     ) -> PortalMessage:
         """Send a message from customer."""
         # Generate thread ID if new conversation
@@ -232,10 +335,10 @@ class PortalNotificationService:
     async def get_messages(
         self,
         user_id: UUID,
-        thread_id: Optional[UUID] = None,
+        thread_id: UUID | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Get messages for a user."""
         if thread_id:
             # Get messages in a specific thread
@@ -318,10 +421,10 @@ class PortalNotificationService:
         description: str,
         category: TicketCategory,
         priority: TicketPriority = TicketPriority.MEDIUM,
-        sub_category: Optional[str] = None,
-        loan_account_id: Optional[UUID] = None,
-        related_payment_id: Optional[UUID] = None,
-        related_service_request_id: Optional[UUID] = None,
+        sub_category: str | None = None,
+        loan_account_id: UUID | None = None,
+        related_payment_id: UUID | None = None,
+        related_service_request_id: UUID | None = None,
     ) -> PortalTicket:
         """Create a support ticket."""
         ticket_number = self._generate_ticket_number()
@@ -339,9 +442,7 @@ class PortalNotificationService:
             loan_account_id=loan_account_id,
             related_payment_id=related_payment_id,
             related_service_request_id=related_service_request_id,
-            sla_due_at=datetime.utcnow() + timedelta(
-                hours=self.TICKET_SLA_HOURS.get(priority, 24)
-            ),
+            sla_due_at=datetime.utcnow() + timedelta(hours=self.TICKET_SLA_HOURS.get(priority, 24)),
         )
         self.db.add(ticket)
 
@@ -353,11 +454,11 @@ class PortalNotificationService:
     async def get_tickets(
         self,
         user_id: UUID,
-        status: Optional[TicketStatus] = None,
-        category: Optional[TicketCategory] = None,
+        status: TicketStatus | None = None,
+        category: TicketCategory | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> Tuple[List[Dict[str, Any]], int]:
+    ) -> tuple[list[dict[str, Any]], int]:
         """Get support tickets for a user."""
         stmt = select(PortalTicket).where(PortalTicket.user_id == user_id)
 
@@ -400,7 +501,7 @@ class PortalNotificationService:
         self,
         ticket_id: UUID,
         user_id: UUID,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get ticket details."""
         stmt = select(PortalTicket).where(
             and_(
@@ -461,8 +562,8 @@ class PortalNotificationService:
         ticket_id: UUID,
         user_id: UUID,
         message: str,
-        attachment_ids: Optional[List[UUID]] = None,
-    ) -> Optional[PortalMessage]:
+        attachment_ids: list[UUID] | None = None,
+    ) -> PortalMessage | None:
         """Add a reply to a ticket."""
         stmt = select(PortalTicket).where(
             and_(
@@ -502,7 +603,7 @@ class PortalNotificationService:
         ticket_id: UUID,
         user_id: UUID,
         rating: int,
-        feedback: Optional[str] = None,
+        feedback: str | None = None,
     ) -> bool:
         """Rate a resolved/closed ticket."""
         if rating < 1 or rating > 5:
@@ -534,8 +635,8 @@ class PortalNotificationService:
     async def get_active_announcements(
         self,
         organization_id: UUID,
-        user_segment: Optional[str] = None,
-    ) -> List[Dict[str, Any]]:
+        user_segment: str | None = None,
+    ) -> list[dict[str, Any]]:
         """Get active announcements."""
         now = datetime.utcnow()
 
@@ -573,9 +674,7 @@ class PortalNotificationService:
         announcement_id: UUID,
     ):
         """Record announcement view."""
-        stmt = select(PortalAnnouncement).where(
-            PortalAnnouncement.id == announcement_id
-        )
+        stmt = select(PortalAnnouncement).where(PortalAnnouncement.id == announcement_id)
         result = await self.db.execute(stmt)
         announcement = result.scalar_one_or_none()
 
@@ -587,9 +686,7 @@ class PortalNotificationService:
         announcement_id: UUID,
     ):
         """Record announcement dismiss."""
-        stmt = select(PortalAnnouncement).where(
-            PortalAnnouncement.id == announcement_id
-        )
+        stmt = select(PortalAnnouncement).where(PortalAnnouncement.id == announcement_id)
         result = await self.db.execute(stmt)
         announcement = result.scalar_one_or_none()
 
@@ -601,9 +698,7 @@ class PortalNotificationService:
         announcement_id: UUID,
     ):
         """Record announcement action click."""
-        stmt = select(PortalAnnouncement).where(
-            PortalAnnouncement.id == announcement_id
-        )
+        stmt = select(PortalAnnouncement).where(PortalAnnouncement.id == announcement_id)
         result = await self.db.execute(stmt)
         announcement = result.scalar_one_or_none()
 
@@ -688,39 +783,157 @@ class PortalNotificationService:
         notification: PortalNotification,
     ):
         """Send notification via appropriate channel."""
-        if notification.channel == NotificationChannel.PUSH:
-            await self._send_push_notification(notification)
-        elif notification.channel == NotificationChannel.SMS:
-            await self._send_sms_notification(notification)
-        elif notification.channel == NotificationChannel.EMAIL:
-            await self._send_email_notification(notification)
+        user = await self._get_portal_user(notification.user_id)
+        if user is None:
+            notification.delivery_status = "FAILED"
+            notification.delivery_error = "Portal user not found"
+            notification.is_sent = False
+            return
 
-        notification.is_sent = True
-        notification.sent_at = datetime.utcnow()
+        if not self._is_channel_enabled_for_user(user, notification.channel):
+            notification.delivery_status = "DISABLED_BY_PREFERENCE"
+            notification.delivery_error = None
+            notification.is_sent = False
+            return
+
+        result = await communication_service.send(
+            channel=self._to_channel(notification.channel),
+            recipient=self._to_recipient(user, notification.channel),
+            template_code=notification.notification_type,
+            context=self._build_dispatch_context(notification),
+        )
+        notification.delivery_status = result.status.value.upper()
+        notification.delivery_error = result.error
+        notification.is_sent = result.status in {
+            DispatchStatus.SENT,
+            DispatchStatus.QUEUED,
+            DispatchStatus.MOCKED,
+        }
+        notification.sent_at = datetime.utcnow() if notification.is_sent else None
 
     async def _send_push_notification(
         self,
         notification: PortalNotification,
     ):
         """Send push notification via FCM/APNS."""
-        # This would integrate with Firebase Cloud Messaging
-        # Placeholder implementation
-        notification.delivery_status = "SENT"
+        await self._send_notification(notification)
 
     async def _send_sms_notification(
         self,
         notification: PortalNotification,
     ):
         """Send SMS notification."""
-        # This would integrate with SMS gateway
-        # Placeholder implementation
-        notification.delivery_status = "SENT"
+        await self._send_notification(notification)
 
     async def _send_email_notification(
         self,
         notification: PortalNotification,
     ):
         """Send email notification."""
-        # This would integrate with email service
-        # Placeholder implementation
-        notification.delivery_status = "SENT"
+        await self._send_notification(notification)
+
+    async def _get_portal_user(self, user_id: UUID) -> PortalUser | None:
+        stmt = (
+            select(PortalUser)
+            .options(selectinload(PortalUser.devices))
+            .where(
+                PortalUser.id == user_id,
+                PortalUser.deleted_at.is_(None),
+            )
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    def _is_channel_enabled_for_user(
+        self,
+        user: PortalUser,
+        channel: NotificationChannel,
+    ) -> bool:
+        if channel == NotificationChannel.IN_APP:
+            return True
+        raw = user.notification_preferences
+        if not raw:
+            return True
+        try:
+            preferences = json.loads(raw) if isinstance(raw, str) else raw
+        except (TypeError, ValueError):
+            return True
+        if not isinstance(preferences, dict):
+            return True
+        key_map = {
+            NotificationChannel.SMS: "sms",
+            NotificationChannel.EMAIL: "email",
+            NotificationChannel.PUSH: "push",
+            NotificationChannel.WHATSAPP: "whatsapp",
+        }
+        key = key_map.get(channel)
+        if not key:
+            return True
+        value = preferences.get(key)
+        return True if value is None else bool(value)
+
+    def _to_channel(self, channel: NotificationChannel) -> Channel:
+        mapping = {
+            NotificationChannel.SMS: Channel.SMS,
+            NotificationChannel.EMAIL: Channel.EMAIL,
+            NotificationChannel.PUSH: Channel.PUSH,
+            NotificationChannel.IN_APP: Channel.IN_APP,
+        }
+        try:
+            return mapping[channel]
+        except KeyError as exc:
+            raise ValueError(f"Unsupported portal notification channel: {channel}") from exc
+
+    def _to_recipient(
+        self,
+        user: PortalUser,
+        channel: NotificationChannel,
+    ) -> Recipient:
+        latest_device = None
+        active_devices = [
+            device for device in user.devices if device.is_active and not device.blocked_at
+        ]
+        if active_devices:
+            active_devices.sort(key=lambda item: item.last_seen_at, reverse=True)
+            latest_device = active_devices[0]
+        return Recipient(
+            user_id=str(user.id),
+            email=user.email,
+            phone=user.mobile,
+            device_token=(
+                (latest_device.fcm_token or latest_device.apns_token)
+                if latest_device is not None
+                else None
+            ),
+        )
+
+    def _build_dispatch_context(
+        self,
+        notification: PortalNotification,
+    ) -> dict[str, Any]:
+        html_body = (
+            "<html><body>"
+            f"<h2>{notification.title}</h2>"
+            f"<p>{notification.body}</p>"
+            + (
+                f'<p><a href="{notification.action_url}">Open portal</a></p>'
+                if notification.action_url
+                else ""
+            )
+            + "</body></html>"
+        )
+        return {
+            "title": notification.title,
+            "subject": notification.title,
+            "message": notification.body,
+            "body": notification.body,
+            "html_body": html_body,
+            "data": {
+                "notification_id": str(notification.id),
+                "reference_type": notification.reference_type,
+                "reference_id": (
+                    str(notification.reference_id) if notification.reference_id else None
+                ),
+                "action_url": notification.action_url,
+            },
+        }

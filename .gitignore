@@ -11,6 +11,7 @@ coverage
 
 # test artifacts
 playwright-report
+playwright-results
 test-results
 blob-report
 
@@ -24,3 +25,10 @@ backend/**/__pycache__
 .pytest_cache
 .mypy_cache
 .ruff_cache
+
+# runtime/user uploads
+backend/uploads/
+
+# production deployment runtime
+deploy/production.env
+deploy/runtime/

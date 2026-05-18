@@ -1,10 +1,9 @@
 /**
  * NACH Batch List Page
- * Displays all NACH batches with filtering and management options
+ *
+ * Data source: GET /lending/nach/batches (camelCase via Pydantic CamelSchema).
  */
 
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -20,10 +19,33 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  Loader2,
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -33,129 +55,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-
+  useNachBatches,
+  type NachBatchListItem,
+  type NachBatchStatusValue,
+  type NachBatchFilters,
+} from '@/hooks/lending/useNachBatches';
 import { logger } from '@/lib/logger';
-// NACH Batch Status
-type NachBatchStatus =
-  | 'CREATED'
-  | 'VALIDATED'
-  | 'FILE_GENERATED'
-  | 'SUBMITTED'
-  | 'PROCESSING'
-  | 'RESPONSE_RECEIVED'
-  | 'COMPLETED'
-  | 'FAILED'
-  | 'CANCELLED';
-
-interface NachBatch {
-  id: string;
-  batchReference: string;
-  batchDate: string;
-  debitDate: string;
-  provider: 'RAZORPAY' | 'CASHFREE' | 'NPCI_DIRECT';
-  totalTransactions: number;
-  totalAmount: number;
-  successCount: number;
-  failureCount: number;
-  pendingCount: number;
-  status: NachBatchStatus;
-  fileGenerated: boolean;
-  fileName?: string;
-  submittedAt?: string;
-  completedAt?: string;
-  createdAt: string;
-}
-
-// Mock data
-const mockBatches: NachBatch[] = [
-  {
-    id: '1',
-    batchReference: 'NACH/2025/01/001',
-    batchDate: '2025-01-10',
-    debitDate: '2025-01-15',
-    provider: 'RAZORPAY',
-    totalTransactions: 245,
-    totalAmount: 12500000,
-    successCount: 230,
-    failureCount: 15,
-    pendingCount: 0,
-    status: 'COMPLETED',
-    fileGenerated: true,
-    fileName: 'NACH_DEBIT_20250115_001.txt',
-    submittedAt: '2025-01-14T10:30:00',
-    completedAt: '2025-01-15T18:00:00',
-    createdAt: '2025-01-10T09:00:00',
-  },
-  {
-    id: '2',
-    batchReference: 'NACH/2025/01/002',
-    batchDate: '2025-01-12',
-    debitDate: '2025-01-20',
-    provider: 'RAZORPAY',
-    totalTransactions: 312,
-    totalAmount: 15750000,
-    successCount: 0,
-    failureCount: 0,
-    pendingCount: 312,
-    status: 'SUBMITTED',
-    fileGenerated: true,
-    fileName: 'NACH_DEBIT_20250120_001.txt',
-    submittedAt: '2025-01-18T14:00:00',
-    createdAt: '2025-01-12T11:30:00',
-  },
-  {
-    id: '3',
-    batchReference: 'NACH/2025/01/003',
-    batchDate: '2025-01-13',
-    debitDate: '2025-01-25',
-    provider: 'CASHFREE',
-    totalTransactions: 178,
-    totalAmount: 8900000,
-    successCount: 0,
-    failureCount: 0,
-    pendingCount: 178,
-    status: 'FILE_GENERATED',
-    fileGenerated: true,
-    fileName: 'NACH_DEBIT_20250125_001.txt',
-    createdAt: '2025-01-13T08:45:00',
-  },
-  {
-    id: '4',
-    batchReference: 'NACH/2025/01/004',
-    batchDate: '2025-01-14',
-    debitDate: '2025-01-28',
-    provider: 'RAZORPAY',
-    totalTransactions: 425,
-    totalAmount: 21250000,
-    successCount: 0,
-    failureCount: 0,
-    pendingCount: 425,
-    status: 'CREATED',
-    fileGenerated: false,
-    createdAt: '2025-01-14T16:20:00',
-  },
-];
 
 const statusConfig: Record<
-  NachBatchStatus,
+  NachBatchStatusValue,
   { label: string; color: string; icon: React.ReactNode }
 > = {
   CREATED: {
@@ -205,41 +113,33 @@ const statusConfig: Record<
   },
 };
 
-const providerLabels: Record<string, { label: string; color: string }> = {
-  RAZORPAY: { label: 'Razorpay', color: 'bg-blue-100 text-blue-700' },
-  CASHFREE: { label: 'Cashfree', color: 'bg-green-100 text-green-700' },
-  NPCI_DIRECT: { label: 'NPCI Direct', color: 'bg-purple-100 text-purple-700' },
-};
-
 export default function NachBatchList() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
-  const [providerFilter, setProviderFilter] = useState<string>('ALL');
 
-  const filteredBatches = mockBatches.filter((batch) => {
-    const matchesSearch = batch.batchReference
-      .toLowerCase()
-      .includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || batch.status === statusFilter;
-    const matchesProvider =
-      providerFilter === 'ALL' || batch.provider === providerFilter;
-    return matchesSearch && matchesStatus && matchesProvider;
+  const filters: NachBatchFilters = {
+    pageSize: 100,
+    ...(statusFilter !== 'ALL' && { status: statusFilter as NachBatchStatusValue }),
+  };
+  const { data, isLoading, isError, error, refetch } = useNachBatches(filters);
+
+  const all: NachBatchListItem[] = data?.items ?? [];
+  const batches = all.filter((b) => {
+    if (!searchQuery) return true;
+    return b.batchReference.toLowerCase().includes(searchQuery.toLowerCase());
   });
 
-  // Calculate summary stats
-  const totalBatches = mockBatches.length;
-  const totalAmount = mockBatches.reduce((sum, b) => sum + b.totalAmount, 0);
-  const totalSuccess = mockBatches.reduce((sum, b) => sum + b.successCount, 0);
-  const totalFailed = mockBatches.reduce((sum, b) => sum + b.failureCount, 0);
-  const totalTransactions = mockBatches.reduce(
-    (sum, b) => sum + b.totalTransactions,
-    0
-  );
+  const totalBatches = data?.total ?? batches.length;
+  // Wire amounts are strings (Decimal precision); coerce once for display-only sums.
+  const totalAmount = batches.reduce((sum, b) => sum + Number(b.totalAmount), 0);
+  const totalSuccess = batches.reduce((sum, b) => sum + b.successCount, 0);
+  const totalFailed = batches.reduce((sum, b) => sum + b.failureCount, 0);
+  const totalTransactions = batches.reduce((sum, b) => sum + b.totalTransactions, 0);
   const successRate =
-    totalTransactions > 0
+    totalSuccess + totalFailed > 0
       ? ((totalSuccess / (totalSuccess + totalFailed)) * 100).toFixed(1)
-      : 0;
+      : '0.0';
 
   return (
     <div className="space-y-6">
@@ -254,7 +154,6 @@ export default function NachBatchList() {
         }
       />
 
-      {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -262,7 +161,7 @@ export default function NachBatchList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{totalBatches}</div>
-            <p className="text-xs text-muted-foreground">This month</p>
+            <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
         <Card>
@@ -271,9 +170,7 @@ export default function NachBatchList() {
           </CardHeader>
           <CardContent>
             <AmountDisplay amount={totalAmount} abbreviated className="text-2xl font-bold" />
-            <p className="text-xs text-muted-foreground">
-              {totalTransactions} transactions
-            </p>
+            <p className="text-xs text-muted-foreground">{totalTransactions} transactions</p>
           </CardContent>
         </Card>
         <Card>
@@ -305,7 +202,6 @@ export default function NachBatchList() {
         </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-center">
@@ -337,23 +233,11 @@ export default function NachBatchList() {
                   <SelectItem value="CANCELLED">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              <Select value={providerFilter} onValueChange={setProviderFilter}>
-                <SelectTrigger className="w-[150px]">
-                  <SelectValue placeholder="Provider" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ALL">All Providers</SelectItem>
-                  <SelectItem value="RAZORPAY">Razorpay</SelectItem>
-                  <SelectItem value="CASHFREE">Cashfree</SelectItem>
-                  <SelectItem value="NPCI_DIRECT">NPCI Direct</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Batches Table */}
       <Card>
         <CardContent className="p-0">
           <Table>
@@ -361,7 +245,6 @@ export default function NachBatchList() {
               <TableRow>
                 <TableHead>Batch Reference</TableHead>
                 <TableHead>Debit Date</TableHead>
-                <TableHead>Provider</TableHead>
                 <TableHead className="text-right">Transactions</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead className="text-center">Success/Fail</TableHead>
@@ -370,42 +253,46 @@ export default function NachBatchList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBatches.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-muted-foreground"
-                  >
-                    No batches found matching your criteria
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                    Loading NACH batches...
+                  </TableCell>
+                </TableRow>
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8">
+                    <ErrorState
+                      title="Could not load NACH batches"
+                      error={error}
+                      onRetry={() => refetch()}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : batches.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                    No NACH batches found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredBatches.map((batch) => {
+                batches.map((batch) => {
                   const status = statusConfig[batch.status];
-                  const provider = providerLabels[batch.provider];
                   return (
                     <TableRow
                       key={batch.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() =>
-                        navigate(`/admin/lending/nach/batches/${batch.id}`)
-                      }
+                      onClick={() => navigate(`/admin/lending/nach/batches/${batch.id}`)}
                     >
                       <TableCell>
-                        <div className="font-mono text-sm font-medium">
-                          {batch.batchReference}
-                        </div>
+                        <div className="font-mono text-sm font-medium">{batch.batchReference}</div>
                         <div className="text-xs text-muted-foreground">
                           Created: <DateDisplay date={batch.createdAt} />
                         </div>
                       </TableCell>
                       <TableCell>
                         <DateDisplay date={batch.debitDate} />
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={provider.color}>
-                          {provider.label}
-                        </Badge>
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {batch.totalTransactions}
@@ -414,36 +301,25 @@ export default function NachBatchList() {
                         <AmountDisplay amount={batch.totalAmount} />
                       </TableCell>
                       <TableCell className="text-center">
-                        {batch.status === 'COMPLETED' ||
-                        batch.status === 'RESPONSE_RECEIVED' ? (
+                        {batch.status === 'COMPLETED' || batch.status === 'RESPONSE_RECEIVED' ? (
                           <div className="flex items-center justify-center gap-2">
-                            <span className="text-green-600 font-medium">
-                              {batch.successCount}
-                            </span>
+                            <span className="font-medium text-green-600">{batch.successCount}</span>
                             <span className="text-muted-foreground">/</span>
-                            <span className="text-red-600 font-medium">
-                              {batch.failureCount}
-                            </span>
+                            <span className="font-medium text-red-600">{batch.failureCount}</span>
                           </div>
                         ) : (
-                          <span className="text-muted-foreground">-</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge
-                          variant="outline"
-                          className={`${status.color} border font-medium`}
-                        >
+                        <Badge variant="outline" className={`${status.color} border font-medium`}>
                           <span className="mr-1">{status.icon}</span>
                           {status.label}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
-                          <DropdownMenuTrigger
-                            asChild
-                            onClick={(e) => e.stopPropagation()}
-                          >
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
                             <Button variant="ghost" size="icon">
                               <MoreHorizontal className="h-4 w-4" />
                             </Button>
@@ -452,15 +328,12 @@ export default function NachBatchList() {
                             <DropdownMenuItem
                               onClick={(e) => {
                                 e.stopPropagation();
-                                navigate(
-                                  `/admin/lending/nach/batches/${batch.id}`
-                                );
+                                navigate(`/admin/lending/nach/batches/${batch.id}`);
                               }}
                             >
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
-
                             {batch.status === 'CREATED' && (
                               <>
                                 <DropdownMenuSeparator />
@@ -475,7 +348,6 @@ export default function NachBatchList() {
                                 </DropdownMenuItem>
                               </>
                             )}
-
                             {batch.status === 'FILE_GENERATED' && (
                               <>
                                 <DropdownMenuSeparator />
@@ -490,7 +362,6 @@ export default function NachBatchList() {
                                 </DropdownMenuItem>
                               </>
                             )}
-
                             {batch.status === 'SUBMITTED' && (
                               <>
                                 <DropdownMenuSeparator />
@@ -505,8 +376,7 @@ export default function NachBatchList() {
                                 </DropdownMenuItem>
                               </>
                             )}
-
-                            {batch.fileGenerated && (
+                            {batch.fileName && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
@@ -520,10 +390,7 @@ export default function NachBatchList() {
                                 </DropdownMenuItem>
                               </>
                             )}
-
-                            {['CREATED', 'VALIDATED', 'FILE_GENERATED'].includes(
-                              batch.status
-                            ) && (
+                            {['CREATED', 'VALIDATED', 'FILE_GENERATED'].includes(batch.status) && (
                               <>
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem

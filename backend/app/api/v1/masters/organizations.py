@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, RequirePermissions
+from app.api.deps import get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.masters.organization_service import OrganizationService
 from app.schemas.masters.organization import (
@@ -19,13 +19,13 @@ from app.schemas.base import PaginatedResponse, MessageResponse
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[OrganizationResponse])
+@router.get("", response_model=PaginatedResponse[OrganizationResponse], response_model_by_alias=True)
 async def list_organizations(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("MASTER_ORG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of organizations.
@@ -74,11 +74,11 @@ async def list_organizations(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=OrganizationResponse)
+@router.post("", response_model=OrganizationResponse, response_model_by_alias=True)
 async def create_organization(
     data: OrganizationCreate,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new organization.
@@ -90,11 +90,11 @@ async def create_organization(
     return await _org_to_response(org, db)
 
 
-@router.get("/{org_id}", response_model=OrganizationResponse)
+@router.get("/{org_id}", response_model=OrganizationResponse, response_model_by_alias=True)
 async def get_organization(
     org_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get organization by ID.
@@ -141,12 +141,12 @@ async def get_organization(
     )
 
 
-@router.put("/{org_id}", response_model=OrganizationResponse)
+@router.put("/{org_id}", response_model=OrganizationResponse, response_model_by_alias=True)
 async def update_organization(
     org_id: UUID,
     data: OrganizationUpdate,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing organization.
@@ -158,11 +158,11 @@ async def update_organization(
     return await _org_to_response(org, db)
 
 
-@router.delete("/{org_id}", response_model=MessageResponse)
+@router.delete("/{org_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_organization(
     org_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete an organization.

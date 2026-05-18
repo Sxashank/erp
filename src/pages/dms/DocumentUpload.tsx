@@ -3,12 +3,7 @@
  * Upload new documents with metadata
  */
 
-import { useState, useCallback, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useDropzone } from 'react-dropzone';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import {
   Upload,
   File,
@@ -21,21 +16,17 @@ import {
   Loader2,
   FolderOpen,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState, useCallback, useEffect } from 'react';
+import { useDropzone } from 'react-dropzone';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { z } from 'zod';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { getErrorMessage } from '@/lib/errorMessage';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -45,11 +36,23 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { documentApi, folderApi } from '@/services/dmsApi';
-import type { DMSFolder, DocumentCreate } from '@/types/dms';
+import type { DMSFolder, DocumentCreate, FolderTreeNode } from '@/types/dms';
 import { formatFileSize, DOCUMENT_TYPES, ACCESS_LEVELS } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
 const uploadSchema = z.object({
   name: z.string().optional(),
   description: z.string().optional(),
@@ -62,7 +65,8 @@ const uploadSchema = z.object({
   entity_id: z.string().optional(),
 });
 
-type UploadFormData = z.infer<typeof uploadSchema>;
+type UploadFormInput = z.input<typeof uploadSchema>;
+type UploadFormData = z.output<typeof uploadSchema>;
 
 interface FileUploadStatus {
   file: File;
@@ -84,8 +88,11 @@ export default function DocumentUpload() {
   const [selectedFolder, setSelectedFolder] = useState<string | undefined>(folderId);
   const [uploading, setUploading] = useState(false);
 
-  const form = useForm<UploadFormData>({
-    resolver: zodResolver(uploadSchema) as any,
+  // `z.input` carries optional `.default(...)` fields; `z.output` is the
+  // resolved shape after defaults — RHF can't reconcile them under a single
+  // generic, so we parameterize the resolver pair explicitly.
+  const form = useForm<UploadFormInput, unknown, UploadFormData>({
+    resolver: zodResolver(uploadSchema),
     defaultValues: {
       access_level: 'organization',
     },
@@ -97,10 +104,10 @@ export default function DocumentUpload() {
       try {
         const tree = await folderApi.getTree({ max_depth: 5 });
         // Flatten tree for simple select
-        const flattenTree = (nodes: any[], level = 0): DMSFolder[] => {
+        const flattenTree = (nodes: FolderTreeNode[], level = 0): DMSFolder[] => {
           let result: DMSFolder[] = [];
           for (const node of nodes) {
-            result.push({ ...node, level } as DMSFolder);
+            result.push({ ...node, level } as unknown as DMSFolder);
             if (node.children?.length) {
               result = result.concat(flattenTree(node.children, level + 1));
             }
@@ -109,7 +116,7 @@ export default function DocumentUpload() {
         };
         setFolders(flattenTree(tree));
       } catch (error) {
-        console.error('Failed to fetch folders:', error);
+        logger.error('Failed to fetch folders:', error);
       }
     };
     fetchFolders();
@@ -209,7 +216,7 @@ export default function DocumentUpload() {
               : f
           )
         );
-      } catch (error: any) {
+      } catch (error: unknown) {
         setFiles((prev) =>
           prev.map((f, idx) =>
             idx === i
@@ -217,7 +224,7 @@ export default function DocumentUpload() {
                   ...f,
                   status: 'error' as const,
                   progress: 0,
-                  error: error.message || 'Upload failed',
+                  error: getErrorMessage(error, 'Upload failed'),
                 }
               : f
           )
@@ -348,7 +355,7 @@ export default function DocumentUpload() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleUpload as any)} className="space-y-4">
+              <form onSubmit={form.handleSubmit(handleUpload)} className="space-y-4">
                 {/* Folder Selection */}
                 <div className="space-y-2">
                   <Label>Destination Folder</Label>

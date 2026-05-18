@@ -3,8 +3,9 @@
  * Step indicator sidebar for multi-step wizards
  */
 
-import { cn } from '@/lib/utils';
 import { useWizard, type WizardStep } from './WizardContext';
+
+import { cn } from '@/lib/utils';
 
 export interface WizardProgressProps {
   className?: string;

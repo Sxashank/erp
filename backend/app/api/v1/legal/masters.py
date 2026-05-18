@@ -13,12 +13,12 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.legal.statutory_period import StatutoryPeriod
 from app.models.legal.notice import NoticeTemplate
@@ -29,6 +29,7 @@ from app.models.legal.enums import (
     CourtType,
     ExpenseCategoryType,
 )
+from app.core.exceptions import ConflictException, NotFoundException
 
 router = APIRouter(tags=["Legal Masters"])
 
@@ -91,28 +92,30 @@ class StatutoryPeriodResponse(BaseModel):
 
 @router.post(
     "/statutory-periods",
-    response_model=StatutoryPeriodResponse,
+    response_model=StatutoryPeriodResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_statutory_period(
     data: StatutoryPeriodCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new statutory period."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     # Check for duplicate
     existing = await db.execute(
         select(StatutoryPeriod).where(
             and_(
-                StatutoryPeriod.organization_id == data.organization_id,
+                StatutoryPeriod.organization_id == current_user.organization_id,
                 StatutoryPeriod.provision_code == data.provision_code,
             )
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ConflictException(
             detail=f"Statutory period with code {data.provision_code} already exists",
+            error_code="STATUTORY_PERIOD_WITH_CODE_ALREADY_EXISTS",
         )
 
     period = StatutoryPeriod(
@@ -125,28 +128,27 @@ async def create_statutory_period(
     return period
 
 
-@router.get("/statutory-periods", response_model=List[StatutoryPeriodResponse])
+@router.get("/statutory-periods", response_model=List[StatutoryPeriodResponse], response_model_by_alias=True)
 async def list_statutory_periods(
-    organization_id: UUID = Query(...),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List all statutory periods."""
     result = await db.execute(
         select(StatutoryPeriod)
-        .where(StatutoryPeriod.organization_id == organization_id)
+        .where(StatutoryPeriod.organization_id == current_user.organization_id)
         .offset(skip)
         .limit(limit)
     )
     return result.scalars().all()
 
 
-@router.get("/statutory-periods/{period_id}", response_model=StatutoryPeriodResponse)
+@router.get("/statutory-periods/{period_id}", response_model=StatutoryPeriodResponse, response_model_by_alias=True)
 async def get_statutory_period(
     period_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a statutory period by ID."""
@@ -155,9 +157,9 @@ async def get_statutory_period(
     )
     period = result.scalar_one_or_none()
     if not period:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Statutory period not found",
+            error_code="STATUTORY_PERIOD_NOT_FOUND",
         )
     return period
 
@@ -208,28 +210,30 @@ class NoticeTemplateResponse(BaseModel):
 
 @router.post(
     "/notice-templates",
-    response_model=NoticeTemplateResponse,
+    response_model=NoticeTemplateResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_notice_template(
     data: NoticeTemplateCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new notice template."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     # Check for duplicate
     existing = await db.execute(
         select(NoticeTemplate).where(
             and_(
-                NoticeTemplate.organization_id == data.organization_id,
+                NoticeTemplate.organization_id == current_user.organization_id,
                 NoticeTemplate.template_code == data.template_code,
             )
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ConflictException(
             detail=f"Notice template with code {data.template_code} already exists",
+            error_code="NOTICE_TEMPLATE_WITH_CODE_ALREADY_EXISTS",
         )
 
     template = NoticeTemplate(
@@ -242,18 +246,17 @@ async def create_notice_template(
     return template
 
 
-@router.get("/notice-templates", response_model=List[NoticeTemplateResponse])
+@router.get("/notice-templates", response_model=List[NoticeTemplateResponse], response_model_by_alias=True)
 async def list_notice_templates(
-    organization_id: UUID = Query(...),
     notice_type: Optional[NoticeType] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List all notice templates."""
     query = select(NoticeTemplate).where(
-        NoticeTemplate.organization_id == organization_id
+        NoticeTemplate.organization_id == current_user.organization_id
     )
     if notice_type:
         query = query.where(NoticeTemplate.notice_type == notice_type)
@@ -263,10 +266,10 @@ async def list_notice_templates(
     return result.scalars().all()
 
 
-@router.get("/notice-templates/{template_id}", response_model=NoticeTemplateResponse)
+@router.get("/notice-templates/{template_id}", response_model=NoticeTemplateResponse, response_model_by_alias=True)
 async def get_notice_template(
     template_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a notice template by ID."""
@@ -275,9 +278,9 @@ async def get_notice_template(
     )
     template = result.scalar_one_or_none()
     if not template:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Notice template not found",
+            error_code="NOTICE_TEMPLATE_NOT_FOUND",
         )
     return template
 
@@ -339,28 +342,30 @@ class CourtResponse(BaseModel):
 
 @router.post(
     "/courts",
-    response_model=CourtResponse,
+    response_model=CourtResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_court(
     data: CourtCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new court."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     # Check for duplicate
     existing = await db.execute(
         select(Court).where(
             and_(
-                Court.organization_id == data.organization_id,
+                Court.organization_id == current_user.organization_id,
                 Court.court_code == data.court_code,
             )
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ConflictException(
             detail=f"Court with code {data.court_code} already exists",
+            error_code="COURT_WITH_CODE_ALREADY_EXISTS",
         )
 
     court = Court(
@@ -373,18 +378,17 @@ async def create_court(
     return court
 
 
-@router.get("/courts", response_model=List[CourtResponse])
+@router.get("/courts", response_model=List[CourtResponse], response_model_by_alias=True)
 async def list_courts(
-    organization_id: UUID = Query(...),
     court_type: Optional[CourtType] = None,
     state_code: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List all courts."""
-    query = select(Court).where(Court.organization_id == organization_id)
+    query = select(Court).where(Court.organization_id == current_user.organization_id)
     if court_type:
         query = query.where(Court.court_type == court_type)
     if state_code:
@@ -395,20 +399,17 @@ async def list_courts(
     return result.scalars().all()
 
 
-@router.get("/courts/{court_id}", response_model=CourtResponse)
+@router.get("/courts/{court_id}", response_model=CourtResponse, response_model_by_alias=True)
 async def get_court(
     court_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a court by ID."""
     result = await db.execute(select(Court).where(Court.id == court_id))
     court = result.scalar_one_or_none()
     if not court:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Court not found",
-        )
+        raise NotFoundException(detail="Court not found", error_code="COURT_NOT_FOUND")
     return court
 
 
@@ -464,15 +465,17 @@ class CourtFeeSlabResponse(BaseModel):
 
 @router.post(
     "/court-fee-slabs",
-    response_model=CourtFeeSlabResponse,
+    response_model=CourtFeeSlabResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_court_fee_slab(
     data: CourtFeeSlabCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new court fee slab."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     slab = CourtFeeSlab(
         **data.model_dump(),
         created_by_id=current_user.id,
@@ -483,13 +486,13 @@ async def create_court_fee_slab(
     return slab
 
 
-@router.get("/court-fee-slabs", response_model=List[CourtFeeSlabResponse])
+@router.get("/court-fee-slabs", response_model=List[CourtFeeSlabResponse], response_model_by_alias=True)
 async def list_court_fee_slabs(
     court_type: Optional[CourtType] = None,
     fee_type: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List all court fee slabs."""
@@ -509,7 +512,7 @@ async def calculate_court_fee(
     court_type: CourtType = Query(...),
     fee_type: str = Query(...),
     claim_amount: Decimal = Query(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Calculate court fee for given parameters."""
@@ -531,9 +534,9 @@ async def calculate_court_fee(
     slab = result.scalar_one_or_none()
 
     if not slab:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="No applicable fee slab found",
+            error_code="NO_APPLICABLE_FEE_SLAB_FOUND",
         )
 
     fee = slab.calculate_fee(claim_amount)
@@ -595,28 +598,30 @@ class ExpenseCategoryMasterResponse(BaseModel):
 
 @router.post(
     "/expense-categories",
-    response_model=ExpenseCategoryMasterResponse,
+    response_model=ExpenseCategoryMasterResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_expense_category(
     data: ExpenseCategoryCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new expense category."""
+    # Force tenant scope from the JWT — never trust the body's organization_id.
+    data.organization_id = current_user.organization_id
     # Check for duplicate
     existing = await db.execute(
         select(ExpenseCategory).where(
             and_(
-                ExpenseCategory.organization_id == data.organization_id,
+                ExpenseCategory.organization_id == current_user.organization_id,
                 ExpenseCategory.category_code == data.category_code,
             )
         )
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
+        raise ConflictException(
             detail=f"Expense category with code {data.category_code} already exists",
+            error_code="EXPENSE_CATEGORY_WITH_CODE_ALREADY_EXISTS",
         )
 
     category = ExpenseCategory(
@@ -629,18 +634,17 @@ async def create_expense_category(
     return category
 
 
-@router.get("/expense-categories", response_model=List[ExpenseCategoryMasterResponse])
+@router.get("/expense-categories", response_model=List[ExpenseCategoryMasterResponse], response_model_by_alias=True)
 async def list_expense_categories(
-    organization_id: UUID = Query(...),
     category_type: Optional[ExpenseCategoryType] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List all expense categories."""
     query = select(ExpenseCategory).where(
-        ExpenseCategory.organization_id == organization_id
+        ExpenseCategory.organization_id == current_user.organization_id
     )
     if category_type:
         query = query.where(ExpenseCategory.category_type == category_type)
@@ -651,11 +655,12 @@ async def list_expense_categories(
 
 
 @router.get(
-    "/expense-categories/{category_id}", response_model=ExpenseCategoryMasterResponse
+    "/expense-categories/{category_id}", response_model=ExpenseCategoryMasterResponse,
+    response_model_by_alias=True,
 )
 async def get_expense_category(
     category_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get an expense category by ID."""
@@ -664,8 +669,8 @@ async def get_expense_category(
     )
     category = result.scalar_one_or_none()
     if not category:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Expense category not found",
+            error_code="EXPENSE_CATEGORY_NOT_FOUND",
         )
     return category

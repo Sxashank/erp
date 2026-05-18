@@ -2,8 +2,6 @@
  * Notification Log Page - View delivery logs for notifications
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Search,
@@ -17,11 +15,12 @@ import {
   Clock,
   AlertCircle,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -29,6 +28,14 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -37,16 +44,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import api from '@/services/api';
-import { NotificationLog, NotificationChannel, NotificationStatus } from '@/types/notification';
+import { notificationApi } from '@/services/notificationApi';
+import type { NotificationLog, NotificationChannel, NotificationStatus } from '@/types/notification';
 
 const CHANNEL_ICONS: Record<string, React.ReactNode> = {
   email: <Mail className="h-4 w-4" />,
@@ -76,9 +76,7 @@ const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'o
   cancelled: 'outline',
 };
 
-interface LogEntry extends NotificationLog {
-  notification_title?: string;
-}
+type LogEntry = NotificationLog;
 
 export default function NotificationLogPage() {
   const navigate = useNavigate();
@@ -103,47 +101,16 @@ export default function NotificationLogPage() {
   const loadLogs = async () => {
     try {
       setLoading(true);
-      // This would be a dedicated endpoint in production
-      // For now, simulating with placeholder data
-      const mockLogs: LogEntry[] = [
-        {
-          id: '1',
-          notification_id: 'notif-1',
-          notification_title: 'Loan Approved',
-          channel: 'email',
-          status: 'delivered',
-          attempt_number: 1,
-          attempted_at: new Date().toISOString(),
-          provider: 'SMTP',
-          response_code: '250',
-          response_message: 'Message accepted',
-        },
-        {
-          id: '2',
-          notification_id: 'notif-2',
-          notification_title: 'Payment Due Reminder',
-          channel: 'sms',
-          status: 'sent',
-          attempt_number: 1,
-          attempted_at: new Date(Date.now() - 3600000).toISOString(),
-          provider: 'MSG91',
-          provider_message_id: 'msg_12345',
-        },
-        {
-          id: '3',
-          notification_id: 'notif-3',
-          notification_title: 'System Maintenance',
-          channel: 'push',
-          status: 'failed',
-          attempt_number: 2,
-          attempted_at: new Date(Date.now() - 7200000).toISOString(),
-          provider: 'FCM',
-          response_message: 'Invalid device token',
-        },
-      ];
+      const response = await notificationApi.getLogs({
+        notificationId: notificationId ?? undefined,
+        channel: channel === 'all' ? undefined : channel,
+        status: status === 'all' ? undefined : status,
+        page,
+        pageSize,
+      });
 
-      setLogs(mockLogs);
-      setTotal(mockLogs.length);
+      setLogs(response.items);
+      setTotal(response.total);
     } catch (error) {
       toast({
         title: 'Error',
@@ -297,14 +264,14 @@ export default function NotificationLogPage() {
                 {logs.map((log) => (
                   <TableRow key={log.id}>
                     <TableCell className="text-sm">
-                      {formatDate(log.attempted_at)}
+                      {formatDate(log.attemptedAt)}
                     </TableCell>
                     <TableCell>
                       <button
                         className="text-left hover:underline"
-                        onClick={() => navigate(`/admin/notifications/${log.notification_id}`)}
+                        onClick={() => navigate(`/admin/notifications/${log.notificationId}`)}
                       >
-                        {log.notification_title || log.notification_id.substring(0, 8)}
+                        {log.notificationTitle || log.notificationId.substring(0, 8)}
                       </button>
                     </TableCell>
                     <TableCell>
@@ -321,7 +288,7 @@ export default function NotificationLogPage() {
                         </Badge>
                       </div>
                     </TableCell>
-                    <TableCell>{log.attempt_number}</TableCell>
+                    <TableCell>{log.attemptNumber}</TableCell>
                     <TableCell>
                       <span className="text-sm text-muted-foreground">
                         {log.provider || '-'}
@@ -329,13 +296,13 @@ export default function NotificationLogPage() {
                     </TableCell>
                     <TableCell>
                       <div className="max-w-xs">
-                        {log.response_code && (
+                        {log.responseCode && (
                           <Badge variant="outline" className="mr-2">
-                            {log.response_code}
+                            {log.responseCode}
                           </Badge>
                         )}
                         <span className="text-sm text-muted-foreground truncate">
-                          {log.response_message || log.provider_message_id || '-'}
+                          {log.responseMessage || log.providerMessageId || '-'}
                         </span>
                       </div>
                     </TableCell>

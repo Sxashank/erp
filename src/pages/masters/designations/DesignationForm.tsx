@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -20,6 +20,7 @@ import { designationsApi, departmentsApi } from '@/services/api';
 import { STATUS_OPTIONS } from '@/types';
 import type { DesignationCreate, DesignationUpdate, Designation, Department } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function DesignationForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -57,7 +58,7 @@ export function DesignationForm() {
       const response = await departmentsApi.list({ page_size: 100 });
       setDepartments(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch departments:', error);
+      logger.error('Failed to fetch departments:', error);
     }
   };
 
@@ -66,7 +67,7 @@ export function DesignationForm() {
       const response = await designationsApi.list({ page_size: 100 });
       setReportingDesignations(response.data.items.filter((d: Designation) => d.id !== id));
     } catch (error) {
-      console.error('Failed to fetch reporting designations:', error);
+      logger.error('Failed to fetch reporting designations:', error);
     }
   };
 
@@ -90,7 +91,7 @@ export function DesignationForm() {
         status: designation.status,
       });
     } catch (error) {
-      console.error('Failed to fetch designation:', error);
+      logger.error('Failed to fetch designation:', error);
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ export function DesignationForm() {
       }
       navigate('/admin/designations');
     } catch (error) {
-      console.error('Failed to save designation:', error);
+      logger.error('Failed to save designation:', error);
     } finally {
       setSubmitting(false);
     }

@@ -3,8 +3,8 @@
  * Credit rating display (AAA to D)
  */
 
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 import type { CreditRating } from '@/types/lending';
 
 export interface RatingBadgeProps {

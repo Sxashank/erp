@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Clock,
   Edit,
@@ -7,11 +5,14 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { HrisConfirmDialog } from '@/components/hris/HrisConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Shift {
   id: string;
   shift_code: string;
@@ -69,6 +71,8 @@ export function ShiftList() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [deleteShiftId, setDeleteShiftId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     const fetchOrganizations = async () => {
@@ -80,7 +84,7 @@ export function ShiftList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -94,7 +98,7 @@ export function ShiftList() {
         const response = await hrisApi.listShifts({ organization_id: selectedOrgId });
         setShifts(response.data.items || response.data || []);
       } catch (error) {
-        console.error('Failed to fetch shifts:', error);
+        logger.error('Failed to fetch shifts:', error);
       } finally {
         setLoading(false);
       }
@@ -102,13 +106,17 @@ export function ShiftList() {
     fetchShifts();
   }, [selectedOrgId]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this shift?')) return;
+  const executeDelete = async () => {
+    if (!deleteShiftId) return;
     try {
-      await hrisApi.deleteShift(id);
-      setShifts(shifts.filter((s) => s.id !== id));
+      setDeleteBusy(true);
+      await hrisApi.deleteShift(deleteShiftId);
+      setShifts(shifts.filter((s) => s.id !== deleteShiftId));
+      setDeleteShiftId(null);
     } catch (error) {
-      console.error('Failed to delete shift:', error);
+      logger.error('Failed to delete shift:', error);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -210,7 +218,7 @@ export function ShiftList() {
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDelete(shift.id)}
+                            onClick={() => setDeleteShiftId(shift.id)}
                             className="text-red-600"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -226,6 +234,18 @@ export function ShiftList() {
           )}
         </CardContent>
       </Card>
+      <HrisConfirmDialog
+        open={Boolean(deleteShiftId)}
+        title="Delete shift"
+        description="This removes the shift from future roster and attendance setup. Existing processed attendance should be reviewed before deletion."
+        confirmLabel="Delete shift"
+        destructive
+        busy={deleteBusy}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteShiftId(null);
+        }}
+        onConfirm={executeDelete}
+      />
     </div>
   );
 }

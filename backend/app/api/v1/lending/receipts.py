@@ -1,39 +1,71 @@
 """Loan Receipt API endpoints."""
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status, UploadFile, File
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
+from app.models.lending.enums import ReceiptStatus
+from app.schemas.base import CamelSchema, PaginatedResponse
+from app.schemas.lending.loan_account import LoanReceiptListResponse
 from app.services.lending import ReceiptService
+from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
 
 router = APIRouter()
 
 
+@router.get(
+    "",
+    response_model=PaginatedResponse[LoanReceiptListResponse],
+    response_model_by_alias=True,
+)
+async def list_receipts(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    search: str | None = Query(None),
+    status: ReceiptStatus | None = Query(None),
+    current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+):
+    """Paginated list of receipts scoped to caller's org."""
+    service = ReceiptService(db)
+    skip = (page - 1) * page_size
+    items, total = await service.list_receipts_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        search=search,
+        status=status,
+    )
+    list_items = [LoanReceiptListResponse.model_validate(r) for r in items]
+    return PaginatedResponse.create(list_items, total, page, page_size)
+
+
 # Request/Response Schemas
-class ReceiptCreateRequest(BaseModel):
+class ReceiptCreateRequest(CamelSchema):
     """Request to create a receipt."""
+
     loan_account_id: UUID
     receipt_amount: Decimal = Field(..., gt=0)
     receipt_date: date
-    value_date: Optional[date] = None
+    value_date: date | None = None
     receipt_type: str = Field(default="REGULAR")
     receipt_mode: str
-    instrument_number: Optional[str] = None
-    instrument_date: Optional[date] = None
-    instrument_bank: Optional[str] = None
-    mandate_id: Optional[UUID] = None
-    remarks: Optional[str] = None
+    instrument_number: str | None = None
+    instrument_date: date | None = None
+    instrument_bank: str | None = None
+    mandate_id: UUID | None = None
+    remarks: str | None = None
 
 
-class ReceiptResponse(BaseModel):
+class ReceiptResponse(CamelSchema):
     """Receipt response."""
+
     id: UUID
     receipt_number: str
     loan_account_id: UUID
@@ -51,79 +83,184 @@ class ReceiptResponse(BaseModel):
     charges_allocated: Decimal
 
 
-class AllocationRequest(BaseModel):
+class SpecificAllocation(CamelSchema):
+    """Specific allocation row for manual allocation."""
+
+    installment_id: UUID | None = None
+    schedule_id: UUID | None = None
+    component: str
+    amount: Decimal = Field(..., gt=0)
+
+
+class AllocationRequest(CamelSchema):
     """Request to allocate a receipt."""
+
     receipt_id: UUID
     allocation_method: str = Field(default="fifo", description="fifo, proportional, or specific")
-    specific_allocations: Optional[List[dict]] = None
+    specific_allocations: list[SpecificAllocation] | None = None
 
 
-class AllocationResponse(BaseModel):
+class AllocationItemResponse(CamelSchema):
     """Allocation response."""
+
     id: UUID
     receipt_id: UUID
-    installment_id: Optional[UUID]
+    installment_id: UUID | None
     component: str
     amount: Decimal
     sequence: int
 
 
-class ReceiptReversalRequest(BaseModel):
+class AllocationResponse(CamelSchema):
+    """Receipt allocation action response."""
+
+    receipt_id: UUID
+    allocation_count: int
+    allocations: list[AllocationItemResponse]
+
+
+class ReceiptReversalRequest(CamelSchema):
     """Request to reverse a receipt."""
+
     receipt_id: UUID
     reversal_reason: str
-    reversal_date: Optional[date] = None
+    reversal_date: date | None = None
 
 
-class BulkReceiptItem(BaseModel):
+class ReceiptReversalResponse(CamelSchema):
+    """Receipt reversal action response."""
+
+    receipt_id: UUID
+    receipt_number: str
+    status: str
+    message: str
+
+
+class BulkReceiptItem(CamelSchema):
     """Single receipt in bulk upload."""
+
     loan_account_number: str
     receipt_amount: Decimal
     receipt_date: date
     receipt_mode: str
-    instrument_number: Optional[str] = None
-    remarks: Optional[str] = None
+    instrument_number: str | None = None
+    remarks: str | None = None
 
 
-class BulkReceiptRequest(BaseModel):
+class BulkReceiptRequest(CamelSchema):
     """Bulk receipt upload request."""
-    receipts: List[BulkReceiptItem]
+
+    receipts: list[BulkReceiptItem]
     auto_allocate: bool = Field(default=True)
 
 
-class BulkReceiptResponse(BaseModel):
+class BulkReceiptResponse(CamelSchema):
     """Bulk receipt response."""
+
     total_count: int
     success_count: int
     failed_count: int
     total_amount: Decimal
-    failures: List[dict]
+    failures: list[dict]
 
 
 # Endpoints
-@router.post("/", response_model=ReceiptResponse)
+class LoanReceiptByLoanItem(CamelSchema):
+    """Receipt row returned for one loan account."""
+
+    id: UUID
+    receipt_number: str
+    receipt_date: date
+    receipt_amount: Decimal
+    receipt_type: str
+    receipt_mode: str
+    status: str
+    allocated_amount: Decimal
+    unallocated_amount: Decimal
+
+
+class LoanReceiptsByLoanResponse(CamelSchema):
+    """Receipts response for one loan account."""
+
+    loan_account_id: UUID
+    count: int
+    receipts: list[LoanReceiptByLoanItem]
+
+
+class ReceiptSummaryResponse(CamelSchema):
+    """Receipt summary response."""
+
+    receipt_count: int
+    receipt_amount: Decimal
+    allocated_amount: Decimal
+    unallocated_amount: Decimal
+
+
+class ReceiptBankStatementMatchResponse(CamelSchema):
+    """Bank statement match already recorded against a receipt."""
+
+    id: UUID
+    statement_id: UUID
+    bank_account_id: UUID
+    matched_amount: Decimal
+    match_confidence: Decimal
+    match_type: str
+    match_basis: dict
+    matched_at: datetime | None
+    matched_by_id: UUID | None
+
+
+class ReceiptDetailResponse(ReceiptResponse):
+    """Detailed receipt response."""
+
+    instrument_number: str | None = None
+    instrument_date: date | None = None
+    instrument_bank: str | None = None
+    bounced: bool
+    bounce_reason: str | None = None
+    remarks: str | None = None
+    allocations: list[AllocationItemResponse]
+    bank_statement_matches: list[ReceiptBankStatementMatchResponse]
+
+
+class ReceiptBounceResponse(CamelSchema):
+    """Receipt bounce action response."""
+
+    receipt_id: UUID
+    receipt_number: str
+    status: str
+    bounced: bool
+    bounce_reason: str | None
+    bounce_charges: Decimal
+    message: str
+
+
+@router.post("/", response_model=ReceiptResponse, response_model_by_alias=True)
 async def create_receipt(
     request: ReceiptCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions("LMS_RECEIPT_CREATE")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new receipt."""
     service = ReceiptService(db)
 
-    receipt = await service.create_receipt(
-        loan_account_id=request.loan_account_id,
-        receipt_amount=request.receipt_amount,
-        receipt_date=request.receipt_date,
-        value_date=request.value_date,
-        receipt_type=request.receipt_type,
-        receipt_mode=request.receipt_mode,
-        instrument_number=request.instrument_number,
-        instrument_date=request.instrument_date,
-        instrument_bank=request.instrument_bank,
-        mandate_id=request.mandate_id,
-        remarks=request.remarks,
-        user_id=current_user.id,
-    )
+    try:
+        receipt = await service.create_receipt(
+            loan_account_id=request.loan_account_id,
+            receipt_amount=request.receipt_amount,
+            receipt_date=request.receipt_date,
+            value_date=request.value_date,
+            receipt_type=request.receipt_type,
+            receipt_mode=request.receipt_mode,
+            instrument_number=request.instrument_number,
+            instrument_date=request.instrument_date,
+            instrument_bank=request.instrument_bank,
+            mandate_id=request.mandate_id,
+            remarks=request.remarks,
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise BadRequestException(detail=str(exc), error_code="BAD_REQUEST") from exc
 
     return ReceiptResponse(
         id=receipt.id,
@@ -144,29 +281,41 @@ async def create_receipt(
     )
 
 
-@router.post("/allocate")
+@router.post(
+    "/allocate",
+    response_model=AllocationResponse,
+    response_model_by_alias=True,
+)
 async def allocate_receipt(
     request: AllocationRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions("LMS_RECEIPT_ALLOCATE")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Allocate a receipt to installments."""
     service = ReceiptService(db)
 
-    allocations = await service.allocate_receipt(
-        receipt_id=request.receipt_id,
-        allocation_method=request.allocation_method,
-        specific_allocations=request.specific_allocations,
-        user_id=current_user.id,
-    )
+    try:
+        allocations = await service.allocate_receipt(
+            receipt_id=request.receipt_id,
+            allocation_method=request.allocation_method,
+            specific_allocations=(
+                [item.model_dump() for item in request.specific_allocations]
+                if request.specific_allocations
+                else None
+            ),
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise BadRequestException(detail=str(exc), error_code="BAD_REQUEST") from exc
 
     return {
-        "receipt_id": str(request.receipt_id),
+        "receipt_id": request.receipt_id,
         "allocation_count": len(allocations),
         "allocations": [
             {
-                "id": str(a.id),
-                "installment_id": str(a.installment_id) if a.installment_id else None,
+                "id": a.id,
+                "receipt_id": a.receipt_id,
+                "installment_id": a.installment_id,
                 "component": a.allocation_component.name,
                 "amount": a.allocated_amount,
                 "sequence": a.allocation_sequence,
@@ -176,35 +325,42 @@ async def allocate_receipt(
     }
 
 
-@router.post("/reverse")
+@router.post(
+    "/reverse",
+    response_model=ReceiptReversalResponse,
+    response_model_by_alias=True,
+)
 async def reverse_receipt(
     request: ReceiptReversalRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions("LMS_RECEIPT_UPDATE")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Reverse a receipt."""
     service = ReceiptService(db)
 
-    receipt = await service.reverse_receipt(
-        receipt_id=request.receipt_id,
-        reversal_reason=request.reversal_reason,
-        reversal_date=request.reversal_date,
-        user_id=current_user.id,
-    )
+    try:
+        receipt = await service.reverse_receipt(
+            receipt_id=request.receipt_id,
+            reversal_reason=request.reversal_reason,
+            reversal_date=request.reversal_date,
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise BadRequestException(detail=str(exc), error_code="BAD_REQUEST") from exc
 
     return {
-        "receipt_id": str(receipt.id),
+        "receipt_id": receipt.id,
         "receipt_number": receipt.receipt_number,
         "status": receipt.status.name,
         "message": "Receipt reversed successfully",
     }
 
 
-@router.post("/bulk", response_model=BulkReceiptResponse)
+@router.post("/bulk", response_model=BulkReceiptResponse, response_model_by_alias=True)
 async def process_bulk_receipts(
     request: BulkReceiptRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions("LMS_RECEIPT_CREATE")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Process bulk receipt upload."""
     service = ReceiptService(db)
@@ -228,14 +384,18 @@ async def process_bulk_receipts(
     )
 
 
-@router.get("/loan/{loan_account_id}")
+@router.get(
+    "/loan/{loan_account_id}",
+    response_model=LoanReceiptsByLoanResponse,
+    response_model_by_alias=True,
+)
 async def get_receipts_by_loan(
     loan_account_id: UUID,
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
-    status: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    from_date: date | None = None,
+    to_date: date | None = None,
+    status: str | None = None,
+    current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get receipts for a loan account."""
     service = ReceiptService(db)
@@ -248,11 +408,11 @@ async def get_receipts_by_loan(
     )
 
     return {
-        "loan_account_id": str(loan_account_id),
+        "loan_account_id": loan_account_id,
         "count": len(receipts),
         "receipts": [
             {
-                "id": str(r.id),
+                "id": r.id,
                 "receipt_number": r.receipt_number,
                 "receipt_date": r.receipt_date,
                 "receipt_amount": r.receipt_amount,
@@ -267,11 +427,42 @@ async def get_receipts_by_loan(
     }
 
 
-@router.get("/{receipt_id}")
+@router.get(
+    "/organization/{organization_id}/summary",
+    response_model=ReceiptSummaryResponse,
+    response_model_by_alias=True,
+)
+async def get_receipt_summary(
+    organization_id: UUID,
+    from_date: date | None = None,
+    to_date: date | None = None,
+    current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+):
+    """Get receipt summary for organization."""
+    service = ReceiptService(db)
+
+    if organization_id != current_user.organization_id:
+        raise ForbiddenException(detail="Forbidden", error_code="FORBIDDEN")
+
+    summary = await service.get_receipt_summary(
+        organization_id=current_user.organization_id,
+        from_date=from_date,
+        to_date=to_date,
+    )
+
+    return summary
+
+
+@router.get(
+    "/{receipt_id}",
+    response_model=ReceiptDetailResponse,
+    response_model_by_alias=True,
+)
 async def get_receipt(
     receipt_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get receipt details with allocations."""
     service = ReceiptService(db)
@@ -279,17 +470,14 @@ async def get_receipt(
     receipt = await service.get_receipt(receipt_id)
 
     if not receipt:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Receipt not found",
-        )
+        raise NotFoundException(detail="Receipt not found", error_code="RECEIPT_NOT_FOUND")
 
     allocations = await service.get_allocations(receipt_id)
 
     return {
-        "id": str(receipt.id),
+        "id": receipt.id,
         "receipt_number": receipt.receipt_number,
-        "loan_account_id": str(receipt.loan_account_id),
+        "loan_account_id": receipt.loan_account_id,
         "receipt_date": receipt.receipt_date,
         "value_date": receipt.value_date,
         "receipt_amount": receipt.receipt_amount,
@@ -310,59 +498,64 @@ async def get_receipt(
         "remarks": receipt.remarks,
         "allocations": [
             {
-                "id": str(a.id),
-                "installment_id": str(a.installment_id) if a.installment_id else None,
+                "id": a.id,
+                "receipt_id": a.receipt_id,
+                "installment_id": a.installment_id,
                 "component": a.allocation_component.name,
                 "amount": a.allocated_amount,
                 "sequence": a.allocation_sequence,
             }
             for a in allocations
         ],
+        "bank_statement_matches": [
+            {
+                "id": match.id,
+                "statement_id": match.statement_id,
+                "bank_account_id": match.bank_account_id,
+                "matched_amount": match.matched_amount,
+                "match_confidence": match.match_confidence,
+                "match_type": match.match_type,
+                "match_basis": match.match_basis or {},
+                "matched_at": match.matched_at,
+                "matched_by_id": match.matched_by_id,
+            }
+            for match in receipt.bank_statement_matches
+        ],
     }
 
 
-@router.get("/organization/{organization_id}/summary")
-async def get_receipt_summary(
-    organization_id: UUID,
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
-):
-    """Get receipt summary for organization."""
-    service = ReceiptService(db)
-
-    summary = await service.get_receipt_summary(
-        organization_id=organization_id,
-        from_date=from_date,
-        to_date=to_date,
-    )
-
-    return summary
-
-
-@router.post("/{receipt_id}/bounce")
+@router.post(
+    "/{receipt_id}/bounce",
+    response_model=ReceiptBounceResponse,
+    response_model_by_alias=True,
+)
 async def mark_receipt_bounced(
     receipt_id: UUID,
     bounce_reason: str = Query(..., description="Reason for bounce"),
-    bounce_date: Optional[date] = None,
-    bounce_charges: Decimal = Query(default=Decimal("0"), description="Bounce charges"),
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    bounce_date: date | None = None,
+    bounce_charges: Decimal = Query(
+        default=Decimal("0"),
+        description="Bounce charges",
+    ),
+    current_user: User = Depends(RequirePermissions("LMS_RECEIPT_UPDATE")),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Mark a receipt as bounced."""
     service = ReceiptService(db)
 
-    receipt = await service.mark_bounced(
-        receipt_id=receipt_id,
-        bounce_reason=bounce_reason,
-        bounce_date=bounce_date,
-        bounce_charges=bounce_charges,
-        user_id=current_user.id,
-    )
+    try:
+        receipt = await service.mark_bounced(
+            receipt_id=receipt_id,
+            bounce_reason=bounce_reason,
+            bounce_date=bounce_date,
+            bounce_charges=bounce_charges,
+            user_id=current_user.id,
+        )
+    except ValueError as exc:
+        raise BadRequestException(detail=str(exc), error_code="BAD_REQUEST") from exc
 
     return {
-        "receipt_id": str(receipt.id),
+        "receipt_id": receipt.id,
         "receipt_number": receipt.receipt_number,
         "status": receipt.status.name,
         "bounced": receipt.bounced,

@@ -4,15 +4,15 @@ Handles callbacks from payment gateways (Razorpay, PayU, etc.)
 """
 
 import logging
-from typing import Optional
+from uuid import UUID
 
-from fastapi import APIRouter, Request, Header, HTTPException, status, Depends
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
 from app.config import settings
 from app.integrations.payment_gateway import RazorpayGateway, create_webhook_handler
-from app.integrations.payment_gateway.webhook_handler import WebhookEvent
+from app.core.exceptions import BadRequestException
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ def get_razorpay_gateway() -> RazorpayGateway:
 )
 async def razorpay_webhook(
     request: Request,
-    x_razorpay_signature: Optional[str] = Header(None),
+    x_razorpay_signature: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -54,9 +54,9 @@ async def razorpay_webhook(
     - token.rejected
     """
     if not x_razorpay_signature:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Missing X-Razorpay-Signature header",
+            error_code="MISSING_X_RAZORPAY_SIGNATURE_HEADER",
         )
 
     # Read raw body for signature verification
@@ -68,30 +68,32 @@ async def razorpay_webhook(
 
         # Register custom handlers for our application
         from app.api.v1.webhooks.payment_handlers import (
-            handle_payment_success,
-            handle_payment_failure,
-            handle_refund_success,
-            handle_mandate_success,
             handle_mandate_failure,
+            handle_mandate_success,
+            handle_payment_failure,
+            handle_payment_success,
+            handle_refund_success,
         )
         from app.integrations.payment_gateway.webhook_handler import WebhookEventType
 
-        webhook_handler.register_handlers({
-            WebhookEventType.PAYMENT_CAPTURED: handle_payment_success,
-            WebhookEventType.PAYMENT_FAILED: handle_payment_failure,
-            WebhookEventType.REFUND_PROCESSED: handle_refund_success,
-            WebhookEventType.TOKEN_CONFIRMED: handle_mandate_success,
-            WebhookEventType.TOKEN_REJECTED: handle_mandate_failure,
-        })
+        webhook_handler.register_handlers(
+            {
+                WebhookEventType.PAYMENT_CAPTURED: handle_payment_success,
+                WebhookEventType.PAYMENT_FAILED: handle_payment_failure,
+                WebhookEventType.REFUND_PROCESSED: handle_refund_success,
+                WebhookEventType.TOKEN_CONFIRMED: handle_mandate_success,
+                WebhookEventType.TOKEN_REJECTED: handle_mandate_failure,
+            }
+        )
 
         # Process webhook
         result = await webhook_handler.handle_webhook(body, x_razorpay_signature)
 
         if not result.get("success"):
             logger.error(f"Webhook processing failed: {result}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestException(
                 detail=result.get("error", "Webhook processing failed"),
+                error_code="BAD_REQUEST",
             )
 
         return {"status": "ok", **result}
@@ -108,53 +110,93 @@ async def razorpay_webhook(
 @router.post(
     "/paytm",
     summary="Paytm Webhook",
-    description="Handle Paytm payment webhooks",
+    description="Handle Paytm payment webhooks — HMAC verified via tenant IntegrationConfig",
 )
 async def paytm_webhook(
     request: Request,
+    organization_id: UUID,
+    x_paytm_checksum: str | None = Header(None),
+    x_paytm_timestamp: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle Paytm webhook events."""
-    body = await request.json()
+    """Handle Paytm webhook events.
 
-    logger.info(f"Paytm webhook received: {body.get('ORDERID')}")
+    Signature is verified against the per-tenant ``webhook_signing_secret`` in
+    the IntegrationConfig row keyed by (organization_id, PAYMENT_GATEWAY, PAYTM).
+    Domain-specific order-status handling is STAGE-6-PENDING-paytm-live.
+    """
+    from app.core.webhook_gate import verify_tenant_webhook
+    from app.models.core.integration_config import (
+        IntegrationProvider,
+        IntegrationType,
+    )
 
-    # TODO: Implement Paytm webhook handling
-    # - Verify checksum
-    # - Process payment status
-    # - Update records
-
-    return {"status": "ok"}
+    body = await request.body()
+    envelope = await verify_tenant_webhook(
+        session=db,
+        organization_id=organization_id,
+        integration_type=IntegrationType.PAYMENT_GATEWAY,
+        provider=IntegrationProvider.PAYTM,
+        vendor_label="Paytm",
+        body=body,
+        signature=x_paytm_checksum or "",
+        timestamp=x_paytm_timestamp,
+    )
+    logger.info(
+        "paytm_webhook_verified org=%s bytes=%d",
+        envelope.organization_id,
+        len(envelope.body),
+    )
+    # TODO[STAGE-6-PENDING-paytm-live]: dispatch verified payload to the
+    # portal payment service (similar to the Razorpay branch above).
+    return {"status": "ok", "vendor": "paytm"}
 
 
 @router.post(
     "/ccavenue",
     summary="CCAvenue Webhook",
-    description="Handle CCAvenue payment webhooks",
+    description="Handle CCAvenue payment webhooks — HMAC verified via tenant IntegrationConfig",
 )
 async def ccavenue_webhook(
     request: Request,
+    organization_id: UUID,
+    x_ccavenue_signature: str | None = Header(None),
+    x_ccavenue_timestamp: str | None = Header(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Handle CCAvenue webhook events."""
-    # CCAvenue sends encrypted response
-    form_data = await request.form()
-    enc_resp = form_data.get("encResp")
+    """Handle CCAvenue webhook events.
 
-    if not enc_resp:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing encResp",
-        )
+    CCAvenue's real transport is an AES-encrypted form-posted ``encResp``.
+    Before we decrypt it we gate on an HMAC signature computed over the raw
+    body using the tenant's per-merchant shared secret. That gate matches the
+    shape we use for every other vendor so support can reason about signatures
+    uniformly.
+    """
+    from app.core.webhook_gate import verify_tenant_webhook
+    from app.models.core.integration_config import (
+        IntegrationProvider,
+        IntegrationType,
+    )
 
-    logger.info("CCAvenue webhook received")
-
-    # TODO: Implement CCAvenue webhook handling
-    # - Decrypt response
-    # - Verify order
-    # - Process payment status
-
-    return {"status": "ok"}
+    body = await request.body()
+    envelope = await verify_tenant_webhook(
+        session=db,
+        organization_id=organization_id,
+        integration_type=IntegrationType.PAYMENT_GATEWAY,
+        provider=IntegrationProvider.CCAVENUE,
+        vendor_label="CCAvenue",
+        body=body,
+        signature=x_ccavenue_signature or "",
+        timestamp=x_ccavenue_timestamp,
+    )
+    logger.info(
+        "ccavenue_webhook_verified org=%s bytes=%d",
+        envelope.organization_id,
+        len(envelope.body),
+    )
+    # TODO[STAGE-6-PENDING-ccavenue-live]: decrypt `encResp`, verify order,
+    # dispatch to portal payment service.
+    return {"status": "ok", "vendor": "ccavenue"}
 
 
 @router.get(

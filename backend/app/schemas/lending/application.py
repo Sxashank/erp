@@ -2,45 +2,54 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from app.schemas.base import BaseSchema
 from app.models.lending.enums import (
     ApplicationStage,
     ApplicationStatus,
-    AppraisalType,
-    TechnicalFeasibility,
     AppraisalRecommendation,
-    MilestoneStatus,
+    AppraisalType,
     InterestType,
-    RepaymentMode,
+    MilestoneStatus,
     RepaymentFrequency,
+    RepaymentMode,
+    TechnicalFeasibility,
 )
-
+from app.schemas.base import CamelSchema
 
 # =============================================================================
 # Application Document Schemas
 # =============================================================================
 
 
-class ApplicationDocumentBase(BaseSchema):
+class ApplicationDocumentBase(CamelSchema):
     """Base schema for application document."""
 
-    checklist_id: Optional[UUID] = None
+    checklist_item_id: UUID | None = None
+    document_code: str = Field(..., min_length=1, max_length=50)
     document_name: str = Field(..., min_length=1, max_length=200)
-    document_category: Optional[str] = Field(None, max_length=50)
-    file_path: Optional[str] = Field(None, max_length=500)
-    file_name: Optional[str] = Field(None, max_length=200)
-    file_size_kb: Optional[int] = Field(None, ge=0)
-    mime_type: Optional[str] = Field(None, max_length=100)
-    is_verified: bool = False
-    verified_by_id: Optional[UUID] = None
-    verified_at: Optional[datetime] = None
-    verification_remarks: Optional[str] = None
-    expiry_date: Optional[date] = None
+    document_description: str | None = None
+    file_name: str = Field(..., min_length=1, max_length=255)
+    dms_document_id: UUID | None = None
+    file_path: str = Field(..., min_length=1, max_length=500)
+    file_size_bytes: int | None = Field(None, ge=0)
+    file_mime_type: str | None = Field(None, max_length=100)
+    file_hash: str | None = Field(None, max_length=64)
+    document_date: date | None = None
+    expiry_date: date | None = None
+    upload_date: datetime | None = None
+    status: str = Field(default="PENDING", max_length=50)
+    is_mandatory: bool = True
+    is_waived: bool = False
+    waiver_reason: str | None = None
+    waiver_approved_by: UUID | None = None
+    verified_by_id: UUID | None = None
+    verified_at: datetime | None = None
+    verification_remarks: str | None = None
+    rejection_reason: str | None = None
 
 
 class ApplicationDocumentCreate(ApplicationDocumentBase):
@@ -49,21 +58,31 @@ class ApplicationDocumentCreate(ApplicationDocumentBase):
     application_id: UUID
 
 
-class ApplicationDocumentUpdate(BaseSchema):
+class ApplicationDocumentUpdate(CamelSchema):
     """Schema for updating application document."""
 
-    document_name: Optional[str] = Field(None, min_length=1, max_length=200)
-    document_category: Optional[str] = Field(None, max_length=50)
-    file_path: Optional[str] = Field(None, max_length=500)
-    file_name: Optional[str] = Field(None, max_length=200)
-    file_size_kb: Optional[int] = Field(None, ge=0)
-    mime_type: Optional[str] = Field(None, max_length=100)
-    is_verified: Optional[bool] = None
-    verified_by_id: Optional[UUID] = None
-    verified_at: Optional[datetime] = None
-    verification_remarks: Optional[str] = None
-    expiry_date: Optional[date] = None
-    is_active: Optional[bool] = None
+    checklist_item_id: UUID | None = None
+    document_code: str | None = Field(None, min_length=1, max_length=50)
+    document_name: str | None = Field(None, min_length=1, max_length=200)
+    document_description: str | None = None
+    file_path: str | None = Field(None, max_length=500)
+    file_name: str | None = Field(None, max_length=255)
+    dms_document_id: UUID | None = None
+    file_size_bytes: int | None = Field(None, ge=0)
+    file_mime_type: str | None = Field(None, max_length=100)
+    file_hash: str | None = Field(None, max_length=64)
+    document_date: date | None = None
+    status: str | None = Field(None, max_length=50)
+    is_mandatory: bool | None = None
+    is_waived: bool | None = None
+    waiver_reason: str | None = None
+    waiver_approved_by: UUID | None = None
+    verified_by_id: UUID | None = None
+    verified_at: datetime | None = None
+    verification_remarks: str | None = None
+    rejection_reason: str | None = None
+    expiry_date: date | None = None
+    is_active: bool | None = None
 
 
 class ApplicationDocumentResponse(ApplicationDocumentBase):
@@ -72,7 +91,7 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
     id: UUID
     application_id: UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True
 
 
@@ -81,22 +100,30 @@ class ApplicationDocumentResponse(ApplicationDocumentBase):
 # =============================================================================
 
 
-class ApplicationFeeBase(BaseSchema):
+class ApplicationFeeBase(CamelSchema):
     """Base schema for application fee."""
 
     fee_master_id: UUID
+    fee_code: str = Field(..., min_length=1, max_length=50)
     fee_name: str = Field(..., min_length=1, max_length=200)
     calculated_amount: Decimal = Field(..., ge=0)
+    approved_amount: Decimal = Field(..., ge=0)
     waiver_amount: Decimal = Field(default=Decimal("0"), ge=0)
-    final_amount: Decimal = Field(..., ge=0)
-    gst_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    waiver_percentage: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    cgst_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    sgst_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    igst_amount: Decimal = Field(default=Decimal("0"), ge=0)
     total_amount: Decimal = Field(..., ge=0)
-    collection_stage: Optional[str] = Field(None, max_length=30)
-    collected_amount: Decimal = Field(default=Decimal("0"), ge=0)
-    is_collected: bool = False
-    collected_date: Optional[date] = None
-    waiver_approved_by_id: Optional[UUID] = None
-    waiver_remarks: Optional[str] = None
+    status: str = Field(default="PENDING", max_length=50)
+    collection_mode: str | None = Field(None, max_length=50)
+    collection_date: date | None = None
+    collection_reference: str | None = Field(None, max_length=100)
+    waiver_approved_by: UUID | None = None
+    waiver_reason: str | None = None
+    deducted_from_disbursement: bool = False
+    disbursement_id: UUID | None = None
+    invoice_number: str | None = Field(None, max_length=50)
+    invoice_date: date | None = None
 
 
 class ApplicationFeeCreate(ApplicationFeeBase):
@@ -105,18 +132,27 @@ class ApplicationFeeCreate(ApplicationFeeBase):
     application_id: UUID
 
 
-class ApplicationFeeUpdate(BaseSchema):
+class ApplicationFeeUpdate(CamelSchema):
     """Schema for updating application fee."""
 
-    waiver_amount: Optional[Decimal] = Field(None, ge=0)
-    final_amount: Optional[Decimal] = Field(None, ge=0)
-    total_amount: Optional[Decimal] = Field(None, ge=0)
-    collected_amount: Optional[Decimal] = Field(None, ge=0)
-    is_collected: Optional[bool] = None
-    collected_date: Optional[date] = None
-    waiver_approved_by_id: Optional[UUID] = None
-    waiver_remarks: Optional[str] = None
-    is_active: Optional[bool] = None
+    approved_amount: Decimal | None = Field(None, ge=0)
+    waiver_amount: Decimal | None = Field(None, ge=0)
+    waiver_percentage: Decimal | None = Field(None, ge=0, le=100)
+    cgst_amount: Decimal | None = Field(None, ge=0)
+    sgst_amount: Decimal | None = Field(None, ge=0)
+    igst_amount: Decimal | None = Field(None, ge=0)
+    total_amount: Decimal | None = Field(None, ge=0)
+    status: str | None = Field(None, max_length=50)
+    collection_mode: str | None = Field(None, max_length=50)
+    collection_date: date | None = None
+    collection_reference: str | None = Field(None, max_length=100)
+    waiver_approved_by: UUID | None = None
+    waiver_reason: str | None = None
+    deducted_from_disbursement: bool | None = None
+    disbursement_id: UUID | None = None
+    invoice_number: str | None = Field(None, max_length=50)
+    invoice_date: date | None = None
+    is_active: bool | None = None
 
 
 class ApplicationFeeResponse(ApplicationFeeBase):
@@ -125,7 +161,7 @@ class ApplicationFeeResponse(ApplicationFeeBase):
     id: UUID
     application_id: UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True
 
 
@@ -134,82 +170,93 @@ class ApplicationFeeResponse(ApplicationFeeBase):
 # =============================================================================
 
 
-class TechnicalAppraisalBase(BaseSchema):
+class TechnicalAppraisalBase(CamelSchema):
     """Base schema for technical appraisal."""
 
+    appraisal_reference: str | None = Field(None, max_length=50)
     appraisal_type: AppraisalType = AppraisalType.TECHNICAL
     appraisal_date: date
-    appraiser_name: Optional[str] = Field(None, max_length=200)
-    appraiser_agency: Optional[str] = Field(None, max_length=200)
+    site_visit_date: date | None = None
+    appraiser_id: UUID | None = None
+    external_appraiser: str | None = Field(None, max_length=200)
+    external_appraiser_firm: str | None = Field(None, max_length=200)
 
     # Project Details
-    project_description: Optional[str] = None
-    project_location: Optional[str] = Field(None, max_length=500)
-    project_area_sqft: Optional[Decimal] = Field(None, ge=0)
-    construction_type: Optional[str] = Field(None, max_length=100)
+    project_description: str | None = None
+    location_details: str | None = None
+    land_area_sqft: Decimal | None = Field(None, ge=0)
+    built_up_area_sqft: Decimal | None = Field(None, ge=0)
 
     # Cost Details
-    land_cost: Optional[Decimal] = Field(None, ge=0)
-    construction_cost: Optional[Decimal] = Field(None, ge=0)
-    plant_machinery_cost: Optional[Decimal] = Field(None, ge=0)
-    other_costs: Optional[Decimal] = Field(None, ge=0)
-    total_project_cost: Optional[Decimal] = Field(None, ge=0)
-    contingency: Optional[Decimal] = Field(None, ge=0)
+    estimated_project_cost: Decimal | None = Field(None, ge=0)
+    land_cost: Decimal | None = Field(None, ge=0)
+    construction_cost: Decimal | None = Field(None, ge=0)
+    machinery_cost: Decimal | None = Field(None, ge=0)
+    other_costs: Decimal | None = Field(None, ge=0)
+    contingency: Decimal | None = Field(None, ge=0)
 
     # Progress
-    current_completion_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    expected_completion_date: Optional[date] = None
+    feasibility: TechnicalFeasibility = TechnicalFeasibility.FEASIBLE
+    feasibility_remarks: str | None = None
+    estimated_completion_months: int | None = Field(None, ge=0)
+    construction_stage: str | None = Field(None, max_length=100)
+    completion_percentage: Decimal | None = Field(None, ge=0, le=100)
+    statutory_approvals: dict[str, Any] | None = None
+    environmental_clearance: str | None = Field(None, max_length=50)
 
     # Assessment
-    feasibility: TechnicalFeasibility = TechnicalFeasibility.FEASIBLE
     recommendation: AppraisalRecommendation = AppraisalRecommendation.PROCEED
-    observations: Optional[str] = None
-    conditions: Optional[str] = None
-
-    # Valuation
-    valuation_amount: Optional[Decimal] = Field(None, ge=0)
-    forced_sale_value: Optional[Decimal] = Field(None, ge=0)
+    conditions: list[dict[str, Any]] | None = None
+    concerns: list[dict[str, Any]] | None = None
+    report_summary: str | None = None
+    report_file_path: str | None = Field(None, max_length=500)
+    photos: list[dict[str, Any]] | None = None
 
 
 class TechnicalAppraisalCreate(TechnicalAppraisalBase):
     """Schema for creating technical appraisal."""
 
     application_id: UUID
-    appraised_by_id: Optional[UUID] = None
 
 
-class TechnicalAppraisalUpdate(BaseSchema):
+class TechnicalAppraisalUpdate(CamelSchema):
     """Schema for updating technical appraisal."""
 
-    appraisal_type: Optional[AppraisalType] = None
-    appraisal_date: Optional[date] = None
-    appraiser_name: Optional[str] = Field(None, max_length=200)
-    appraiser_agency: Optional[str] = Field(None, max_length=200)
+    appraisal_reference: str | None = Field(None, max_length=50)
+    appraisal_type: AppraisalType | None = None
+    appraisal_date: date | None = None
+    site_visit_date: date | None = None
+    appraiser_id: UUID | None = None
+    external_appraiser: str | None = Field(None, max_length=200)
+    external_appraiser_firm: str | None = Field(None, max_length=200)
 
-    project_description: Optional[str] = None
-    project_location: Optional[str] = Field(None, max_length=500)
-    project_area_sqft: Optional[Decimal] = Field(None, ge=0)
-    construction_type: Optional[str] = Field(None, max_length=100)
+    project_description: str | None = None
+    location_details: str | None = None
+    land_area_sqft: Decimal | None = Field(None, ge=0)
+    built_up_area_sqft: Decimal | None = Field(None, ge=0)
 
-    land_cost: Optional[Decimal] = Field(None, ge=0)
-    construction_cost: Optional[Decimal] = Field(None, ge=0)
-    plant_machinery_cost: Optional[Decimal] = Field(None, ge=0)
-    other_costs: Optional[Decimal] = Field(None, ge=0)
-    total_project_cost: Optional[Decimal] = Field(None, ge=0)
-    contingency: Optional[Decimal] = Field(None, ge=0)
+    estimated_project_cost: Decimal | None = Field(None, ge=0)
+    land_cost: Decimal | None = Field(None, ge=0)
+    construction_cost: Decimal | None = Field(None, ge=0)
+    machinery_cost: Decimal | None = Field(None, ge=0)
+    other_costs: Decimal | None = Field(None, ge=0)
+    contingency: Decimal | None = Field(None, ge=0)
 
-    current_completion_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    expected_completion_date: Optional[date] = None
+    feasibility: TechnicalFeasibility | None = None
+    feasibility_remarks: str | None = None
+    estimated_completion_months: int | None = Field(None, ge=0)
+    construction_stage: str | None = Field(None, max_length=100)
+    completion_percentage: Decimal | None = Field(None, ge=0, le=100)
+    statutory_approvals: dict[str, Any] | None = None
+    environmental_clearance: str | None = Field(None, max_length=50)
+    recommendation: AppraisalRecommendation | None = None
+    conditions: list[dict[str, Any]] | None = None
+    concerns: list[dict[str, Any]] | None = None
+    report_summary: str | None = None
+    report_file_path: str | None = Field(None, max_length=500)
+    photos: list[dict[str, Any]] | None = None
 
-    feasibility: Optional[TechnicalFeasibility] = None
-    recommendation: Optional[AppraisalRecommendation] = None
-    observations: Optional[str] = None
-    conditions: Optional[str] = None
-
-    valuation_amount: Optional[Decimal] = Field(None, ge=0)
-    forced_sale_value: Optional[Decimal] = Field(None, ge=0)
-
-    is_active: Optional[bool] = None
+    is_active: bool | None = None
 
 
 class TechnicalAppraisalResponse(TechnicalAppraisalBase):
@@ -217,9 +264,8 @@ class TechnicalAppraisalResponse(TechnicalAppraisalBase):
 
     id: UUID
     application_id: UUID
-    appraised_by_id: Optional[UUID] = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True
 
 
@@ -228,91 +274,88 @@ class TechnicalAppraisalResponse(TechnicalAppraisalBase):
 # =============================================================================
 
 
-class FinancialAnalysisBase(BaseSchema):
+class FinancialAnalysisBase(CamelSchema):
     """Base schema for financial analysis."""
 
+    analysis_reference: str | None = Field(None, max_length=50)
     analysis_date: date
-    financial_year_analyzed: str = Field(..., max_length=7)
+    analyst_id: UUID | None = None
+    financial_years_analyzed: list[str] = Field(default_factory=list)
+    base_year: str = Field(..., max_length=10)
+    historical_ratios: dict[str, Any] = Field(default_factory=dict)
 
     # Project Financials
-    total_project_cost: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    debt_required: Optional[Decimal] = Field(None, ge=0)
-    proposed_loan_amount: Optional[Decimal] = Field(None, ge=0)
+    projection_years: int = Field(default=5, ge=1)
+    projected_revenue: dict[str, Any] = Field(default_factory=dict)
+    projected_ebitda: dict[str, Any] = Field(default_factory=dict)
+    projected_net_profit: dict[str, Any] = Field(default_factory=dict)
+    projected_cash_flows: dict[str, Any] = Field(default_factory=dict)
 
-    # Projected Financials
-    projected_revenue_y1: Optional[Decimal] = None
-    projected_revenue_y2: Optional[Decimal] = None
-    projected_revenue_y3: Optional[Decimal] = None
-    projected_ebitda_y1: Optional[Decimal] = None
-    projected_ebitda_y2: Optional[Decimal] = None
-    projected_ebitda_y3: Optional[Decimal] = None
-    projected_pat_y1: Optional[Decimal] = None
-    projected_pat_y2: Optional[Decimal] = None
-    projected_pat_y3: Optional[Decimal] = None
-
-    # Key Ratios
-    current_ratio: Optional[Decimal] = None
-    debt_equity_ratio: Optional[Decimal] = None
-    interest_coverage_ratio: Optional[Decimal] = None
-    dscr_average: Optional[Decimal] = None
-    dscr_minimum: Optional[Decimal] = None
-    roce: Optional[Decimal] = None
-    roe: Optional[Decimal] = None
-    break_even_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
+    current_ratio: Decimal | None = None
+    debt_equity_ratio: Decimal | None = None
+    interest_coverage_ratio: Decimal | None = None
+    average_dscr: Decimal | None = None
+    minimum_dscr: Decimal | None = None
+    dscr_by_year: dict[str, Any] | None = None
+    break_even_capacity_pct: Decimal | None = Field(None, ge=0, le=100)
+    break_even_sales: Decimal | None = Field(None, ge=0)
 
     # Assessment
-    sensitivity_analysis: Optional[Dict[str, Any]] = None
+    sensitivity_analysis: dict[str, Any] | None = None
     recommendation: AppraisalRecommendation = AppraisalRecommendation.PROCEED
-    observations: Optional[str] = None
-    conditions: Optional[str] = None
+    recommended_amount: Decimal | None = Field(None, ge=0)
+    recommended_tenure: int | None = Field(None, ge=1)
+    recommended_moratorium: int | None = Field(None, ge=0)
+    strengths: str | None = None
+    weaknesses: str | None = None
+    comments: str | None = None
+    conditions: list[dict[str, Any]] | None = None
+    report_file_path: str | None = Field(None, max_length=500)
 
 
 class FinancialAnalysisCreate(FinancialAnalysisBase):
     """Schema for creating financial analysis."""
 
     application_id: UUID
-    analyzed_by_id: Optional[UUID] = None
 
 
-class FinancialAnalysisUpdate(BaseSchema):
+class FinancialAnalysisUpdate(CamelSchema):
     """Schema for updating financial analysis."""
 
-    analysis_date: Optional[date] = None
-    financial_year_analyzed: Optional[str] = Field(None, max_length=7)
+    analysis_reference: str | None = Field(None, max_length=50)
+    analysis_date: date | None = None
+    analyst_id: UUID | None = None
+    financial_years_analyzed: list[str] | None = None
+    base_year: str | None = Field(None, max_length=10)
+    historical_ratios: dict[str, Any] | None = None
 
-    total_project_cost: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    debt_required: Optional[Decimal] = Field(None, ge=0)
-    proposed_loan_amount: Optional[Decimal] = Field(None, ge=0)
+    projection_years: int | None = Field(None, ge=1)
+    projected_revenue: dict[str, Any] | None = None
+    projected_ebitda: dict[str, Any] | None = None
+    projected_net_profit: dict[str, Any] | None = None
+    projected_cash_flows: dict[str, Any] | None = None
 
-    projected_revenue_y1: Optional[Decimal] = None
-    projected_revenue_y2: Optional[Decimal] = None
-    projected_revenue_y3: Optional[Decimal] = None
-    projected_ebitda_y1: Optional[Decimal] = None
-    projected_ebitda_y2: Optional[Decimal] = None
-    projected_ebitda_y3: Optional[Decimal] = None
-    projected_pat_y1: Optional[Decimal] = None
-    projected_pat_y2: Optional[Decimal] = None
-    projected_pat_y3: Optional[Decimal] = None
+    current_ratio: Decimal | None = None
+    debt_equity_ratio: Decimal | None = None
+    interest_coverage_ratio: Decimal | None = None
+    average_dscr: Decimal | None = None
+    minimum_dscr: Decimal | None = None
+    dscr_by_year: dict[str, Any] | None = None
+    break_even_capacity_pct: Decimal | None = Field(None, ge=0, le=100)
+    break_even_sales: Decimal | None = Field(None, ge=0)
 
-    current_ratio: Optional[Decimal] = None
-    debt_equity_ratio: Optional[Decimal] = None
-    interest_coverage_ratio: Optional[Decimal] = None
-    dscr_average: Optional[Decimal] = None
-    dscr_minimum: Optional[Decimal] = None
-    roce: Optional[Decimal] = None
-    roe: Optional[Decimal] = None
-    break_even_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
+    sensitivity_analysis: dict[str, Any] | None = None
+    recommendation: AppraisalRecommendation | None = None
+    recommended_amount: Decimal | None = Field(None, ge=0)
+    recommended_tenure: int | None = Field(None, ge=1)
+    recommended_moratorium: int | None = Field(None, ge=0)
+    strengths: str | None = None
+    weaknesses: str | None = None
+    comments: str | None = None
+    conditions: list[dict[str, Any]] | None = None
+    report_file_path: str | None = Field(None, max_length=500)
 
-    sensitivity_analysis: Optional[Dict[str, Any]] = None
-    recommendation: Optional[AppraisalRecommendation] = None
-    observations: Optional[str] = None
-    conditions: Optional[str] = None
-
-    is_active: Optional[bool] = None
+    is_active: bool | None = None
 
 
 class FinancialAnalysisResponse(FinancialAnalysisBase):
@@ -320,9 +363,8 @@ class FinancialAnalysisResponse(FinancialAnalysisBase):
 
     id: UUID
     application_id: UUID
-    analyzed_by_id: Optional[UUID] = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True
 
 
@@ -331,22 +373,27 @@ class FinancialAnalysisResponse(FinancialAnalysisBase):
 # =============================================================================
 
 
-class ProjectMilestoneBase(BaseSchema):
+class ProjectMilestoneBase(CamelSchema):
     """Base schema for project milestone."""
 
     milestone_number: int = Field(..., ge=1)
-    name: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = None
-    expected_completion_date: date
-    actual_completion_date: Optional[date] = None
-    completion_percentage: Decimal = Field(default=Decimal("0"), ge=0, le=100)
+    milestone_name: str = Field(..., min_length=1, max_length=200)
+    milestone_description: str | None = None
+    expected_date: date
+    actual_date: date | None = None
+    delay_days: int | None = None
     disbursement_percentage: Decimal = Field(..., ge=0, le=100)
-    disbursement_amount: Optional[Decimal] = Field(None, ge=0)
+    disbursement_amount: Decimal | None = Field(None, ge=0)
+    cumulative_disbursement_pct: Decimal | None = Field(None, ge=0, le=100)
+    equity_contribution_required: Decimal | None = Field(None, ge=0)
+    equity_contribution_verified: bool = False
     status: MilestoneStatus = MilestoneStatus.PENDING
-    verification_required: bool = True
-    verified_by_id: Optional[UUID] = None
-    verified_at: Optional[datetime] = None
-    verification_remarks: Optional[str] = None
+    verification_criteria: str | None = None
+    verification_documents: list[dict[str, Any]] | None = None
+    verified_by_id: UUID | None = None
+    verified_at: datetime | None = None
+    verification_remarks: str | None = None
+    remarks: str | None = None
 
 
 class ProjectMilestoneCreate(ProjectMilestoneBase):
@@ -355,22 +402,27 @@ class ProjectMilestoneCreate(ProjectMilestoneBase):
     application_id: UUID
 
 
-class ProjectMilestoneUpdate(BaseSchema):
+class ProjectMilestoneUpdate(CamelSchema):
     """Schema for updating project milestone."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = None
-    expected_completion_date: Optional[date] = None
-    actual_completion_date: Optional[date] = None
-    completion_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    disbursement_percentage: Optional[Decimal] = Field(None, ge=0, le=100)
-    disbursement_amount: Optional[Decimal] = Field(None, ge=0)
-    status: Optional[MilestoneStatus] = None
-    verification_required: Optional[bool] = None
-    verified_by_id: Optional[UUID] = None
-    verified_at: Optional[datetime] = None
-    verification_remarks: Optional[str] = None
-    is_active: Optional[bool] = None
+    milestone_name: str | None = Field(None, min_length=1, max_length=200)
+    milestone_description: str | None = None
+    expected_date: date | None = None
+    actual_date: date | None = None
+    delay_days: int | None = None
+    disbursement_percentage: Decimal | None = Field(None, ge=0, le=100)
+    disbursement_amount: Decimal | None = Field(None, ge=0)
+    cumulative_disbursement_pct: Decimal | None = Field(None, ge=0, le=100)
+    equity_contribution_required: Decimal | None = Field(None, ge=0)
+    equity_contribution_verified: bool | None = None
+    status: MilestoneStatus | None = None
+    verification_criteria: str | None = None
+    verification_documents: list[dict[str, Any]] | None = None
+    verified_by_id: UUID | None = None
+    verified_at: datetime | None = None
+    verification_remarks: str | None = None
+    remarks: str | None = None
+    is_active: bool | None = None
 
 
 class ProjectMilestoneResponse(ProjectMilestoneBase):
@@ -379,7 +431,7 @@ class ProjectMilestoneResponse(ProjectMilestoneBase):
     id: UUID
     application_id: UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True
 
 
@@ -388,7 +440,7 @@ class ProjectMilestoneResponse(ProjectMilestoneBase):
 # =============================================================================
 
 
-class LoanApplicationBase(BaseSchema):
+class LoanApplicationBase(CamelSchema):
     """Base schema for loan application."""
 
     entity_id: UUID
@@ -398,19 +450,19 @@ class LoanApplicationBase(BaseSchema):
     requested_amount: Decimal = Field(..., ge=0)
     requested_tenure_months: int = Field(..., ge=1)
     purpose: str = Field(..., min_length=1, max_length=500)
-    detailed_purpose: Optional[str] = None
+    detailed_purpose: str | None = None
 
     # Project Details (for project finance)
     is_project_finance: bool = False
-    project_name: Optional[str] = Field(None, max_length=200)
-    project_cost: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution_pct: Optional[Decimal] = Field(None, ge=0, le=100)
-    bank_finance: Optional[Decimal] = Field(None, ge=0)
-    other_finance: Optional[Decimal] = Field(None, ge=0)
-    project_location: Optional[str] = Field(None, max_length=500)
-    project_start_date: Optional[date] = None
-    project_completion_date: Optional[date] = None
+    project_name: str | None = Field(None, max_length=200)
+    project_cost: Decimal | None = Field(None, ge=0)
+    promoter_contribution: Decimal | None = Field(None, ge=0)
+    promoter_contribution_pct: Decimal | None = Field(None, ge=0, le=100)
+    bank_finance: Decimal | None = Field(None, ge=0)
+    other_finance: Decimal | None = Field(None, ge=0)
+    project_location: str | None = Field(None, max_length=500)
+    project_start_date: date | None = None
+    project_completion_date: date | None = None
 
     # Preferred Terms
     preferred_interest_type: InterestType = InterestType.FLOATING
@@ -420,57 +472,57 @@ class LoanApplicationBase(BaseSchema):
 
     # Source
     source_channel: str = Field(default="DIRECT", max_length=50)
-    source_reference: Optional[str] = Field(None, max_length=100)
+    source_reference: str | None = Field(None, max_length=100)
 
     # Metadata
-    remarks: Optional[str] = None
-    extra_data: Optional[Dict[str, Any]] = None
+    remarks: str | None = None
+    extra_data: dict[str, Any] | None = None
 
 
 class LoanApplicationCreate(LoanApplicationBase):
     """Schema for creating loan application."""
 
-    organization_id: UUID
+    organization_id: UUID | None = None
 
 
-class LoanApplicationUpdate(BaseSchema):
+class LoanApplicationUpdate(CamelSchema):
     """Schema for updating loan application."""
 
-    requested_amount: Optional[Decimal] = Field(None, ge=0)
-    requested_tenure_months: Optional[int] = Field(None, ge=1)
-    purpose: Optional[str] = Field(None, min_length=1, max_length=500)
-    detailed_purpose: Optional[str] = None
+    requested_amount: Decimal | None = Field(None, ge=0)
+    requested_tenure_months: int | None = Field(None, ge=1)
+    purpose: str | None = Field(None, min_length=1, max_length=500)
+    detailed_purpose: str | None = None
 
     # Project Details
-    is_project_finance: Optional[bool] = None
-    project_name: Optional[str] = Field(None, max_length=200)
-    project_cost: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution: Optional[Decimal] = Field(None, ge=0)
-    promoter_contribution_pct: Optional[Decimal] = Field(None, ge=0, le=100)
-    bank_finance: Optional[Decimal] = Field(None, ge=0)
-    other_finance: Optional[Decimal] = Field(None, ge=0)
-    project_location: Optional[str] = Field(None, max_length=500)
-    project_start_date: Optional[date] = None
-    project_completion_date: Optional[date] = None
+    is_project_finance: bool | None = None
+    project_name: str | None = Field(None, max_length=200)
+    project_cost: Decimal | None = Field(None, ge=0)
+    promoter_contribution: Decimal | None = Field(None, ge=0)
+    promoter_contribution_pct: Decimal | None = Field(None, ge=0, le=100)
+    bank_finance: Decimal | None = Field(None, ge=0)
+    other_finance: Decimal | None = Field(None, ge=0)
+    project_location: str | None = Field(None, max_length=500)
+    project_start_date: date | None = None
+    project_completion_date: date | None = None
 
     # Preferred Terms
-    preferred_interest_type: Optional[InterestType] = None
-    preferred_repayment_frequency: Optional[RepaymentFrequency] = None
-    preferred_repayment_mode: Optional[RepaymentMode] = None
-    requested_moratorium_months: Optional[int] = Field(None, ge=0)
+    preferred_interest_type: InterestType | None = None
+    preferred_repayment_frequency: RepaymentFrequency | None = None
+    preferred_repayment_mode: RepaymentMode | None = None
+    requested_moratorium_months: int | None = Field(None, ge=0)
 
     # Source
-    source_channel: Optional[str] = Field(None, max_length=50)
-    source_reference: Optional[str] = Field(None, max_length=100)
+    source_channel: str | None = Field(None, max_length=50)
+    source_reference: str | None = Field(None, max_length=100)
 
     # Status
-    stage: Optional[ApplicationStage] = None
-    status: Optional[ApplicationStatus] = None
-    sub_status: Optional[str] = Field(None, max_length=50)
+    stage: ApplicationStage | None = None
+    status: ApplicationStatus | None = None
+    sub_status: str | None = Field(None, max_length=50)
 
-    remarks: Optional[str] = None
-    extra_data: Optional[Dict[str, Any]] = None
-    is_active: Optional[bool] = None
+    remarks: str | None = None
+    extra_data: dict[str, Any] | None = None
+    is_active: bool | None = None
 
 
 class LoanApplicationResponse(LoanApplicationBase):
@@ -481,36 +533,150 @@ class LoanApplicationResponse(LoanApplicationBase):
     organization_id: UUID
     stage: ApplicationStage
     status: ApplicationStatus
-    workflow_instance_id: Optional[UUID] = None
-    relationship_manager_id: Optional[UUID] = None
-    credit_officer_id: Optional[UUID] = None
-    submitted_at: Optional[datetime] = None
+    workflow_instance_id: UUID | None = None
+    relationship_manager_id: UUID | None = None
+    credit_officer_id: UUID | None = None
+    submitted_at: datetime | None = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True
 
 
-class LoanApplicationListResponse(BaseSchema):
-    """Schema for loan application list response (lightweight)."""
+class LoanApplicationListResponse(CamelSchema):
+    """Slim list response for loan applications (camelCase wire format).
+
+    Monetary fields stay Decimal per CLAUDE.md §6.2.
+    """
 
     id: UUID
     application_number: str
     entity_id: UUID
+    entity_name: str | None = None
     product_id: UUID
+    product_name: str | None = None
     requested_amount: Decimal
     requested_tenure_months: int
     stage: ApplicationStage
     status: ApplicationStatus
     priority: str
-    submitted_at: Optional[datetime] = None
+    submitted_at: datetime | None = None
     created_at: datetime
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flatten(cls, obj):
+        if isinstance(obj, dict):
+            return obj
+        entity = getattr(obj, "entity", None)
+        product = getattr(obj, "product", None)
+        return {
+            "id": obj.id,
+            "application_number": obj.application_number,
+            "entity_id": obj.entity_id,
+            "entity_name": (
+                getattr(entity, "trade_name", None) or getattr(entity, "legal_name", None)
+            ),
+            "product_id": obj.product_id,
+            "product_name": getattr(product, "name", None),
+            "requested_amount": obj.requested_amount,
+            "requested_tenure_months": obj.requested_tenure_months,
+            "stage": obj.stage,
+            "status": obj.status,
+            "priority": getattr(obj, "priority", None) or "NORMAL",
+            "submitted_at": getattr(obj, "submitted_at", None)
+            or getattr(obj, "submission_date", None),
+            "created_at": obj.created_at,
+        }
 
 
 class LoanApplicationDetailResponse(LoanApplicationResponse):
     """Schema for detailed loan application response with related data."""
 
-    documents: List[ApplicationDocumentResponse] = []
-    fees: List[ApplicationFeeResponse] = []
-    technical_appraisals: List[TechnicalAppraisalResponse] = []
-    financial_analyses: List[FinancialAnalysisResponse] = []
-    milestones: List[ProjectMilestoneResponse] = []
+    documents: list[ApplicationDocumentResponse] = []
+    fees: list[ApplicationFeeResponse] = []
+    technical_appraisals: list[TechnicalAppraisalResponse] = []
+    financial_analyses: list[FinancialAnalysisResponse] = []
+    milestones: list[ProjectMilestoneResponse] = []
+
+
+class LoanApplicationViewResponse(CamelSchema):
+    """Slim detail response for the application view page (camelCase wire).
+
+    Monetary fields stay Decimal per CLAUDE.md §6.2.
+    """
+
+    id: UUID
+    application_number: str
+    stage: ApplicationStage
+    status: ApplicationStatus
+    priority: str = "NORMAL"
+    requested_amount: Decimal
+    requested_tenure_months: int
+    purpose: str | None = None
+    project_name: str | None = None
+    project_cost: Decimal | None = None
+    promoter_contribution: Decimal | None = None
+    entity_id: UUID
+    entity_name: str | None = None
+    entity_legal_name: str | None = None
+    entity_code: str | None = None
+    entity_pan: str | None = None
+    entity_type: str | None = None
+    product_id: UUID
+    product_name: str | None = None
+    product_code: str | None = None
+    product_category: str | None = None
+    relationship_manager_id: UUID | None = None
+    credit_officer_id: UUID | None = None
+    submitted_at: datetime | None = None
+    created_at: datetime
+    updated_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flatten(cls, obj):
+        if isinstance(obj, dict):
+            return obj
+        entity = getattr(obj, "entity", None)
+        product = getattr(obj, "product", None)
+        return {
+            "id": obj.id,
+            "application_number": obj.application_number,
+            "stage": obj.stage,
+            "status": obj.status,
+            "priority": getattr(obj, "priority", None) or "NORMAL",
+            "requested_amount": obj.requested_amount,
+            "requested_tenure_months": obj.requested_tenure_months,
+            "purpose": getattr(obj, "purpose", None),
+            "project_name": getattr(obj, "project_name", None),
+            "project_cost": getattr(obj, "project_cost", None),
+            "promoter_contribution": getattr(obj, "promoter_contribution", None),
+            "entity_id": obj.entity_id,
+            "entity_name": (
+                getattr(entity, "trade_name", None) or getattr(entity, "legal_name", None)
+            ),
+            "entity_legal_name": getattr(entity, "legal_name", None),
+            "entity_code": getattr(entity, "entity_code", None),
+            "entity_pan": getattr(entity, "pan", None),
+            "entity_type": (
+                getattr(entity, "entity_type", None).value
+                if getattr(entity, "entity_type", None) is not None
+                and hasattr(entity.entity_type, "value")
+                else getattr(entity, "entity_type", None)
+            ),
+            "product_id": obj.product_id,
+            "product_name": getattr(product, "name", None),
+            "product_code": getattr(product, "code", None),
+            "product_category": (
+                getattr(product, "category", None).value
+                if getattr(product, "category", None) is not None
+                and hasattr(product.category, "value")
+                else getattr(product, "category", None)
+            ),
+            "relationship_manager_id": getattr(obj, "relationship_manager_id", None),
+            "credit_officer_id": getattr(obj, "credit_officer_id", None),
+            "submitted_at": getattr(obj, "submitted_at", None)
+            or getattr(obj, "submission_date", None),
+            "created_at": obj.created_at,
+            "updated_at": getattr(obj, "updated_at", None),
+        }

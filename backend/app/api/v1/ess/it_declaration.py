@@ -5,13 +5,14 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.services.ess.it_declaration_service import ESSITDeclarationService
 from app.models.ess.enums import ITDeclarationStatus, RegularizationStatus
+from app.core.exceptions import BadRequestException, NotFoundException
 
 
 router = APIRouter(prefix="/it-declaration", tags=["ESS IT Declaration"])
@@ -172,7 +173,7 @@ class RegularizationResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.get("/sections", response_model=List[ITSectionResponse])
+@router.get("/sections", response_model=List[ITSectionResponse], response_model_by_alias=True)
 async def get_sections(
     organization_id: UUID,  # From authenticated user
     tax_regime: str = Query("OLD", pattern="^(OLD|NEW)$"),
@@ -202,7 +203,7 @@ async def get_sections(
     ]
 
 
-@router.get("", response_model=List[DeclarationSummaryResponse])
+@router.get("", response_model=List[DeclarationSummaryResponse], response_model_by_alias=True)
 async def get_declarations(
     employee_id: UUID,  # From authenticated user
     limit: int = Query(5, le=10),
@@ -230,7 +231,7 @@ async def get_declarations(
     ]
 
 
-@router.post("/{financial_year}", response_model=DeclarationDetailResponse)
+@router.post("/{financial_year}", response_model=DeclarationDetailResponse, response_model_by_alias=True)
 async def get_or_create_declaration(
     financial_year: str,
     organization_id: UUID,  # From authenticated user
@@ -255,7 +256,7 @@ async def get_or_create_declaration(
     return _format_declaration_detail(declaration)
 
 
-@router.get("/{declaration_id}/detail", response_model=DeclarationDetailResponse)
+@router.get("/{declaration_id}/detail", response_model=DeclarationDetailResponse, response_model_by_alias=True)
 async def get_declaration_detail(
     declaration_id: UUID,
     session: AsyncSession = Depends(get_session),
@@ -265,10 +266,7 @@ async def get_declaration_detail(
     declaration = await service.get_declaration_by_id(declaration_id)
 
     if not declaration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Declaration not found",
-        )
+        raise NotFoundException(detail="Declaration not found", error_code="DECLARATION_NOT_FOUND")
 
     return _format_declaration_detail(declaration)
 
@@ -285,16 +283,10 @@ async def update_tax_regime(
     try:
         declaration = await service.update_tax_regime(declaration_id, tax_regime)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not declaration:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Declaration not found",
-        )
+        raise NotFoundException(detail="Declaration not found", error_code="DECLARATION_NOT_FOUND")
 
     await session.commit()
 
@@ -303,7 +295,7 @@ async def update_tax_regime(
 
 # ==================== Declaration Items ====================
 
-@router.post("/{declaration_id}/items", response_model=DeclarationItemResponse)
+@router.post("/{declaration_id}/items", response_model=DeclarationItemResponse, response_model_by_alias=True)
 async def add_declaration_item(
     declaration_id: UUID,
     request: DeclarationItemCreate,
@@ -318,10 +310,7 @@ async def add_declaration_item(
             **request.model_dump()
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
@@ -337,7 +326,7 @@ async def add_declaration_item(
     )
 
 
-@router.patch("/{declaration_id}/items/{item_id}", response_model=DeclarationItemResponse)
+@router.patch("/{declaration_id}/items/{item_id}", response_model=DeclarationItemResponse, response_model_by_alias=True)
 async def update_declaration_item(
     declaration_id: UUID,
     item_id: UUID,
@@ -353,16 +342,10 @@ async def update_declaration_item(
             **request.model_dump(exclude_unset=True)
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found",
-        )
+        raise NotFoundException(detail="Item not found", error_code="ITEM_NOT_FOUND")
 
     await session.commit()
 
@@ -390,16 +373,10 @@ async def delete_declaration_item(
     try:
         success = await service.delete_declaration_item(item_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found",
-        )
+        raise NotFoundException(detail="Item not found", error_code="ITEM_NOT_FOUND")
 
     await session.commit()
 
@@ -423,10 +400,7 @@ async def update_hra_details(
             **request.model_dump()
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
@@ -472,10 +446,7 @@ async def update_home_loan_details(
             **request.model_dump()
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
@@ -495,17 +466,14 @@ async def submit_declaration(
     try:
         declaration = await service.submit_declaration(declaration_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
     return {"success": True, "status": declaration.status.value}
 
 
-@router.post("/{declaration_id}/calculate-tax", response_model=TaxCalculationResponse)
+@router.post("/{declaration_id}/calculate-tax", response_model=TaxCalculationResponse, response_model_by_alias=True)
 async def calculate_tax(
     declaration_id: UUID,
     request: TaxCalculationRequest,
@@ -521,10 +489,7 @@ async def calculate_tax(
             other_income=request.other_income,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
@@ -533,7 +498,7 @@ async def calculate_tax(
 
 # ==================== Attendance Regularization ====================
 
-@router.post("/regularization", response_model=RegularizationResponse)
+@router.post("/regularization", response_model=RegularizationResponse, response_model_by_alias=True)
 async def create_regularization(
     request: RegularizationCreate,
     organization_id: UUID,  # From authenticated user
@@ -565,7 +530,7 @@ async def create_regularization(
     )
 
 
-@router.get("/regularization", response_model=List[RegularizationResponse])
+@router.get("/regularization", response_model=List[RegularizationResponse], response_model_by_alias=True)
 async def get_regularizations(
     employee_id: UUID,  # From authenticated user
     status: Optional[str] = None,

@@ -76,6 +76,30 @@ class EInvoiceService:
 
         return EInvoiceClient(auth_manager=auth_manager)
 
+    @staticmethod
+    def _split_address(address: Optional[str]) -> Tuple[str, str]:
+        """Split the single GST registration address field for IRP payloads."""
+        if not address:
+            return "", ""
+        first, _, rest = address.partition("\n")
+        if rest:
+            return first[:100], rest.replace("\n", ", ")[:100]
+        if len(address) <= 100:
+            return address, ""
+        return address[:100], address[100:200]
+
+    @staticmethod
+    def _clean_pincode(value: Optional[str]) -> str:
+        if value and value.isdigit() and len(value) == 6:
+            return value
+        return "999999"
+
+    @staticmethod
+    def _customer_name(customer: Any) -> str:
+        if not customer:
+            return ""
+        return customer.display_name or customer.name
+
     def _build_invoice_data(
         self,
         invoice: SalesInvoice,
@@ -95,29 +119,30 @@ class EInvoiceService:
             supply_type = "B2B"
 
         # Build seller details from GST registration
+        seller_address1, seller_address2 = self._split_address(gst_registration.address)
         seller_data = {
             "seller_gstin": gst_registration.gstin,
             "seller_name": gst_registration.legal_name or gst_registration.trade_name,
             "seller_trade_name": gst_registration.trade_name,
-            "seller_address1": gst_registration.address_line1 or "",
-            "seller_address2": gst_registration.address_line2 or "",
-            "seller_location": gst_registration.city or "",
-            "seller_pincode": gst_registration.pincode or "000000",
+            "seller_address1": seller_address1,
+            "seller_address2": seller_address2,
+            "seller_location": gst_registration.state_name,
+            "seller_pincode": self._clean_pincode(gst_registration.pincode),
             "seller_state_code": gst_registration.state_code or "",
-            "seller_phone": gst_registration.phone,
-            "seller_email": gst_registration.email,
+            "seller_phone": "",
+            "seller_email": "",
         }
 
         # Build buyer details from customer
         customer = invoice.customer
         buyer_data = {
             "buyer_gstin": invoice.customer_gstin or "URP",
-            "buyer_name": customer.legal_name if customer else "",
-            "buyer_trade_name": customer.trade_name if customer else "",
+            "buyer_name": self._customer_name(customer),
+            "buyer_trade_name": customer.display_name if customer else "",
             "buyer_address1": customer.billing_address_line1 if customer else "",
             "buyer_address2": customer.billing_address_line2 if customer else "",
             "buyer_location": customer.billing_city if customer else "",
-            "buyer_pincode": customer.billing_pincode if customer else "000000",
+            "buyer_pincode": self._clean_pincode(customer.billing_pincode if customer else None),
             "buyer_state_code": customer.billing_state_code if customer else "",
             "place_of_supply": invoice.place_of_supply or "",
             "buyer_phone": customer.phone if customer else "",
@@ -314,7 +339,7 @@ class EInvoiceService:
         finally:
             await client.close()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(einvoice_request)
         return einvoice_request
 
@@ -386,7 +411,7 @@ class EInvoiceService:
         finally:
             await client.close()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(request)
         return request
 

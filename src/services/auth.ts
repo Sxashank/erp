@@ -6,10 +6,10 @@
 
 import axios, { type AxiosInstance } from 'axios';
 
+import { api } from './api';
+
 import { useAuthStore, type AuthUser } from '@/stores/authStore';
 import { useOrganizationStore, type Organization } from '@/stores/organizationStore';
-
-import { api } from './api';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
 
@@ -50,7 +50,7 @@ export interface MeResponse {
   organization_id: string | null;
   default_unit_id: string | null;
   mfa_enabled: boolean;
-  roles: Array<{ id: string; code: string; name: string }>;
+  roles: { id: string; code: string; name: string }[];
   permissions: string[];
 }
 
@@ -62,14 +62,14 @@ export interface OrganizationListItem {
 
 function mapMeToUser(me: MeResponse): AuthUser {
   return {
-    id: me.id,
-    username: me.username,
-    email: me.email,
-    fullName: me.full_name,
-    organizationId: me.organization_id,
-    defaultUnitId: me.default_unit_id,
-    mfaEnabled: me.mfa_enabled,
-    roles: me.roles.map((r) => r.code),
+    id: me.id ?? '',
+    username: me.username ?? '',
+    email: me.email ?? '',
+    fullName: me.full_name ?? '',
+    organizationId: me.organization_id ?? null,
+    defaultUnitId: me.default_unit_id ?? null,
+    mfaEnabled: Boolean(me.mfa_enabled),
+    roles: Array.isArray(me.roles) ? me.roles.map((r) => r.code) : [],
   };
 }
 
@@ -131,7 +131,9 @@ export async function hydrateFromServer(): Promise<void> {
       params: { limit: 200 },
     }),
   ]);
-  useAuthStore.getState().setUser(mapMeToUser(me.data), me.data.permissions);
+  useAuthStore
+    .getState()
+    .setUser(mapMeToUser(me.data), Array.isArray(me.data.permissions) ? me.data.permissions : []);
   const orgList = Array.isArray(orgs.data) ? orgs.data : orgs.data.items;
   useOrganizationStore.getState().setOrganizations(orgList.map(mapOrg));
 }
@@ -144,6 +146,15 @@ export async function bootstrap(): Promise<void> {
   const store = useAuthStore.getState();
   store.setBootstrapping(true);
   try {
+    if (store.accessToken) {
+      try {
+        await hydrateFromServer();
+        return;
+      } catch {
+        // Fall through to refresh-token recovery if the access token is stale.
+      }
+    }
+
     if (!store.refreshToken) {
       store.clear();
       return;

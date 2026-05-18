@@ -4,11 +4,14 @@
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { Card, CardContent } from '@/components/ui/card';
+
 import { WizardProvider, type WizardStep } from './WizardContext';
-import { WizardProgress, WizardProgressBar } from './WizardProgress';
 import { WizardNavigation, type WizardNavigationProps } from './WizardNavigation';
+import { WizardProgress, WizardProgressBar } from './WizardProgress';
+
+import { Card, CardContent } from '@/components/ui/card';
+import { logger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
 
 export interface WizardContainerProps extends Omit<WizardNavigationProps, 'className'> {
   steps: WizardStep[];
@@ -103,9 +106,7 @@ function WizardLayout({
           {title && (
             <div className="mb-6">
               <h1 className="text-xl font-semibold">{title}</h1>
-              {description && (
-                <p className="text-sm text-muted-foreground mt-1">{description}</p>
-              )}
+              {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
             </div>
           )}
           {showProgress && <WizardProgress variant="sidebar" className="sticky top-6" />}
@@ -117,9 +118,10 @@ function WizardLayout({
             {children}
             <WizardNavigation {...navigationProps} />
             {showKeyboardHint && (
-              <p className="text-xs text-muted-foreground text-center mt-4">
-                Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Ctrl</kbd> +{' '}
-                <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to proceed
+              <p className="mt-4 text-center text-xs text-muted-foreground">
+                Press <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">Ctrl</kbd> +{' '}
+                <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">Enter</kbd> to
+                proceed
               </p>
             )}
           </CardContent>
@@ -135,9 +137,7 @@ function WizardLayout({
         {title && (
           <div className="text-center">
             <h1 className="text-xl font-semibold">{title}</h1>
-            {description && (
-              <p className="text-sm text-muted-foreground mt-1">{description}</p>
-            )}
+            {description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}
           </div>
         )}
 
@@ -162,9 +162,7 @@ function WizardLayout({
       <div className="flex items-center justify-between">
         <div>
           {title && <h1 className="text-lg font-semibold">{title}</h1>}
-          {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
-          )}
+          {description && <p className="text-sm text-muted-foreground">{description}</p>}
         </div>
         {showProgress && <WizardProgress variant="minimal" />}
       </div>
@@ -200,41 +198,60 @@ export function WizardWithDraft({
       if (saved) {
         setInitialData(JSON.parse(saved));
       }
-    } catch (e) {
-      console.error('Failed to load draft:', e);
+    } catch (error) {
+      logger.error('Failed to load draft:', error);
     }
     setIsLoaded(true);
   }, [storageKey]);
 
   // Save draft handler
-  const handleSaveDraft = React.useCallback(async () => {
-    // This will be called with the current wizard data
-    // The actual saving is handled in onDataChange
-    alert('Draft saved successfully!');
-  }, []);
+  const handleSaveDraft = React.useCallback(
+    async (data: Record<string, unknown>) => {
+      await props.onSaveDraft?.(data);
+      alert('Draft saved successfully!');
+    },
+    [props.onSaveDraft],
+  );
 
   // Save to localStorage on data change
-  const handleDataChange = React.useCallback((data: Record<string, unknown>) => {
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(data));
-    } catch (e) {
-      console.error('Failed to save draft:', e);
-    }
-    props.onDataChange?.(data);
-  }, [storageKey, props.onDataChange]);
+  const handleDataChange = React.useCallback(
+    (data: Record<string, unknown>) => {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(data));
+      } catch (error) {
+        logger.error('Failed to save draft:', error);
+      }
+      props.onDataChange?.(data);
+    },
+    [storageKey, props.onDataChange],
+  );
 
   // Clear draft on successful submit
-  const handleSubmit = React.useCallback(async () => {
-    await props.onSubmit?.();
-    localStorage.removeItem(storageKey);
-  }, [storageKey, props.onSubmit]);
+  const handleSubmit = React.useCallback(
+    async (data: Record<string, unknown>) => {
+      await props.onSubmit?.(data);
+      localStorage.removeItem(storageKey);
+    },
+    [storageKey, props.onSubmit],
+  );
 
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center p-12">
-        <svg className="animate-spin h-6 w-6 text-muted-foreground" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+        <svg className="h-6 w-6 animate-spin text-muted-foreground" fill="none" viewBox="0 0 24 24">
+          <circle
+            className="opacity-25"
+            cx="12"
+            cy="12"
+            r="10"
+            stroke="currentColor"
+            strokeWidth="4"
+          />
+          <path
+            className="opacity-75"
+            fill="currentColor"
+            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+          />
         </svg>
       </div>
     );

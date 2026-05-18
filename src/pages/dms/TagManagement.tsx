@@ -3,11 +3,7 @@
  * Create, edit, and manage document tags
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import {
   Tag,
   Plus,
@@ -19,14 +15,25 @@ import {
   MoreVertical,
   Palette,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState, useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
+import { z } from 'zod';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -43,23 +50,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
   Form,
   FormControl,
   FormDescription,
@@ -68,10 +58,23 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { tagApi } from '@/services/dmsApi';
 import type { DMSTag, TagCreate } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 const tagSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
@@ -141,7 +144,7 @@ export default function TagManagement() {
       setTags(tagsData.items);
       setCategories(categoriesData);
     } catch (error) {
-      console.error('Failed to fetch tags:', error);
+      logger.error('Failed to fetch tags:', error);
       toast({
         title: 'Error',
         description: 'Failed to load tags',
@@ -172,10 +175,10 @@ export default function TagManagement() {
       setShowCreateDialog(false);
       form.reset();
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create tag',
+        description: getErrorMessage(error, 'Failed to create tag'),
         variant: 'destructive',
       });
     } finally {
@@ -201,10 +204,10 @@ export default function TagManagement() {
       setEditingTag(null);
       form.reset();
       fetchData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to update tag',
+        description: getErrorMessage(error, 'Failed to update tag'),
         variant: 'destructive',
       });
     } finally {

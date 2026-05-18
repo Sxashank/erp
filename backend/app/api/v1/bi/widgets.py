@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.bi.widget_service import WidgetService
 from app.schemas.bi.dashboard import (
@@ -67,11 +67,11 @@ def _to_widget_response(widget) -> DashboardWidgetResponse:
     )
 
 
-@router.get("/{dashboard_id}/widgets", response_model=List[DashboardWidgetResponse])
+@router.get("/{dashboard_id}/widgets", response_model=List[DashboardWidgetResponse], response_model_by_alias=True)
 async def list_widgets(
     dashboard_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List all widgets in a dashboard."""
     service = WidgetService(db)
@@ -79,12 +79,12 @@ async def list_widgets(
     return [_to_widget_response(w) for w in widgets]
 
 
-@router.post("/{dashboard_id}/widgets", response_model=DashboardWidgetResponse)
+@router.post("/{dashboard_id}/widgets", response_model=DashboardWidgetResponse, response_model_by_alias=True)
 async def create_widget(
     dashboard_id: UUID,
     data: DashboardWidgetCreate,
     current_user: User = Depends(RequirePermissions("BI_WIDGET_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new widget in a dashboard."""
     service = WidgetService(db)
@@ -93,12 +93,12 @@ async def create_widget(
     return _to_widget_response(widget)
 
 
-@router.get("/{dashboard_id}/widgets/{widget_id}", response_model=DashboardWidgetResponse)
+@router.get("/{dashboard_id}/widgets/{widget_id}", response_model=DashboardWidgetResponse, response_model_by_alias=True)
 async def get_widget(
     dashboard_id: UUID,
     widget_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DASHBOARD_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a widget by ID."""
     service = WidgetService(db)
@@ -106,13 +106,13 @@ async def get_widget(
     return _to_widget_response(widget)
 
 
-@router.put("/{dashboard_id}/widgets/{widget_id}", response_model=DashboardWidgetResponse)
+@router.put("/{dashboard_id}/widgets/{widget_id}", response_model=DashboardWidgetResponse, response_model_by_alias=True)
 async def update_widget(
     dashboard_id: UUID,
     widget_id: UUID,
     data: DashboardWidgetUpdate,
     current_user: User = Depends(RequirePermissions("BI_WIDGET_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a widget."""
     service = WidgetService(db)
@@ -121,12 +121,12 @@ async def update_widget(
     return _to_widget_response(widget)
 
 
-@router.delete("/{dashboard_id}/widgets/{widget_id}", response_model=MessageResponse)
+@router.delete("/{dashboard_id}/widgets/{widget_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_widget(
     dashboard_id: UUID,
     widget_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_WIDGET_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a widget."""
     service = WidgetService(db)
@@ -135,12 +135,12 @@ async def delete_widget(
     return MessageResponse(message="Widget deleted successfully", success=True)
 
 
-@router.put("/{dashboard_id}/widgets/layout", response_model=List[DashboardWidgetResponse])
+@router.put("/{dashboard_id}/widgets/layout", response_model=List[DashboardWidgetResponse], response_model_by_alias=True)
 async def update_layout(
     dashboard_id: UUID,
     data: BulkLayoutUpdateRequest,
     current_user: User = Depends(RequirePermissions("BI_WIDGET_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Bulk update widget layouts."""
     service = WidgetService(db)

@@ -2,38 +2,36 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.repositories.base import BaseRepository
 from app.models.lending.collections import (
     CollectionFollowUp,
     DemandNotice,
-    NPARecord,
-    PenalInterest,
-    PenalWaiver,
-    OTSProposal,
-    OTSPaymentSchedule,
-    LoanRestructure,
     LegalCase,
     LegalHearing,
+    LoanRestructure,
+    NPARecord,
+    OTSPaymentSchedule,
+    OTSProposal,
+    PenalInterest,
+    PenalWaiver,
     PropertyAuction,
     WriteOffRecord,
 )
 from app.models.lending.enums import (
-    CollectionStage,
+    AuctionStatus,
     FollowUpStatus,
+    LegalCaseStatus,
     NPAStatus,
     OTSStatus,
     RestructureStatus,
-    LegalCaseStatus,
-    AuctionStatus,
     WriteOffStatus,
 )
+from app.repositories.base import BaseRepository
 
 
 class CollectionFollowUpRepository(BaseRepository[CollectionFollowUp]):
@@ -45,14 +43,14 @@ class CollectionFollowUpRepository(BaseRepository[CollectionFollowUp]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-        status: Optional[FollowUpStatus] = None,
+        status: FollowUpStatus | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[CollectionFollowUp]:
+    ) -> list[CollectionFollowUp]:
         """Get follow-ups for a loan account."""
         query = select(CollectionFollowUp).where(
             CollectionFollowUp.loan_account_id == loan_account_id,
-            CollectionFollowUp.is_deleted == False,
+            CollectionFollowUp.is_active == True,
         )
         if status:
             query = query.where(CollectionFollowUp.status == status)
@@ -63,13 +61,13 @@ class CollectionFollowUpRepository(BaseRepository[CollectionFollowUp]):
     async def get_scheduled_for_date(
         self,
         scheduled_date: date,
-        assigned_to_id: Optional[UUID] = None,
-    ) -> List[CollectionFollowUp]:
+        assigned_to_id: UUID | None = None,
+    ) -> list[CollectionFollowUp]:
         """Get follow-ups scheduled for a specific date."""
         query = select(CollectionFollowUp).where(
             CollectionFollowUp.scheduled_date == scheduled_date,
             CollectionFollowUp.status == FollowUpStatus.SCHEDULED,
-            CollectionFollowUp.is_deleted == False,
+            CollectionFollowUp.is_active == True,
         )
         if assigned_to_id:
             query = query.where(CollectionFollowUp.assigned_to_id == assigned_to_id)
@@ -80,12 +78,12 @@ class CollectionFollowUpRepository(BaseRepository[CollectionFollowUp]):
     async def get_pending_ptp(
         self,
         as_of_date: date,
-    ) -> List[CollectionFollowUp]:
+    ) -> list[CollectionFollowUp]:
         """Get follow-ups with PTP date passed and not fulfilled."""
         query = select(CollectionFollowUp).where(
             CollectionFollowUp.ptp_date <= as_of_date,
             CollectionFollowUp.ptp_broken == False,
-            CollectionFollowUp.is_deleted == False,
+            CollectionFollowUp.is_active == True,
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
@@ -99,7 +97,7 @@ class CollectionFollowUpRepository(BaseRepository[CollectionFollowUp]):
             select(CollectionFollowUp.status, func.count(CollectionFollowUp.id))
             .where(
                 CollectionFollowUp.loan_account_id == loan_account_id,
-                CollectionFollowUp.is_deleted == False,
+                CollectionFollowUp.is_active == True,
             )
             .group_by(CollectionFollowUp.status)
         )
@@ -118,13 +116,13 @@ class DemandNoticeRepository(BaseRepository[DemandNotice]):
         loan_account_id: UUID,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[DemandNotice]:
+    ) -> list[DemandNotice]:
         """Get demand notices for a loan account."""
         query = (
             select(DemandNotice)
             .where(
                 DemandNotice.loan_account_id == loan_account_id,
-                DemandNotice.is_deleted == False,
+                DemandNotice.is_active == True,
             )
             .order_by(DemandNotice.notice_date.desc())
             .offset(skip)
@@ -136,11 +134,11 @@ class DemandNoticeRepository(BaseRepository[DemandNotice]):
     async def get_by_notice_number(
         self,
         notice_number: str,
-    ) -> Optional[DemandNotice]:
+    ) -> DemandNotice | None:
         """Get demand notice by notice number."""
         query = select(DemandNotice).where(
             DemandNotice.notice_number == notice_number,
-            DemandNotice.is_deleted == False,
+            DemandNotice.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -168,23 +166,23 @@ class NPARecordRepository(BaseRepository[NPARecord]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-    ) -> Optional[NPARecord]:
+    ) -> NPARecord | None:
         """Get NPA record for a loan account."""
         query = select(NPARecord).where(
             NPARecord.loan_account_id == loan_account_id,
-            NPARecord.is_deleted == False,
+            NPARecord.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
     async def get_npa_accounts(
         self,
-        npa_status: Optional[NPAStatus] = None,
+        npa_status: NPAStatus | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[NPARecord]:
+    ) -> list[NPARecord]:
         """Get all NPA records."""
-        query = select(NPARecord).where(NPARecord.is_deleted == False)
+        query = select(NPARecord).where(NPARecord.is_active == True)
         if npa_status:
             query = query.where(NPARecord.npa_status == npa_status)
         query = query.order_by(NPARecord.npa_date.desc()).offset(skip).limit(limit)
@@ -202,14 +200,13 @@ class NPARecordRepository(BaseRepository[NPARecord]):
             )
             .where(
                 NPARecord.npa_status == NPAStatus.NPA,
-                NPARecord.is_deleted == False,
+                NPARecord.is_active == True,
             )
             .group_by(NPARecord.current_classification)
         )
         result = await self.session.execute(query)
         return {
-            row[0]: {"count": row[1], "amount": row[2], "provision": row[3]}
-            for row in result.all()
+            row[0]: {"count": row[1], "amount": row[2], "provision": row[3]} for row in result.all()
         }
 
 
@@ -224,13 +221,13 @@ class PenalInterestRepository(BaseRepository[PenalInterest]):
         loan_account_id: UUID,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[PenalInterest]:
+    ) -> list[PenalInterest]:
         """Get penal interest records for a loan account."""
         query = (
             select(PenalInterest)
             .where(
                 PenalInterest.loan_account_id == loan_account_id,
-                PenalInterest.is_deleted == False,
+                PenalInterest.is_active == True,
             )
             .order_by(PenalInterest.period_end.desc())
             .offset(skip)
@@ -244,13 +241,10 @@ class PenalInterestRepository(BaseRepository[PenalInterest]):
         loan_account_id: UUID,
     ) -> Decimal:
         """Get total outstanding penal interest for a loan account."""
-        query = (
-            select(func.sum(PenalInterest.applied_amount - PenalInterest.waived_amount))
-            .where(
-                PenalInterest.loan_account_id == loan_account_id,
-                PenalInterest.is_accrued == True,
-                PenalInterest.is_deleted == False,
-            )
+        query = select(func.sum(PenalInterest.applied_amount - PenalInterest.waived_amount)).where(
+            PenalInterest.loan_account_id == loan_account_id,
+            PenalInterest.is_accrued == True,
+            PenalInterest.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar() or Decimal("0")
@@ -265,13 +259,13 @@ class PenalWaiverRepository(BaseRepository[PenalWaiver]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-    ) -> List[PenalWaiver]:
+    ) -> list[PenalWaiver]:
         """Get penal waivers for a loan account."""
         query = (
             select(PenalWaiver)
             .where(
                 PenalWaiver.loan_account_id == loan_account_id,
-                PenalWaiver.is_deleted == False,
+                PenalWaiver.is_active == True,
             )
             .order_by(PenalWaiver.waiver_date.desc())
         )
@@ -281,11 +275,11 @@ class PenalWaiverRepository(BaseRepository[PenalWaiver]):
     async def get_by_reference(
         self,
         waiver_reference: str,
-    ) -> Optional[PenalWaiver]:
+    ) -> PenalWaiver | None:
         """Get penal waiver by reference."""
         query = select(PenalWaiver).where(
             PenalWaiver.waiver_reference == waiver_reference,
-            PenalWaiver.is_deleted == False,
+            PenalWaiver.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -313,14 +307,14 @@ class OTSProposalRepository(BaseRepository[OTSProposal]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-    ) -> List[OTSProposal]:
+    ) -> list[OTSProposal]:
         """Get OTS proposals for a loan account."""
         query = (
             select(OTSProposal)
             .options(selectinload(OTSProposal.payment_schedule))
             .where(
                 OTSProposal.loan_account_id == loan_account_id,
-                OTSProposal.is_deleted == False,
+                OTSProposal.is_active == True,
             )
             .order_by(OTSProposal.proposal_date.desc())
         )
@@ -330,14 +324,14 @@ class OTSProposalRepository(BaseRepository[OTSProposal]):
     async def get_by_reference(
         self,
         ots_reference: str,
-    ) -> Optional[OTSProposal]:
+    ) -> OTSProposal | None:
         """Get OTS proposal by reference."""
         query = (
             select(OTSProposal)
             .options(selectinload(OTSProposal.payment_schedule))
             .where(
                 OTSProposal.ots_reference == ots_reference,
-                OTSProposal.is_deleted == False,
+                OTSProposal.is_active == True,
             )
         )
         result = await self.session.execute(query)
@@ -348,13 +342,13 @@ class OTSProposalRepository(BaseRepository[OTSProposal]):
         status: OTSStatus,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[OTSProposal]:
+    ) -> list[OTSProposal]:
         """Get OTS proposals by status."""
         query = (
             select(OTSProposal)
             .where(
                 OTSProposal.status == status,
-                OTSProposal.is_deleted == False,
+                OTSProposal.is_active == True,
             )
             .order_by(OTSProposal.valid_till)
             .offset(skip)
@@ -366,18 +360,16 @@ class OTSProposalRepository(BaseRepository[OTSProposal]):
     async def get_expiring_soon(
         self,
         days: int = 7,
-    ) -> List[OTSProposal]:
+    ) -> list[OTSProposal]:
         """Get OTS proposals expiring soon."""
         target_date = date.today()
         from datetime import timedelta
+
         end_date = target_date + timedelta(days=days)
-        query = (
-            select(OTSProposal)
-            .where(
-                OTSProposal.status.in_([OTSStatus.APPROVED, OTSStatus.ACCEPTED]),
-                OTSProposal.valid_till.between(target_date, end_date),
-                OTSProposal.is_deleted == False,
-            )
+        query = select(OTSProposal).where(
+            OTSProposal.status.in_([OTSStatus.APPROVED, OTSStatus.ACCEPTED]),
+            OTSProposal.valid_till.between(target_date, end_date),
+            OTSProposal.is_active == True,
         )
         result = await self.session.execute(query)
         return list(result.scalars().all())
@@ -405,13 +397,13 @@ class OTSPaymentScheduleRepository(BaseRepository[OTSPaymentSchedule]):
     async def get_by_ots_proposal(
         self,
         ots_proposal_id: UUID,
-    ) -> List[OTSPaymentSchedule]:
+    ) -> list[OTSPaymentSchedule]:
         """Get payment schedule for OTS proposal."""
         query = (
             select(OTSPaymentSchedule)
             .where(
                 OTSPaymentSchedule.ots_proposal_id == ots_proposal_id,
-                OTSPaymentSchedule.is_deleted == False,
+                OTSPaymentSchedule.is_active == True,
             )
             .order_by(OTSPaymentSchedule.installment_number)
         )
@@ -421,14 +413,14 @@ class OTSPaymentScheduleRepository(BaseRepository[OTSPaymentSchedule]):
     async def get_overdue_installments(
         self,
         as_of_date: date,
-    ) -> List[OTSPaymentSchedule]:
+    ) -> list[OTSPaymentSchedule]:
         """Get overdue OTS installments."""
         query = (
             select(OTSPaymentSchedule)
             .where(
                 OTSPaymentSchedule.due_date < as_of_date,
                 OTSPaymentSchedule.is_paid == False,
-                OTSPaymentSchedule.is_deleted == False,
+                OTSPaymentSchedule.is_active == True,
             )
             .order_by(OTSPaymentSchedule.due_date)
         )
@@ -445,13 +437,13 @@ class LoanRestructureRepository(BaseRepository[LoanRestructure]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-    ) -> List[LoanRestructure]:
+    ) -> list[LoanRestructure]:
         """Get restructures for a loan account."""
         query = (
             select(LoanRestructure)
             .where(
                 LoanRestructure.loan_account_id == loan_account_id,
-                LoanRestructure.is_deleted == False,
+                LoanRestructure.is_active == True,
             )
             .order_by(LoanRestructure.proposal_date.desc())
         )
@@ -461,11 +453,11 @@ class LoanRestructureRepository(BaseRepository[LoanRestructure]):
     async def get_by_reference(
         self,
         restructure_reference: str,
-    ) -> Optional[LoanRestructure]:
+    ) -> LoanRestructure | None:
         """Get restructure by reference."""
         query = select(LoanRestructure).where(
             LoanRestructure.restructure_reference == restructure_reference,
-            LoanRestructure.is_deleted == False,
+            LoanRestructure.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -475,13 +467,13 @@ class LoanRestructureRepository(BaseRepository[LoanRestructure]):
         status: RestructureStatus,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[LoanRestructure]:
+    ) -> list[LoanRestructure]:
         """Get restructures by status."""
         query = (
             select(LoanRestructure)
             .where(
                 LoanRestructure.status == status,
-                LoanRestructure.is_deleted == False,
+                LoanRestructure.is_active == True,
             )
             .order_by(LoanRestructure.proposal_date.desc())
             .offset(skip)
@@ -513,7 +505,7 @@ class LegalCaseRepository(BaseRepository[LegalCase]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-    ) -> List[LegalCase]:
+    ) -> list[LegalCase]:
         """Get legal cases for a loan account."""
         query = (
             select(LegalCase)
@@ -523,7 +515,7 @@ class LegalCaseRepository(BaseRepository[LegalCase]):
             )
             .where(
                 LegalCase.loan_account_id == loan_account_id,
-                LegalCase.is_deleted == False,
+                LegalCase.is_active == True,
             )
             .order_by(LegalCase.created_at.desc())
         )
@@ -533,7 +525,7 @@ class LegalCaseRepository(BaseRepository[LegalCase]):
     async def get_by_reference(
         self,
         case_reference: str,
-    ) -> Optional[LegalCase]:
+    ) -> LegalCase | None:
         """Get legal case by reference."""
         query = (
             select(LegalCase)
@@ -543,7 +535,7 @@ class LegalCaseRepository(BaseRepository[LegalCase]):
             )
             .where(
                 LegalCase.case_reference == case_reference,
-                LegalCase.is_deleted == False,
+                LegalCase.is_active == True,
             )
         )
         result = await self.session.execute(query)
@@ -554,13 +546,13 @@ class LegalCaseRepository(BaseRepository[LegalCase]):
         status: LegalCaseStatus,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[LegalCase]:
+    ) -> list[LegalCase]:
         """Get legal cases by status."""
         query = (
             select(LegalCase)
             .where(
                 LegalCase.status == status,
-                LegalCase.is_deleted == False,
+                LegalCase.is_active == True,
             )
             .order_by(LegalCase.next_hearing_date)
             .offset(skip)
@@ -572,16 +564,17 @@ class LegalCaseRepository(BaseRepository[LegalCase]):
     async def get_upcoming_hearings(
         self,
         days: int = 7,
-    ) -> List[LegalCase]:
+    ) -> list[LegalCase]:
         """Get cases with upcoming hearings."""
         target_date = date.today()
         from datetime import timedelta
+
         end_date = target_date + timedelta(days=days)
         query = (
             select(LegalCase)
             .where(
                 LegalCase.next_hearing_date.between(target_date, end_date),
-                LegalCase.is_deleted == False,
+                LegalCase.is_active == True,
             )
             .order_by(LegalCase.next_hearing_date)
         )
@@ -611,13 +604,13 @@ class LegalHearingRepository(BaseRepository[LegalHearing]):
     async def get_by_legal_case(
         self,
         legal_case_id: UUID,
-    ) -> List[LegalHearing]:
+    ) -> list[LegalHearing]:
         """Get hearings for a legal case."""
         query = (
             select(LegalHearing)
             .where(
                 LegalHearing.legal_case_id == legal_case_id,
-                LegalHearing.is_deleted == False,
+                LegalHearing.is_active == True,
             )
             .order_by(LegalHearing.hearing_date.desc())
         )
@@ -627,13 +620,13 @@ class LegalHearingRepository(BaseRepository[LegalHearing]):
     async def get_latest_hearing(
         self,
         legal_case_id: UUID,
-    ) -> Optional[LegalHearing]:
+    ) -> LegalHearing | None:
         """Get the latest hearing for a legal case."""
         query = (
             select(LegalHearing)
             .where(
                 LegalHearing.legal_case_id == legal_case_id,
-                LegalHearing.is_deleted == False,
+                LegalHearing.is_active == True,
             )
             .order_by(LegalHearing.hearing_date.desc())
             .limit(1)
@@ -646,12 +639,9 @@ class LegalHearingRepository(BaseRepository[LegalHearing]):
         legal_case_id: UUID,
     ) -> int:
         """Get next hearing number for a case."""
-        query = (
-            select(func.max(LegalHearing.hearing_number))
-            .where(
-                LegalHearing.legal_case_id == legal_case_id,
-                LegalHearing.is_deleted == False,
-            )
+        query = select(func.max(LegalHearing.hearing_number)).where(
+            LegalHearing.legal_case_id == legal_case_id,
+            LegalHearing.is_active == True,
         )
         result = await self.session.execute(query)
         max_num = result.scalar() or 0
@@ -667,13 +657,13 @@ class PropertyAuctionRepository(BaseRepository[PropertyAuction]):
     async def get_by_legal_case(
         self,
         legal_case_id: UUID,
-    ) -> List[PropertyAuction]:
+    ) -> list[PropertyAuction]:
         """Get auctions for a legal case."""
         query = (
             select(PropertyAuction)
             .where(
                 PropertyAuction.legal_case_id == legal_case_id,
-                PropertyAuction.is_deleted == False,
+                PropertyAuction.is_active == True,
             )
             .order_by(PropertyAuction.auction_date.desc())
         )
@@ -683,11 +673,11 @@ class PropertyAuctionRepository(BaseRepository[PropertyAuction]):
     async def get_by_reference(
         self,
         auction_reference: str,
-    ) -> Optional[PropertyAuction]:
+    ) -> PropertyAuction | None:
         """Get auction by reference."""
         query = select(PropertyAuction).where(
             PropertyAuction.auction_reference == auction_reference,
-            PropertyAuction.is_deleted == False,
+            PropertyAuction.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -697,13 +687,13 @@ class PropertyAuctionRepository(BaseRepository[PropertyAuction]):
         status: AuctionStatus,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[PropertyAuction]:
+    ) -> list[PropertyAuction]:
         """Get auctions by status."""
         query = (
             select(PropertyAuction)
             .where(
                 PropertyAuction.status == status,
-                PropertyAuction.is_deleted == False,
+                PropertyAuction.is_active == True,
             )
             .order_by(PropertyAuction.auction_date)
             .offset(skip)
@@ -715,17 +705,18 @@ class PropertyAuctionRepository(BaseRepository[PropertyAuction]):
     async def get_upcoming_auctions(
         self,
         days: int = 30,
-    ) -> List[PropertyAuction]:
+    ) -> list[PropertyAuction]:
         """Get upcoming auctions."""
         target_date = date.today()
         from datetime import timedelta
+
         end_date = target_date + timedelta(days=days)
         query = (
             select(PropertyAuction)
             .where(
                 PropertyAuction.auction_date.between(target_date, end_date),
                 PropertyAuction.status.in_([AuctionStatus.SCHEDULED, AuctionStatus.PUBLISHED]),
-                PropertyAuction.is_deleted == False,
+                PropertyAuction.is_active == True,
             )
             .order_by(PropertyAuction.auction_date)
         )
@@ -755,13 +746,13 @@ class WriteOffRecordRepository(BaseRepository[WriteOffRecord]):
     async def get_by_loan_account(
         self,
         loan_account_id: UUID,
-    ) -> List[WriteOffRecord]:
+    ) -> list[WriteOffRecord]:
         """Get write-offs for a loan account."""
         query = (
             select(WriteOffRecord)
             .where(
                 WriteOffRecord.loan_account_id == loan_account_id,
-                WriteOffRecord.is_deleted == False,
+                WriteOffRecord.is_active == True,
             )
             .order_by(WriteOffRecord.proposal_date.desc())
         )
@@ -771,11 +762,11 @@ class WriteOffRecordRepository(BaseRepository[WriteOffRecord]):
     async def get_by_reference(
         self,
         write_off_reference: str,
-    ) -> Optional[WriteOffRecord]:
+    ) -> WriteOffRecord | None:
         """Get write-off by reference."""
         query = select(WriteOffRecord).where(
             WriteOffRecord.write_off_reference == write_off_reference,
-            WriteOffRecord.is_deleted == False,
+            WriteOffRecord.is_active == True,
         )
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
@@ -785,13 +776,13 @@ class WriteOffRecordRepository(BaseRepository[WriteOffRecord]):
         status: WriteOffStatus,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[WriteOffRecord]:
+    ) -> list[WriteOffRecord]:
         """Get write-offs by status."""
         query = (
             select(WriteOffRecord)
             .where(
                 WriteOffRecord.status == status,
-                WriteOffRecord.is_deleted == False,
+                WriteOffRecord.is_active == True,
             )
             .order_by(WriteOffRecord.proposal_date.desc())
             .offset(skip)
@@ -802,16 +793,13 @@ class WriteOffRecordRepository(BaseRepository[WriteOffRecord]):
 
     async def get_total_written_off(self) -> dict:
         """Get total written off amounts."""
-        query = (
-            select(
-                func.count(WriteOffRecord.id),
-                func.sum(WriteOffRecord.total_written_off),
-                func.sum(WriteOffRecord.recovery_after_write_off),
-            )
-            .where(
-                WriteOffRecord.status == WriteOffStatus.EFFECTED,
-                WriteOffRecord.is_deleted == False,
-            )
+        query = select(
+            func.count(WriteOffRecord.id),
+            func.sum(WriteOffRecord.total_written_off),
+            func.sum(WriteOffRecord.recovery_after_write_off),
+        ).where(
+            WriteOffRecord.status == WriteOffStatus.EFFECTED,
+            WriteOffRecord.is_active == True,
         )
         result = await self.session.execute(query)
         row = result.one()

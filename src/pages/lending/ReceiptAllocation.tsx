@@ -1,12 +1,21 @@
+import { Receipt, Check, AlertCircle, Calculator } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Receipt, Check, AlertCircle, Calculator } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -16,108 +25,75 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+  useAllocateReceipt,
+  type AllocationMethod,
+  type SpecificAllocation,
+} from '@/hooks/lending/useReceipts';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-// Mock data
+// Receipt + outstanding-demand wiring. Loads from
+// GET /lending/receipts/{id} and GET /lending/loan-accounts/{la_id}/demands.
+// Render-empty until those hooks land.
 const receiptDetails = {
-  id: '1',
-  receipt_number: 'RCP/2025/00243',
-  loan_account: 'SMFC/LA/2024/00156',
-  entity: 'Metro Logistics',
-  receipt_date: '2025-01-14',
-  value_date: '2025-01-14',
-  total_amount: 500000,
-  allocated_amount: 0,
-  unallocated_amount: 500000,
-  receipt_type: 'REGULAR',
-  receipt_mode: 'NEFT',
+  id: '',
+  receiptNumber: '',
+  loanAccount: '',
+  entity: '',
+  receiptDate: '',
+  valueDate: '',
+  totalAmount: 0,
+  allocatedAmount: 0,
+  unallocatedAmount: 0,
+  receiptType: '',
+  receiptMode: '',
 };
 
-const outstandingDemands = [
-  {
-    id: '1',
-    demand_date: '2025-01-01',
-    due_date: '2025-01-05',
-    demand_type: 'EMI',
-    principal: 200000,
-    interest: 75000,
-    penalty: 5000,
-    other_charges: 0,
-    total: 280000,
-    paid: 0,
-    outstanding: 280000,
-    overdue_days: 9,
-    selected: false,
-    allocated: 0,
-  },
-  {
-    id: '2',
-    demand_date: '2024-12-01',
-    due_date: '2024-12-05',
-    demand_type: 'EMI',
-    principal: 195000,
-    interest: 80000,
-    penalty: 15000,
-    other_charges: 2500,
-    total: 292500,
-    paid: 100000,
-    outstanding: 192500,
-    overdue_days: 40,
-    selected: false,
-    allocated: 0,
-  },
-  {
-    id: '3',
-    demand_date: '2024-11-01',
-    due_date: '2024-11-05',
-    demand_type: 'EMI',
-    principal: 190000,
-    interest: 85000,
-    penalty: 25000,
-    other_charges: 5000,
-    total: 305000,
-    paid: 305000,
-    outstanding: 0,
-    overdue_days: 0,
-    selected: false,
-    allocated: 0,
-  },
-];
+interface OutstandingDemand {
+  id: string;
+  demand_date: string;
+  due_date: string;
+  demand_type: string;
+  principal: number;
+  interest: number;
+  penalty: number;
+  other_charges: number;
+  total: number;
+  paid: number;
+  outstanding: number;
+  overdue_days: number;
+  selected: boolean;
+  allocated: number;
+}
+
+const outstandingDemands: OutstandingDemand[] = [];
 
 export default function ReceiptAllocation() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { id } = useParams();
-  const [isLoading, setIsLoading] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
-  const [allocationMethod, setAllocationMethod] = useState('FIFO');
+  const [allocationMethod, setAllocationMethod] = useState<'FIFO' | 'PROPORTIONAL' | 'SPECIFIC'>(
+    'FIFO',
+  );
   const [demands, setDemands] = useState(outstandingDemands);
-  const [remainingAmount, setRemainingAmount] = useState(receiptDetails.unallocated_amount);
+  const allocateReceipt = useAllocateReceipt();
 
   const handleSelectDemand = (demandId: string, checked: boolean) => {
-    setDemands(
-      demands.map((d) => (d.id === demandId ? { ...d, selected: checked } : d))
-    );
+    setDemands(demands.map((d) => (d.id === demandId ? { ...d, selected: checked } : d)));
   };
 
   const handleAllocationChange = (demandId: string, amount: string) => {
     const value = parseFloat(amount) || 0;
-    setDemands(
-      demands.map((d) => (d.id === demandId ? { ...d, allocated: value } : d))
-    );
+    setDemands(demands.map((d) => (d.id === demandId ? { ...d, allocated: value } : d)));
   };
 
   const totalAllocated = demands.reduce((sum, d) => sum + d.allocated, 0);
-  const unallocatedBalance = receiptDetails.unallocated_amount - totalAllocated;
+  const unallocatedBalance = receiptDetails.unallocatedAmount - totalAllocated;
 
   const handleAutoAllocate = () => {
-    let remaining = receiptDetails.unallocated_amount;
+    let remaining = receiptDetails.unallocatedAmount;
     const sorted = [...demands].filter((d) => d.outstanding > 0);
 
     if (allocationMethod === 'FIFO') {
@@ -134,7 +110,7 @@ export default function ReceiptAllocation() {
             return { ...d, allocated, selected: true };
           }
           return d;
-        })
+        }),
       );
       return;
     }
@@ -157,33 +133,68 @@ export default function ReceiptAllocation() {
   };
 
   const handleSubmit = async () => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setShowSuccess(true);
+    if (!id) {
+      toast({
+        title: 'Receipt id missing',
+        description: 'Cannot allocate without a receipt identifier in the URL.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    try {
+      const methodLower = allocationMethod.toLowerCase() as AllocationMethod;
+      const specificAllocations: SpecificAllocation[] | undefined =
+        methodLower === 'specific'
+          ? demands
+              .filter((d) => d.allocated > 0)
+              .map((d) => ({
+                installmentId: d.id,
+                // BE expects the receipt allocation priority bucket. Default
+                // here is current principal — when a richer demand-shape
+                // ships (interest/principal split per row), this should be
+                // multi-row per demand. For now SPECIFIC mode is best effort.
+                component: 'CURRENT_PRINCIPAL' as const,
+                amount: d.allocated,
+              }))
+          : undefined;
+      await allocateReceipt.mutateAsync({
+        receiptId: id,
+        allocationMethod: methodLower,
+        specificAllocations,
+      });
+      toast({
+        title: 'Receipt allocated',
+        description: `Allocated ${formatCurrency(totalAllocated)} across ${
+          demands.filter((d) => d.allocated > 0).length
+        } demand(s).`,
+      });
+      setShowSuccess(true);
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
   if (showSuccess) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <Check className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Receipt Allocated Successfully</h2>
-          <p className="text-muted-foreground mb-2">
+          <h2 className="mb-2 text-2xl font-bold">Receipt Allocated Successfully</h2>
+          <p className="mb-2 text-muted-foreground">
             Amount allocated: {formatCurrency(totalAllocated)}
           </p>
           {unallocatedBalance > 0 && (
-            <p className="text-orange-600 mb-6">
+            <p className="mb-6 text-orange-600">
               Unallocated balance: {formatCurrency(unallocatedBalance)}
             </p>
           )}
-          <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => navigate('/lending/receipts')}>
+          <div className="flex justify-center gap-4">
+            <Button variant="outline" onClick={() => navigate('/admin/lending/receipts')}>
               View All Receipts
             </Button>
-            <Button variant="outline" onClick={() => navigate(`/lending/receipts/${id}`)}>
+            <Button variant="outline" onClick={() => navigate(`/admin/lending/receipts/${id}`)}>
               View Receipt Details
             </Button>
           </div>
@@ -196,14 +207,11 @@ export default function ReceiptAllocation() {
     <div className="space-y-6">
       <PageHeader
         title="Allocate Receipt"
-        subtitle={`${receiptDetails.receipt_number} - ${receiptDetails.entity}`}
-        breadcrumbs={[
-          { label: 'Receipts', to: '/lending/receipts' },
-          { label: 'Allocate' },
-        ]}
+        subtitle={`${receiptDetails.receiptNumber} - ${receiptDetails.entity}`}
+        breadcrumbs={[{ label: 'Receipts', to: '/admin/lending/receipts' }, { label: 'Allocate' }]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Allocation Table */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -213,7 +221,12 @@ export default function ReceiptAllocation() {
                 <CardDescription>Select demands to allocate the receipt</CardDescription>
               </div>
               <div className="flex gap-2">
-                <Select value={allocationMethod} onValueChange={setAllocationMethod}>
+                <Select
+                  value={allocationMethod}
+                  onValueChange={(v) =>
+                    setAllocationMethod(v as 'FIFO' | 'PROPORTIONAL' | 'SPECIFIC')
+                  }
+                >
                   <SelectTrigger className="w-40">
                     <SelectValue />
                   </SelectTrigger>
@@ -224,7 +237,7 @@ export default function ReceiptAllocation() {
                   </SelectContent>
                 </Select>
                 <Button variant="outline" onClick={handleAutoAllocate}>
-                  <Calculator className="h-4 w-4 mr-2" />
+                  <Calculator className="mr-2 h-4 w-4" />
                   Auto Allocate
                 </Button>
                 <Button variant="ghost" onClick={handleClearAllocation}>
@@ -248,70 +261,78 @@ export default function ReceiptAllocation() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {demands.filter((d) => d.outstanding > 0).map((demand) => (
-                  <TableRow key={demand.id}>
-                    <TableCell>
-                      <Checkbox
-                        checked={demand.selected}
-                        onCheckedChange={(checked) =>
-                          handleSelectDemand(demand.id, checked as boolean)
-                        }
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">{formatDate(demand.due_date)}</div>
-                      {demand.overdue_days > 0 && (
-                        <Badge variant="destructive" className="text-xs">
-                          {demand.overdue_days} days overdue
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{demand.demand_type}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(demand.principal)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(demand.interest)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {demand.penalty > 0 ? (
-                        <span className="text-red-600">{formatCurrency(demand.penalty)}</span>
-                      ) : (
-                        '-'
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-medium">
-                      {formatCurrency(demand.outstanding)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="number"
-                        className="w-28 text-right"
-                        value={demand.allocated || ''}
-                        onChange={(e) => handleAllocationChange(demand.id, e.target.value)}
-                        max={Math.min(demand.outstanding, unallocatedBalance + demand.allocated)}
-                      />
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {demands
+                  .filter((d) => d.outstanding > 0)
+                  .map((demand) => (
+                    <TableRow key={demand.id}>
+                      <TableCell>
+                        <Checkbox
+                          checked={demand.selected}
+                          onCheckedChange={(checked) =>
+                            handleSelectDemand(demand.id, checked as boolean)
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">{formatDate(demand.due_date)}</div>
+                        {demand.overdue_days > 0 && (
+                          <Badge variant="destructive" className="text-xs">
+                            {demand.overdue_days} days overdue
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{demand.demand_type}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(demand.principal)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(demand.interest)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {demand.penalty > 0 ? (
+                          <span className="text-red-600">{formatCurrency(demand.penalty)}</span>
+                        ) : (
+                          '-'
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(demand.outstanding)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Input
+                          type="number"
+                          className="w-28 text-right"
+                          value={demand.allocated || ''}
+                          onChange={(e) => handleAllocationChange(demand.id, e.target.value)}
+                          max={Math.min(demand.outstanding, unallocatedBalance + demand.allocated)}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
 
             {demands.filter((d) => d.outstanding > 0).length === 0 && (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="py-8 text-center text-muted-foreground">
                 No outstanding demands found
               </div>
             )}
 
-            <div className="flex gap-4 justify-end mt-6">
+            <div className="mt-6 flex justify-end gap-4">
               <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                 Cancel
               </Button>
-              <Button onClick={handleSubmit} disabled={isLoading || totalAllocated === 0}>
-                <Receipt className="h-4 w-4 mr-2" />
-                {isLoading ? 'Allocating...' : 'Confirm Allocation'}
+              <Button
+                onClick={handleSubmit}
+                disabled={
+                  allocateReceipt.isPending ||
+                  (allocationMethod === 'SPECIFIC' && totalAllocated === 0)
+                }
+              >
+                <Receipt className="mr-2 h-4 w-4" />
+                {allocateReceipt.isPending ? 'Allocating...' : 'Confirm Allocation'}
               </Button>
             </div>
           </CardContent>
@@ -326,19 +347,19 @@ export default function ReceiptAllocation() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Receipt Number</p>
-                <p className="font-mono">{receiptDetails.receipt_number}</p>
+                <p className="font-mono">{receiptDetails.receiptNumber}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Loan Account</p>
-                <p className="font-mono">{receiptDetails.loan_account}</p>
+                <p className="font-mono">{receiptDetails.loanAccount}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Receipt Date</p>
-                <p>{formatDate(receiptDetails.receipt_date)}</p>
+                <p>{formatDate(receiptDetails.receiptDate)}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Receipt Mode</p>
-                <Badge variant="outline">{receiptDetails.receipt_mode}</Badge>
+                <Badge variant="outline">{receiptDetails.receiptMode}</Badge>
               </div>
             </CardContent>
           </Card>
@@ -350,30 +371,24 @@ export default function ReceiptAllocation() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground">Total Receipt Amount</p>
-                <p className="text-2xl font-bold">
-                  {formatCurrency(receiptDetails.total_amount)}
-                </p>
+                <p className="text-2xl font-bold">{formatCurrency(receiptDetails.totalAmount)}</p>
               </div>
 
               <div className="border-t pt-4">
                 <p className="text-sm text-muted-foreground">Already Allocated</p>
-                <p className="font-medium">
-                  {formatCurrency(receiptDetails.allocated_amount)}
-                </p>
+                <p className="font-medium">{formatCurrency(receiptDetails.allocatedAmount)}</p>
               </div>
 
               <div>
                 <p className="text-sm text-muted-foreground">Available for Allocation</p>
                 <p className="text-xl font-bold text-green-600">
-                  {formatCurrency(receiptDetails.unallocated_amount)}
+                  {formatCurrency(receiptDetails.unallocatedAmount)}
                 </p>
               </div>
 
               <div className="border-t pt-4">
                 <p className="text-sm text-muted-foreground">Current Allocation</p>
-                <p className="text-xl font-bold">
-                  {formatCurrency(totalAllocated)}
-                </p>
+                <p className="text-xl font-bold">{formatCurrency(totalAllocated)}</p>
               </div>
 
               <div>
@@ -398,13 +413,13 @@ export default function ReceiptAllocation() {
                 </Alert>
               )}
 
-              {totalAllocated > receiptDetails.unallocated_amount && (
+              {totalAllocated > receiptDetails.unallocatedAmount && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertTitle>Over-allocation</AlertTitle>
                   <AlertDescription>
                     Allocation exceeds available amount by{' '}
-                    {formatCurrency(totalAllocated - receiptDetails.unallocated_amount)}
+                    {formatCurrency(totalAllocated - receiptDetails.unallocatedAmount)}
                   </AlertDescription>
                 </Alert>
               )}

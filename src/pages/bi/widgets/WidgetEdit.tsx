@@ -2,15 +2,17 @@
  * Widget Edit Page - Full page editor for widget configuration
  */
 
+import { Loader2, Save, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save, Eye } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+import { WidgetRenderer } from '@/components/bi';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -20,10 +22,17 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biWidgetApi, biChartApi, biDataSourceApi } from '@/services/biApi';
-import { DashboardWidget, ChartDefinitionListItem, DataSourceListItem, WidgetType } from '@/types/bi';
-import { WidgetRenderer } from '@/components/bi';
+import { logger } from "@/lib/logger";
+import type {
+  DashboardWidget,
+  ChartDefinitionListItem,
+  DataSourceListItem,
+  WidgetType,
+} from '@/types/bi';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface FormData {
   title: string;
@@ -105,7 +114,7 @@ export function WidgetEdit() {
       setValue('grid_h', w.grid_h);
       setValue('config', w.config || {});
     } catch (error) {
-      console.error('Error fetching data:', error);
+      logger.error('Error fetching data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load widget',
@@ -132,7 +141,7 @@ export function WidgetEdit() {
         const response = await biDataSourceApi.preview(dataSourceId);
         setPreviewData(Array.isArray(response.data.data) ? response.data.data : []);
       } catch (error) {
-        console.error('Error fetching preview:', error);
+        logger.error('Error fetching preview:', error);
         setPreviewData([]);
       }
     };
@@ -160,11 +169,11 @@ export function WidgetEdit() {
       });
 
       navigate(`/admin/bi/dashboards/${dashboardId}/edit`);
-    } catch (error: any) {
-      console.error('Error updating widget:', error);
+    } catch (error: unknown) {
+      logger.error('Error updating widget:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to update widget',
+        description: getErrorMessage(error, 'Failed to update widget'),
         variant: 'destructive',
       });
     } finally {
@@ -172,7 +181,7 @@ export function WidgetEdit() {
     }
   };
 
-  const updateConfig = (key: string, value: any) => {
+  const updateConfig = (key: string, value: unknown) => {
     setValue('config', { ...config, [key]: value });
   };
 
@@ -252,7 +261,10 @@ export function WidgetEdit() {
                 onChange={(e) =>
                   updateConfig(
                     'series',
-                    e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                    e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
                   )
                 }
               />
@@ -302,7 +314,10 @@ export function WidgetEdit() {
                 onChange={(e) =>
                   updateConfig(
                     'series',
-                    e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                    e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
                   )
                 }
               />
@@ -479,7 +494,7 @@ export function WidgetEdit() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -487,7 +502,7 @@ export function WidgetEdit() {
 
   if (!widget) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-muted-foreground">Widget not found</p>
         <Button
           variant="outline"
@@ -502,19 +517,15 @@ export function WidgetEdit() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(`/admin/bi/dashboards/${dashboardId}/edit`)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Edit Widget</h1>
-          <p className="text-muted-foreground">Configure widget settings and appearance</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Edit Widget"
+        subtitle="Configure widget settings and appearance"
+        breadcrumbs={[
+          { label: 'Dashboards', to: '/admin/bi/dashboards' },
+          { label: 'Edit Dashboard', to: `/admin/bi/dashboards/${dashboardId}/edit` },
+          { label: 'Edit Widget' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-3 gap-6">
@@ -532,9 +543,7 @@ export function WidgetEdit() {
                     placeholder="Widget title"
                     {...register('title', { required: 'Title is required' })}
                   />
-                  {errors.title && (
-                    <p className="text-sm text-red-500">{errors.title.message}</p>
-                  )}
+                  {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -625,7 +634,8 @@ export function WidgetEdit() {
               <CardHeader>
                 <CardTitle>Widget Configuration</CardTitle>
                 <CardDescription>
-                  Configure the specific settings for this {WIDGET_TYPES.find((t) => t.value === widgetType)?.label || 'widget'}
+                  Configure the specific settings for this{' '}
+                  {WIDGET_TYPES.find((t) => t.value === widgetType)?.label || 'widget'}
                 </CardDescription>
               </CardHeader>
               <CardContent>{renderConfigFields()}</CardContent>
@@ -640,8 +650,8 @@ export function WidgetEdit() {
                 Cancel
               </Button>
               <Button type="submit" disabled={saving}>
-                {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                <Save className="h-4 w-4 mr-2" />
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Save className="mr-2 h-4 w-4" />
                 Save Widget
               </Button>
             </div>
@@ -657,7 +667,7 @@ export function WidgetEdit() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="border rounded-lg p-4 bg-muted/50">
+                <div className="rounded-lg border bg-muted/50 p-4">
                   <WidgetRenderer
                     widget={{
                       ...widget,

@@ -1,13 +1,12 @@
 """Portal Communication API endpoints."""
 
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_db_with_tenant
 from app.api.v1.portal.auth import get_portal_user
 from app.models.portal.enums import (
     TicketCategory,
@@ -15,8 +14,9 @@ from app.models.portal.enums import (
     TicketStatus,
 )
 from app.services.portal.notification_service import PortalNotificationService
+from app.core.exceptions import BadRequestException, NotFoundException
 
-router = APIRouter(prefix="/communication", tags=["Portal Communication"])
+router = APIRouter(tags=["Portal Communication"])
 
 
 # =============================================================================
@@ -33,7 +33,7 @@ class NotificationResponse(BaseModel):
     notification_type: str
     channel: str
     priority: str
-    action_url: Optional[str] = None
+    action_url: str | None = None
     is_read: bool
     created_at: str
 
@@ -41,22 +41,22 @@ class NotificationResponse(BaseModel):
 class MessageSendRequest(BaseModel):
     """Send message request."""
 
-    subject: Optional[str] = None
+    subject: str | None = None
     body: str = Field(..., min_length=1)
-    thread_id: Optional[UUID] = None
-    reference_type: Optional[str] = None
-    reference_id: Optional[UUID] = None
+    thread_id: UUID | None = None
+    reference_type: str | None = None
+    reference_id: UUID | None = None
 
 
 class MessageResponse(BaseModel):
     """Message response."""
 
     id: str
-    thread_id: Optional[str] = None
-    subject: Optional[str] = None
+    thread_id: str | None = None
+    subject: str | None = None
     body: str
     is_from_customer: bool
-    sender_name: Optional[str] = None
+    sender_name: str | None = None
     is_read: bool
     has_attachments: bool
     created_at: str
@@ -69,8 +69,8 @@ class TicketCreateRequest(BaseModel):
     description: str
     category: TicketCategory
     priority: TicketPriority = TicketPriority.MEDIUM
-    sub_category: Optional[str] = None
-    loan_account_id: Optional[UUID] = None
+    sub_category: str | None = None
+    loan_account_id: UUID | None = None
 
 
 class TicketResponse(BaseModel):
@@ -83,7 +83,7 @@ class TicketResponse(BaseModel):
     priority: str
     status: str
     created_at: str
-    sla_due_at: Optional[str] = None
+    sla_due_at: str | None = None
     is_sla_breached: bool
 
 
@@ -95,17 +95,17 @@ class TicketDetails(BaseModel):
     subject: str
     description: str
     category: str
-    sub_category: Optional[str] = None
+    sub_category: str | None = None
     priority: str
     status: str
     created_at: str
-    sla_due_at: Optional[str] = None
+    sla_due_at: str | None = None
     is_sla_breached: bool
-    resolved_at: Optional[str] = None
-    resolution_summary: Optional[str] = None
-    customer_rating: Optional[int] = None
-    customer_feedback: Optional[str] = None
-    messages: List[dict]
+    resolved_at: str | None = None
+    resolution_summary: str | None = None
+    customer_rating: int | None = None
+    customer_feedback: str | None = None
+    messages: list[dict]
 
 
 class TicketReplyRequest(BaseModel):
@@ -118,7 +118,7 @@ class TicketRatingRequest(BaseModel):
     """Rate ticket request."""
 
     rating: int = Field(..., ge=1, le=5)
-    feedback: Optional[str] = None
+    feedback: str | None = None
 
 
 class AnnouncementResponse(BaseModel):
@@ -129,15 +129,15 @@ class AnnouncementResponse(BaseModel):
     body: str
     announcement_type: str
     display_position: str
-    action_url: Optional[str] = None
-    action_text: Optional[str] = None
+    action_url: str | None = None
+    action_text: str | None = None
     is_dismissible: bool
 
 
 class PaginatedResponse(BaseModel):
     """Paginated response."""
 
-    items: List
+    items: list
     total: int
     page: int
     page_size: int
@@ -151,19 +151,22 @@ class PaginatedResponse(BaseModel):
 
 @router.get(
     "/notifications",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Notifications",
 )
 async def get_notifications(
-    is_read: Optional[bool] = None,
-    notification_type: Optional[str] = None,
+    is_read: bool | None = None,
+    unread_only: bool | None = None,
+    notification_type: str | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get notifications for the user."""
     service = PortalNotificationService(db)
+    if unread_only is True:
+        is_read = False
     items, total = await service.get_notifications(
         user_id=user.id,
         is_read=is_read,
@@ -187,7 +190,7 @@ async def get_notifications(
 )
 async def get_unread_count(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get count of unread notifications."""
     service = PortalNotificationService(db)
@@ -203,7 +206,7 @@ async def get_unread_count(
 async def mark_notification_read(
     notification_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Mark a notification as read."""
     service = PortalNotificationService(db)
@@ -211,10 +214,7 @@ async def mark_notification_read(
     await db.commit()
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Notification not found",
-        )
+        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
 
     return {"message": "Marked as read"}
 
@@ -225,7 +225,7 @@ async def mark_notification_read(
 )
 async def mark_all_notifications_read(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Mark all notifications as read."""
     service = PortalNotificationService(db)
@@ -242,14 +242,14 @@ async def mark_all_notifications_read(
 
 @router.post(
     "/messages",
-    response_model=MessageResponse,
+    response_model=MessageResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Send Message",
 )
 async def send_message(
     request: MessageSendRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Send a message to support."""
     service = PortalNotificationService(db)
@@ -275,15 +275,15 @@ async def send_message(
 
 @router.get(
     "/messages",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Messages",
 )
 async def get_messages(
-    thread_id: Optional[UUID] = None,
+    thread_id: UUID | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get messages."""
     service = PortalNotificationService(db)
@@ -310,7 +310,7 @@ async def get_messages(
 async def mark_message_read(
     message_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Mark a message as read."""
     service = PortalNotificationService(db)
@@ -318,10 +318,7 @@ async def mark_message_read(
     await db.commit()
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Message not found",
-        )
+        raise NotFoundException(detail="Message not found", error_code="MESSAGE_NOT_FOUND")
 
     return {"message": "Marked as read"}
 
@@ -333,14 +330,14 @@ async def mark_message_read(
 
 @router.post(
     "/tickets",
-    response_model=TicketResponse,
+    response_model=TicketResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create Support Ticket",
 )
 async def create_ticket(
     request: TicketCreateRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new support ticket."""
     service = PortalNotificationService(db)
@@ -366,16 +363,16 @@ async def create_ticket(
 
 @router.get(
     "/tickets",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Tickets",
 )
 async def get_tickets(
-    status: Optional[TicketStatus] = None,
-    category: Optional[TicketCategory] = None,
+    status: TicketStatus | None = None,
+    category: TicketCategory | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get support tickets."""
     service = PortalNotificationService(db)
@@ -398,37 +395,34 @@ async def get_tickets(
 
 @router.get(
     "/tickets/{ticket_id}",
-    response_model=TicketDetails,
+    response_model=TicketDetails, response_model_by_alias=True,
     summary="Get Ticket Details",
 )
 async def get_ticket_details(
     ticket_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get ticket details with message history."""
     service = PortalNotificationService(db)
     details = await service.get_ticket_details(ticket_id, user.id)
 
     if not details:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
 
     return TicketDetails(**details)
 
 
 @router.post(
     "/tickets/{ticket_id}/reply",
-    response_model=MessageResponse,
+    response_model=MessageResponse, response_model_by_alias=True,
     summary="Reply to Ticket",
 )
 async def reply_to_ticket(
     ticket_id: UUID,
     request: TicketReplyRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add a reply to a ticket."""
     service = PortalNotificationService(db)
@@ -441,16 +435,10 @@ async def reply_to_ticket(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not message:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
 
     return MessageResponse(
         id=str(message.id),
@@ -473,7 +461,7 @@ async def rate_ticket(
     ticket_id: UUID,
     request: TicketRatingRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Rate a resolved/closed ticket."""
     service = PortalNotificationService(db)
@@ -487,15 +475,12 @@ async def rate_ticket(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Ticket not found or not resolved",
+            error_code="TICKET_NOT_FOUND_OR_NOT_RESOLVED",
         )
 
     return {"message": "Rating submitted"}
@@ -508,12 +493,12 @@ async def rate_ticket(
 
 @router.get(
     "/announcements",
-    response_model=List[AnnouncementResponse],
+    response_model=list[AnnouncementResponse], response_model_by_alias=True,
     summary="Get Announcements",
 )
 async def get_announcements(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active announcements."""
     service = PortalNotificationService(db)
@@ -531,7 +516,7 @@ async def get_announcements(
 async def record_announcement_view(
     announcement_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Record that user viewed an announcement."""
     service = PortalNotificationService(db)
@@ -548,7 +533,7 @@ async def record_announcement_view(
 async def dismiss_announcement(
     announcement_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Dismiss an announcement."""
     service = PortalNotificationService(db)
@@ -565,7 +550,7 @@ async def dismiss_announcement(
 async def record_announcement_click(
     announcement_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Record that user clicked announcement action."""
     service = PortalNotificationService(db)

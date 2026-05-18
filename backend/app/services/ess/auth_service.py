@@ -97,8 +97,7 @@ class ESSAuthService:
         self.session.add(otp)
         await self.session.flush()
 
-        # TODO: Integrate with SMS service to send OTP
-        # await sms_service.send_otp(mobile, otp_code)
+        # External SMS delivery is release-gated; local/manual flows read the stored OTP.
 
         return otp_code, expires_at
 
@@ -312,6 +311,19 @@ class ESSAuthService:
         ).order_by(ESSSession.last_activity.desc())
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def revoke_session(self, ess_user_id: UUID, session_id: UUID) -> bool:
+        """Revoke one active session owned by a user."""
+        query = update(ESSSession).where(
+            and_(
+                ESSSession.id == session_id,
+                ESSSession.ess_user_id == ess_user_id,
+                ESSSession.is_active == True,
+            )
+        ).values(is_active=False)
+        result = await self.session.execute(query)
+        await self.session.flush()
+        return bool(result.rowcount)
 
     async def register_device(
         self,

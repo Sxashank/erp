@@ -30,7 +30,7 @@ class ShiftService:
         """Create a new shift."""
         shift = Shift(**data.model_dump(), created_by=created_by)
         self.db.add(shift)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(shift)
         return shift
 
@@ -90,7 +90,7 @@ class ShiftService:
             setattr(shift, field, value)
 
         shift.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(shift)
         return shift
 
@@ -101,7 +101,7 @@ class ShiftService:
             return False
 
         shift.is_active = False
-        await self.db.commit()
+        await self.db.flush()
         return True
 
 
@@ -118,7 +118,7 @@ class HolidayService:
         """Create a new holiday calendar."""
         calendar = HolidayCalendar(**data.model_dump(), created_by=created_by)
         self.db.add(calendar)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(calendar)
         return calendar
 
@@ -180,7 +180,7 @@ class HolidayService:
             setattr(calendar, field, value)
 
         calendar.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(calendar)
         return calendar
 
@@ -191,7 +191,7 @@ class HolidayService:
             return False
 
         calendar.is_active = False
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     # ============================================
@@ -201,7 +201,7 @@ class HolidayService:
         """Create a new holiday."""
         holiday = Holiday(**data.model_dump(), created_by=created_by)
         self.db.add(holiday)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(holiday)
         return holiday
 
@@ -219,7 +219,7 @@ class HolidayService:
             self.db.add(holiday)
             holidays.append(holiday)
 
-        await self.db.commit()
+        await self.db.flush()
         for holiday in holidays:
             await self.db.refresh(holiday)
 
@@ -263,7 +263,7 @@ class HolidayService:
             setattr(holiday, field, value)
 
         holiday.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(holiday)
         return holiday
 
@@ -274,7 +274,7 @@ class HolidayService:
             return False
 
         await self.db.delete(holiday)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def is_holiday(

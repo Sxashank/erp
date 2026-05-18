@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowRight,
@@ -18,12 +16,15 @@ import {
   UserMinus,
   Users,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -35,6 +36,7 @@ import { Separator } from '@/components/ui/separator';
 import { organizationsApi } from '@/services/api';
 import type { Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 interface DashboardStats {
   totalEmployees: number;
   activeEmployees: number;
@@ -112,85 +114,36 @@ export function HRISDashboard() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      // Mock data - replace with actual API calls
       setStats({
-        totalEmployees: 256,
-        activeEmployees: 248,
-        newJoineesThisMonth: 8,
-        separationsThisMonth: 3,
-        pendingLeaveApprovals: 12,
-        pendingRegularizations: 5,
-        todayPresent: 215,
-        todayAbsent: 18,
-        todayOnLeave: 15,
-        attendancePercentage: 89.5,
-        upcomingTrainings: 3,
-        activeCycles: 1,
-        pendingGoals: 24,
-        pendingAppraisals: 18,
+        totalEmployees: 0,
+        activeEmployees: 0,
+        newJoineesThisMonth: 0,
+        separationsThisMonth: 0,
+        pendingLeaveApprovals: 0,
+        pendingRegularizations: 0,
+        todayPresent: 0,
+        todayAbsent: 0,
+        todayOnLeave: 0,
+        attendancePercentage: 0,
+        upcomingTrainings: 0,
+        activeCycles: 0,
+        pendingGoals: 0,
+        pendingAppraisals: 0,
       });
-
-      setPendingActions([
-        {
-          id: '1',
-          type: 'LEAVE',
-          title: 'Annual Leave - 5 days',
-          employee: 'John Doe',
-          requestDate: '2024-11-18',
-          status: 'PENDING',
-        },
-        {
-          id: '2',
-          type: 'LEAVE',
-          title: 'Sick Leave - 2 days',
-          employee: 'Jane Smith',
-          requestDate: '2024-11-17',
-          status: 'PENDING',
-        },
-        {
-          id: '3',
-          type: 'REGULARIZATION',
-          title: 'Missed Punch - Nov 15',
-          employee: 'Mike Wilson',
-          requestDate: '2024-11-16',
-          status: 'PENDING',
-        },
-        {
-          id: '4',
-          type: 'SEPARATION',
-          title: 'Resignation - Serving Notice',
-          employee: 'Sarah Johnson',
-          requestDate: '2024-11-10',
-          status: 'IN_PROGRESS',
-        },
-      ]);
-
-      setUpcomingEvents([
-        { id: '1', type: 'HOLIDAY', title: 'Christmas', date: '2024-12-25' },
-        { id: '2', type: 'BIRTHDAY', title: 'Employee Birthdays', date: '2024-11-20', count: 3 },
-        { id: '3', type: 'ANNIVERSARY', title: 'Work Anniversaries', date: '2024-11-22', count: 2 },
-        { id: '4', type: 'TRAINING', title: 'Leadership Workshop', date: '2024-11-25' },
-        { id: '5', type: 'APPRAISAL_DUE', title: 'Q3 Appraisals Due', date: '2024-11-30' },
-      ]);
+      setPendingActions([]);
+      setUpcomingEvents([]);
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      logger.error('Failed to fetch dashboard data:', error);
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-    });
   };
 
   const getEventIcon = (type: string) => {
@@ -349,7 +302,7 @@ export function HRISDashboard() {
                       <div>
                         <p className="font-medium">{action.title}</p>
                         <p className="text-sm text-slate-500">
-                          {action.employee} • {formatDate(action.requestDate)}
+                          {action.employee} • <DateDisplay date={action.requestDate} />
                         </p>
                       </div>
                     </div>
@@ -392,7 +345,7 @@ export function HRISDashboard() {
                   {getEventIcon(event.type)}
                   <div className="flex-1">
                     <p className="font-medium text-sm">{event.title}</p>
-                    <p className="text-xs text-slate-500">{formatDate(event.date)}</p>
+                    <p className="text-xs text-slate-500"><DateDisplay date={event.date} /></p>
                   </div>
                   {event.count && (
                     <Badge variant="outline">{event.count}</Badge>

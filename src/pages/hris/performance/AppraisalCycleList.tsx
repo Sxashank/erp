@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Search,
   Plus,
@@ -15,19 +13,21 @@ import {
   BarChart3,
   Settings,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -36,12 +36,13 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Progress } from '@/components/ui/progress';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatDate } from '@/lib/utils';
 
 type CycleStatus = 'DRAFT' | 'GOAL_SETTING' | 'IN_PROGRESS' | 'REVIEW' | 'CALIBRATION' | 'COMPLETED';
@@ -64,86 +65,20 @@ interface AppraisalCycle {
   pending_manager_review: number;
 }
 
-// Mock summary data
-const cycleSummary = {
-  total_cycles: 12,
-  active: 2,
-  completed: 9,
-  draft: 1,
-  employees_appraised: 450,
-};
+const appraisalCycles: AppraisalCycle[] = [];
 
-// Mock data
-const appraisalCycles: AppraisalCycle[] = [
-  {
-    id: '1',
-    cycle_name: 'Annual Performance Review 2024-25',
-    cycle_code: 'APR-2024-25',
-    financial_year: '2024-25',
-    cycle_type: 'ANNUAL',
-    start_date: '2024-04-01',
-    end_date: '2025-03-31',
-    goal_setting_deadline: '2024-04-30',
-    self_appraisal_deadline: '2025-01-31',
-    manager_review_deadline: '2025-02-28',
-    status: 'IN_PROGRESS',
-    eligible_employees: 150,
-    completed_appraisals: 45,
-    pending_self_appraisal: 80,
-    pending_manager_review: 25,
-  },
-  {
-    id: '2',
-    cycle_name: 'Mid-Year Review H1 2024-25',
-    cycle_code: 'MYR-H1-2024-25',
-    financial_year: '2024-25',
-    cycle_type: 'HALF_YEARLY',
-    start_date: '2024-04-01',
-    end_date: '2024-09-30',
-    goal_setting_deadline: '2024-04-15',
-    self_appraisal_deadline: '2024-09-25',
-    manager_review_deadline: '2024-09-30',
-    status: 'COMPLETED',
-    eligible_employees: 145,
-    completed_appraisals: 145,
-    pending_self_appraisal: 0,
-    pending_manager_review: 0,
-  },
-  {
-    id: '3',
-    cycle_name: 'Annual Performance Review 2023-24',
-    cycle_code: 'APR-2023-24',
-    financial_year: '2023-24',
-    cycle_type: 'ANNUAL',
-    start_date: '2023-04-01',
-    end_date: '2024-03-31',
-    goal_setting_deadline: '2023-04-30',
-    self_appraisal_deadline: '2024-01-31',
-    manager_review_deadline: '2024-02-28',
-    status: 'COMPLETED',
-    eligible_employees: 135,
-    completed_appraisals: 135,
-    pending_self_appraisal: 0,
-    pending_manager_review: 0,
-  },
-  {
-    id: '4',
-    cycle_name: 'Q3 Review 2024-25',
-    cycle_code: 'QR-Q3-2024-25',
-    financial_year: '2024-25',
-    cycle_type: 'QUARTERLY',
-    start_date: '2024-10-01',
-    end_date: '2024-12-31',
-    goal_setting_deadline: '2024-10-10',
-    self_appraisal_deadline: '2024-12-25',
-    manager_review_deadline: '2024-12-31',
-    status: 'REVIEW',
-    eligible_employees: 148,
-    completed_appraisals: 90,
-    pending_self_appraisal: 20,
-    pending_manager_review: 38,
-  },
-];
+const cycleSummary = {
+  total_cycles: appraisalCycles.length,
+  active: appraisalCycles.filter((cycle) =>
+    ['GOAL_SETTING', 'IN_PROGRESS', 'REVIEW', 'CALIBRATION'].includes(cycle.status),
+  ).length,
+  completed: appraisalCycles.filter((cycle) => cycle.status === 'COMPLETED').length,
+  draft: appraisalCycles.filter((cycle) => cycle.status === 'DRAFT').length,
+  employees_appraised: appraisalCycles.reduce(
+    (sum, cycle) => sum + cycle.completed_appraisals,
+    0,
+  ),
+};
 
 const getStatusBadge = (status: CycleStatus) => {
   const config: Record<CycleStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode; label: string; color?: string }> = {
@@ -340,7 +275,14 @@ export default function AppraisalCycleList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredCycles.map((cycle) => (
+              {filteredCycles.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    Appraisal cycle data is pending backend HRIS performance endpoints.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                filteredCycles.map((cycle) => (
                 <TableRow key={cycle.id}>
                   <TableCell>
                     <div>
@@ -425,7 +367,8 @@ export default function AppraisalCycleList() {
                     </DropdownMenu>
                   </TableCell>
                 </TableRow>
-              ))}
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

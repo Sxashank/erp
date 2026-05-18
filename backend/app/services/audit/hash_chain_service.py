@@ -86,7 +86,7 @@ async def persist_day_chain(
             existing.previous_anchor = r.previous_anchor
             existing.anchor = r.anchor
 
-    await session.commit()
+    await session.flush()
     logger.info(
         "audit_hash_chain_persisted",
         organization_id=str(organization_id) if organization_id else None,

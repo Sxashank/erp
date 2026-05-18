@@ -1,8 +1,4 @@
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Download,
   FileText,
@@ -15,12 +11,16 @@ import {
   FileBadge,
   MapPin,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import * as z from 'zod';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
@@ -31,11 +31,13 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate } from '@/lib/utils';
 
+import { logger } from "@/lib/logger";
 // Form schema for CKYC download
 const ckycDownloadSchema = z.object({
   ckyc_number: z
@@ -48,7 +50,8 @@ const ckycDownloadSchema = z.object({
   download_documents: z.boolean().default(true),
 });
 
-type CKYCDownloadFormValues = z.infer<typeof ckycDownloadSchema>;
+type CKYCDownloadFormInput = z.input<typeof ckycDownloadSchema>;
+type CKYCDownloadFormValues = z.output<typeof ckycDownloadSchema>;
 
 // Types for downloaded record
 interface CKYCRecord {
@@ -176,8 +179,8 @@ export default function CKYCDownload() {
   const [downloadedRecord, setDownloadedRecord] = useState<CKYCRecord | null>(null);
   const [hasDownloaded, setHasDownloaded] = useState(false);
 
-  const form = useForm<CKYCDownloadFormValues>({
-    resolver: zodResolver(ckycDownloadSchema) as any,
+  const form = useForm<CKYCDownloadFormInput, unknown, CKYCDownloadFormValues>({
+    resolver: zodResolver(ckycDownloadSchema),
     defaultValues: {
       ckyc_number: ckycFromUrl,
       entity_id: '',
@@ -199,7 +202,7 @@ export default function CKYCDownload() {
       setDownloadedRecord(mockCKYCRecord);
       setHasDownloaded(true);
     } catch (error) {
-      console.error('CKYC Download failed:', error);
+      logger.error('CKYC Download failed:', error);
     } finally {
       setIsDownloading(false);
     }
@@ -238,7 +241,7 @@ export default function CKYCDownload() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
                   control={form.control}
                   name="ckyc_number"

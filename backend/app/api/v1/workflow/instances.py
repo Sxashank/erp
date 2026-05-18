@@ -3,13 +3,13 @@
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.workflow import (
     WorkflowInstance,
@@ -25,19 +25,19 @@ from app.schemas.workflow import (
     CancelWorkflowRequest,
 )
 from app.schemas.base import PaginatedResponse, MessageResponse
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[WorkflowInstanceResponse])
+@router.get("", response_model=PaginatedResponse[WorkflowInstanceResponse], response_model_by_alias=True)
 async def list_workflow_instances(
-    organization_id: UUID = Query(...),
     entity_type: Optional[WorkflowEntityType] = Query(None),
     status_filter: Optional[WorkflowInstanceStatus] = Query(None, alias="status"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of workflow instances."""
     query = (
@@ -49,7 +49,7 @@ async def list_workflow_instances(
         )
         .where(
             and_(
-                WorkflowInstance.organization_id == organization_id,
+                WorkflowInstance.organization_id == current_user.organization_id,
                 WorkflowInstance.is_active == True,
             )
         )
@@ -63,7 +63,7 @@ async def list_workflow_instances(
     # Count total
     count_query = select(WorkflowInstance.id).where(
         and_(
-            WorkflowInstance.organization_id == organization_id,
+            WorkflowInstance.organization_id == current_user.organization_id,
             WorkflowInstance.is_active == True,
         )
     )
@@ -114,11 +114,11 @@ async def list_workflow_instances(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/{instance_id}", response_model=WorkflowInstanceDetailResponse)
+@router.get("/{instance_id}", response_model=WorkflowInstanceDetailResponse, response_model_by_alias=True)
 async def get_workflow_instance(
     instance_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get a workflow instance with full details."""
     query = (
@@ -145,19 +145,19 @@ async def get_workflow_instance(
     instance = result.scalar_one_or_none()
 
     if not instance:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Workflow instance not found",
+            error_code="WORKFLOW_INSTANCE_NOT_FOUND",
         )
 
     return _instance_to_detail_response(instance)
 
 
-@router.get("/{instance_id}/history", response_model=List[WorkflowHistoryResponse])
+@router.get("/{instance_id}/history", response_model=List[WorkflowHistoryResponse], response_model_by_alias=True)
 async def get_workflow_history(
     instance_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get full history for a workflow instance."""
     engine = WorkflowEngine(db)
@@ -183,12 +183,12 @@ async def get_workflow_history(
     ]
 
 
-@router.post("/{instance_id}/cancel", response_model=WorkflowInstanceResponse)
+@router.post("/{instance_id}/cancel", response_model=WorkflowInstanceResponse, response_model_by_alias=True)
 async def cancel_workflow(
     instance_id: UUID,
     data: CancelWorkflowRequest,
     current_user: User = Depends(RequirePermissions("WORKFLOW_CANCEL")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel an active workflow."""
     engine = WorkflowEngine(db)
@@ -200,10 +200,7 @@ async def cancel_workflow(
             cancelled_by=current_user.id,
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return WorkflowInstanceResponse(
         id=instance.id,
@@ -231,12 +228,12 @@ async def cancel_workflow(
     )
 
 
-@router.get("/entity/{entity_type}/{entity_id}", response_model=Optional[WorkflowInstanceResponse])
+@router.get("/entity/{entity_type}/{entity_id}", response_model=Optional[WorkflowInstanceResponse], response_model_by_alias=True)
 async def get_entity_workflow(
     entity_type: WorkflowEntityType,
     entity_id: UUID,
     current_user: User = Depends(RequirePermissions("WORKFLOW_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active workflow for a specific entity."""
     query = (

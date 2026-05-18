@@ -1,11 +1,11 @@
+import { Edit, MoreHorizontal, Plus, Shield, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, MoreHorizontal, Plus, Shield, Trash2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import {
 import { rolesApi } from '@/services/api';
 import type { RoleListItem } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function RoleList() {
   const navigate = useNavigate();
   const [roles, setRoles] = useState<RoleListItem[]>([]);
@@ -34,7 +35,7 @@ export function RoleList() {
       const response = await rolesApi.list();
       setRoles(response.data);
     } catch (error) {
-      console.error('Failed to fetch roles:', error);
+      logger.error('Failed to fetch roles:', error);
     } finally {
       setLoading(false);
     }
@@ -50,7 +51,7 @@ export function RoleList() {
       await rolesApi.delete(id);
       fetchRoles();
     } catch (error) {
-      console.error('Failed to delete role:', error);
+      logger.error('Failed to delete role:', error);
     }
   };
 

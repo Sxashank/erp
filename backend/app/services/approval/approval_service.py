@@ -121,10 +121,32 @@ class ApprovalService:
             raise NotFoundException("Approval workflow not found")
 
         # Update workflow fields
-        update_data = data.model_dump(exclude_unset=True)
+        update_data = data.model_dump(exclude_unset=True, exclude={"levels"})
         update_data["updated_by"] = updated_by
 
         workflow = await self.workflow_repo.update(workflow, update_data)
+        if data.levels is not None:
+            expected_levels = data.approval_levels or len(data.levels)
+            if len(data.levels) != expected_levels:
+                raise BadRequestException(
+                    f"Number of levels ({len(data.levels)}) must match approval_levels ({expected_levels})"
+                )
+            await self.workflow_repo.delete_levels(workflow_id)
+            for level_data in data.levels:
+                await self.workflow_repo.create_level({
+                    "workflow_id": workflow.id,
+                    "level_number": level_data.level_number,
+                    "level_name": level_data.level_name,
+                    "approver_roles": level_data.approver_roles,
+                    "approver_users": level_data.approver_users,
+                    "min_approvers": level_data.min_approvers,
+                    "threshold_amount": level_data.threshold_amount,
+                    "escalation_hours": level_data.escalation_hours,
+                    "escalation_user_id": level_data.escalation_user_id,
+                    "created_by": updated_by,
+                    "updated_by": updated_by,
+                })
+            await self.session.refresh(workflow)
         return workflow
 
     async def get_workflow(
@@ -395,6 +417,8 @@ class ApprovalService:
 
         # Refresh and return
         request = await self.request_repo.get_with_details(request_id)
+        if request and request.status == ApprovalRequestStatus.APPROVED:
+            await self._execute_final_approved_request(request, action_by)
         return request
 
     def _can_user_approve(
@@ -633,3 +657,27 @@ class ApprovalService:
             "total_levels": request.total_levels,
             "requested_at": request.requested_at.isoformat(),
         }
+
+    async def _execute_final_approved_request(
+        self,
+        request: ApprovalRequest,
+        action_by: UUID,
+    ) -> None:
+        """Execute domain-side effects for approved requests that declare a target."""
+        request_details = request.request_details or {}
+        execution_target = request_details.get("execution_target")
+        if not execution_target:
+            return
+
+        if execution_target == "fixed_assets_disposal":
+            from app.services.fixed_assets.disposal_service import DisposalService
+
+            service = DisposalService(self.session)
+            await service.finalize_approved_request(request, approved_by=action_by)
+            return
+
+        if execution_target == "fixed_assets_depreciation_post":
+            from app.services.fixed_assets.depreciation_service import DepreciationService
+
+            service = DepreciationService(self.session)
+            await service.execute_approved_posting_request(request, posted_by=action_by)

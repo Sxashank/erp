@@ -2,8 +2,6 @@
  * Vendor Payment List
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   CreditCard,
   Search,
@@ -15,12 +13,16 @@ import {
   Calendar,
   FileText,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -34,6 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPaymentApi } from '@/services/vendorApi';
 import type { VendorPayment, VendorAgingReport } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorPaymentList() {
   const { toast } = useToast();
 
@@ -67,7 +70,7 @@ export default function VendorPaymentList() {
       setAging(agingRes.data);
       setSummary(summaryRes.data);
     } catch (error) {
-      console.error('Failed to fetch payments:', error);
+      logger.error('Failed to fetch payments:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -147,11 +150,7 @@ export default function VendorPaymentList() {
               <Calendar className="h-5 w-5 text-purple-600" />
               <span className="text-sm font-medium text-purple-800">Last Payment</span>
             </div>
-            <p className="text-lg font-bold text-purple-900 mt-2">
-              {summary?.last_payment_date
-                ? new Date(summary.last_payment_date as string).toLocaleDateString()
-                : '-'}
-            </p>
+            <DateDisplay date={summary?.last_payment_date as string | null | undefined} className="text-lg font-bold text-purple-900 mt-2" />
           </CardContent>
         </Card>
         <Card className="bg-orange-50 border-orange-200">
@@ -207,7 +206,7 @@ export default function VendorPaymentList() {
                     {payments.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell className="font-medium">{payment.payment_reference}</TableCell>
-                        <TableCell>{new Date(payment.payment_date).toLocaleDateString()}</TableCell>
+                        <TableCell><DateDisplay date={payment.payment_date} /></TableCell>
                         <TableCell>{payment.payment_mode}</TableCell>
                         <TableCell className="text-right">{formatCurrency(payment.amount)}</TableCell>
                         <TableCell>
@@ -236,7 +235,7 @@ export default function VendorPaymentList() {
             <CardHeader>
               <CardTitle>Aging Report</CardTitle>
               <CardDescription>
-                Outstanding invoices as of {aging?.as_of_date ? new Date(aging.as_of_date).toLocaleDateString() : 'today'}
+                Outstanding invoices as of {aging?.as_of_date ? <DateDisplay date={aging.as_of_date} /> : 'today'}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -271,8 +270,8 @@ export default function VendorPaymentList() {
                       {aging.invoices.map((inv, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{inv.invoice_number}</TableCell>
-                          <TableCell>{new Date(inv.invoice_date).toLocaleDateString()}</TableCell>
-                          <TableCell>{inv.due_date ? new Date(inv.due_date).toLocaleDateString() : '-'}</TableCell>
+                          <TableCell><DateDisplay date={inv.invoice_date} /></TableCell>
+                          <TableCell><DateDisplay date={inv.due_date} /></TableCell>
                           <TableCell className="text-right">{formatCurrency(inv.invoice_amount)}</TableCell>
                           <TableCell className="text-right">{formatCurrency(inv.balance_amount)}</TableCell>
                           <TableCell className="text-right">

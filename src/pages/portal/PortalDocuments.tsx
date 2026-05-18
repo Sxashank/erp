@@ -3,21 +3,26 @@
  * View and download loan documents, statements, certificates
  */
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { File } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+  FileText,
+  Download,
+  Loader2,
+  FileCheck,
+  Calendar,
+  Search,
+  Filter,
+  Eye,
+  IndianRupee,
+  Upload,
+} from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -27,21 +32,22 @@ import {
   DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
-  FileText,
-  Download,
-  Loader2,
-  File,
-  FileCheck,
-  Calendar,
-  Search,
-  Filter,
-  Eye,
-  IndianRupee,
-} from 'lucide-react';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { portalDocumentApi, portalDashboardApi } from '@/services/portalApi';
 import type { PortalDocument, LoanSummary } from '@/types/portal';
 
+import { logger } from "@/lib/logger";
 const documentTypeLabels: Record<string, string> = {
   SANCTION_LETTER: 'Sanction Letter',
   LOAN_AGREEMENT: 'Loan Agreement',
@@ -67,6 +73,7 @@ const documentTypeIcons: Record<string, string> = {
 };
 
 export default function PortalDocuments() {
+  const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [documents, setDocuments] = useState<PortalDocument[]>([]);
   const [loans, setLoans] = useState<LoanSummary[]>([]);
@@ -74,6 +81,15 @@ export default function PortalDocuments() {
   const [searchQuery, setSearchQuery] = useState('');
   const [downloading, setDownloading] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('documents');
+
+  // Per-loan upload state — see CLAUDE.md §6.3: every mutation carries an
+  // Idempotency-Key. The portalDocumentApi.uploadForLoan helper below
+  // builds one for us. The BE accepts multipart/form-data.
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadLoanId, setUploadLoanId] = useState<string>('');
+  const [uploadType, setUploadType] = useState<string>('SUPPORTING_DOCUMENT');
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   // Statement generation
   const [statementLoan, setStatementLoan] = useState('');
@@ -103,7 +119,7 @@ export default function PortalDocuments() {
       setDocuments(docsRes.data);
       setLoans(loansRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -125,7 +141,7 @@ export default function PortalDocuments() {
       window.document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download document:', error);
+      logger.error('Failed to download document:', error);
     } finally {
       setDownloading(null);
     }
@@ -151,7 +167,7 @@ export default function PortalDocuments() {
       window.document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to generate statement:', error);
+      logger.error('Failed to generate statement:', error);
     } finally {
       setGeneratingStatement(false);
     }
@@ -176,7 +192,7 @@ export default function PortalDocuments() {
       window.document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to generate interest certificate:', error);
+      logger.error('Failed to generate interest certificate:', error);
     } finally {
       setGeneratingCert(false);
     }
@@ -200,9 +216,44 @@ export default function PortalDocuments() {
       window.document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to generate TDS certificate:', error);
+      logger.error('Failed to generate TDS certificate:', error);
     } finally {
       setGeneratingTds(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!uploadFile || !uploadLoanId) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadFile);
+      formData.append('document_type', uploadType);
+      formData.append('loan_account_id', uploadLoanId);
+      // The portal documents endpoint accepts multipart uploads keyed by
+      // loan_account_id. Idempotency-Key is set per CLAUDE.md §6.3.
+      const idempotencyKey = crypto.randomUUID();
+      await (
+        await import('@/services/api')
+      ).default.post('/portal/documents/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          'Idempotency-Key': idempotencyKey,
+        },
+      });
+      toast({
+        title: 'Document uploaded',
+        description: 'Your document is now available for the operations team.',
+      });
+      setUploadOpen(false);
+      setUploadFile(null);
+      // Refresh the docs list.
+      const docsRes = await portalDocumentApi.getDocuments();
+      setDocuments(docsRes.data);
+    } catch (err) {
+      showErrorToast(err, toast);
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -235,7 +286,7 @@ export default function PortalDocuments() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
@@ -246,7 +297,85 @@ export default function PortalDocuments() {
       <PageHeader
         title="Documents"
         subtitle="Download your loan documents, statements, and certificates"
+        actions={
+          <Button
+            onClick={() => {
+              setUploadLoanId(loans[0]?.id ?? '');
+              setUploadFile(null);
+              setUploadOpen(true);
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700"
+            disabled={loans.length === 0}
+          >
+            <Upload className="mr-2 h-4 w-4" />
+            Upload document
+          </Button>
+        }
       />
+
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload document</DialogTitle>
+            <DialogDescription>
+              Attach a document to a specific loan account. Our operations team will pick it up
+              automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Loan account</Label>
+              <Select value={uploadLoanId} onValueChange={setUploadLoanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a loan" />
+                </SelectTrigger>
+                <SelectContent>
+                  {loans.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>
+                      {l.loan_account_number}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Document type</Label>
+              <Select value={uploadType} onValueChange={setUploadType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BOARD_RESOLUTION">Board resolution</SelectItem>
+                  <SelectItem value="FINANCIAL_STATEMENT">Financial statement</SelectItem>
+                  <SelectItem value="PROJECT_PROPOSAL">Project proposal</SelectItem>
+                  <SelectItem value="SUPPORTING_DOCUMENT">Supporting document</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>File</Label>
+              <Input type="file" onChange={(e) => setUploadFile(e.target.files?.[0] ?? null)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUploadOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleUpload}
+              disabled={uploading || !uploadFile || !uploadLoanId}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              {uploading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
+              Upload
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
@@ -258,9 +387,9 @@ export default function PortalDocuments() {
           {/* Filters */}
           <Card>
             <CardContent className="p-4">
-              <div className="flex flex-col md:flex-row gap-4">
-                <div className="flex-1 relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <div className="flex flex-col gap-4 md:flex-row">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                   <Input
                     placeholder="Search documents..."
                     value={searchQuery}
@@ -289,9 +418,7 @@ export default function PortalDocuments() {
           <Card>
             <CardHeader>
               <CardTitle className="text-base">Available Documents</CardTitle>
-              <CardDescription>
-                {filteredDocuments.length} document(s) found
-              </CardDescription>
+              <CardDescription>{filteredDocuments.length} document(s) found</CardDescription>
             </CardHeader>
             <CardContent>
               {filteredDocuments.length > 0 ? (
@@ -303,7 +430,7 @@ export default function PortalDocuments() {
                     >
                       <div className="flex items-center gap-4">
                         <div
-                          className={`p-3 rounded-lg ${
+                          className={`rounded-lg p-3 ${
                             documentTypeIcons[doc.document_type] || 'bg-gray-100 text-gray-600'
                           }`}
                         >
@@ -325,7 +452,7 @@ export default function PortalDocuments() {
                             <span>{formatFileSize(doc.file_size)}</span>
                           </div>
                           <p className="text-xs text-gray-400">
-                            Uploaded: {new Date(doc.uploaded_at).toLocaleDateString()}
+                            Uploaded: <DateDisplay date={doc.uploaded_at} />
                           </p>
                         </div>
                       </div>
@@ -351,8 +478,8 @@ export default function PortalDocuments() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-12 text-gray-500">
-                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <div className="py-12 text-center text-gray-500">
+                  <FileText className="mx-auto mb-4 h-12 w-12 opacity-50" />
                   <p>No documents found</p>
                   {searchQuery && (
                     <Button variant="link" onClick={() => setSearchQuery('')}>
@@ -366,11 +493,11 @@ export default function PortalDocuments() {
         </TabsContent>
 
         <TabsContent value="generate" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {/* Account Statement */}
             <Card>
               <CardHeader>
-                <div className="p-3 bg-gray-100 rounded-lg w-fit">
+                <div className="w-fit rounded-lg bg-gray-100 p-3">
                   <FileText className="h-5 w-5 text-gray-600" />
                 </div>
                 <CardTitle className="text-base">Account Statement</CardTitle>
@@ -437,7 +564,7 @@ export default function PortalDocuments() {
             {/* Interest Certificate */}
             <Card>
               <CardHeader>
-                <div className="p-3 bg-yellow-100 rounded-lg w-fit">
+                <div className="w-fit rounded-lg bg-yellow-100 p-3">
                   <IndianRupee className="h-5 w-5 text-yellow-600" />
                 </div>
                 <CardTitle className="text-base">Interest Certificate</CardTitle>
@@ -499,7 +626,7 @@ export default function PortalDocuments() {
             {/* TDS Certificate */}
             <Card>
               <CardHeader>
-                <div className="p-3 bg-indigo-100 rounded-lg w-fit">
+                <div className="w-fit rounded-lg bg-indigo-100 p-3">
                   <FileCheck className="h-5 w-5 text-indigo-600" />
                 </div>
                 <CardTitle className="text-base">TDS Certificate (Form 16A)</CardTitle>

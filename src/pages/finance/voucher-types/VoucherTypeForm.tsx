@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Loader2, Save } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,9 +18,16 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { voucherTypesApi, organizationsApi } from '@/services/api';
-import type { VoucherType, VoucherTypeCreate, VoucherTypeUpdate, Organization, PaginatedResponse } from '@/types';
+import type {
+  VoucherType,
+  VoucherTypeCreate,
+  VoucherTypeUpdate,
+  Organization,
+  PaginatedResponse,
+} from '@/types';
 import { VOUCHER_CLASSES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function VoucherTypeForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -42,30 +50,20 @@ export function VoucherTypeForm() {
   const requiresApproval = watch('requires_approval');
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchVoucherType(id);
-    }
-  }, [id, isEdit]);
-
-  useEffect(() => {
     setShowApprovalLevels(requiresApproval === true);
   }, [requiresApproval]);
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchVoucherType = async (vtId: string) => {
+  const fetchVoucherType = useCallback(async (vtId: string) => {
     try {
       setLoading(true);
       const response = await voucherTypesApi.get(vtId);
@@ -86,11 +84,21 @@ export function VoucherTypeForm() {
         organization_id: vt.organization_id,
       });
     } catch (error) {
-      console.error('Failed to fetch voucher type:', error);
+      logger.error('Failed to fetch voucher type:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      fetchVoucherType(id);
+    }
+  }, [fetchVoucherType, id, isEdit]);
 
   const onSubmit = async (data: VoucherTypeCreate | VoucherTypeUpdate) => {
     try {
@@ -98,7 +106,7 @@ export function VoucherTypeForm() {
       // Set approval_levels to 0 if not required
       const submitData = {
         ...data,
-        approval_levels: data.requires_approval ? (data.approval_levels || 1) : 0,
+        approval_levels: data.requires_approval ? data.approval_levels || 1 : 0,
       };
       if (isEdit && id) {
         await voucherTypesApi.update(id, submitData);
@@ -107,7 +115,7 @@ export function VoucherTypeForm() {
       }
       navigate('/admin/finance/voucher-types');
     } catch (error) {
-      console.error('Failed to save voucher type:', error);
+      logger.error('Failed to save voucher type:', error);
     } finally {
       setSubmitting(false);
     }
@@ -123,19 +131,14 @@ export function VoucherTypeForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/voucher-types')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Voucher Type' : 'New Voucher Type'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {isEdit ? 'Update voucher type configuration' : 'Create a new voucher type'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Voucher Type' : 'New Voucher Type'}
+        subtitle={isEdit ? 'Update voucher type configuration' : 'Create a new voucher type'}
+        breadcrumbs={[
+          { label: 'Voucher Types', to: '/admin/finance/voucher-types' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
@@ -168,7 +171,7 @@ export function VoucherTypeForm() {
                 <Label htmlFor="voucher_class">Voucher Class *</Label>
                 <Select
                   value={watch('voucher_class') || ''}
-                  onValueChange={(value) => setValue('voucher_class', value as any)}
+                  onValueChange={(value) => setValue('voucher_class', value as VoucherTypeCreate['voucher_class'])}
                   disabled={isEdit}
                 >
                   <SelectTrigger>
@@ -194,9 +197,7 @@ export function VoucherTypeForm() {
                   placeholder="JV"
                   disabled={isEdit}
                 />
-                {errors.code && (
-                  <p className="text-sm text-red-500">{errors.code.message}</p>
-                )}
+                {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Voucher Type Name *</Label>
@@ -205,9 +206,7 @@ export function VoucherTypeForm() {
                   {...register('name', { required: 'Name is required' })}
                   placeholder="Journal Voucher"
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
-                )}
+                {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
               </div>
             </div>
 
@@ -243,11 +242,7 @@ export function VoucherTypeForm() {
             <div className="grid gap-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="prefix">Prefix</Label>
-                <Input
-                  id="prefix"
-                  {...register('prefix')}
-                  placeholder="JV-"
-                />
+                <Input id="prefix" {...register('prefix')} placeholder="JV-" />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="starting_number">Starting Number</Label>

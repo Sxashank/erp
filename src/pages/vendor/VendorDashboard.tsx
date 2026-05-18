@@ -2,8 +2,6 @@
  * Vendor Portal Dashboard
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   ShoppingCart,
   FileText,
@@ -18,14 +16,19 @@ import {
   Clock,
   CheckCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { vendorDashboardApi } from '@/services/vendorApi';
 import type { VendorDashboardSummary, PendingAction, VendorNotification } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<VendorDashboardSummary | null>(null);
@@ -48,7 +51,7 @@ export default function VendorDashboard() {
       setPendingActions(actionsRes.data.actions || []);
       setNotifications(notificationsRes.data.items || []);
     } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
+      logger.error('Failed to fetch dashboard data:', error);
     } finally {
       setLoading(false);
     }
@@ -73,9 +76,26 @@ export default function VendorDashboard() {
     return colors[priority] || colors.medium;
   };
 
+  const getPendingActionPath = (action: PendingAction) => {
+    switch (action.type) {
+      case 'po_acknowledgement':
+        return `/vendor/purchase-orders/${action.reference_id}`;
+      case 'asn':
+        return `/vendor/asn/${action.reference_id}`;
+      case 'invoices':
+      case 'invoice':
+        return `/vendor/invoices/${action.reference_id}`;
+      case 'payments':
+      case 'payment':
+        return `/vendor/payments/${action.reference_id}`;
+      default:
+        return '/vendor/dashboard';
+    }
+  };
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
       </div>
     );
@@ -89,9 +109,9 @@ export default function VendorDashboard() {
       />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* PO Stats */}
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="transition-shadow hover:shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Pending POs</CardTitle>
             <ShoppingCart className="h-5 w-5 text-purple-600" />
@@ -100,11 +120,9 @@ export default function VendorDashboard() {
             <div className="text-2xl font-bold">
               {summary?.purchase_orders?.pending_acknowledgement || 0}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Awaiting acknowledgement
-            </p>
+            <p className="mt-1 text-xs text-gray-500">Awaiting acknowledgement</p>
             <Link to="/vendor/purchase-orders?status=pending">
-              <Button variant="link" className="px-0 text-purple-600 mt-2">
+              <Button variant="link" className="mt-2 px-0 text-purple-600">
                 View all <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </Link>
@@ -112,20 +130,16 @@ export default function VendorDashboard() {
         </Card>
 
         {/* Invoice Stats */}
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="transition-shadow hover:shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Draft Invoices</CardTitle>
             <FileText className="h-5 w-5 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {summary?.invoices?.draft || 0}
-            </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Ready to submit
-            </p>
+            <div className="text-2xl font-bold">{summary?.invoices?.draft || 0}</div>
+            <p className="mt-1 text-xs text-gray-500">Ready to submit</p>
             <Link to="/vendor/invoices?status=draft">
-              <Button variant="link" className="px-0 text-purple-600 mt-2">
+              <Button variant="link" className="mt-2 px-0 text-purple-600">
                 View all <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </Link>
@@ -133,7 +147,7 @@ export default function VendorDashboard() {
         </Card>
 
         {/* Outstanding Amount */}
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="transition-shadow hover:shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Outstanding</CardTitle>
             <CreditCard className="h-5 w-5 text-green-600" />
@@ -142,11 +156,9 @@ export default function VendorDashboard() {
             <div className="text-2xl font-bold text-green-600">
               {formatCurrency(summary?.payments?.total_outstanding)}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Total receivable
-            </p>
+            <p className="mt-1 text-xs text-gray-500">Total receivable</p>
             <Link to="/vendor/payments">
-              <Button variant="link" className="px-0 text-purple-600 mt-2">
+              <Button variant="link" className="mt-2 px-0 text-purple-600">
                 View details <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </Link>
@@ -154,25 +166,21 @@ export default function VendorDashboard() {
         </Card>
 
         {/* Compliance */}
-        <Card className="hover:shadow-lg transition-shadow">
+        <Card className="transition-shadow hover:shadow-lg">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-gray-600">Compliance</CardTitle>
             <Shield className="h-5 w-5 text-orange-600" />
           </CardHeader>
           <CardContent>
             <div className="flex items-center space-x-2">
-              <div className="text-2xl font-bold">
-                {summary?.compliance?.verified || 0}
-              </div>
+              <div className="text-2xl font-bold">{summary?.compliance?.verified || 0}</div>
               <span className="text-sm text-gray-500">
                 / {summary?.compliance?.total_documents || 0}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              Documents verified
-            </p>
+            <p className="mt-1 text-xs text-gray-500">Documents verified</p>
             <Link to="/vendor/compliance">
-              <Button variant="link" className="px-0 text-purple-600 mt-2">
+              <Button variant="link" className="mt-2 px-0 text-purple-600">
                 Manage <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </Link>
@@ -181,14 +189,14 @@ export default function VendorDashboard() {
       </div>
 
       {/* Pending Actions & Notifications */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Pending Actions */}
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center">
-                  <AlertCircle className="h-5 w-5 mr-2 text-orange-500" />
+                  <AlertCircle className="mr-2 h-5 w-5 text-orange-500" />
                   Pending Actions
                 </CardTitle>
                 <CardDescription>Items requiring your attention</CardDescription>
@@ -199,8 +207,8 @@ export default function VendorDashboard() {
           <CardContent>
             <ScrollArea className="h-[300px]">
               {pendingActions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                  <CheckCircle className="h-12 w-12 text-green-500 mb-2" />
+                <div className="flex h-full flex-col items-center justify-center text-gray-500">
+                  <CheckCircle className="mb-2 h-12 w-12 text-green-500" />
                   <p>All caught up!</p>
                 </div>
               ) : (
@@ -208,20 +216,18 @@ export default function VendorDashboard() {
                   {pendingActions.map((action, index) => (
                     <div
                       key={index}
-                      className="flex items-start space-x-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors"
+                      className="flex items-start space-x-3 rounded-lg bg-gray-50 p-3 transition-colors hover:bg-gray-100"
                     >
                       <div className="flex-1">
                         <div className="flex items-center space-x-2">
-                          <p className="font-medium text-sm">{action.title}</p>
+                          <p className="text-sm font-medium">{action.title}</p>
                           <Badge className={`text-xs ${getPriorityBadge(action.priority)}`}>
                             {action.priority}
                           </Badge>
                         </div>
-                        <p className="text-sm text-gray-500 mt-1">{action.description}</p>
+                        <p className="mt-1 text-sm text-gray-500">{action.description}</p>
                       </div>
-                      <Link
-                        to={`/vendor/${action.type === 'po_acknowledgement' ? 'purchase-orders' : action.type}/${action.reference_id}`}
-                      >
+                      <Link to={getPendingActionPath(action)}>
                         <Button variant="ghost" size="sm">
                           <ArrowRight className="h-4 w-4" />
                         </Button>
@@ -240,7 +246,7 @@ export default function VendorDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center">
-                  <Bell className="h-5 w-5 mr-2 text-blue-500" />
+                  <Bell className="mr-2 h-5 w-5 text-blue-500" />
                   Notifications
                 </CardTitle>
                 <CardDescription>Recent updates and alerts</CardDescription>
@@ -255,8 +261,8 @@ export default function VendorDashboard() {
           <CardContent>
             <ScrollArea className="h-[300px]">
               {notifications.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                  <Bell className="h-12 w-12 text-gray-300 mb-2" />
+                <div className="flex h-full flex-col items-center justify-center text-gray-500">
+                  <Bell className="mb-2 h-12 w-12 text-gray-300" />
                   <p>No notifications</p>
                 </div>
               ) : (
@@ -264,24 +270,22 @@ export default function VendorDashboard() {
                   {notifications.map((notification) => (
                     <div
                       key={notification.id}
-                      className={`p-3 rounded-lg border-l-4 ${
+                      className={`rounded-lg border-l-4 p-3 ${
                         notification.is_read
-                          ? 'bg-white border-gray-200'
-                          : 'bg-purple-50 border-purple-500'
+                          ? 'border-gray-200 bg-white'
+                          : 'border-purple-500 bg-purple-50'
                       }`}
                     >
                       <div className="flex items-start justify-between">
                         <div>
-                          <p className="font-medium text-sm">{notification.title}</p>
-                          <p className="text-sm text-gray-500 mt-1">{notification.message}</p>
+                          <p className="text-sm font-medium">{notification.title}</p>
+                          <p className="mt-1 text-sm text-gray-500">{notification.message}</p>
                         </div>
                         <Badge variant="outline" className="text-xs">
                           {notification.category}
                         </Badge>
                       </div>
-                      <p className="text-xs text-gray-400 mt-2">
-                        {new Date(notification.created_at).toLocaleDateString()}
-                      </p>
+                      <DateDisplay date={notification.created_at} className="mt-2 text-xs text-gray-400" />
                     </div>
                   ))}
                 </div>
@@ -298,27 +302,39 @@ export default function VendorDashboard() {
           <CardDescription>Common tasks and shortcuts</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             <Link to="/vendor/invoices/new">
-              <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+              <Button
+                variant="outline"
+                className="flex h-20 w-full flex-col items-center justify-center space-y-2"
+              >
                 <FileText className="h-6 w-6 text-purple-600" />
                 <span className="text-sm">Create Invoice</span>
               </Button>
             </Link>
             <Link to="/vendor/asn/new">
-              <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+              <Button
+                variant="outline"
+                className="flex h-20 w-full flex-col items-center justify-center space-y-2"
+              >
                 <Truck className="h-6 w-6 text-purple-600" />
                 <span className="text-sm">Create ASN</span>
               </Button>
             </Link>
             <Link to="/vendor/payments/statement">
-              <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+              <Button
+                variant="outline"
+                className="flex h-20 w-full flex-col items-center justify-center space-y-2"
+              >
                 <TrendingUp className="h-6 w-6 text-purple-600" />
                 <span className="text-sm">Account Statement</span>
               </Button>
             </Link>
             <Link to="/vendor/compliance">
-              <Button variant="outline" className="w-full h-20 flex flex-col items-center justify-center space-y-2">
+              <Button
+                variant="outline"
+                className="flex h-20 w-full flex-col items-center justify-center space-y-2"
+              >
                 <Shield className="h-6 w-6 text-purple-600" />
                 <span className="text-sm">Upload Documents</span>
               </Button>
@@ -333,7 +349,7 @@ export default function VendorDashboard() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="flex items-center">
-                <Clock className="h-5 w-5 mr-2 text-gray-500" />
+                <Clock className="mr-2 h-5 w-5 text-gray-500" />
                 Recent Activity
               </CardTitle>
               <CardDescription>Your latest actions and updates</CardDescription>
@@ -343,26 +359,24 @@ export default function VendorDashboard() {
         <CardContent>
           <div className="space-y-4">
             {/* Summary Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="p-4 bg-blue-50 rounded-lg">
+            <div className="grid grid-cols-2 gap-4 text-center md:grid-cols-4">
+              <div className="rounded-lg bg-blue-50 p-4">
                 <p className="text-2xl font-bold text-blue-600">
                   {summary?.purchase_orders?.acknowledged || 0}
                 </p>
                 <p className="text-xs text-gray-600">POs Acknowledged</p>
               </div>
-              <div className="p-4 bg-green-50 rounded-lg">
+              <div className="rounded-lg bg-green-50 p-4">
                 <p className="text-2xl font-bold text-green-600">
                   {summary?.invoices?.approved || 0}
                 </p>
                 <p className="text-xs text-gray-600">Invoices Approved</p>
               </div>
-              <div className="p-4 bg-purple-50 rounded-lg">
-                <p className="text-2xl font-bold text-purple-600">
-                  {summary?.asn?.delivered || 0}
-                </p>
+              <div className="rounded-lg bg-purple-50 p-4">
+                <p className="text-2xl font-bold text-purple-600">{summary?.asn?.delivered || 0}</p>
                 <p className="text-xs text-gray-600">Shipments Delivered</p>
               </div>
-              <div className="p-4 bg-orange-50 rounded-lg">
+              <div className="rounded-lg bg-orange-50 p-4">
                 <p className="text-2xl font-bold text-orange-600">
                   {summary?.payments?.pending_payments || 0}
                 </p>

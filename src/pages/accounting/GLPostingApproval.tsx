@@ -1,21 +1,4 @@
-import { useState } from 'react';
-import { Link, useParams, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  ArrowLeft,
   BookOpen,
   CheckCircle,
   XCircle,
@@ -24,9 +7,28 @@ import {
   Calendar,
   AlertTriangle,
   History,
-  FileText,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { vouchersApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
+
+import { logger } from "@/lib/logger";
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -35,92 +37,138 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-// Mock pending postings for approval
-const pendingPostings = [
-  {
-    id: '1',
-    postingId: 'GLP2025010010',
-    description: 'Provision for NPA - Q4',
-    postingDate: '2025-01-14',
-    period: 'Jan 2025',
-    entries: [
-      { id: '1', accountCode: '4012', accountName: 'Provision for NPA', debit: 850000, credit: 0 },
-      { id: '2', accountCode: '2010', accountName: 'NPA Provision Reserve', debit: 0, credit: 850000 },
-    ],
-    totalDebit: 850000,
-    totalCredit: 850000,
-    createdBy: 'Risk Team',
-    createdAt: '2025-01-14 16:45:00',
-    priority: 'HIGH',
-    remarks: 'Quarterly NPA provisioning as per RBI guidelines',
-    attachments: ['npa_calculation.xlsx', 'provisioning_schedule.pdf'],
-  },
-  {
-    id: '2',
-    postingId: 'GLP2025010011',
-    description: 'Interest Accrual - Gold Loans',
-    postingDate: '2025-01-15',
-    period: 'Jan 2025',
-    entries: [
-      { id: '1', accountCode: '1009', accountName: 'Interest Receivable - Gold Loans', debit: 320000, credit: 0 },
-      { id: '2', accountCode: '3003', accountName: 'Interest Income - Gold Loans', debit: 0, credit: 320000 },
-    ],
-    totalDebit: 320000,
-    totalCredit: 320000,
-    createdBy: 'Finance Team',
-    createdAt: '2025-01-15 09:30:00',
-    priority: 'NORMAL',
-    remarks: 'Monthly interest accrual for gold loan portfolio',
-    attachments: [],
-  },
-  {
-    id: '3',
-    postingId: 'GLP2025010012',
-    description: 'Salary Accrual - January 2025',
-    postingDate: '2025-01-16',
-    period: 'Jan 2025',
-    entries: [
-      { id: '1', accountCode: '4002', accountName: 'Salary Expense', debit: 1500000, credit: 0 },
-      { id: '2', accountCode: '4005', accountName: 'Employer PF Contribution', debit: 180000, credit: 0 },
-      { id: '3', accountCode: '2005', accountName: 'Salary Payable', debit: 0, credit: 1350000 },
-      { id: '4', accountCode: '2006', accountName: 'TDS Payable', debit: 0, credit: 150000 },
-      { id: '5', accountCode: '2007', accountName: 'PF Payable', debit: 0, credit: 180000 },
-    ],
-    totalDebit: 1680000,
-    totalCredit: 1680000,
-    createdBy: 'HR Finance',
-    createdAt: '2025-01-16 11:00:00',
-    priority: 'NORMAL',
-    remarks: 'Monthly salary accrual with statutory deductions',
-    attachments: ['payroll_summary.xlsx'],
-  },
-];
+interface PendingPosting {
+  id: string;
+  postingId: string;
+  description: string;
+  postingDate: string;
+  period: string;
+  entries: {
+    id: string;
+    accountCode: string;
+    accountName: string;
+    debit: number;
+    credit: number;
+  }[];
+  totalDebit: number;
+  totalCredit: number;
+  createdBy: string;
+  createdAt: string;
+  priority: 'NORMAL' | 'HIGH' | 'URGENT';
+  remarks?: string;
+}
+
+interface VoucherLineDto {
+  id: string;
+  account_code?: string | null;
+  account_name?: string | null;
+  debit_amount?: number | string | null;
+  credit_amount?: number | string | null;
+}
+
+interface VoucherDto {
+  id: string;
+  voucher_number?: string | null;
+  narration?: string | null;
+  voucher_type_name?: string | null;
+  voucher_date?: string | null;
+  financial_year_code?: string | null;
+  lines?: VoucherLineDto[];
+  total_debit?: number | string | null;
+  total_credit?: number | string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+}
 
 export default function GLPostingApproval() {
   const { id } = useParams();
-  const navigate = useNavigate();
-  const [selectedPosting, setSelectedPosting] = useState<typeof pendingPostings[0] | null>(
-    id ? pendingPostings.find(p => p.id === id) || null : null
-  );
+  const organizationId = useActiveOrganizationId();
+  const [pendingPostings, setPendingPostings] = useState<PendingPosting[]>([]);
+  const [selectedPosting, setSelectedPosting] = useState<PendingPosting | null>(null);
   const [approvalRemarks, setApprovalRemarks] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  const mapVoucher = useCallback((voucher: VoucherDto): PendingPosting => ({
+    id: voucher.id,
+    postingId: voucher.voucher_number || '-',
+    description: voucher.narration || voucher.voucher_type_name || 'Voucher posting',
+    postingDate: voucher.voucher_date || '-',
+    period: voucher.financial_year_code || '-',
+    entries: (voucher.lines || []).map((line) => ({
+      id: line.id,
+      accountCode: line.account_code || '-',
+      accountName: line.account_name || '-',
+      debit: Number(line.debit_amount || 0),
+      credit: Number(line.credit_amount || 0),
+    })),
+    totalDebit: Number(voucher.total_debit || 0),
+    totalCredit: Number(voucher.total_credit || 0),
+    createdBy: voucher.created_by || '-',
+    createdAt: voucher.created_at || '-',
+    priority: Number(voucher.total_debit || 0) >= 5000000 ? 'HIGH' : 'NORMAL',
+    remarks: voucher.narration || undefined,
+  }), []);
+
+  const selectPosting = useCallback(async (posting: PendingPosting) => {
+    try {
+      const response = await vouchersApi.get(posting.id);
+      setSelectedPosting(mapVoucher(response.data as VoucherDto));
+    } catch (error) {
+      logger.error('Failed to load posting detail:', error);
+      setSelectedPosting(posting);
+    }
+  }, [mapVoucher]);
+
+  const loadPendingPostings = useCallback(async () => {
+    if (!organizationId) return;
+    try {
+      const response = await vouchersApi.getPendingApproval({
+        organization_id: organizationId,
+        page_size: 100,
+      });
+      const postings = ((response.data || []) as VoucherDto[]).map(mapVoucher);
+      setPendingPostings(postings);
+      if (id) {
+        const selected = postings.find((posting) => posting.id === id);
+        if (selected) {
+          await selectPosting(selected);
+        }
+      }
+    } catch (error) {
+      logger.error('Failed to load pending GL postings:', error);
+      setPendingPostings([]);
+    }
+  }, [id, mapVoucher, organizationId, selectPosting]);
+
+  useEffect(() => {
+    loadPendingPostings();
+  }, [loadPendingPostings]);
 
   const handleApprove = async () => {
     if (!selectedPosting) return;
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsProcessing(false);
-    setSelectedPosting(null);
-    setApprovalRemarks('');
+    try {
+      await vouchersApi.approve(selectedPosting.id, approvalRemarks);
+      await vouchersApi.post(selectedPosting.id);
+      await loadPendingPostings();
+      setSelectedPosting(null);
+      setApprovalRemarks('');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleReject = async () => {
     if (!selectedPosting) return;
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsProcessing(false);
-    setSelectedPosting(null);
-    setApprovalRemarks('');
+    try {
+      await vouchersApi.reject(selectedPosting.id, approvalRemarks || 'Rejected during approval review');
+      await loadPendingPostings();
+      setSelectedPosting(null);
+      setApprovalRemarks('');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const getPriorityBadge = (priority: string) => {
@@ -193,12 +241,13 @@ export default function GLPostingApproval() {
           <CardContent>
             <div className="space-y-3">
               {pendingPostings.map((posting) => (
-                <div
+                <button
+                  type="button"
                   key={posting.id}
-                  className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                  className={`w-full p-4 border rounded-lg text-left transition-colors ${
                     selectedPosting?.id === posting.id ? 'border-primary bg-muted/50' : 'hover:bg-muted/30'
                   }`}
-                  onClick={() => setSelectedPosting(posting)}
+                  onClick={() => selectPosting(posting)}
                 >
                   <div className="flex items-start justify-between">
                     <div>
@@ -213,7 +262,7 @@ export default function GLPostingApproval() {
                   <div className="mt-2 text-sm font-medium">
                     {formatCurrency(posting.totalDebit)}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </CardContent>
@@ -300,20 +349,6 @@ export default function GLPostingApproval() {
                 </div>
 
                 {/* Attachments */}
-                {selectedPosting.attachments.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-2">Attachments</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedPosting.attachments.map((file, index) => (
-                        <Badge key={index} variant="outline" className="flex items-center gap-1">
-                          <FileText className="h-3 w-3" />
-                          {file}
-                        </Badge>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 {/* Audit Info */}
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div className="flex items-center gap-2">

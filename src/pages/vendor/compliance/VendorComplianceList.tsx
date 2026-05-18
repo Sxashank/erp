@@ -2,8 +2,6 @@
  * Vendor Compliance Documents
  */
 
-import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Shield,
   Upload,
@@ -16,15 +14,20 @@ import {
   Calendar,
   XCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { vendorComplianceApi } from '@/services/vendorApi';
 import type { ComplianceDocument, ComplianceSummary } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 const DOCUMENT_TYPES = [
   { value: 'PAN_CARD', label: 'PAN Card' },
   { value: 'GST_CERTIFICATE', label: 'GST Certificate' },
@@ -66,7 +69,7 @@ export default function VendorComplianceList() {
       setSummary(summaryRes.data);
       setExpiringDocs(expiringRes.data);
     } catch (error) {
-      console.error('Failed to fetch compliance data:', error);
+      logger.error('Failed to fetch compliance data:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -184,7 +187,7 @@ export default function VendorComplianceList() {
                   <div>
                     <p className="font-medium">{doc.document_name}</p>
                     <p className="text-sm text-gray-500">
-                      Expires on {new Date(doc.expiry_date!).toLocaleDateString()}
+                      Expires on <DateDisplay date={doc.expiry_date!} />
                     </p>
                   </div>
                   <Badge variant="outline" className="text-orange-600 border-orange-300">
@@ -254,7 +257,7 @@ export default function VendorComplianceList() {
                         <div className="flex items-center space-x-1 text-xs">
                           <Calendar className="h-3 w-3 text-gray-400" />
                           <span className={doc.is_expired ? 'text-red-600' : 'text-gray-600'}>
-                            Expires: {new Date(doc.expiry_date).toLocaleDateString()}
+                            Expires: <DateDisplay date={doc.expiry_date} />
                           </span>
                         </div>
                       )}

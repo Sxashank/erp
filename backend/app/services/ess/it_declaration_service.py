@@ -711,3 +711,27 @@ class ESSITDeclarationService:
 
         result = await self.session.execute(query)
         return list(result.scalars().all()), total
+
+    async def cancel_regularization_request(
+        self,
+        employee_id: UUID,
+        request_id: UUID,
+    ) -> bool:
+        """Cancel a pending regularization request owned by an employee."""
+        query = select(AttendanceRegularization).where(
+            and_(
+                AttendanceRegularization.id == request_id,
+                AttendanceRegularization.employee_id == employee_id,
+            )
+        )
+        result = await self.session.execute(query)
+        regularization = result.scalar_one_or_none()
+        if not regularization:
+            return False
+
+        if regularization.status != RegularizationStatus.PENDING.value:
+            raise ValueError("Only pending regularization requests can be cancelled")
+
+        regularization.status = RegularizationStatus.CANCELLED.value
+        await self.session.flush()
+        return True

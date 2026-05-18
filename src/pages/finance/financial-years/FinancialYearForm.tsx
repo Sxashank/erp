@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Lock, Loader2, Save } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Lock, Loader2, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +27,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { financialYearsApi, organizationsApi } from '@/services/api';
-import type { FinancialYear, FinancialYearCreate, FinancialYearUpdate, Organization, PaginatedResponse } from '@/types';
+import { logger } from "@/lib/logger";
+import type {
+  FinancialYear,
+  FinancialYearCreate,
+  FinancialYearUpdate,
+  Organization,
+  PaginatedResponse,
+} from '@/types';
 
 export function FinancialYearForm() {
   const { id } = useParams();
@@ -46,27 +55,17 @@ export function FinancialYearForm() {
     formState: { errors },
   } = useForm<FinancialYearCreate | FinancialYearUpdate>();
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchFinancialYear(id);
-    }
-  }, [id, isEdit]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchFinancialYear = async (fyId: string) => {
+  const fetchFinancialYear = useCallback(async (fyId: string) => {
     try {
       setLoading(true);
       const response = await financialYearsApi.get(fyId);
@@ -81,19 +80,33 @@ export function FinancialYearForm() {
         is_current: fy.is_current,
       });
     } catch (error) {
-      console.error('Failed to fetch financial year:', error);
+      logger.error('Failed to fetch financial year:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      fetchFinancialYear(id);
+    }
+  }, [fetchFinancialYear, id, isEdit]);
 
   const handleClosePeriod = async (periodId: string) => {
-    if (!id || !confirm('Are you sure you want to close this period? This action cannot be undone.')) return;
+    if (
+      !id ||
+      !confirm('Are you sure you want to close this period? This action cannot be undone.')
+    )
+      return;
     try {
       await financialYearsApi.closePeriod(id, periodId);
       fetchFinancialYear(id);
     } catch (error) {
-      console.error('Failed to close period:', error);
+      logger.error('Failed to close period:', error);
     }
   };
 
@@ -107,18 +120,10 @@ export function FinancialYearForm() {
       }
       navigate('/admin/finance/financial-years');
     } catch (error) {
-      console.error('Failed to save financial year:', error);
+      logger.error('Failed to save financial year:', error);
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
   };
 
   if (loading) {
@@ -131,19 +136,16 @@ export function FinancialYearForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/financial-years')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Financial Year' : 'New Financial Year'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {isEdit ? 'Update financial year details' : 'Create a new financial year with periods'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Financial Year' : 'New Financial Year'}
+        subtitle={
+          isEdit ? 'Update financial year details' : 'Create a new financial year with periods'
+        }
+        breadcrumbs={[
+          { label: 'Financial Years', to: '/admin/finance/financial-years' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
@@ -183,9 +185,7 @@ export function FinancialYearForm() {
                   placeholder="FY2024-25"
                   disabled={isEdit}
                 />
-                {errors.code && (
-                  <p className="text-sm text-red-500">{errors.code.message}</p>
-                )}
+                {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
               </div>
             </div>
 
@@ -196,9 +196,7 @@ export function FinancialYearForm() {
                 {...register('name', { required: 'Name is required' })}
                 placeholder="April 2024 - March 2025"
               />
-              {errors.name && (
-                <p className="text-sm text-red-500">{errors.name.message}</p>
-              )}
+              {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -264,8 +262,8 @@ export function FinancialYearForm() {
                     <TableRow key={period.id}>
                       <TableCell className="font-medium">P{period.period_number}</TableCell>
                       <TableCell>{period.name}</TableCell>
-                      <TableCell>{formatDate(period.start_date)}</TableCell>
-                      <TableCell>{formatDate(period.end_date)}</TableCell>
+                      <TableCell><DateDisplay date={period.start_date} /></TableCell>
+                      <TableCell><DateDisplay date={period.end_date} /></TableCell>
                       <TableCell>
                         <Badge
                           className={

@@ -19,6 +19,9 @@ from typing import Any
 import structlog
 
 from app.core.feature_flags import FeatureFlagState, get_flag
+from app.services.email import email_service
+from app.services.notification.push_service import push_service
+from app.services.notification.sms_service import sms_service
 
 logger = structlog.get_logger("communication")
 
@@ -31,11 +34,11 @@ class Channel(str, Enum):
 
 
 class DispatchStatus(str, Enum):
-    SENT = "sent"            # provider acknowledged
-    QUEUED = "queued"        # accepted for async send (bulk fan-out)
-    MOCKED = "mocked"        # running in dev/test — logged but not sent
-    DISABLED = "disabled"    # feature flag OFF — no attempt made
-    FAILED = "failed"        # transport error; check result.error
+    SENT = "sent"  # provider acknowledged
+    QUEUED = "queued"  # accepted for async send (bulk fan-out)
+    MOCKED = "mocked"  # running in dev/test — logged but not sent
+    DISABLED = "disabled"  # feature flag OFF — no attempt made
+    FAILED = "failed"  # transport error; check result.error
 
 
 @dataclass(frozen=True)
@@ -188,3 +191,135 @@ class CommunicationService:
 # import communication_service`. Real providers register during app
 # startup in main.py (STAGE-6-PENDING-sms-live etc.).
 communication_service = CommunicationService()
+
+
+class _SMSGatewayProvider:
+    """Adapter from the portal communication surface to ``sms_service``."""
+
+    async def send(
+        self,
+        *,
+        recipient: Recipient,
+        template_code: str,
+        context: dict[str, Any],
+    ) -> DispatchResult:
+        if not sms_service.enabled:
+            return DispatchResult(
+                channel=Channel.SMS,
+                status=DispatchStatus.FAILED,
+                error="SMS provider is not configured",
+            )
+
+        message = str(context.get("message") or "").strip()
+        if not message:
+            return DispatchResult(
+                channel=Channel.SMS,
+                status=DispatchStatus.FAILED,
+                error="message is required for SMS dispatch",
+            )
+
+        success = await sms_service.send_sms(
+            to=recipient.phone or "",
+            message=message,
+        )
+        return DispatchResult(
+            channel=Channel.SMS,
+            status=DispatchStatus.SENT if success else DispatchStatus.FAILED,
+            provider_message_id=f"sms-{template_code.lower()}",
+            error=None if success else "SMS provider rejected the dispatch",
+        )
+
+
+class _EmailGatewayProvider:
+    """Adapter from the portal communication surface to ``email_service``."""
+
+    async def send(
+        self,
+        *,
+        recipient: Recipient,
+        template_code: str,
+        context: dict[str, Any],
+    ) -> DispatchResult:
+        if not email_service.enabled:
+            return DispatchResult(
+                channel=Channel.EMAIL,
+                status=DispatchStatus.FAILED,
+                error="Email provider is not configured",
+            )
+
+        subject = str(context.get("subject") or template_code.replace("_", " ").title()).strip()
+        html_body = str(context.get("html_body") or "").strip()
+        if not html_body:
+            message = str(context.get("message") or "").strip()
+            if not message:
+                return DispatchResult(
+                    channel=Channel.EMAIL,
+                    status=DispatchStatus.FAILED,
+                    error="email content is required for dispatch",
+                )
+            html_body = f"<html><body><p>{message}</p></body></html>"
+
+        success = await email_service.send_email(
+            to=[recipient.email or ""],
+            subject=subject,
+            html_body=html_body,
+        )
+        return DispatchResult(
+            channel=Channel.EMAIL,
+            status=DispatchStatus.SENT if success else DispatchStatus.FAILED,
+            provider_message_id=f"email-{template_code.lower()}",
+            error=None if success else "Email provider rejected the dispatch",
+        )
+
+
+class _PushGatewayProvider:
+    """Adapter from the portal communication surface to ``push_service``."""
+
+    async def send(
+        self,
+        *,
+        recipient: Recipient,
+        template_code: str,
+        context: dict[str, Any],
+    ) -> DispatchResult:
+        if not push_service.enabled:
+            return DispatchResult(
+                channel=Channel.PUSH,
+                status=DispatchStatus.FAILED,
+                error="Push provider is not configured",
+            )
+        if not recipient.device_token:
+            return DispatchResult(
+                channel=Channel.PUSH,
+                status=DispatchStatus.FAILED,
+                error="recipient has no device token for push dispatch",
+            )
+
+        title = str(context.get("title") or template_code.replace("_", " ").title()).strip()
+        body = str(context.get("message") or context.get("body") or "").strip()
+        if not body:
+            return DispatchResult(
+                channel=Channel.PUSH,
+                status=DispatchStatus.FAILED,
+                error="push body is required for dispatch",
+            )
+
+        success = await push_service.send_to_tokens(
+            tokens=[recipient.device_token],
+            title=title,
+            body=body,
+            data=context.get("data") if isinstance(context.get("data"), dict) else None,
+        )
+        success_count = int(success.get("success", 0))
+        is_success = success_count > 0
+        return DispatchResult(
+            channel=Channel.PUSH,
+            status=DispatchStatus.SENT if is_success else DispatchStatus.FAILED,
+            provider_message_id=f"push-{template_code.lower()}",
+            error=None if is_success else "Push provider rejected the dispatch",
+        )
+
+
+communication_service.register_provider(Channel.SMS, _SMSGatewayProvider())
+communication_service.register_provider(Channel.EMAIL, _EmailGatewayProvider())
+communication_service.register_provider(Channel.PUSH, _PushGatewayProvider())

@@ -3,19 +3,6 @@
  * View and request updates to employee profile
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   User,
   Mail,
@@ -31,11 +18,29 @@ import {
   CheckCircle,
   XCircle,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { essProfileApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { ESSProfile, ESSProfileUpdateRequest, ProfileUpdateType } from '@/types/ess';
 
+import { logger } from "@/lib/logger";
 export default function ESSProfilePage() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ESSProfile | null>(null);
   const [updateRequests, setUpdateRequests] = useState<ESSProfileUpdateRequest[]>([]);
@@ -44,13 +49,12 @@ export default function ESSProfilePage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('ess_access_token');
-    if (!token) {
+    if (!accessToken) {
       navigate('/ess/login');
       return;
     }
     fetchData();
-  }, [navigate]);
+  }, [accessToken, navigate]);
 
   const fetchData = async () => {
     try {
@@ -59,9 +63,9 @@ export default function ESSProfilePage() {
         essProfileApi.getUpdateRequests(),
       ]);
       setProfile(profileRes.data);
-      setUpdateRequests(requestsRes.data?.items || []);
+      setUpdateRequests(Array.isArray(requestsRes.data) ? requestsRes.data : requestsRes.data?.items || []);
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
+      logger.error('Failed to fetch profile:', error);
     } finally {
       setLoading(false);
     }
@@ -89,7 +93,7 @@ export default function ESSProfilePage() {
       setEditDialogOpen(false);
       fetchData();
     } catch (error) {
-      console.error('Failed to submit request:', error);
+      logger.error('Failed to submit request:', error);
     } finally {
       setSubmitting(false);
     }
@@ -442,7 +446,7 @@ export default function ESSProfilePage() {
                       </div>
                       <p className="text-sm text-gray-500">Request #: {request.request_number}</p>
                       <p className="text-sm text-gray-500">
-                        Submitted: {new Date(request.created_at).toLocaleDateString()}
+                        Submitted: <DateDisplay date={request.created_at} />
                       </p>
                       {request.reviewer_remarks && (
                         <p className="text-sm text-gray-600 mt-2">

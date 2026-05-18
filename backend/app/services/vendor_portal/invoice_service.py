@@ -93,7 +93,7 @@ class VendorInvoiceService:
         # Recalculate totals
         await self._recalculate_invoice_totals(invoice)
 
-        await self.session.commit()
+        await self.session.flush()
         return await self.invoice_repo.get_with_details(invoice.id)
 
     async def update_invoice(
@@ -112,7 +112,7 @@ class VendorInvoiceService:
         update_data = data.model_dump(exclude_unset=True)
         invoice = await self.invoice_repo.update(invoice, update_data)
 
-        await self.session.commit()
+        await self.session.flush()
         return await self.invoice_repo.get_with_details(id)
 
     async def add_line(
@@ -135,7 +135,7 @@ class VendorInvoiceService:
         # Recalculate totals
         await self._recalculate_invoice_totals(invoice)
 
-        await self.session.commit()
+        await self.session.flush()
         return line
 
     async def validate_invoice(
@@ -156,7 +156,7 @@ class VendorInvoiceService:
         invoice.matching_remarks = matching_result.message
         invoice.matching_exceptions = matching_result.exceptions
 
-        await self.session.commit()
+        await self.session.flush()
 
         return matching_result
 
@@ -201,7 +201,7 @@ class VendorInvoiceService:
         elif matching_result.matching_status == InvoiceMatchingStatus.MISMATCH:
             invoice.status = VendorInvoiceStatus.EXCEPTION
 
-        await self.session.commit()
+        await self.session.flush()
 
         return invoice
 
@@ -231,7 +231,7 @@ class VendorInvoiceService:
 
         # TODO: Create purchase bill from approved invoice
 
-        await self.session.commit()
+        await self.session.flush()
 
         return invoice
 
@@ -258,7 +258,7 @@ class VendorInvoiceService:
         invoice.rejected_at = datetime.utcnow()
         invoice.rejection_reason = reason
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send rejection notification to vendor
 
@@ -313,7 +313,7 @@ class VendorInvoiceService:
         }
 
         document = await self.doc_repo.create(doc_data)
-        await self.session.commit()
+        await self.session.flush()
 
         return document
 

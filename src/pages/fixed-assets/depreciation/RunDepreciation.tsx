@@ -1,11 +1,19 @@
-import { useEffect, useState } from 'react';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Play } from 'lucide-react';
+import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Play } from 'lucide-react';
 
+import { FormSection, FormShell, PageHeader } from '@/components/common';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -14,155 +22,135 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { fixedAssetsApi, organizationsApi } from '@/services/api';
-import type { Organization, PaginatedResponse } from '@/types';
+import { useRunDepreciation } from '@/hooks/fixed-assets/useDepreciation';
+import { useToast } from '@/hooks/use-toast';
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import { showErrorToast } from '@/lib/errorToast';
+import {
+  depreciationRunSchema,
+  type DepreciationRunInput,
+} from '@/schemas/fixed-assets/depreciationSchema';
 
-export function RunDepreciation() {
+export function RunDepreciation(): JSX.Element {
+  const organizationId = useRequiredActiveOrganizationId();
   const navigate = useNavigate();
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
-  const [runLoading, setRunLoading] = useState(false);
-  const [runPeriod, setRunPeriod] = useState('');
-  const [runRemarks, setRunRemarks] = useState('');
-  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
+  const runMutation = useRunDepreciation(organizationId);
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
+  const form = useForm<DepreciationRunInput>({
+    resolver: zodResolver(depreciationRunSchema),
+    defaultValues: {
+      depreciationPeriod: '',
+      depreciationBook: 'COMPANIES_ACT',
+      remarks: '',
+    },
+  });
 
-  const fetchOrganizations = async () => {
+  async function onSubmit(values: DepreciationRunInput) {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
-      const data: PaginatedResponse<Organization> = response.data;
-      setOrganizations(data.items);
-      if (data.items.length > 0) {
-        setSelectedOrgId(data.items[0].id);
-      }
-    } catch (error) {
-      console.error('Failed to fetch organizations:', error);
-    }
-  };
-
-  const handleRunDepreciation = async () => {
-    if (!selectedOrgId || !runPeriod) return;
-    try {
-      setRunLoading(true);
-      setError(null);
-      await fixedAssetsApi.runDepreciation({
-        organization_id: selectedOrgId,
-        depreciation_period: runPeriod,
-        remarks: runRemarks || undefined,
+      const run = await runMutation.mutateAsync({
+        organizationId,
+        depreciationPeriod: values.depreciationPeriod,
+        depreciationBook: values.depreciationBook,
+        remarks: values.remarks || null,
       });
-      navigate('/admin/fixed-assets/depreciation');
-    } catch (error: any) {
-      console.error('Failed to run depreciation:', error);
-      setError(error.response?.data?.detail || 'Failed to run depreciation');
-    } finally {
-      setRunLoading(false);
+      toast({ title: `Depreciation run ${run.depreciationPeriod} completed` });
+      navigate(`/admin/fixed-assets/depreciation/runs/${run.id}`);
+    } catch (error) {
+      showErrorToast(error, toast);
     }
-  };
-
-  const formatPeriod = (period: string) => {
-    const [year, month] = period.split('-');
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${monthNames[parseInt(month) - 1]} ${year}`;
-  };
-
-  const getPeriodOptions = () => {
-    const options = [];
-    const now = new Date();
-    for (let i = 0; i < 12; i++) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-      const label = formatPeriod(value);
-      options.push({ value, label });
-    }
-    return options;
-  };
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Run Depreciation"
-        subtitle="Calculate and record depreciation for all active assets"
+        subtitle="Create a monthly depreciation run for the current organization."
         breadcrumbs={[
-          { label: 'Depreciation', to: '/admin/fixed-assets/depreciation' },
+          { label: 'Fixed Assets' },
+          { label: 'Depreciation Runs', to: '/admin/fixed-assets/depreciation' },
           { label: 'Run' },
         ]}
       />
 
-      <Card className="max-w-xl">
-        <CardHeader>
-          <CardTitle>Depreciation Parameters</CardTitle>
-          <CardDescription>
-            Select the period and organization to process monthly depreciation
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="organization">Organization</Label>
-            <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select organization" />
-              </SelectTrigger>
-              <SelectContent>
-                {organizations.map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
-                    {org.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="period">Depreciation Period</Label>
-            <Select value={runPeriod} onValueChange={setRunPeriod}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select period" />
-              </SelectTrigger>
-              <SelectContent>
-                {getPeriodOptions().map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="remarks">Remarks (Optional)</Label>
-            <Textarea
-              id="remarks"
-              value={runRemarks}
-              onChange={(e) => setRunRemarks(e.target.value)}
-              placeholder="Add any notes for this depreciation run"
-              rows={3}
-            />
-          </div>
-
-          {error && (
-            <div className="p-3 text-sm text-red-600 bg-red-50 rounded-md">
-              {error}
-            </div>
-          )}
-
-          <div className="flex justify-end gap-4 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate('/admin/fixed-assets/depreciation')}
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <FormShell
+            footer={
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => navigate('/admin/fixed-assets/depreciation')}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={form.formState.isSubmitting}>
+                  <Play className="mr-2 h-4 w-4" />
+                  {form.formState.isSubmitting ? 'Running…' : 'Run depreciation'}
+                </Button>
+              </>
+            }
+          >
+            <FormSection
+              title="Run Parameters"
+              description="Pick the accounting book and month to process."
             >
-              Cancel
-            </Button>
-            <Button onClick={handleRunDepreciation} disabled={!runPeriod || !selectedOrgId || runLoading}>
-              <Play className="mr-2 h-4 w-4" />
-              {runLoading ? 'Processing...' : 'Run Depreciation'}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+              <FormField
+                control={form.control}
+                name="depreciationPeriod"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Depreciation period</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="month"
+                        value={field.value}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="depreciationBook"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Book</FormLabel>
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="COMPANIES_ACT">Companies Act</SelectItem>
+                        <SelectItem value="IT_ACT">IT Act</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="remarks"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Remarks</FormLabel>
+                    <FormControl>
+                      <Textarea {...field} rows={3} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </FormSection>
+          </FormShell>
+        </form>
+      </Form>
     </div>
   );
 }

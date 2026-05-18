@@ -1,21 +1,20 @@
 """Entity/Borrower repositories for the lending module."""
 
-from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, and_, func, or_
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models.lending.entity import (
     Entity,
-    EntityContact,
     EntityAddress,
     EntityBankAccount,
-    EntityRelation,
+    EntityContact,
     EntityFinancial,
+    EntityRelation,
 )
-from app.models.lending.enums import EntityType, EntityStatus, RiskCategory
+from app.models.lending.enums import EntityStatus, EntityType, RiskCategory
 from app.repositories.base import BaseRepository
 
 
@@ -25,9 +24,7 @@ class EntityRepository(BaseRepository[Entity]):
     def __init__(self, session: AsyncSession):
         super().__init__(Entity, session)
 
-    async def get_by_code(
-        self, entity_code: str, organization_id: UUID
-    ) -> Optional[Entity]:
+    async def get_by_code(self, entity_code: str, organization_id: UUID) -> Entity | None:
         """Get entity by code within an organization."""
         query = select(Entity).where(
             and_(
@@ -39,9 +36,7 @@ class EntityRepository(BaseRepository[Entity]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_pan(
-        self, pan: str, organization_id: UUID
-    ) -> Optional[Entity]:
+    async def get_by_pan(self, pan: str, organization_id: UUID) -> Entity | None:
         """Get entity by PAN within an organization."""
         query = select(Entity).where(
             and_(
@@ -53,9 +48,7 @@ class EntityRepository(BaseRepository[Entity]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_cin(
-        self, cin: str, organization_id: UUID
-    ) -> Optional[Entity]:
+    async def get_by_cin(self, cin: str, organization_id: UUID) -> Entity | None:
         """Get entity by CIN within an organization."""
         query = select(Entity).where(
             and_(
@@ -67,9 +60,7 @@ class EntityRepository(BaseRepository[Entity]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_gstin(
-        self, gstin: str, organization_id: UUID
-    ) -> Optional[Entity]:
+    async def get_by_gstin(self, gstin: str, organization_id: UUID) -> Entity | None:
         """Get entity by GSTIN within an organization."""
         query = select(Entity).where(
             and_(
@@ -81,7 +72,7 @@ class EntityRepository(BaseRepository[Entity]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_with_details(self, entity_id: UUID) -> Optional[Entity]:
+    async def get_with_details(self, entity_id: UUID) -> Entity | None:
         """Get entity with all related data (contacts, addresses, etc.)."""
         query = (
             select(Entity)
@@ -108,16 +99,14 @@ class EntityRepository(BaseRepository[Entity]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_type: Optional[EntityType] = None,
-        status: Optional[EntityStatus] = None,
-        risk_category: Optional[RiskCategory] = None,
-        relationship_manager_id: Optional[UUID] = None,
-    ) -> Tuple[List[Entity], int]:
+        search: str | None = None,
+        entity_type: EntityType | None = None,
+        status: EntityStatus | None = None,
+        risk_category: RiskCategory | None = None,
+        relationship_manager_id: UUID | None = None,
+    ) -> tuple[list[Entity], int]:
         """Get all entities for an organization with filters."""
-        base_query = select(Entity).where(
-            Entity.organization_id == organization_id
-        )
+        base_query = select(Entity).where(Entity.organization_id == organization_id)
 
         if not include_inactive:
             base_query = base_query.where(Entity.is_active == True)
@@ -145,9 +134,7 @@ class EntityRepository(BaseRepository[Entity]):
             base_query = base_query.where(Entity.risk_category == risk_category)
 
         if relationship_manager_id:
-            base_query = base_query.where(
-                Entity.relationship_manager_id == relationship_manager_id
-            )
+            base_query = base_query.where(Entity.relationship_manager_id == relationship_manager_id)
 
         # Count total
         count_query = select(func.count()).select_from(base_query.subquery())
@@ -164,8 +151,8 @@ class EntityRepository(BaseRepository[Entity]):
     async def get_active_entities(
         self,
         organization_id: UUID,
-        entity_type: Optional[EntityType] = None,
-    ) -> List[Entity]:
+        entity_type: EntityType | None = None,
+    ) -> list[Entity]:
         """Get all active entities for dropdown lists."""
         query = select(Entity).where(
             and_(
@@ -182,9 +169,7 @@ class EntityRepository(BaseRepository[Entity]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def generate_entity_code(
-        self, organization_id: UUID, prefix: str = "ENT"
-    ) -> str:
+    async def generate_entity_code(self, organization_id: UUID, prefix: str = "ENT") -> str:
         """Generate next entity code."""
         import datetime
 
@@ -219,18 +204,16 @@ class EntityContactRepository(BaseRepository[EntityContact]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityContact]:
+    ) -> list[EntityContact]:
         """Get all contacts for an entity."""
         query = select(EntityContact).where(EntityContact.entity_id == entity_id)
         if not include_inactive:
             query = query.where(EntityContact.is_active == True)
-        query = query.order_by(EntityContact.name)
+        query = query.order_by(EntityContact.first_name, EntityContact.last_name)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_authorized_signatories(
-        self, entity_id: UUID
-    ) -> List[EntityContact]:
+    async def get_authorized_signatories(self, entity_id: UUID) -> list[EntityContact]:
         """Get authorized signatories for an entity."""
         query = select(EntityContact).where(
             and_(
@@ -251,7 +234,7 @@ class EntityAddressRepository(BaseRepository[EntityAddress]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityAddress]:
+    ) -> list[EntityAddress]:
         """Get all addresses for an entity."""
         query = select(EntityAddress).where(EntityAddress.entity_id == entity_id)
         if not include_inactive:
@@ -259,9 +242,7 @@ class EntityAddressRepository(BaseRepository[EntityAddress]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_registered_address(
-        self, entity_id: UUID
-    ) -> Optional[EntityAddress]:
+    async def get_registered_address(self, entity_id: UUID) -> EntityAddress | None:
         """Get registered address for an entity."""
         from app.models.lending.enums import AddressType
 
@@ -284,19 +265,15 @@ class EntityBankAccountRepository(BaseRepository[EntityBankAccount]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityBankAccount]:
+    ) -> list[EntityBankAccount]:
         """Get all bank accounts for an entity."""
-        query = select(EntityBankAccount).where(
-            EntityBankAccount.entity_id == entity_id
-        )
+        query = select(EntityBankAccount).where(EntityBankAccount.entity_id == entity_id)
         if not include_inactive:
             query = query.where(EntityBankAccount.is_active == True)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_primary_account(
-        self, entity_id: UUID
-    ) -> Optional[EntityBankAccount]:
+    async def get_primary_account(self, entity_id: UUID) -> EntityBankAccount | None:
         """Get primary bank account for an entity."""
         query = select(EntityBankAccount).where(
             and_(
@@ -308,9 +285,7 @@ class EntityBankAccountRepository(BaseRepository[EntityBankAccount]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_disbursement_account(
-        self, entity_id: UUID
-    ) -> Optional[EntityBankAccount]:
+    async def get_disbursement_account(self, entity_id: UUID) -> EntityBankAccount | None:
         """Get disbursement account for an entity."""
         query = select(EntityBankAccount).where(
             and_(
@@ -331,7 +306,7 @@ class EntityRelationRepository(BaseRepository[EntityRelation]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityRelation]:
+    ) -> list[EntityRelation]:
         """Get all relations for an entity."""
         query = select(EntityRelation).where(EntityRelation.entity_id == entity_id)
         if not include_inactive:
@@ -339,7 +314,7 @@ class EntityRelationRepository(BaseRepository[EntityRelation]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_group_companies(self, entity_id: UUID) -> List[EntityRelation]:
+    async def get_group_companies(self, entity_id: UUID) -> list[EntityRelation]:
         """Get group companies for an entity."""
         from app.models.lending.enums import RelationType
 
@@ -369,7 +344,7 @@ class EntityFinancialRepository(BaseRepository[EntityFinancial]):
 
     async def get_by_entity(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[EntityFinancial]:
+    ) -> list[EntityFinancial]:
         """Get all financials for an entity."""
         query = select(EntityFinancial).where(EntityFinancial.entity_id == entity_id)
         if not include_inactive:
@@ -378,9 +353,7 @@ class EntityFinancialRepository(BaseRepository[EntityFinancial]):
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
-    async def get_latest_financial(
-        self, entity_id: UUID
-    ) -> Optional[EntityFinancial]:
+    async def get_latest_financial(self, entity_id: UUID) -> EntityFinancial | None:
         """Get latest financial year data for an entity."""
         query = (
             select(EntityFinancial)
@@ -398,7 +371,7 @@ class EntityFinancialRepository(BaseRepository[EntityFinancial]):
 
     async def get_by_financial_year(
         self, entity_id: UUID, financial_year: str
-    ) -> Optional[EntityFinancial]:
+    ) -> EntityFinancial | None:
         """Get financial data for a specific year."""
         query = select(EntityFinancial).where(
             and_(

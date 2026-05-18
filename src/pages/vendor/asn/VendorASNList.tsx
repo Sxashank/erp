@@ -2,8 +2,6 @@
  * Vendor ASN List
  */
 
-import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
 import {
   Truck,
   Search,
@@ -15,11 +13,22 @@ import {
   Package,
   MapPin,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -28,17 +37,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { vendorASNApi } from '@/services/vendorApi';
 import type { AdvancedShippingNotice, ASNStatus } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorASNList() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -67,7 +70,7 @@ export default function VendorASNList() {
       setASNs(response.data.items);
       setTotal(response.data.total);
     } catch (error) {
-      console.error('Failed to fetch ASNs:', error);
+      logger.error('Failed to fetch ASNs:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -225,12 +228,10 @@ export default function VendorASNList() {
                   <TableRow key={asn.id}>
                     <TableCell className="font-medium">{asn.asn_number}</TableCell>
                     <TableCell>
-                      {asn.ship_date ? new Date(asn.ship_date).toLocaleDateString() : '-'}
+                      <DateDisplay date={asn.ship_date} />
                     </TableCell>
                     <TableCell>
-                      {asn.expected_delivery_date
-                        ? new Date(asn.expected_delivery_date).toLocaleDateString()
-                        : '-'}
+                      <DateDisplay date={asn.expected_delivery_date} />
                     </TableCell>
                     <TableCell>{asn.carrier_name || '-'}</TableCell>
                     <TableCell>{asn.tracking_number || '-'}</TableCell>

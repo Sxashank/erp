@@ -4,26 +4,27 @@ Handles notifications, messages, tickets, and announcements.
 """
 
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional
 from uuid import UUID
 
 from sqlalchemy import (
-    String,
     Boolean,
-    ForeignKey,
-    Text,
     DateTime,
+    ForeignKey,
     Index,
+    String,
+    Text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.portal.enums import (
     NotificationChannel,
     NotificationPriority,
-    TicketStatus,
-    TicketPriority,
     TicketCategory,
+    TicketPriority,
+    TicketStatus,
 )
 
 
@@ -56,32 +57,30 @@ class PortalNotification(BaseModel):
 
     # Delivery
     channel: Mapped[NotificationChannel] = mapped_column(
-        default=NotificationChannel.IN_APP
+        String(20), default=NotificationChannel.IN_APP
     )
     priority: Mapped[NotificationPriority] = mapped_column(
-        default=NotificationPriority.MEDIUM
+        String(20), default=NotificationPriority.MEDIUM
     )
 
     # Action
-    action_url: Mapped[Optional[str]] = mapped_column(String(500))
-    action_data: Mapped[Optional[str]] = mapped_column(Text)  # JSON payload
+    action_url: Mapped[str | None] = mapped_column(String(500))
+    action_data: Mapped[dict | None] = mapped_column(JSONB)  # JSON payload
 
     # Reference (what triggered the notification)
-    reference_type: Mapped[Optional[str]] = mapped_column(
-        String(50)
-    )  # LOAN, PAYMENT, TICKET
-    reference_id: Mapped[Optional[UUID]] = mapped_column()
+    reference_type: Mapped[str | None] = mapped_column(String(50))  # LOAN, PAYMENT, TICKET
+    reference_id: Mapped[UUID | None] = mapped_column()
 
     # Status
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
-    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    delivery_status: Mapped[Optional[str]] = mapped_column(String(50))
-    delivery_error: Mapped[Optional[str]] = mapped_column(Text)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime)
+    delivery_status: Mapped[str | None] = mapped_column(String(50))
+    delivery_error: Mapped[str | None] = mapped_column(Text)
 
     # Expiry
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     __table_args__ = (
         Index("ix_portal_notif_user_read", "user_id", "is_read"),
@@ -110,38 +109,32 @@ class PortalMessage(BaseModel):
     )
 
     # Thread (for conversation grouping)
-    thread_id: Mapped[Optional[UUID]] = mapped_column(index=True)
-    parent_message_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("portal_message.id")
-    )
+    thread_id: Mapped[UUID | None] = mapped_column(index=True)
+    parent_message_id: Mapped[UUID | None] = mapped_column(ForeignKey("portal_message.id"))
 
     # Message Content
-    subject: Mapped[Optional[str]] = mapped_column(String(255))
+    subject: Mapped[str | None] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Direction
     is_from_customer: Mapped[bool] = mapped_column(Boolean, default=True)
-    sender_name: Mapped[Optional[str]] = mapped_column(String(100))
-    sender_employee_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("hris_employee.id")
-    )
+    sender_name: Mapped[str | None] = mapped_column(String(100))
+    sender_employee_id: Mapped[UUID | None] = mapped_column(ForeignKey("hris_employee.id"))
 
     # Attachments
     has_attachments: Mapped[bool] = mapped_column(Boolean, default=False)
-    attachment_ids: Mapped[Optional[str]] = mapped_column(Text)  # JSON array of UUIDs
+    attachment_ids: Mapped[str | None] = mapped_column(Text)  # JSON array of UUIDs
 
     # Reference
-    reference_type: Mapped[Optional[str]] = mapped_column(
-        String(50)
-    )  # LOAN, TICKET, etc.
-    reference_id: Mapped[Optional[UUID]] = mapped_column()
+    reference_type: Mapped[str | None] = mapped_column(String(50))  # LOAN, TICKET, etc.
+    reference_id: Mapped[UUID | None] = mapped_column()
 
     # Status
     is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Relationships
-    replies: Mapped[List["PortalMessage"]] = relationship(
+    replies: Mapped[list["PortalMessage"]] = relationship(
         "PortalMessage",
         back_populates="parent",
         remote_side="PortalMessage.parent_message_id",
@@ -179,57 +172,47 @@ class PortalTicket(BaseModel):
     )
 
     # Ticket Info
-    ticket_number: Mapped[str] = mapped_column(
-        String(50), unique=True, nullable=False
-    )
+    ticket_number: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Classification
-    category: Mapped[TicketCategory] = mapped_column(nullable=False)
-    sub_category: Mapped[Optional[str]] = mapped_column(String(100))
-    priority: Mapped[TicketPriority] = mapped_column(
-        default=TicketPriority.MEDIUM
-    )
+    category: Mapped[TicketCategory] = mapped_column(String(50), nullable=False)
+    sub_category: Mapped[str | None] = mapped_column(String(100))
+    priority: Mapped[TicketPriority] = mapped_column(String(20), default=TicketPriority.MEDIUM)
 
     # Status
-    status: Mapped[TicketStatus] = mapped_column(default=TicketStatus.OPEN)
-    status_changed_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow
-    )
+    status: Mapped[TicketStatus] = mapped_column(String(30), default=TicketStatus.OPEN)
+    status_changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Assignment
-    assigned_to: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("hris_employee.id")
-    )
-    assigned_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    assigned_team: Mapped[Optional[str]] = mapped_column(String(100))
+    assigned_to: Mapped[UUID | None] = mapped_column(ForeignKey("hris_employee.id"))
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime)
+    assigned_team: Mapped[str | None] = mapped_column(String(100))
 
     # Reference
-    loan_account_id: Mapped[Optional[UUID]] = mapped_column(
-        ForeignKey("lms_loan_account.id")
-    )
-    related_payment_id: Mapped[Optional[UUID]] = mapped_column()
-    related_service_request_id: Mapped[Optional[UUID]] = mapped_column()
+    loan_account_id: Mapped[UUID | None] = mapped_column(ForeignKey("lms_loan_account.id"))
+    related_payment_id: Mapped[UUID | None] = mapped_column()
+    related_service_request_id: Mapped[UUID | None] = mapped_column()
 
     # Resolution
-    resolution_summary: Mapped[Optional[str]] = mapped_column(Text)
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    resolved_by: Mapped[Optional[UUID]] = mapped_column(ForeignKey("hris_employee.id"))
+    resolution_summary: Mapped[str | None] = mapped_column(Text)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime)
+    resolved_by: Mapped[UUID | None] = mapped_column(ForeignKey("hris_employee.id"))
 
     # Closure
-    closed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    closed_by: Mapped[Optional[UUID]] = mapped_column(ForeignKey("hris_employee.id"))
-    closure_reason: Mapped[Optional[str]] = mapped_column(String(255))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    closed_by: Mapped[UUID | None] = mapped_column(ForeignKey("hris_employee.id"))
+    closure_reason: Mapped[str | None] = mapped_column(String(255))
 
     # SLA
-    sla_due_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    sla_due_at: Mapped[datetime | None] = mapped_column(DateTime)
     is_sla_breached: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Feedback
-    customer_rating: Mapped[Optional[int]] = mapped_column()  # 1-5
-    customer_feedback: Mapped[Optional[str]] = mapped_column(Text)
-    feedback_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    customer_rating: Mapped[int | None] = mapped_column()  # 1-5
+    customer_feedback: Mapped[str | None] = mapped_column(Text)
+    feedback_at: Mapped[datetime | None] = mapped_column(DateTime)
 
     __table_args__ = (
         Index("ix_portal_ticket_user_status", "user_id", "status"),
@@ -263,18 +246,18 @@ class PortalAnnouncement(BaseModel):
     display_position: Mapped[str] = mapped_column(
         String(50), default="BANNER"
     )  # BANNER, MODAL, INLINE
-    action_url: Mapped[Optional[str]] = mapped_column(String(500))
-    action_text: Mapped[Optional[str]] = mapped_column(String(100))
+    action_url: Mapped[str | None] = mapped_column(String(500))
+    action_text: Mapped[str | None] = mapped_column(String(100))
 
     # Targeting
     target_audience: Mapped[str] = mapped_column(
         String(50), default="ALL"
     )  # ALL, SEGMENT, SPECIFIC_USERS
-    target_segment: Mapped[Optional[str]] = mapped_column(Text)  # JSON criteria
+    target_segment: Mapped[str | None] = mapped_column(Text)  # JSON criteria
 
     # Schedule
     start_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    end_date: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    end_date: Mapped[datetime | None] = mapped_column(DateTime)
 
     # Status
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -285,6 +268,4 @@ class PortalAnnouncement(BaseModel):
     dismiss_count: Mapped[int] = mapped_column(default=0)
     click_count: Mapped[int] = mapped_column(default=0)
 
-    __table_args__ = (
-        Index("ix_portal_announcement_active", "organization_id", "is_active"),
-    )
+    __table_args__ = (Index("ix_portal_announcement_active", "organization_id", "is_active"),)

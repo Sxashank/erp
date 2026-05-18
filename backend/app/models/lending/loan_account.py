@@ -1,50 +1,75 @@
 """Loan Account models for Phase 2 - Loan Accounting."""
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import (
-    Boolean, Date, DateTime, Enum, ForeignKey, Integer,
-    Numeric, String, Text, Index, UniqueConstraint
+    Boolean,
+    CheckConstraint,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.lending.enums import (
-    LoanAccountStatus, DisbursementStatus, DisbursementMode,
-    ScheduleType, InstallmentType, InstallmentStatus,
-    AccrualCategory, AccrualStatus, AssetClassification,
-    ReceiptType, ReceiptStatus, ReceiptMode,
-    AllocationPriority, AllocationComponent,
-    AdjustmentType, WaiverType, ProvisioningCategory,
-    MandateStatus, GLEntryType,
-    InterestType, RateResetFrequency, RepaymentFrequency,
-    RepaymentMode, DayCountConvention
+    AccrualCategory,
+    AccrualStatus,
+    AdjustmentType,
+    AllocationComponent,
+    AllocationPriority,
+    AssetClassification,
+    DayCountConvention,
+    DisbursementMode,
+    DisbursementStatus,
+    InstallmentStatus,
+    InterestType,
+    LoanAccountStatus,
+    MandateStatus,
+    ProvisioningCategory,
+    RateResetFrequency,
+    ReceiptMode,
+    ReceiptStatus,
+    ReceiptType,
+    RepaymentFrequency,
+    RepaymentMode,
+    ScheduleType,
+    WaiverType,
 )
 
-
 if TYPE_CHECKING:
-    from app.models.masters.organization import Organization
-    from app.models.lending.entity import Entity, EntityBankAccount
-    from app.models.lending.product import LoanProduct, InterestRate
-    from app.models.lending.sanction import LoanSanction
+    from app.models.ap_ar.bank_reconciliation import BankStatement
+    from app.models.auth.user import User
     from app.models.finance.account import Account
-    from app.models.finance.voucher import Voucher
+
     # Phase 3: Collections models
     from app.models.lending.collections import (
         CollectionFollowUp,
         DemandNotice,
+        LegalCase,
+        LoanRestructure,
         NPARecord,
+        OTSProposal,
         PenalInterest,
         PenalWaiver,
-        OTSProposal,
-        LoanRestructure,
-        LegalCase,
         WriteOffRecord,
     )
+    from app.models.lending.entity import Entity, EntityBankAccount
+    from app.models.lending.product import InterestRate, LoanProduct
+    from app.models.lending.sanction import LoanSanction
+    from app.models.masters.organization import Organization
 
 
 class LoanAccount(BaseModel):
@@ -92,7 +117,7 @@ class LoanAccount(BaseModel):
         index=True,
         comment="Loan account number e.g., 'SMFC/LA/2025/00001'",
     )
-    loan_reference_number: Mapped[Optional[str]] = mapped_column(
+    loan_reference_number: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="External reference number",
@@ -104,27 +129,27 @@ class LoanAccount(BaseModel):
         nullable=False,
         comment="Account opening date",
     )
-    first_disbursement_date: Mapped[Optional[date]] = mapped_column(
+    first_disbursement_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="First disbursement date",
     )
-    last_disbursement_date: Mapped[Optional[date]] = mapped_column(
+    last_disbursement_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Last disbursement date",
     )
-    repayment_start_date: Mapped[Optional[date]] = mapped_column(
+    repayment_start_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Actual repayment start date",
     )
-    maturity_date: Mapped[Optional[date]] = mapped_column(
+    maturity_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Loan maturity date",
     )
-    closure_date: Mapped[Optional[date]] = mapped_column(
+    closure_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Account closure date",
@@ -147,7 +172,7 @@ class LoanAccount(BaseModel):
         default=0,
         comment="Moratorium period in months",
     )
-    moratorium_end_date: Mapped[Optional[date]] = mapped_column(
+    moratorium_end_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Moratorium end date",
@@ -159,13 +184,13 @@ class LoanAccount(BaseModel):
         nullable=False,
         comment="FIXED or FLOATING",
     )
-    base_rate_id: Mapped[Optional[UUID]] = mapped_column(
+    base_rate_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_interest_rate.id", ondelete="RESTRICT"),
         nullable=True,
         comment="Base rate for floating loans",
     )
-    current_base_rate: Mapped[Optional[Decimal]] = mapped_column(
+    current_base_rate: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Current base rate",
@@ -181,17 +206,17 @@ class LoanAccount(BaseModel):
         nullable=False,
         comment="Current effective interest rate",
     )
-    rate_reset_frequency: Mapped[Optional[RateResetFrequency]] = mapped_column(
+    rate_reset_frequency: Mapped[RateResetFrequency | None] = mapped_column(
         Enum(RateResetFrequency),
         nullable=True,
         comment="Rate reset frequency",
     )
-    next_rate_reset_date: Mapped[Optional[date]] = mapped_column(
+    next_rate_reset_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Next rate reset date",
     )
-    last_rate_reset_date: Mapped[Optional[date]] = mapped_column(
+    last_rate_reset_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Last rate reset date",
@@ -228,7 +253,7 @@ class LoanAccount(BaseModel):
         default=1,
         comment="Day of month for installment (1-28)",
     )
-    current_emi_amount: Mapped[Optional[Decimal]] = mapped_column(
+    current_emi_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Current EMI amount",
@@ -322,7 +347,7 @@ class LoanAccount(BaseModel):
         default=Decimal("0"),
         comment="Interest accrued but not yet due",
     )
-    last_accrual_date: Mapped[Optional[date]] = mapped_column(
+    last_accrual_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Last interest accrual date",
@@ -333,7 +358,7 @@ class LoanAccount(BaseModel):
         default=False,
         comment="Is accrual suspended (NPA)?",
     )
-    accrual_suspension_date: Mapped[Optional[date]] = mapped_column(
+    accrual_suspension_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date accrual was suspended",
@@ -352,7 +377,7 @@ class LoanAccount(BaseModel):
         default=0,
         comment="Days past due",
     )
-    oldest_due_date: Mapped[Optional[date]] = mapped_column(
+    oldest_due_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Oldest unpaid installment date",
@@ -364,7 +389,7 @@ class LoanAccount(BaseModel):
         index=True,
         comment="Current asset classification",
     )
-    npa_date: Mapped[Optional[date]] = mapped_column(
+    npa_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date account became NPA",
@@ -409,7 +434,7 @@ class LoanAccount(BaseModel):
         default=Decimal("0"),
         comment="Interest written off",
     )
-    write_off_date: Mapped[Optional[date]] = mapped_column(
+    write_off_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Write-off date",
@@ -428,7 +453,7 @@ class LoanAccount(BaseModel):
         default=Decimal("0"),
         comment="Foreclosure penalty rate",
     )
-    lock_in_end_date: Mapped[Optional[date]] = mapped_column(
+    lock_in_end_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Lock-in period end date",
@@ -458,31 +483,49 @@ class LoanAccount(BaseModel):
     )
 
     # GL Account mapping
-    loan_asset_account_id: Mapped[Optional[UUID]] = mapped_column(
+    loan_asset_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_account.id", ondelete="SET NULL"),
         nullable=True,
         comment="Loan asset GL account",
     )
-    interest_receivable_account_id: Mapped[Optional[UUID]] = mapped_column(
+    interest_receivable_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_account.id", ondelete="SET NULL"),
         nullable=True,
         comment="Interest receivable GL account",
     )
-    interest_income_account_id: Mapped[Optional[UUID]] = mapped_column(
+    interest_income_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_account.id", ondelete="SET NULL"),
         nullable=True,
         comment="Interest income GL account",
     )
-    interest_suspense_account_id: Mapped[Optional[UUID]] = mapped_column(
+    interest_suspense_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_account.id", ondelete="SET NULL"),
         nullable=True,
         comment="Interest suspense GL account",
     )
-    provision_account_id: Mapped[Optional[UUID]] = mapped_column(
+    penal_interest_income_account_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Penal interest income GL account",
+    )
+    charges_income_account_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Charges income GL account",
+    )
+    receipt_suspense_account_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Borrower receipt suspense GL account",
+    )
+    provision_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_account.id", ondelete="SET NULL"),
         nullable=True,
@@ -490,7 +533,7 @@ class LoanAccount(BaseModel):
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -517,25 +560,25 @@ class LoanAccount(BaseModel):
         "InterestRate",
         lazy="selectin",
     )
-    disbursements: Mapped[List["Disbursement"]] = relationship(
+    disbursements: Mapped[list["Disbursement"]] = relationship(
         "Disbursement",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    schedules: Mapped[List["RepaymentSchedule"]] = relationship(
+    schedules: Mapped[list["RepaymentSchedule"]] = relationship(
         "RepaymentSchedule",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    receipts: Mapped[List["LoanReceipt"]] = relationship(
+    receipts: Mapped[list["LoanReceipt"]] = relationship(
         "LoanReceipt",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    mandates: Mapped[List["LoanMandate"]] = relationship(
+    mandates: Mapped[list["LoanMandate"]] = relationship(
         "LoanMandate",
         back_populates="loan_account",
         cascade="all, delete-orphan",
@@ -543,13 +586,13 @@ class LoanAccount(BaseModel):
     )
 
     # Phase 3: Collections relationships
-    follow_ups: Mapped[List["CollectionFollowUp"]] = relationship(
+    follow_ups: Mapped[list["CollectionFollowUp"]] = relationship(
         "CollectionFollowUp",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    demand_notices: Mapped[List["DemandNotice"]] = relationship(
+    demand_notices: Mapped[list["DemandNotice"]] = relationship(
         "DemandNotice",
         back_populates="loan_account",
         cascade="all, delete-orphan",
@@ -561,37 +604,37 @@ class LoanAccount(BaseModel):
         uselist=False,
         lazy="noload",
     )
-    penal_interests: Mapped[List["PenalInterest"]] = relationship(
+    penal_interests: Mapped[list["PenalInterest"]] = relationship(
         "PenalInterest",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    penal_waivers: Mapped[List["PenalWaiver"]] = relationship(
+    penal_waivers: Mapped[list["PenalWaiver"]] = relationship(
         "PenalWaiver",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    ots_proposals: Mapped[List["OTSProposal"]] = relationship(
+    ots_proposals: Mapped[list["OTSProposal"]] = relationship(
         "OTSProposal",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    restructures: Mapped[List["LoanRestructure"]] = relationship(
+    restructures: Mapped[list["LoanRestructure"]] = relationship(
         "LoanRestructure",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    legal_cases: Mapped[List["LegalCase"]] = relationship(
+    legal_cases: Mapped[list["LegalCase"]] = relationship(
         "LegalCase",
         back_populates="loan_account",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    write_offs: Mapped[List["WriteOffRecord"]] = relationship(
+    write_offs: Mapped[list["WriteOffRecord"]] = relationship(
         "WriteOffRecord",
         back_populates="loan_account",
         cascade="all, delete-orphan",
@@ -642,12 +685,12 @@ class Disbursement(BaseModel):
         nullable=False,
         comment="Requested disbursement amount",
     )
-    approved_amount: Mapped[Optional[Decimal]] = mapped_column(
+    approved_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Approved disbursement amount",
     )
-    disbursed_amount: Mapped[Optional[Decimal]] = mapped_column(
+    disbursed_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Actual disbursed amount",
@@ -658,7 +701,7 @@ class Disbursement(BaseModel):
         default=Decimal("0"),
         comment="Disbursement related charges",
     )
-    net_disbursement: Mapped[Optional[Decimal]] = mapped_column(
+    net_disbursement: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Net amount after charges",
@@ -670,22 +713,22 @@ class Disbursement(BaseModel):
         nullable=False,
         comment="Disbursement request date",
     )
-    approval_date: Mapped[Optional[date]] = mapped_column(
+    approval_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Approval date",
     )
-    scheduled_date: Mapped[Optional[date]] = mapped_column(
+    scheduled_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Scheduled disbursement date",
     )
-    disbursement_date: Mapped[Optional[date]] = mapped_column(
+    disbursement_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Actual disbursement date",
     )
-    value_date: Mapped[Optional[date]] = mapped_column(
+    value_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Value date for interest calculation",
@@ -715,38 +758,44 @@ class Disbursement(BaseModel):
         nullable=False,
         comment="Beneficiary IFSC code",
     )
-    beneficiary_bank: Mapped[Optional[str]] = mapped_column(
+    beneficiary_bank: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Beneficiary bank name",
     )
-    bank_account_id: Mapped[Optional[UUID]] = mapped_column(
+    bank_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_entity_bank_account.id", ondelete="SET NULL"),
         nullable=True,
         comment="Entity bank account reference",
     )
+    source_account_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="RESTRICT"),
+        nullable=True,
+        comment="SMFC bank/cash GL account used for disbursement",
+    )
 
     # Payment reference
-    utr_number: Mapped[Optional[str]] = mapped_column(
+    utr_number: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         index=True,
         comment="UTR/Transaction reference number",
     )
-    cheque_number: Mapped[Optional[str]] = mapped_column(
+    cheque_number: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Cheque/DD number if applicable",
     )
 
     # Purpose and milestone
-    purpose: Mapped[Optional[str]] = mapped_column(
+    purpose: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Purpose of disbursement",
     )
-    milestone_id: Mapped[Optional[UUID]] = mapped_column(
+    milestone_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_project_milestone.id", ondelete="SET NULL"),
         nullable=True,
@@ -760,13 +809,13 @@ class Disbursement(BaseModel):
         default=False,
         comment="Pre-disbursement conditions verified?",
     )
-    conditions_verified_by: Mapped[Optional[UUID]] = mapped_column(
+    conditions_verified_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Conditions verified by",
     )
-    conditions_verified_at: Mapped[Optional[datetime]] = mapped_column(
+    conditions_verified_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Conditions verification timestamp",
@@ -782,40 +831,40 @@ class Disbursement(BaseModel):
     )
 
     # Approval
-    approved_by_id: Mapped[Optional[UUID]] = mapped_column(
+    approved_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Approved by",
     )
-    approved_at: Mapped[Optional[datetime]] = mapped_column(
+    approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Approval timestamp",
     )
 
     # Processing
-    processed_by_id: Mapped[Optional[UUID]] = mapped_column(
+    processed_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Processed by",
     )
-    processed_at: Mapped[Optional[datetime]] = mapped_column(
+    processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Processing timestamp",
     )
 
     # Rejection/Failure details
-    rejection_reason: Mapped[Optional[str]] = mapped_column(
+    rejection_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Rejection/failure reason",
     )
 
     # GL Entry reference
-    voucher_id: Mapped[Optional[UUID]] = mapped_column(
+    voucher_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("txn_voucher.id", ondelete="SET NULL"),
         nullable=True,
@@ -823,7 +872,7 @@ class Disbursement(BaseModel):
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -838,10 +887,15 @@ class Disbursement(BaseModel):
         "EntityBankAccount",
         lazy="selectin",
     )
+    source_account: Mapped[Optional["Account"]] = relationship(
+        "Account",
+        foreign_keys=[source_account_id],
+        lazy="selectin",
+    )
 
     __table_args__ = (
         UniqueConstraint("loan_account_id", "disbursement_number", name="uq_disbursement_num"),
-        Index("ix_lms_disbursement_status", "loan_account_id", "status"),
+        Index("ix_lms_disbursement_loan_status", "loan_account_id", "status"),
         Index("ix_lms_disbursement_date", "disbursement_date"),
     )
 
@@ -892,7 +946,7 @@ class RepaymentSchedule(BaseModel):
         nullable=False,
         comment="Tenure in months",
     )
-    emi_amount: Mapped[Optional[Decimal]] = mapped_column(
+    emi_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Calculated EMI amount",
@@ -939,12 +993,12 @@ class RepaymentSchedule(BaseModel):
         default=True,
         comment="Is this the current active schedule?",
     )
-    superseded_date: Mapped[Optional[date]] = mapped_column(
+    superseded_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date this schedule was superseded",
     )
-    superseded_by_id: Mapped[Optional[UUID]] = mapped_column(
+    superseded_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("lms_repayment_schedule.id", ondelete="SET NULL"),
         nullable=True,
@@ -952,14 +1006,14 @@ class RepaymentSchedule(BaseModel):
     )
 
     # Reason for new schedule
-    change_reason: Mapped[Optional[str]] = mapped_column(
+    change_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Reason for schedule change",
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -970,7 +1024,7 @@ class RepaymentSchedule(BaseModel):
         "LoanAccount",
         back_populates="schedules",
     )
-    installments: Mapped[List["ScheduleInstallment"]] = relationship(
+    installments: Mapped[list["ScheduleInstallment"]] = relationship(
         "ScheduleInstallment",
         back_populates="schedule",
         cascade="all, delete-orphan",
@@ -1093,7 +1147,7 @@ class ScheduleInstallment(BaseModel):
         index=True,
         comment="Installment status",
     )
-    paid_date: Mapped[Optional[date]] = mapped_column(
+    paid_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date fully paid",
@@ -1189,14 +1243,14 @@ class LoanAccrual(BaseModel):
         default=False,
         comment="Moved to suspense (NPA)?",
     )
-    suspense_date: Mapped[Optional[date]] = mapped_column(
+    suspense_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date moved to suspense",
     )
 
     # GL reference
-    voucher_id: Mapped[Optional[UUID]] = mapped_column(
+    voucher_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("txn_voucher.id", ondelete="SET NULL"),
         nullable=True,
@@ -1204,7 +1258,9 @@ class LoanAccrual(BaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint("loan_account_id", "accrual_date", "accrual_category", name="uq_accrual_date_cat"),
+        UniqueConstraint(
+            "loan_account_id", "accrual_date", "accrual_category", name="uq_accrual_date_cat"
+        ),
         Index("ix_lms_accrual_date", "accrual_date"),
         Index("ix_lms_accrual_status", "loan_account_id", "status"),
     )
@@ -1277,28 +1333,40 @@ class LoanReceipt(BaseModel):
     )
 
     # Instrument details
-    instrument_number: Mapped[Optional[str]] = mapped_column(
+    instrument_number: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="Cheque/DD/UTR number",
     )
-    instrument_date: Mapped[Optional[date]] = mapped_column(
+    instrument_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Instrument date",
     )
-    instrument_bank: Mapped[Optional[str]] = mapped_column(
+    instrument_bank: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Drawn on bank",
     )
 
     # NACH/Mandate reference
-    mandate_id: Mapped[Optional[UUID]] = mapped_column(
+    mandate_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("lms_loan_mandate.id", ondelete="SET NULL"),
         nullable=True,
         comment="NACH mandate reference",
+    )
+    receipt_account_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="RESTRICT"),
+        nullable=True,
+        comment="SMFC bank/cash GL account where receipt was deposited",
+    )
+    receipt_suspense_account_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="RESTRICT"),
+        nullable=True,
+        comment="GL suspense account used until the receipt is allocated",
     )
 
     # Allocation
@@ -1365,12 +1433,12 @@ class LoanReceipt(BaseModel):
         default=False,
         comment="Is receipt bounced?",
     )
-    bounce_date: Mapped[Optional[date]] = mapped_column(
+    bounce_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Bounce date",
     )
-    bounce_reason: Mapped[Optional[str]] = mapped_column(
+    bounce_reason: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Bounce reason",
@@ -1383,28 +1451,64 @@ class LoanReceipt(BaseModel):
     )
 
     # GL reference
-    voucher_id: Mapped[Optional[UUID]] = mapped_column(
+    voucher_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("txn_voucher.id", ondelete="SET NULL"),
         nullable=True,
-        comment="GL voucher reference",
+        comment="Cash receipt GL voucher reference",
+    )
+    allocation_voucher_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("txn_voucher.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Latest receipt allocation GL voucher reference",
+    )
+    gl_allocated_amount: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        default=Decimal("0"),
+        comment="Receipt amount already posted from suspense to loan/component ledgers",
+    )
+    gl_principal_allocated: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        default=Decimal("0"),
+        comment="Principal allocation already posted to GL",
+    )
+    gl_interest_allocated: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        default=Decimal("0"),
+        comment="Interest allocation already posted to GL",
+    )
+    gl_penal_interest_allocated: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        default=Decimal("0"),
+        comment="Penal interest allocation already posted to GL",
+    )
+    gl_charges_allocated: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        default=Decimal("0"),
+        comment="Charges allocation already posted to GL",
     )
 
     # Processed by
-    processed_by_id: Mapped[Optional[UUID]] = mapped_column(
+    processed_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Processed by",
     )
-    processed_at: Mapped[Optional[datetime]] = mapped_column(
+    processed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Processing timestamp",
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -1419,8 +1523,14 @@ class LoanReceipt(BaseModel):
         "LoanAccount",
         back_populates="receipts",
     )
-    allocations: Mapped[List["ReceiptAllocation"]] = relationship(
+    allocations: Mapped[list["ReceiptAllocation"]] = relationship(
         "ReceiptAllocation",
+        back_populates="receipt",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    bank_statement_matches: Mapped[list["LoanReceiptBankStatementMatch"]] = relationship(
+        "LoanReceiptBankStatementMatch",
         back_populates="receipt",
         cascade="all, delete-orphan",
         lazy="selectin",
@@ -1451,7 +1561,7 @@ class ReceiptAllocation(BaseModel):
     )
 
     # Installment reference (if allocated to specific installment)
-    installment_id: Mapped[Optional[UUID]] = mapped_column(
+    installment_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("lms_schedule_installment.id", ondelete="SET NULL"),
         nullable=True,
@@ -1480,7 +1590,7 @@ class ReceiptAllocation(BaseModel):
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Allocation remarks",
@@ -1505,6 +1615,117 @@ class ReceiptAllocation(BaseModel):
         return f"<ReceiptAllocation(receipt={self.receipt_id}, component={self.allocation_component}, amount={self.allocated_amount})>"
 
 
+class LoanReceiptBankStatementMatch(BaseModel):
+    """Audit link between an LMS receipt and imported bank-statement credit."""
+
+    __tablename__ = "lms_receipt_bank_statement_match"
+
+    organization_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_organization.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Organization",
+    )
+    receipt_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("lms_loan_receipt.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Matched LMS receipt",
+    )
+    statement_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("txn_bank_statement.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+        comment="Imported bank statement credit",
+    )
+    bank_account_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_account.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        comment="Bank GL account from statement import",
+    )
+    matched_amount: Mapped[Decimal] = mapped_column(
+        Numeric(20, 2),
+        nullable=False,
+        comment="Statement amount linked to the LMS receipt",
+    )
+    match_confidence: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2),
+        nullable=False,
+        default=Decimal("100"),
+        comment="Matching confidence percentage",
+    )
+    match_basis: Mapped[dict | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        comment="Machine-readable reason codes and matching context",
+    )
+    match_type: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="AUTO",
+        comment="AUTO or MANUAL",
+    )
+    matched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        comment="Match timestamp",
+    )
+    matched_by_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="User who confirmed the match",
+    )
+
+    receipt: Mapped["LoanReceipt"] = relationship(
+        "LoanReceipt",
+        back_populates="bank_statement_matches",
+    )
+    statement: Mapped["BankStatement"] = relationship(
+        "BankStatement",
+        lazy="selectin",
+    )
+    bank_account: Mapped["Account"] = relationship(
+        "Account",
+        foreign_keys=[bank_account_id],
+        lazy="selectin",
+    )
+    matched_by: Mapped[Optional["User"]] = relationship(
+        "User",
+        foreign_keys=[matched_by_id],
+        lazy="selectin",
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "receipt_id",
+            "statement_id",
+            name="uq_receipt_statement_match",
+        ),
+        CheckConstraint("matched_amount > 0", name="ck_receipt_statement_match_amount"),
+        CheckConstraint(
+            "match_confidence >= 0 AND match_confidence <= 100",
+            name="ck_receipt_statement_match_confidence",
+        ),
+        Index("ix_lms_receipt_stmt_org_date", "organization_id", "matched_at"),
+        Index("ix_lms_receipt_stmt_bank", "bank_account_id", "matched_at"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            "<LoanReceiptBankStatementMatch("
+            f"receipt={self.receipt_id}, "
+            f"statement={self.statement_id}, "
+            f"amount={self.matched_amount})>"
+        )
+
+
 class LoanMandate(BaseModel):
     """NACH/eMandate for auto-debit."""
 
@@ -1527,7 +1748,7 @@ class LoanMandate(BaseModel):
         index=True,
         comment="Mandate reference number",
     )
-    umrn: Mapped[Optional[str]] = mapped_column(
+    umrn: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         index=True,
@@ -1543,7 +1764,7 @@ class LoanMandate(BaseModel):
     )
 
     # Bank account details
-    bank_account_id: Mapped[Optional[UUID]] = mapped_column(
+    bank_account_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_entity_bank_account.id", ondelete="SET NULL"),
         nullable=True,
@@ -1559,7 +1780,7 @@ class LoanMandate(BaseModel):
         nullable=False,
         comment="IFSC code",
     )
-    bank_name: Mapped[Optional[str]] = mapped_column(
+    bank_name: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Bank name",
@@ -1610,7 +1831,7 @@ class LoanMandate(BaseModel):
     )
 
     # Registration
-    registration_date: Mapped[Optional[date]] = mapped_column(
+    registration_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="NPCI registration date",
@@ -1624,26 +1845,26 @@ class LoanMandate(BaseModel):
         index=True,
         comment="Mandate status",
     )
-    rejection_reason: Mapped[Optional[str]] = mapped_column(
+    rejection_reason: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Rejection reason if rejected",
     )
 
     # Cancellation
-    cancellation_date: Mapped[Optional[date]] = mapped_column(
+    cancellation_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Cancellation date",
     )
-    cancellation_reason: Mapped[Optional[str]] = mapped_column(
+    cancellation_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Cancellation reason",
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",
@@ -1689,7 +1910,7 @@ class AssetClassificationHistory(BaseModel):
         index=True,
         comment="Effective date of classification",
     )
-    previous_classification: Mapped[Optional[AssetClassification]] = mapped_column(
+    previous_classification: Mapped[AssetClassification | None] = mapped_column(
         Enum(AssetClassification),
         nullable=True,
         comment="Previous classification",
@@ -1725,23 +1946,21 @@ class AssetClassificationHistory(BaseModel):
         nullable=False,
         comment="SYSTEM_AUTO, MANUAL_UPGRADE, MANUAL_DOWNGRADE, REGULARIZATION",
     )
-    change_remarks: Mapped[Optional[str]] = mapped_column(
+    change_remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Change remarks",
     )
 
     # Approval (if manual)
-    approved_by_id: Mapped[Optional[UUID]] = mapped_column(
+    approved_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Approved by (for manual changes)",
     )
 
-    __table_args__ = (
-        Index("ix_lms_asset_class_hist_loan", "loan_account_id", "effective_date"),
-    )
+    __table_args__ = (Index("ix_lms_asset_class_hist_loan", "loan_account_id", "effective_date"),)
 
     def __repr__(self) -> str:
         return f"<AssetClassificationHistory(loan={self.loan_account_id}, date={self.effective_date}, class={self.new_classification})>"
@@ -1837,7 +2056,7 @@ class LoanProvision(BaseModel):
     )
 
     # GL reference
-    voucher_id: Mapped[Optional[UUID]] = mapped_column(
+    voucher_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("txn_voucher.id", ondelete="SET NULL"),
         nullable=True,
@@ -1845,7 +2064,7 @@ class LoanProvision(BaseModel):
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Provision remarks",
@@ -1898,51 +2117,51 @@ class LoanAdjustment(BaseModel):
     )
 
     # Before values
-    previous_interest_rate: Mapped[Optional[Decimal]] = mapped_column(
+    previous_interest_rate: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Previous interest rate",
     )
-    previous_emi: Mapped[Optional[Decimal]] = mapped_column(
+    previous_emi: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Previous EMI amount",
     )
-    previous_tenure: Mapped[Optional[int]] = mapped_column(
+    previous_tenure: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Previous remaining tenure",
     )
-    previous_maturity_date: Mapped[Optional[date]] = mapped_column(
+    previous_maturity_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Previous maturity date",
     )
 
     # After values
-    new_interest_rate: Mapped[Optional[Decimal]] = mapped_column(
+    new_interest_rate: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="New interest rate",
     )
-    new_emi: Mapped[Optional[Decimal]] = mapped_column(
+    new_emi: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="New EMI amount",
     )
-    new_tenure: Mapped[Optional[int]] = mapped_column(
+    new_tenure: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="New remaining tenure",
     )
-    new_maturity_date: Mapped[Optional[date]] = mapped_column(
+    new_maturity_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="New maturity date",
     )
 
     # Waiver details
-    waiver_type: Mapped[Optional[WaiverType]] = mapped_column(
+    waiver_type: Mapped[WaiverType | None] = mapped_column(
         Enum(WaiverType),
         nullable=True,
         comment="Type of waiver if applicable",
@@ -1963,19 +2182,19 @@ class LoanAdjustment(BaseModel):
     )
 
     # Moratorium details
-    moratorium_months: Mapped[Optional[int]] = mapped_column(
+    moratorium_months: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Moratorium months granted",
     )
-    moratorium_end_date: Mapped[Optional[date]] = mapped_column(
+    moratorium_end_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Moratorium end date",
     )
 
     # New schedule reference
-    new_schedule_id: Mapped[Optional[UUID]] = mapped_column(
+    new_schedule_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("lms_repayment_schedule.id", ondelete="SET NULL"),
         nullable=True,
@@ -1988,20 +2207,20 @@ class LoanAdjustment(BaseModel):
         nullable=False,
         comment="Reason for adjustment",
     )
-    approved_by_id: Mapped[Optional[UUID]] = mapped_column(
+    approved_by_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         comment="Approved by",
     )
-    approved_at: Mapped[Optional[datetime]] = mapped_column(
+    approved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
         comment="Approval timestamp",
     )
 
     # GL reference
-    voucher_id: Mapped[Optional[UUID]] = mapped_column(
+    voucher_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("txn_voucher.id", ondelete="SET NULL"),
         nullable=True,
@@ -2009,7 +2228,7 @@ class LoanAdjustment(BaseModel):
     )
 
     # Remarks
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks",

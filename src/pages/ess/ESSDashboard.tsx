@@ -3,14 +3,6 @@
  * Employee home page with summary widgets
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Progress } from '@/components/ui/progress';
 import {
   User,
   Calendar,
@@ -25,38 +17,46 @@ import {
   TrendingUp,
   Loader2,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Progress } from '@/components/ui/progress';
 import { essProfileApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { ESSDashboard, ESSUser } from '@/types/ess';
 
+import { logger } from "@/lib/logger";
 export default function ESSDashboardPage() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
+  const sessionUser = useEssAuthStore((state) => state.user);
   const [loading, setLoading] = useState(true);
   const [dashboard, setDashboard] = useState<ESSDashboard | null>(null);
   const [user, setUser] = useState<ESSUser | null>(null);
 
   useEffect(() => {
-    // Check authentication
-    const token = localStorage.getItem('ess_access_token');
-    if (!token) {
+    if (!accessToken) {
       navigate('/ess/login');
       return;
     }
 
-    // Load user from storage
-    const storedUser = localStorage.getItem('ess_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
+    setUser(sessionUser as ESSUser | null);
 
     fetchDashboard();
-  }, [navigate]);
+  }, [accessToken, navigate, sessionUser]);
 
   const fetchDashboard = async () => {
     try {
       const response = await essProfileApi.getDashboard();
       setDashboard(response.data);
     } catch (error) {
-      console.error('Failed to fetch dashboard:', error);
+      logger.error('Failed to fetch dashboard:', error);
     } finally {
       setLoading(false);
     }
@@ -300,7 +300,7 @@ export default function ESSDashboardPage() {
                       <h4 className="font-medium text-sm">{announcement.title}</h4>
                       <p className="text-xs text-gray-500 mt-1">{announcement.message}</p>
                       <p className="text-xs text-gray-400 mt-2">
-                        {new Date(announcement.created_at).toLocaleDateString()}
+                        <DateDisplay date={announcement.created_at} />
                       </p>
                     </div>
                   ))}

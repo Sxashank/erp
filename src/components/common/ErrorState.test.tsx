@@ -38,4 +38,25 @@ describe('ErrorState', () => {
     render(<ErrorState error={new Error('boom')} />);
     expect(screen.getByText('boom')).toBeInTheDocument();
   });
+
+  it('renders FastAPI validation errors as text', () => {
+    const err = {
+      isAxiosError: true,
+      message: 'Request failed',
+      response: {
+        status: 422,
+        data: {
+          detail: [
+            {
+              loc: ['path', 'id'],
+              msg: 'Input should be a valid UUID',
+            },
+          ],
+        },
+      },
+    };
+
+    render(<ErrorState error={err} />);
+    expect(screen.getByText(/path.id: Input should be a valid UUID/)).toBeInTheDocument();
+  });
 });

@@ -1,8 +1,4 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import {
   ArrowLeft,
   GraduationCap,
@@ -13,18 +9,14 @@ import {
   IndianRupee,
   User,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
+import { z } from 'zod';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -34,8 +26,16 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const trainingSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters'),
@@ -57,15 +57,16 @@ const trainingSchema = z.object({
   certificate_provided: z.boolean().default(true),
 });
 
-type TrainingFormData = z.infer<typeof trainingSchema>;
+type TrainingFormInput = z.input<typeof trainingSchema>;
+type TrainingFormData = z.output<typeof trainingSchema>;
 
 export default function TrainingProgramForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const isEdit = Boolean(id);
 
-  const form = useForm<TrainingFormData>({
-    resolver: zodResolver(trainingSchema) as any,
+  const form = useForm<TrainingFormInput, unknown, TrainingFormData>({
+    resolver: zodResolver(trainingSchema),
     defaultValues: {
       title: '',
       description: '',
@@ -108,7 +109,7 @@ export default function TrainingProgramForm() {
       />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Main Details */}
             <div className="lg:col-span-2 space-y-6">

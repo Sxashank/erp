@@ -139,12 +139,12 @@ export interface ESSDashboard {
     net_salary: number;
     payslip_id: string;
   };
-  announcements: Array<{
+  announcements: {
     id: string;
     title: string;
     message: string;
     created_at: string;
-  }>;
+  }[];
 }
 
 // ==================== Payslip Types ====================
@@ -338,7 +338,7 @@ export interface TicketComment {
   author_type: 'EMPLOYEE' | 'AGENT' | 'SYSTEM';
   author_name?: string;
   comment: string;
-  attachments?: any;
+  attachments?: unknown;
   created_at: string;
 }
 
@@ -441,11 +441,11 @@ export interface TaxCalculation {
   tax_regime: TaxRegime;
   breakdown: {
     deductions_by_section: Record<string, number>;
-    tax_slabs: Array<{
+    tax_slabs: {
       slab: string;
       rate: number;
       tax: number;
-    }>;
+    }[];
   };
 }
 

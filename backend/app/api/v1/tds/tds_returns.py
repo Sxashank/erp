@@ -9,7 +9,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.tds.tds_return import ReturnType, ReturnStatus, Quarter
 from app.services.tds.tds_return_service import TDSReturnService
@@ -111,9 +111,8 @@ def _to_response(tds_return) -> TDSReturnResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[TDSReturnListResponse])
+@router.get("", response_model=PaginatedResponse[TDSReturnListResponse], response_model_by_alias=True)
 async def list_returns(
-    organization_id: UUID = Query(...),
     return_type: Optional[ReturnType] = Query(None),
     financial_year_id: Optional[UUID] = Query(None),
     quarter: Optional[Quarter] = Query(None),
@@ -121,13 +120,13 @@ async def list_returns(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS returns for an organization."""
     service = TDSReturnService(db)
     skip = (page - 1) * page_size
     returns, total = await service.get_by_organization(
-        organization_id,
+        current_user.organization_id,
         return_type,
         financial_year_id,
         quarter,
@@ -139,35 +138,33 @@ async def list_returns(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/pending", response_model=List[TDSReturnListResponse])
+@router.get("/pending", response_model=List[TDSReturnListResponse], response_model_by_alias=True)
 async def get_pending_returns(
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get returns pending filing."""
     service = TDSReturnService(db)
-    returns = await service.get_pending(organization_id)
+    returns = await service.get_pending(current_user.organization_id)
     return [_to_list_response(r) for r in returns]
 
 
-@router.get("/due", response_model=List[TDSReturnListResponse])
+@router.get("/due", response_model=List[TDSReturnListResponse], response_model_by_alias=True)
 async def get_due_returns(
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get returns due for filing."""
     service = TDSReturnService(db)
-    returns = await service.get_due(organization_id)
+    returns = await service.get_due(current_user.organization_id)
     return [_to_list_response(r) for r in returns]
 
 
-@router.post("", response_model=TDSReturnResponse)
+@router.post("", response_model=TDSReturnResponse, response_model_by_alias=True)
 async def create_return(
     data: TDSReturnCreate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new TDS return."""
     service = TDSReturnService(db)
@@ -175,11 +172,11 @@ async def create_return(
     return _to_response(tds_return)
 
 
-@router.get("/{return_id}", response_model=TDSReturnResponse)
+@router.get("/{return_id}", response_model=TDSReturnResponse, response_model_by_alias=True)
 async def get_return(
     return_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS return by ID."""
     service = TDSReturnService(db)
@@ -187,12 +184,12 @@ async def get_return(
     return _to_response(tds_return)
 
 
-@router.put("/{return_id}", response_model=TDSReturnResponse)
+@router.put("/{return_id}", response_model=TDSReturnResponse, response_model_by_alias=True)
 async def update_return(
     return_id: UUID,
     data: TDSReturnUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a TDS return."""
     service = TDSReturnService(db)
@@ -200,11 +197,11 @@ async def update_return(
     return _to_response(tds_return)
 
 
-@router.post("/{return_id}/validate", response_model=ReturnValidationResult)
+@router.post("/{return_id}/validate", response_model=ReturnValidationResult, response_model_by_alias=True)
 async def validate_return(
     return_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Validate a TDS return."""
     service = TDSReturnService(db)
@@ -217,7 +214,7 @@ async def generate_file(
     return_id: UUID,
     data: ReturnFileGenerationRequest = ReturnFileGenerationRequest(),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate return file in NSDL format."""
     service = TDSReturnService(db)
@@ -235,12 +232,12 @@ async def generate_file(
     )
 
 
-@router.post("/{return_id}/filing-details", response_model=TDSReturnResponse)
+@router.post("/{return_id}/filing-details", response_model=TDSReturnResponse, response_model_by_alias=True)
 async def update_filing_details(
     return_id: UUID,
     data: FilingDetailsUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update filing details after submission."""
     service = TDSReturnService(db)
@@ -248,12 +245,12 @@ async def update_filing_details(
     return _to_response(tds_return)
 
 
-@router.post("/{return_id}/revise", response_model=TDSReturnResponse)
+@router.post("/{return_id}/revise", response_model=TDSReturnResponse, response_model_by_alias=True)
 async def create_revision(
     return_id: UUID,
     data: RevisionRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a revision of a filed return."""
     service = TDSReturnService(db)
@@ -265,7 +262,7 @@ async def create_revision(
 async def delete_return(
     return_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a TDS return."""
     service = TDSReturnService(db)

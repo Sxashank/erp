@@ -27,25 +27,13 @@ export * from './loanAccountApi';
 export * from './receiptApi';
 export * from './collectionApi';
 
-// Re-export disbursementApi (excluding getTranches to avoid conflict with treasuryApi)
+// Re-export actual disbursement endpoints.
 export {
   getDisbursements,
-  getDisbursement,
-  createDisbursementRequest,
-  updateDisbursementRequest,
-  deleteDisbursementRequest,
-  getPendingConditions,
-  verifyCondition,
-  submitDisbursement,
-  approveDisbursement,
-  initiateFundTransfer,
-  getTransferStatus,
-  confirmDisbursement,
-  getTranches as getDisbursementTranches,
-  getDisbursementsByAccount,
-  uploadUtilizationCertificate,
-  getUtilizationCertificates,
+  createDisbursement,
+  approveDisbursementRequest,
+  rejectDisbursementRequest,
+  processDisbursementRequest,
 } from './disbursementApi';
-export type { CreateDisbursementRequest } from './disbursementApi';
 
 export * from './treasuryApi';

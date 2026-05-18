@@ -3,23 +3,22 @@
 import hashlib
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Optional, List, BinaryIO
-from uuid import UUID, uuid4
+from datetime import UTC, datetime
+from typing import BinaryIO
+from uuid import UUID
 
-from sqlalchemy import select, and_, func
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.models.dms import (
     DMSDocument,
-    DMSDocumentVersion,
-    DMSDocumentAccess,
     DMSDocumentHistory,
     DMSDocumentTag,
-    DocumentStatus,
+    DMSDocumentVersion,
     DocumentAccessLevel,
+    DocumentStatus,
 )
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ class DocumentService:
     def __init__(self, db: AsyncSession):
         """Initialize document service."""
         self.db = db
-        self.upload_path = getattr(settings, 'UPLOAD_PATH', 'uploads')
+        self.upload_path = getattr(settings, "UPLOAD_PATH", "uploads")
 
     async def upload_document(
         self,
@@ -39,17 +38,18 @@ class DocumentService:
         file_name: str,
         file_size: int,
         mime_type: str,
-        folder_id: Optional[UUID] = None,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        document_type: Optional[str] = None,
-        document_subtype: Optional[str] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
+        folder_id: UUID | None = None,
+        name: str | None = None,
+        description: str | None = None,
+        document_type: str | None = None,
+        document_subtype: str | None = None,
+        entity_type: str | None = None,
+        entity_id: UUID | None = None,
         access_level: DocumentAccessLevel = DocumentAccessLevel.ORGANIZATION,
-        keywords: Optional[List[str]] = None,
-        expiry_date: Optional[datetime] = None,
-        created_by: Optional[UUID] = None,
+        keywords: list[str] | None = None,
+        expiry_date: datetime | None = None,
+        created_by: UUID | None = None,
+        auto_commit: bool = True,
     ) -> DMSDocument:
         """
         Upload a new document.
@@ -79,10 +79,23 @@ class DocumentService:
         code = await self._generate_code(organization_id)
 
         # Get file extension
-        file_extension = os.path.splitext(file_name)[1].lower().lstrip('.')
+        file_extension = os.path.splitext(file_name)[1].lower().lstrip(".")
 
         # Generate storage path
         storage_path = self._generate_storage_path(organization_id, code, file_extension)
+
+        # AV scan before persistence. Done here (rather than inside _save_file)
+        # so we never write infected content to disk, even transiently. The
+        # `clamav_scan` feature flag selects the backend; when OFF (production
+        # default until the sidecar is deployed) this is a no-op.
+        # See CLAUDE.md §8.7 and app/core/av_scan.py.
+        from app.core.av_scan import enforce_scan
+
+        body = file.read()
+        enforce_scan(body)
+        from io import BytesIO
+
+        file = BytesIO(body)
 
         # Save file to storage
         checksum = await self._save_file(file, storage_path)
@@ -138,7 +151,10 @@ class DocumentService:
             {"file_name": file_name, "file_size": file_size},
         )
 
-        await self.db.commit()
+        if auto_commit:
+            await self.db.flush()
+        else:
+            await self.db.flush()
         await self.db.refresh(document)
 
         return document
@@ -146,8 +162,8 @@ class DocumentService:
     async def get_document(
         self,
         document_id: UUID,
-        user_id: Optional[UUID] = None,
-    ) -> Optional[DMSDocument]:
+        user_id: UUID | None = None,
+    ) -> DMSDocument | None:
         """Get document by ID."""
         result = await self.db.execute(
             select(DMSDocument).where(
@@ -160,23 +176,25 @@ class DocumentService:
         if document and user_id:
             # Log view
             await self._log_history(document_id, "viewed", user_id)
-            document.last_accessed_at = datetime.now(timezone.utc)
-            await self.db.commit()
+            document.view_count = (document.view_count or 0) + 1
+            document.last_accessed_at = datetime.now(UTC)
+            await self.db.flush()
+            await self.db.refresh(document)
 
         return document
 
     async def list_documents(
         self,
         organization_id: UUID,
-        folder_id: Optional[UUID] = None,
-        document_type: Optional[str] = None,
-        status: Optional[DocumentStatus] = None,
-        entity_type: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        search: Optional[str] = None,
+        folder_id: UUID | None = None,
+        document_type: str | None = None,
+        status: DocumentStatus | None = None,
+        entity_type: str | None = None,
+        entity_id: UUID | None = None,
+        search: str | None = None,
         skip: int = 0,
         limit: int = 20,
-    ) -> tuple[List[DMSDocument], int]:
+    ) -> tuple[list[DMSDocument], int]:
         """
         List documents with filters.
 
@@ -200,9 +218,9 @@ class DocumentService:
             conditions.append(DMSDocument.entity_id == entity_id)
         if search:
             conditions.append(
-                (DMSDocument.name.ilike(f"%{search}%")) |
-                (DMSDocument.description.ilike(f"%{search}%")) |
-                (DMSDocument.file_name.ilike(f"%{search}%"))
+                (DMSDocument.name.ilike(f"%{search}%"))
+                | (DMSDocument.description.ilike(f"%{search}%"))
+                | (DMSDocument.file_name.ilike(f"%{search}%"))
             )
 
         # Count query
@@ -226,16 +244,16 @@ class DocumentService:
     async def update_document(
         self,
         document_id: UUID,
-        name: Optional[str] = None,
-        description: Optional[str] = None,
-        folder_id: Optional[UUID] = None,
-        document_type: Optional[str] = None,
-        document_subtype: Optional[str] = None,
-        access_level: Optional[DocumentAccessLevel] = None,
-        keywords: Optional[List[str]] = None,
-        expiry_date: Optional[datetime] = None,
-        updated_by: Optional[UUID] = None,
-    ) -> Optional[DMSDocument]:
+        name: str | None = None,
+        description: str | None = None,
+        folder_id: UUID | None = None,
+        document_type: str | None = None,
+        document_subtype: str | None = None,
+        access_level: DocumentAccessLevel | None = None,
+        keywords: list[str] | None = None,
+        expiry_date: datetime | None = None,
+        updated_by: UUID | None = None,
+    ) -> DMSDocument | None:
         """Update document metadata."""
         document = await self.get_document(document_id)
         if not document:
@@ -261,7 +279,7 @@ class DocumentService:
         document.updated_by = updated_by
 
         await self._log_history(document_id, "updated", updated_by)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(document)
 
         return document
@@ -273,9 +291,9 @@ class DocumentService:
         file_name: str,
         file_size: int,
         mime_type: str,
-        change_notes: Optional[str] = None,
-        uploaded_by: Optional[UUID] = None,
-    ) -> Optional[DMSDocumentVersion]:
+        change_notes: str | None = None,
+        uploaded_by: UUID | None = None,
+    ) -> DMSDocumentVersion | None:
         """Upload a new version of a document."""
         document = await self.get_document(document_id)
         if not document:
@@ -283,23 +301,32 @@ class DocumentService:
 
         # Generate storage path for new version
         new_version_number = document.current_version + 1
-        file_extension = os.path.splitext(file_name)[1].lower().lstrip('.')
+        file_extension = os.path.splitext(file_name)[1].lower().lstrip(".")
         storage_path = self._generate_storage_path(
             document.organization_id,
             f"{document.code}_v{new_version_number}",
             file_extension,
         )
 
+        # AV scan before persistence — see comment in upload_document.
+        from app.core.av_scan import enforce_scan
+
+        body = file.read()
+        enforce_scan(body)
+        from io import BytesIO
+
+        file = BytesIO(body)
+
         # Save file
         checksum = await self._save_file(file, storage_path)
 
         # Mark old versions as not current
         await self.db.execute(
-            select(DMSDocumentVersion)
-            .where(DMSDocumentVersion.document_id == document_id)
+            select(DMSDocumentVersion).where(DMSDocumentVersion.document_id == document_id)
         )
         # Update is_current on existing versions
         from sqlalchemy import update
+
         await self.db.execute(
             update(DMSDocumentVersion)
             .where(DMSDocumentVersion.document_id == document_id)
@@ -337,7 +364,7 @@ class DocumentService:
             {"version": new_version_number, "change_notes": change_notes},
         )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(version)
 
         return version
@@ -345,7 +372,7 @@ class DocumentService:
     async def delete_document(
         self,
         document_id: UUID,
-        deleted_by: Optional[UUID] = None,
+        deleted_by: UUID | None = None,
         hard_delete: bool = False,
     ) -> bool:
         """Delete a document (soft or hard delete)."""
@@ -367,15 +394,15 @@ class DocumentService:
             document.soft_delete(deleted_by)
             await self._log_history(document_id, "deleted", deleted_by)
 
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def download_document(
         self,
         document_id: UUID,
-        user_id: Optional[UUID] = None,
-        version: Optional[int] = None,
-    ) -> Optional[tuple[str, str, str]]:
+        user_id: UUID | None = None,
+        version: int | None = None,
+    ) -> tuple[str, str, str] | None:
         """
         Get document file path for download.
 
@@ -407,7 +434,7 @@ class DocumentService:
         # Update download count and log
         document.download_count += 1
         await self._log_history(document_id, "downloaded", user_id, {"version": version})
-        await self.db.commit()
+        await self.db.flush()
 
         return storage_path, file_name, mime_type
 
@@ -415,7 +442,7 @@ class DocumentService:
         self,
         document_id: UUID,
         tag_id: UUID,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> bool:
         """Add a tag to a document."""
         # Check if tag already exists
@@ -434,7 +461,7 @@ class DocumentService:
             created_by=created_by,
         )
         self.db.add(tag)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def remove_tag(
@@ -452,16 +479,18 @@ class DocumentService:
         tag = result.scalar_one_or_none()
         if tag:
             await self.db.delete(tag)
-            await self.db.commit()
+            await self.db.flush()
             return True
         return False
 
     async def _generate_code(self, organization_id: UUID) -> str:
         """Generate unique document code."""
         # Get count for today
-        today = datetime.now(timezone.utc).strftime("%Y%m%d")
+        today = datetime.now(UTC).strftime("%Y%m%d")
         result = await self.db.execute(
-            select(func.count()).select_from(DMSDocument).where(
+            select(func.count())
+            .select_from(DMSDocument)
+            .where(
                 DMSDocument.organization_id == organization_id,
                 DMSDocument.code.like(f"DOC-{today}%"),
             )
@@ -476,7 +505,7 @@ class DocumentService:
         extension: str,
     ) -> str:
         """Generate storage path for document."""
-        date_path = datetime.now(timezone.utc).strftime("%Y/%m/%d")
+        date_path = datetime.now(UTC).strftime("%Y/%m/%d")
         return f"{str(organization_id)}/{date_path}/{code}.{extension}"
 
     async def _save_file(self, file: BinaryIO, storage_path: str) -> str:
@@ -486,7 +515,7 @@ class DocumentService:
 
         # Calculate checksum while writing
         hasher = hashlib.sha256()
-        with open(full_path, 'wb') as f:
+        with open(full_path, "wb") as f:
             while chunk := file.read(8192):
                 hasher.update(chunk)
                 f.write(chunk)
@@ -503,8 +532,8 @@ class DocumentService:
         self,
         document_id: UUID,
         action: str,
-        user_id: Optional[UUID] = None,
-        details: Optional[dict] = None,
+        user_id: UUID | None = None,
+        details: dict | None = None,
     ) -> None:
         """Log document action to history."""
         history = DMSDocumentHistory(

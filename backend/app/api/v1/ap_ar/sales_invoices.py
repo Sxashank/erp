@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.ap_ar.sales_invoice_service import SalesInvoiceService
 from app.schemas.ap_ar.sales_invoice import (
@@ -116,9 +116,8 @@ def _to_list_response(invoice) -> SalesInvoiceListResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[SalesInvoiceListResponse])
+@router.get("", response_model=PaginatedResponse[SalesInvoiceListResponse], response_model_by_alias=True)
 async def list_sales_invoices(
-    organization_id: UUID = Query(..., description="Organization ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
@@ -129,49 +128,47 @@ async def list_sales_invoices(
     to_date: Optional[date] = Query(None, description="To date"),
     search: Optional[str] = Query(None, description="Search in invoice number"),
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of sales invoices."""
     service = SalesInvoiceService(db)
     skip = (page - 1) * page_size
     invoices, total = await service.get_all(
-        organization_id, skip, page_size, include_inactive,
+        current_user.organization_id, skip, page_size, include_inactive,
         status, receipt_status, customer_id, from_date, to_date, search
     )
     items = [_to_list_response(inv) for inv in invoices]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/unreceived/{customer_id}", response_model=list[SalesInvoiceListResponse])
+@router.get("/unreceived/{customer_id}", response_model=list[SalesInvoiceListResponse], response_model_by_alias=True)
 async def list_unreceived_invoices(
     customer_id: UUID,
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get unreceived invoices for a customer (for receipt allocation)."""
     service = SalesInvoiceService(db)
-    invoices = await service.get_unreceived_for_customer(organization_id, customer_id)
+    invoices = await service.get_unreceived_for_customer(current_user.organization_id, customer_id)
     return [_to_list_response(inv) for inv in invoices]
 
 
 @router.get("/generate-number")
 async def generate_invoice_number(
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate next invoice number."""
     service = SalesInvoiceService(db)
-    number = await service.generate_number(organization_id)
+    number = await service.generate_number(current_user.organization_id)
     return {"invoice_number": number}
 
 
-@router.post("", response_model=SalesInvoiceResponse)
+@router.post("", response_model=SalesInvoiceResponse, response_model_by_alias=True)
 async def create_sales_invoice(
     data: SalesInvoiceCreate,
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new sales invoice."""
     service = SalesInvoiceService(db)
@@ -179,11 +176,11 @@ async def create_sales_invoice(
     return _to_response(invoice)
 
 
-@router.get("/{invoice_id}", response_model=SalesInvoiceResponse)
+@router.get("/{invoice_id}", response_model=SalesInvoiceResponse, response_model_by_alias=True)
 async def get_sales_invoice(
     invoice_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get sales invoice by ID."""
     service = SalesInvoiceService(db)
@@ -191,12 +188,12 @@ async def get_sales_invoice(
     return _to_response(invoice)
 
 
-@router.put("/{invoice_id}", response_model=SalesInvoiceResponse)
+@router.put("/{invoice_id}", response_model=SalesInvoiceResponse, response_model_by_alias=True)
 async def update_sales_invoice(
     invoice_id: UUID,
     data: SalesInvoiceUpdate,
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a sales invoice."""
     service = SalesInvoiceService(db)
@@ -204,11 +201,11 @@ async def update_sales_invoice(
     return _to_response(invoice)
 
 
-@router.post("/{invoice_id}/submit", response_model=SalesInvoiceResponse)
+@router.post("/{invoice_id}/submit", response_model=SalesInvoiceResponse, response_model_by_alias=True)
 async def submit_sales_invoice(
     invoice_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Submit sales invoice for approval."""
     service = SalesInvoiceService(db)
@@ -216,11 +213,11 @@ async def submit_sales_invoice(
     return _to_response(invoice)
 
 
-@router.post("/{invoice_id}/approve", response_model=SalesInvoiceResponse)
+@router.post("/{invoice_id}/approve", response_model=SalesInvoiceResponse, response_model_by_alias=True)
 async def approve_sales_invoice(
     invoice_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Approve a sales invoice."""
     service = SalesInvoiceService(db)
@@ -233,7 +230,7 @@ async def cancel_sales_invoice(
     invoice_id: UUID,
     reason: str = Query(..., description="Cancellation reason"),
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel a sales invoice."""
     service = SalesInvoiceService(db)
@@ -245,7 +242,7 @@ async def cancel_sales_invoice(
 async def delete_sales_invoice(
     invoice_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_INVOICE_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a sales invoice."""
     service = SalesInvoiceService(db)

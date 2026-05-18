@@ -101,22 +101,33 @@ class DashboardService:
         organization_id: UUID,
     ) -> List[Dashboard]:
         """Get dashboards that should appear on landing page for given roles."""
-        query = (
-            select(Dashboard)
-            .join(DashboardRoleAccess)
+        landing_access = (
+            select(
+                DashboardRoleAccess.dashboard_id.label("dashboard_id"),
+                func.min(DashboardRoleAccess.landing_order).label("landing_order"),
+            )
             .where(
-                Dashboard.organization_id == organization_id,
-                Dashboard.is_active == True,
                 DashboardRoleAccess.role_id.in_(role_ids),
                 DashboardRoleAccess.can_view == True,
                 DashboardRoleAccess.show_on_landing == True,
+                DashboardRoleAccess.is_active == True,
+            )
+            .group_by(DashboardRoleAccess.dashboard_id)
+            .subquery()
+        )
+
+        query = (
+            select(Dashboard)
+            .join(landing_access, Dashboard.id == landing_access.c.dashboard_id)
+            .where(
+                Dashboard.organization_id == organization_id,
+                Dashboard.is_active == True,
             )
             .options(
                 selectinload(Dashboard.widgets),
                 selectinload(Dashboard.role_access),
             )
-            .order_by(DashboardRoleAccess.landing_order, Dashboard.display_order)
-            .distinct()
+            .order_by(landing_access.c.landing_order, Dashboard.display_order)
         )
 
         result = await self.session.execute(query)

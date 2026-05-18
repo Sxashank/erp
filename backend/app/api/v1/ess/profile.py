@@ -4,13 +4,14 @@ from datetime import date
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.services.ess.profile_service import ESSProfileService
 from app.models.ess.enums import ProfileUpdateType, ProfileUpdateStatus
+from app.core.exceptions import NotFoundException
 
 
 router = APIRouter(prefix="/profile", tags=["ESS Profile"])
@@ -114,7 +115,7 @@ class DashboardResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.get("/me", response_model=EmployeeProfileResponse)
+@router.get("/me", response_model=EmployeeProfileResponse, response_model_by_alias=True)
 async def get_my_profile(
     employee_id: UUID,  # From authenticated user
     session: AsyncSession = Depends(get_session),
@@ -124,10 +125,7 @@ async def get_my_profile(
     employee = await service.get_employee_profile(employee_id)
 
     if not employee:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Profile not found",
-        )
+        raise NotFoundException(detail="Profile not found", error_code="PROFILE_NOT_FOUND")
 
     return EmployeeProfileResponse(
         id=str(employee.id),
@@ -150,7 +148,7 @@ async def get_my_profile(
     )
 
 
-@router.get("/dashboard", response_model=DashboardResponse)
+@router.get("/dashboard", response_model=DashboardResponse, response_model_by_alias=True)
 async def get_dashboard(
     employee_id: UUID,  # From authenticated user
     session: AsyncSession = Depends(get_session),
@@ -160,15 +158,12 @@ async def get_dashboard(
     data = await service.get_dashboard_data(employee_id)
 
     if not data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dashboard data not found",
-        )
+        raise NotFoundException(detail="Dashboard data not found", error_code="DASHBOARD_DATA_NOT_FOUND")
 
     return data
 
 
-@router.post("/update-requests", response_model=ProfileUpdateRequestResponse)
+@router.post("/update-requests", response_model=ProfileUpdateRequestResponse, response_model_by_alias=True)
 async def create_update_request(
     request: ProfileUpdateRequestCreate,
     organization_id: UUID,  # From authenticated user
@@ -207,7 +202,7 @@ async def create_update_request(
     )
 
 
-@router.get("/update-requests", response_model=List[ProfileUpdateRequestResponse])
+@router.get("/update-requests", response_model=List[ProfileUpdateRequestResponse], response_model_by_alias=True)
 async def get_update_requests(
     employee_id: UUID,  # From authenticated user
     status: Optional[ProfileUpdateStatus] = None,
@@ -245,7 +240,7 @@ async def get_update_requests(
 
 # ==================== Payslip Endpoints ====================
 
-@router.get("/payslips", response_model=List[PayslipSummary])
+@router.get("/payslips", response_model=List[PayslipSummary], response_model_by_alias=True)
 async def get_payslips(
     employee_id: UUID,  # From authenticated user
     financial_year: Optional[str] = None,
@@ -288,10 +283,7 @@ async def get_payslip_detail(
     payslip = await service.get_payslip_by_id(payslip_id, employee_id)
 
     if not payslip:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Payslip not found",
-        )
+        raise NotFoundException(detail="Payslip not found", error_code="PAYSLIP_NOT_FOUND")
 
     # Return full payslip details
     return {
@@ -308,7 +300,7 @@ async def get_payslip_detail(
     }
 
 
-@router.get("/ytd-summary", response_model=YTDSummary)
+@router.get("/ytd-summary", response_model=YTDSummary, response_model_by_alias=True)
 async def get_ytd_summary(
     employee_id: UUID,  # From authenticated user
     financial_year: Optional[str] = None,
@@ -322,7 +314,7 @@ async def get_ytd_summary(
 
 # ==================== Leave Endpoints ====================
 
-@router.get("/leave-balance", response_model=List[LeaveBalanceResponse])
+@router.get("/leave-balance", response_model=List[LeaveBalanceResponse], response_model_by_alias=True)
 async def get_leave_balance(
     employee_id: UUID,  # From authenticated user
     session: AsyncSession = Depends(get_session),
@@ -368,7 +360,7 @@ async def get_attendance(
     ]
 
 
-@router.get("/attendance/summary", response_model=AttendanceSummaryResponse)
+@router.get("/attendance/summary", response_model=AttendanceSummaryResponse, response_model_by_alias=True)
 async def get_attendance_summary(
     employee_id: UUID,  # From authenticated user
     month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),  # YYYY-MM

@@ -3,7 +3,8 @@
  */
 
 import { ArrowUpRight, ArrowDownRight, TrendingUp, DollarSign, Users, Percent, Activity } from 'lucide-react';
-import { KPICardConfig } from '@/types/bi';
+
+import type { KPICardConfig } from '@/types/bi';
 
 interface KPICardWidgetProps {
   config: KPICardConfig;
@@ -21,7 +22,7 @@ const iconMap: Record<string, React.ElementType> = {
 const formatValue = (
   value: number | string | undefined,
   format?: 'currency' | 'number' | 'percentage',
-  decimals: number = 0,
+  decimals = 0,
   prefix?: string,
   suffix?: string
 ): string => {

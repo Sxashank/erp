@@ -1,10 +1,13 @@
-import { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { useWizard } from '@/components/lending/wizard/WizardContext';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Select,
   SelectContent,
@@ -12,9 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useWizard } from '@/components/lending/wizard/WizardContext';
-import { AmountInput } from '@/components/lending/common/AmountInput';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { Textarea } from '@/components/ui/textarea';
 
 interface Security {
   id: string;

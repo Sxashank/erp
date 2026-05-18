@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.masters.organization_bank_account_service import OrganizationBankAccountService
 from app.schemas.masters.organization_bank_account import (
@@ -46,12 +46,12 @@ def _to_response(account) -> OrganizationBankAccountResponse:
     )
 
 
-@router.get("/{org_id}/bank-accounts", response_model=List[OrganizationBankAccountResponse])
+@router.get("/{org_id}/bank-accounts", response_model=List[OrganizationBankAccountResponse], response_model_by_alias=True)
 async def list_organization_bank_accounts(
     org_id: UUID,
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("MASTER_ORG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get all bank accounts for an organization.
@@ -62,12 +62,12 @@ async def list_organization_bank_accounts(
     return [_to_response(a) for a in accounts]
 
 
-@router.post("/{org_id}/bank-accounts", response_model=OrganizationBankAccountResponse)
+@router.post("/{org_id}/bank-accounts", response_model=OrganizationBankAccountResponse, response_model_by_alias=True)
 async def create_organization_bank_account(
     org_id: UUID,
     data: OrganizationBankAccountCreate,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_BANK_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new bank account for an organization.
@@ -80,12 +80,12 @@ async def create_organization_bank_account(
     return _to_response(account)
 
 
-@router.get("/{org_id}/bank-accounts/{account_id}", response_model=OrganizationBankAccountResponse)
+@router.get("/{org_id}/bank-accounts/{account_id}", response_model=OrganizationBankAccountResponse, response_model_by_alias=True)
 async def get_organization_bank_account(
     org_id: UUID,
     account_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get a specific bank account.
@@ -96,13 +96,13 @@ async def get_organization_bank_account(
     return _to_response(account)
 
 
-@router.put("/{org_id}/bank-accounts/{account_id}", response_model=OrganizationBankAccountResponse)
+@router.put("/{org_id}/bank-accounts/{account_id}", response_model=OrganizationBankAccountResponse, response_model_by_alias=True)
 async def update_organization_bank_account(
     org_id: UUID,
     account_id: UUID,
     data: OrganizationBankAccountUpdate,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_BANK_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing bank account.
@@ -113,12 +113,12 @@ async def update_organization_bank_account(
     return _to_response(account)
 
 
-@router.delete("/{org_id}/bank-accounts/{account_id}", response_model=MessageResponse)
+@router.delete("/{org_id}/bank-accounts/{account_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_organization_bank_account(
     org_id: UUID,
     account_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_BANK_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a bank account.
@@ -129,12 +129,12 @@ async def delete_organization_bank_account(
     return MessageResponse(message="Bank account deleted successfully")
 
 
-@router.post("/{org_id}/bank-accounts/{account_id}/set-primary", response_model=OrganizationBankAccountResponse)
+@router.post("/{org_id}/bank-accounts/{account_id}/set-primary", response_model=OrganizationBankAccountResponse, response_model_by_alias=True)
 async def set_primary_bank_account(
     org_id: UUID,
     account_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_ORG_BANK_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Set a bank account as primary.

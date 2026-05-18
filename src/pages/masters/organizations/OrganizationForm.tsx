@@ -1,13 +1,13 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -15,12 +15,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { organizationsApi } from '@/services/api';
 import { INDIAN_STATES, STATUS_OPTIONS } from '@/types';
 import type { OrganizationCreate, OrganizationUpdate, Organization } from '@/types';
 
+import { logger } from "@/lib/logger";
 const CURRENCIES = [
   { value: 'INR', label: 'Indian Rupee (INR)' },
   { value: 'USD', label: 'US Dollar (USD)' },
@@ -99,7 +100,7 @@ export function OrganizationForm() {
         status: org.status,
       });
     } catch (error) {
-      console.error('Failed to fetch organization:', error);
+      logger.error('Failed to fetch organization:', error);
     } finally {
       setLoading(false);
     }
@@ -115,7 +116,7 @@ export function OrganizationForm() {
       }
       navigate('/admin/organizations');
     } catch (error) {
-      console.error('Failed to save organization:', error);
+      logger.error('Failed to save organization:', error);
     } finally {
       setSubmitting(false);
     }

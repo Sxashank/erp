@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, RequirePermissions
+from app.api.deps import get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.masters.designation_service import DesignationService
 from app.schemas.masters.designation import (
@@ -20,14 +20,14 @@ from app.schemas.base import PaginatedResponse, MessageResponse
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[DesignationResponse])
+@router.get("", response_model=PaginatedResponse[DesignationResponse], response_model_by_alias=True)
 async def list_designations(
     department_id: Optional[UUID] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of designations.
@@ -42,11 +42,11 @@ async def list_designations(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=DesignationResponse)
+@router.post("", response_model=DesignationResponse, response_model_by_alias=True)
 async def create_designation(
     data: DesignationCreate,
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new designation.
@@ -58,11 +58,11 @@ async def create_designation(
     return _desig_to_response(desig)
 
 
-@router.get("/{desig_id}", response_model=DesignationResponse)
+@router.get("/{desig_id}", response_model=DesignationResponse, response_model_by_alias=True)
 async def get_designation(
     desig_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get designation by ID.
@@ -74,12 +74,12 @@ async def get_designation(
     return _desig_to_response(desig)
 
 
-@router.put("/{desig_id}", response_model=DesignationResponse)
+@router.put("/{desig_id}", response_model=DesignationResponse, response_model_by_alias=True)
 async def update_designation(
     desig_id: UUID,
     data: DesignationUpdate,
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing designation.
@@ -91,11 +91,11 @@ async def update_designation(
     return _desig_to_response(desig)
 
 
-@router.delete("/{desig_id}", response_model=MessageResponse)
+@router.delete("/{desig_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_designation(
     desig_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a designation.
@@ -107,11 +107,11 @@ async def delete_designation(
     return MessageResponse(message="Designation deleted successfully")
 
 
-@router.get("/{desig_id}/reports", response_model=List[DesignationResponse])
+@router.get("/{desig_id}/reports", response_model=List[DesignationResponse], response_model_by_alias=True)
 async def get_designation_reports(
     desig_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get designations that report to this designation.
@@ -123,11 +123,11 @@ async def get_designation_reports(
     return [_desig_to_response(d) for d in reports]
 
 
-@router.get("/{desig_id}/hierarchy", response_model=List[DesignationResponse])
+@router.get("/{desig_id}/hierarchy", response_model=List[DesignationResponse], response_model_by_alias=True)
 async def get_designation_hierarchy(
     desig_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get reporting hierarchy for a designation.

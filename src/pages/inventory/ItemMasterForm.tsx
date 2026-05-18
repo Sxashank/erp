@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
@@ -18,6 +18,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -26,8 +27,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Save } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const itemSchema = z.object({
   itemCode: z.string().min(1, 'Item code is required').max(50),
@@ -35,7 +35,23 @@ const itemSchema = z.object({
   description: z.string().optional(),
   categoryId: z.string().min(1, 'Category is required'),
   itemType: z.enum(['STOCK', 'SERVICE', 'CONSUMABLE', 'FIXED_ASSET']),
-  uom: z.enum(['EACH', 'BOX', 'CARTON', 'PACK', 'KG', 'GRAM', 'LITER', 'ML', 'METER', 'CM', 'PIECE', 'SET', 'PAIR', 'DOZEN', 'REAM']),
+  uom: z.enum([
+    'EACH',
+    'BOX',
+    'CARTON',
+    'PACK',
+    'KG',
+    'GRAM',
+    'LITER',
+    'ML',
+    'METER',
+    'CM',
+    'PIECE',
+    'SET',
+    'PAIR',
+    'DOZEN',
+    'REAM',
+  ]),
   brand: z.string().optional(),
   modelNumber: z.string().optional(),
   sku: z.string().optional(),
@@ -123,16 +139,16 @@ export default function ItemMasterForm() {
 
   const onSubmit = (data: ItemFormData) => {
     logger.debug('Form submitted:', data);
-    navigate('/inventory/items');
+    navigate('/admin/inventory/items');
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={isEdit ? 'Edit Item' : 'Create Item'}
         subtitle={isEdit ? 'Update item details' : 'Add a new inventory item'}
         breadcrumbs={[
-          { label: 'Items', to: '/inventory/items' },
+          { label: 'Items', to: '/admin/inventory/items' },
           { label: isEdit ? 'Edit' : 'New' },
         ]}
       />
@@ -151,7 +167,7 @@ export default function ItemMasterForm() {
                 <CardHeader>
                   <CardTitle>Basic Information</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
                     name="itemCode"
@@ -319,11 +335,7 @@ export default function ItemMasterForm() {
                         <FormItem>
                           <FormLabel>Description</FormLabel>
                           <FormControl>
-                            <Textarea
-                              placeholder="Enter item description"
-                              rows={3}
-                              {...field}
-                            />
+                            <Textarea placeholder="Enter item description" rows={3} {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
@@ -340,17 +352,14 @@ export default function ItemMasterForm() {
                   <CardTitle>Inventory Settings</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <FormField
                       control={form.control}
                       name="isStockable"
                       render={({ field }) => (
                         <FormItem className="flex items-center space-x-2 space-y-0">
                           <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
                           <FormLabel className="font-normal">Is Stockable</FormLabel>
                         </FormItem>
@@ -363,10 +372,7 @@ export default function ItemMasterForm() {
                       render={({ field }) => (
                         <FormItem className="flex items-center space-x-2 space-y-0">
                           <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
                           <FormLabel className="font-normal">Requires Serial Number</FormLabel>
                         </FormItem>
@@ -379,10 +385,7 @@ export default function ItemMasterForm() {
                       render={({ field }) => (
                         <FormItem className="flex items-center space-x-2 space-y-0">
                           <FormControl>
-                            <Checkbox
-                              checked={field.value}
-                              onCheckedChange={field.onChange}
-                            />
+                            <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                           </FormControl>
                           <FormLabel className="font-normal">Requires Batch Number</FormLabel>
                         </FormItem>
@@ -390,7 +393,7 @@ export default function ItemMasterForm() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                     <FormField
                       control={form.control}
                       name="minimumStockLevel"
@@ -457,7 +460,9 @@ export default function ItemMasterForm() {
                               type="number"
                               placeholder="Optional"
                               {...field}
-                              onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                              onChange={(e) =>
+                                field.onChange(e.target.value ? Number(e.target.value) : undefined)
+                              }
                             />
                           </FormControl>
                           <FormMessage />
@@ -474,7 +479,7 @@ export default function ItemMasterForm() {
                 <CardHeader>
                   <CardTitle>Pricing & Tax</CardTitle>
                 </CardHeader>
-                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
                     name="standardCost"
@@ -567,7 +572,7 @@ export default function ItemMasterForm() {
               Cancel
             </Button>
             <Button type="submit">
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               {isEdit ? 'Update Item' : 'Create Item'}
             </Button>
           </div>

@@ -79,7 +79,7 @@ class CustomerService:
         customer_data["current_balance_type"] = data.opening_balance_type
 
         customer = await self.repo.create(customer_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(customer)
         return customer
 
@@ -106,7 +106,7 @@ class CustomerService:
         update_data["updated_at"] = datetime.now(timezone.utc)
 
         customer = await self.repo.update(customer, update_data)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(customer)
         return customer
 
@@ -118,4 +118,4 @@ class CustomerService:
         # TODO: Add check for invoices and receipts
 
         await self.repo.soft_delete(customer, user_id)
-        await self.db.commit()
+        await self.db.flush()

@@ -11,14 +11,15 @@ from datetime import date
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import get_db, get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.gst.einvoice import EInvoiceRequestStatus
 from app.services.gst.einvoice_service import EInvoiceService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter(prefix="/einvoice", tags=["E-Invoice"])
 
@@ -84,14 +85,14 @@ class EInvoiceStatistics(BaseModel):
 
 @router.post(
     "/generate",
-    response_model=EInvoiceResponse,
+    response_model=EInvoiceResponse, response_model_by_alias=True,
     summary="Generate E-Invoice",
     description="Generate E-Invoice (IRN) for a sales invoice.",
 )
 async def generate_einvoice(
     request: GenerateEInvoiceRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_CREATE")),
 ):
     """Generate E-Invoice for sales invoice."""
     service = EInvoiceService(db)
@@ -117,23 +118,20 @@ async def generate_einvoice(
             created_at=result.created_at.isoformat() if result.created_at else "",
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{request_id}/cancel",
-    response_model=EInvoiceResponse,
+    response_model=EInvoiceResponse, response_model_by_alias=True,
     summary="Cancel E-Invoice",
     description="Cancel an E-Invoice by IRN.",
 )
 async def cancel_einvoice(
     request_id: UUID,
     request: CancelEInvoiceRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.cancel")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_CANCEL")),
 ):
     """Cancel E-Invoice."""
     service = EInvoiceService(db)
@@ -157,30 +155,27 @@ async def cancel_einvoice(
             created_at=result.created_at.isoformat() if result.created_at else "",
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/{request_id}",
-    response_model=EInvoiceResponse,
+    response_model=EInvoiceResponse, response_model_by_alias=True,
     summary="Get E-Invoice",
     description="Get E-Invoice details by ID.",
 )
 async def get_einvoice(
     request_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_READ")),
 ):
     """Get E-Invoice details."""
     service = EInvoiceService(db)
     result = await service.get_einvoice_request(request_id)
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="E-Invoice request not found",
+            error_code="E_INVOICE_REQUEST_NOT_FOUND",
         )
     return EInvoiceResponse(
         id=result.id,
@@ -202,14 +197,14 @@ async def get_einvoice(
 
 @router.get(
     "/invoice/{sales_invoice_id}",
-    response_model=Optional[EInvoiceResponse],
+    response_model=Optional[EInvoiceResponse], response_model_by_alias=True,
     summary="Get E-Invoice by Sales Invoice",
     description="Get E-Invoice for a sales invoice.",
 )
 async def get_einvoice_by_invoice(
     sales_invoice_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_READ")),
 ):
     """Get E-Invoice by sales invoice ID."""
     service = EInvoiceService(db)
@@ -236,7 +231,7 @@ async def get_einvoice_by_invoice(
 
 @router.get(
     "",
-    response_model=EInvoiceListResponse,
+    response_model=EInvoiceListResponse, response_model_by_alias=True,
     summary="List E-Invoices",
     description="List E-Invoice requests with filtering.",
 )
@@ -247,8 +242,8 @@ async def list_einvoices(
     to_date: Optional[date] = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_READ")),
 ):
     """List E-Invoice requests."""
     service = EInvoiceService(db)
@@ -290,14 +285,14 @@ async def list_einvoices(
 
 @router.post(
     "/{request_id}/retry",
-    response_model=EInvoiceResponse,
+    response_model=EInvoiceResponse, response_model_by_alias=True,
     summary="Retry Failed E-Invoice",
     description="Retry a failed E-Invoice generation.",
 )
 async def retry_einvoice(
     request_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.create")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_CREATE")),
 ):
     """Retry failed E-Invoice generation."""
     service = EInvoiceService(db)
@@ -323,15 +318,12 @@ async def retry_einvoice(
             created_at=result.created_at.isoformat() if result.created_at else "",
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/statistics",
-    response_model=EInvoiceStatistics,
+    response_model=EInvoiceStatistics, response_model_by_alias=True,
     summary="Get E-Invoice Statistics",
     description="Get E-Invoice generation statistics.",
 )
@@ -339,8 +331,8 @@ async def get_statistics(
     organization_id: UUID,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_READ")),
 ):
     """Get E-Invoice statistics."""
     service = EInvoiceService(db)
@@ -360,8 +352,8 @@ async def get_statistics(
 async def check_applicable(
     organization_id: UUID,
     invoice_date: date,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("einvoice.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("EINVOICE_READ")),
 ):
     """Check E-Invoice applicability."""
     service = EInvoiceService(db)

@@ -117,7 +117,7 @@ class WorkflowEngine:
             comments=f"Workflow started for {entity_reference}",
         )
 
-        await self.session.commit()
+        await self.session.flush()
         return instance
 
     async def process_approval(
@@ -198,7 +198,7 @@ class WorkflowEngine:
             else:
                 await self._handle_step_rejection(instance, step, action_by, comments)
 
-        await self.session.commit()
+        await self.session.flush()
 
         # Reload instance with fresh data
         return await self._get_instance(instance.id)
@@ -249,7 +249,7 @@ class WorkflowEngine:
             comments=reason,
         )
 
-        await self.session.commit()
+        await self.session.flush()
         return instance
 
     async def delegate_task(
@@ -293,7 +293,7 @@ class WorkflowEngine:
             task=task,
         )
 
-        await self.session.commit()
+        await self.session.flush()
         return task
 
     async def get_pending_tasks(

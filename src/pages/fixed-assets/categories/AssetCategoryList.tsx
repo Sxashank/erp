@@ -1,350 +1,166 @@
-import { useEffect, useState } from 'react';
+import { Edit, Plus, Trash2 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronRight, Edit, FolderTree, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
+import {
+  AmountDisplay,
+  DataTable,
+  FilterBar,
+  PageHeader,
+  type Column,
+} from '@/components/common';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { fixedAssetsApi, organizationsApi } from '@/services/api';
-import type { Organization, PaginatedResponse } from '@/types';
+import { useAssetCategories, useDeleteAssetCategory } from '@/hooks/fixed-assets/useAssetCategories';
+import { useToast } from '@/hooks/use-toast';
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import { showErrorToast } from '@/lib/errorToast';
+import type { AssetCategory } from '@/types/fixed-assets';
 
-interface AssetCategoryTreeNode {
-  id: string;
-  organization_id: string;
-  category_code: string;
-  category_name: string;
-  description?: string;
-  parent_category_id?: string;
-  asset_type: string;
-  depreciation_method: string;
-  useful_life_years?: number;
-  depreciation_rate_slm?: number;
-  depreciation_rate_wdv?: number;
-  is_active: boolean;
-  children?: AssetCategoryTreeNode[];
-}
-
-interface TreeRowProps {
-  node: AssetCategoryTreeNode;
-  level: number;
-  expandedNodes: Set<string>;
-  toggleNode: (id: string) => void;
-  onEdit: (id: string) => void;
-  onDelete: (id: string) => void;
-}
-
-function TreeRow({ node, level, expandedNodes, toggleNode, onEdit, onDelete }: TreeRowProps) {
-  const isExpanded = expandedNodes.has(node.id);
-  const hasChildren = node.children && node.children.length > 0;
-
-  const getAssetTypeBadgeClass = (type: string) => {
-    switch (type) {
-      case 'TANGIBLE':
-        return 'bg-blue-50 text-blue-700';
-      case 'INTANGIBLE':
-        return 'bg-purple-50 text-purple-700';
-      case 'RIGHT_OF_USE':
-        return 'bg-emerald-50 text-emerald-700';
-      default:
-        return 'bg-slate-100 text-slate-600';
-    }
-  };
-
-  const getDepMethodBadgeClass = (method: string) => {
-    switch (method) {
-      case 'SLM':
-        return 'bg-orange-50 text-orange-700';
-      case 'WDV':
-        return 'bg-cyan-50 text-cyan-700';
-      case 'UNIT_OF_PRODUCTION':
-        return 'bg-violet-50 text-violet-700';
-      case 'NO_DEPRECIATION':
-        return 'bg-slate-100 text-slate-600';
-      default:
-        return 'bg-slate-100 text-slate-600';
-    }
-  };
-
-  return (
-    <>
-      <TableRow>
-        <TableCell>
-          <div className="flex items-center" style={{ paddingLeft: `${level * 20}px` }}>
-            {hasChildren ? (
-              <button
-                onClick={() => toggleNode(node.id)}
-                className="mr-2 p-1 hover:bg-slate-100 rounded"
-              >
-                {isExpanded ? (
-                  <ChevronDown className="h-4 w-4" />
-                ) : (
-                  <ChevronRight className="h-4 w-4" />
-                )}
-              </button>
-            ) : (
-              <span className="w-6 mr-2" />
-            )}
-            <span className="font-medium">{node.category_code}</span>
-          </div>
-        </TableCell>
-        <TableCell>{node.category_name}</TableCell>
-        <TableCell>
-          <Badge className={`${getAssetTypeBadgeClass(node.asset_type)} hover:${getAssetTypeBadgeClass(node.asset_type)}`}>
-            {node.asset_type.replace(/_/g, ' ')}
-          </Badge>
-        </TableCell>
-        <TableCell>
-          <Badge className={`${getDepMethodBadgeClass(node.depreciation_method)} hover:${getDepMethodBadgeClass(node.depreciation_method)}`}>
-            {node.depreciation_method.replace(/_/g, ' ')}
-          </Badge>
-        </TableCell>
-        <TableCell className="text-right">
-          {node.useful_life_years ? `${node.useful_life_years} years` : '-'}
-        </TableCell>
-        <TableCell className="text-right">
-          {node.depreciation_rate_slm ? `${node.depreciation_rate_slm}%` : '-'}
-        </TableCell>
-        <TableCell className="text-right">
-          {node.depreciation_rate_wdv ? `${node.depreciation_rate_wdv}%` : '-'}
-        </TableCell>
-        <TableCell>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <MoreHorizontal className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => onEdit(node.id)}>
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => onDelete(node.id)}
-                className="text-red-600"
-              >
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </TableCell>
-      </TableRow>
-      {isExpanded &&
-        hasChildren &&
-        node.children!.map((child) => (
-          <TreeRow
-            key={child.id}
-            node={child}
-            level={level + 1}
-            expandedNodes={expandedNodes}
-            toggleNode={toggleNode}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        ))}
-    </>
-  );
-}
-
-export function AssetCategoryList() {
+export function AssetCategoryList(): JSX.Element {
+  const organizationId = useRequiredActiveOrganizationId();
   const navigate = useNavigate();
-  const [treeData, setTreeData] = useState<AssetCategoryTreeNode[]>([]);
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+  const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
+  const categoriesQuery = useAssetCategories(organizationId);
+  const deleteMutation = useDeleteAssetCategory(organizationId);
 
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchCategories();
-    }
-  }, [selectedOrgId]);
+  const categories = categoriesQuery.data?.items ?? [];
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return categories;
+    return categories.filter((category) =>
+      [category.categoryCode, category.categoryName, category.parentCategoryName]
+        .filter(Boolean)
+        .some((value) => value!.toLowerCase().includes(query)),
+    );
+  }, [categories, search]);
 
-  const fetchOrganizations = async () => {
-    try {
-      const response = await organizationsApi.list({ page_size: 100 });
-      const data: PaginatedResponse<Organization> = response.data;
-      setOrganizations(data.items);
-      if (data.items.length > 0) {
-        setSelectedOrgId(data.items[0].id);
-      }
-    } catch (error) {
-      console.error('Failed to fetch organizations:', error);
-    }
-  };
-
-  const fetchCategories = async () => {
-    if (!selectedOrgId) return;
-    try {
-      setLoading(true);
-      const response = await fixedAssetsApi.getCategoryTree(selectedOrgId);
-      setTreeData(response.data);
-      // Expand root level by default
-      const rootIds = new Set<string>(response.data.map((node: AssetCategoryTreeNode) => node.id));
-      setExpandedNodes(rootIds);
-    } catch (error) {
-      console.error('Failed to fetch asset categories:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const toggleNode = (id: string) => {
-    setExpandedNodes((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const expandAll = () => {
-    const allIds = new Set<string>();
-    const collectIds = (nodes: AssetCategoryTreeNode[]) => {
-      nodes.forEach((node) => {
-        allIds.add(node.id);
-        if (node.children) {
-          collectIds(node.children);
-        }
-      });
-    };
-    collectIds(treeData);
-    setExpandedNodes(allIds);
-  };
-
-  const collapseAll = () => {
-    setExpandedNodes(new Set());
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this asset category?')) return;
-    try {
-      await fixedAssetsApi.deleteCategory(id);
-      fetchCategories();
-    } catch (error) {
-      console.error('Failed to delete asset category:', error);
-    }
-  };
-
-  const handleEdit = (id: string) => {
-    navigate(`/admin/fixed-assets/categories/${id}/edit`);
-  };
+  const columns: Column<AssetCategory>[] = useMemo(
+    () => [
+      {
+        key: 'categoryCode',
+        header: 'Category',
+        render: (row) => (
+          <div>
+            <div className="font-medium">{row.categoryName}</div>
+            <div className="text-xs text-muted-foreground">{row.categoryCode}</div>
+          </div>
+        ),
+        sortable: true,
+        sortValue: (row) => row.categoryCode,
+      },
+      {
+        key: 'parentCategoryName',
+        header: 'Parent',
+        render: (row) => row.parentCategoryName ?? 'Root category',
+      },
+      {
+        key: 'assetType',
+        header: 'Asset type',
+        render: (row) => row.assetType.replace(/_/g, ' '),
+        sortable: true,
+        sortValue: (row) => row.assetType,
+      },
+      {
+        key: 'depreciationMethod',
+        header: 'Depreciation',
+        render: (row) => (
+          <div>
+            <div className="font-medium">{row.depreciationMethod.replace(/_/g, ' ')}</div>
+            <div className="text-xs text-muted-foreground">
+              Life {row.usefulLifeYears} years
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: 'capitalizationThreshold',
+        header: 'Threshold',
+        align: 'right',
+        render: (row) => <AmountDisplay amount={row.capitalizationThreshold} compact />,
+        sortable: true,
+        sortValue: (row) => Number(row.capitalizationThreshold),
+      },
+      {
+        key: 'assetCount',
+        header: 'Assets',
+        align: 'right',
+        render: (row) => row.assetCount.toLocaleString('en-IN'),
+        sortable: true,
+        sortValue: (row) => row.assetCount,
+      },
+      {
+        key: 'actions',
+        header: '',
+        align: 'right',
+        render: (row) => (
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/admin/fixed-assets/categories/${row.id}/edit`)}
+            >
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="text-red-600 hover:text-red-700"
+              onClick={async () => {
+                if (!window.confirm(`Delete category ${row.categoryCode}?`)) return;
+                try {
+                  await deleteMutation.mutateAsync(row.id);
+                  toast({ title: 'Asset category deleted' });
+                } catch (error) {
+                  showErrorToast(error, toast);
+                }
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              Delete
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    [deleteMutation, navigate, toast],
+  );
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Asset Categories"
-        subtitle="Manage fixed asset category hierarchy and depreciation settings"
+        subtitle="Define capitalization thresholds, depreciation defaults, and GL mapping for fixed assets."
+        breadcrumbs={[{ label: 'Fixed Assets' }, { label: 'Asset Categories' }]}
         actions={
           <Button onClick={() => navigate('/admin/fixed-assets/categories/new')}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Category
+            New category
           </Button>
         }
       />
 
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Asset Category Hierarchy</CardTitle>
-            <div className="flex items-center gap-4">
-              <div className="flex gap-2">
-                <Button variant="outline" size="sm" onClick={expandAll}>
-                  Expand All
-                </Button>
-                <Button variant="outline" size="sm" onClick={collapseAll}>
-                  Collapse All
-                </Button>
-              </div>
-              <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
-                <SelectTrigger className="w-[250px]">
-                  <SelectValue placeholder="Select organization" />
-                </SelectTrigger>
-                <SelectContent>
-                  {organizations.map((org) => (
-                    <SelectItem key={org.id} value={org.id}>
-                      {org.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <p className="text-sm text-slate-500">Loading...</p>
-            </div>
-          ) : treeData.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <FolderTree className="mb-4 h-12 w-12 text-slate-300" />
-              <p className="text-sm text-slate-500">No asset categories found</p>
-              <Button variant="link" onClick={() => navigate('/admin/fixed-assets/categories/new')}>
-                Create your first asset category
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Code</TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Asset Type</TableHead>
-                  <TableHead>Dep. Method</TableHead>
-                  <TableHead className="text-right">Useful Life</TableHead>
-                  <TableHead className="text-right">SLM Rate</TableHead>
-                  <TableHead className="text-right">WDV Rate</TableHead>
-                  <TableHead className="w-[70px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {treeData.map((node) => (
-                  <TreeRow
-                    key={node.id}
-                    node={node}
-                    level={0}
-                    expandedNodes={expandedNodes}
-                    toggleNode={toggleNode}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+      <FilterBar
+        search={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="Search by category code, name, or parent"
+        onClear={() => setSearch('')}
+      />
+
+      <DataTable
+        data={filtered}
+        columns={columns}
+        getRowId={(row) => row.id}
+        isLoading={categoriesQuery.isLoading}
+        error={categoriesQuery.error}
+        onRetry={() => categoriesQuery.refetch()}
+        emptyTitle="No asset categories found"
+        emptySubtitle="Create a category to start classifying and capitalizing fixed assets."
+      />
     </div>
   );
 }

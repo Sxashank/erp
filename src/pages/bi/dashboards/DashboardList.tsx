@@ -2,20 +2,11 @@
  * Dashboard List Page
  */
 
+import { Plus, Edit, Trash2, Eye, Settings, Star, StarOff, Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Eye, Settings, Star, StarOff, Loader2 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,11 +18,22 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { biDashboardApi } from '@/services/biApi';
-import { DashboardListItem } from '@/types/bi';
 import { hasPermission, Permissions } from '@/lib/permissions';
+import { biDashboardApi } from '@/services/biApi';
+import type { DashboardListItem } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
 export function DashboardList() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -54,7 +56,7 @@ export function DashboardList() {
       const response = await biDashboardApi.list();
       setDashboards(response.data);
     } catch (error) {
-      console.error('Error fetching dashboards:', error);
+      logger.error('Error fetching dashboards:', error);
       toast({
         title: 'Error',
         description: 'Failed to load dashboards',
@@ -81,7 +83,7 @@ export function DashboardList() {
       });
       fetchDashboards();
     } catch (error) {
-      console.error('Error deleting dashboard:', error);
+      logger.error('Error deleting dashboard:', error);
       toast({
         title: 'Error',
         description: 'Failed to delete dashboard',
@@ -102,7 +104,7 @@ export function DashboardList() {
       });
       fetchDashboards();
     } catch (error) {
-      console.error('Error setting default:', error);
+      logger.error('Error setting default:', error);
       toast({
         title: 'Error',
         description: 'Failed to set default dashboard',

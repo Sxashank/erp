@@ -1,43 +1,42 @@
 """Loan Product API endpoints."""
 
 from datetime import date
-from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
 from app.api.deps import RequirePermissions
+from app.database import get_db
 from app.models.auth.user import User
 from app.models.lending.enums import (
-    ProductCategory,
-    InterestType,
-    FeeType,
     DocumentStage,
     EntityType,
-)
-from app.services.lending.product_service import ProductService
-from app.schemas.lending.product import (
-    LoanProductCreate,
-    LoanProductUpdate,
-    LoanProductResponse,
-    LoanProductListResponse,
-    LoanProductDetailResponse,
-    InterestRateCreate,
-    InterestRateUpdate,
-    InterestRateResponse,
-    FeeMasterCreate,
-    FeeMasterUpdate,
-    FeeMasterResponse,
-    ProductFeeCreate,
-    ProductFeeUpdate,
-    ProductFeeResponse,
-    DocumentChecklistCreate,
-    DocumentChecklistUpdate,
-    DocumentChecklistResponse,
+    FeeType,
+    InterestType,
+    ProductCategory,
 )
 from app.schemas.base import PaginatedResponse
+from app.schemas.lending.product import (
+    DocumentChecklistCreate,
+    DocumentChecklistResponse,
+    DocumentChecklistUpdate,
+    FeeMasterCreate,
+    FeeMasterResponse,
+    FeeMasterUpdate,
+    InterestRateCreate,
+    InterestRateResponse,
+    InterestRateUpdate,
+    LoanProductCreate,
+    LoanProductDetailResponse,
+    LoanProductListResponse,
+    LoanProductResponse,
+    LoanProductUpdate,
+    ProductFeeCreate,
+    ProductFeeResponse,
+    ProductFeeUpdate,
+)
+from app.services.lending.product_service import ProductService
 
 router = APIRouter()
 
@@ -47,12 +46,16 @@ router = APIRouter()
 # =============================================================================
 
 
-@router.get("/interest-rates", response_model=PaginatedResponse[InterestRateResponse])
+@router.get(
+    "/interest-rates",
+    response_model=PaginatedResponse[InterestRateResponse],
+    response_model_by_alias=True,
+)
 async def list_interest_rates(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
-    effective_date: Optional[date] = Query(None),
+    effective_date: date | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -70,19 +73,28 @@ async def list_interest_rates(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("/interest-rates", response_model=InterestRateResponse)
+@router.post(
+    "/interest-rates",
+    response_model=InterestRateResponse,
+    response_model_by_alias=True,
+)
 async def create_interest_rate(
     data: InterestRateCreate,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_CREATE")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new interest rate."""
+    data.organization_id = current_user.organization_id
     service = ProductService(db)
     rate = await service.create_interest_rate(data, current_user.id)
     return InterestRateResponse.model_validate(rate)
 
 
-@router.get("/interest-rates/{rate_id}", response_model=InterestRateResponse)
+@router.get(
+    "/interest-rates/{rate_id}",
+    response_model=InterestRateResponse,
+    response_model_by_alias=True,
+)
 async def get_interest_rate(
     rate_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
@@ -94,7 +106,11 @@ async def get_interest_rate(
     return InterestRateResponse.model_validate(rate)
 
 
-@router.put("/interest-rates/{rate_id}", response_model=InterestRateResponse)
+@router.put(
+    "/interest-rates/{rate_id}",
+    response_model=InterestRateResponse,
+    response_model_by_alias=True,
+)
 async def update_interest_rate(
     rate_id: UUID,
     data: InterestRateUpdate,
@@ -112,12 +128,16 @@ async def update_interest_rate(
 # =============================================================================
 
 
-@router.get("/fee-masters", response_model=PaginatedResponse[FeeMasterResponse])
+@router.get(
+    "/fee-masters",
+    response_model=PaginatedResponse[FeeMasterResponse],
+    response_model_by_alias=True,
+)
 async def list_fee_masters(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
-    fee_type: Optional[FeeType] = Query(None),
+    fee_type: FeeType | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -135,19 +155,28 @@ async def list_fee_masters(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("/fee-masters", response_model=FeeMasterResponse)
+@router.post(
+    "/fee-masters",
+    response_model=FeeMasterResponse,
+    response_model_by_alias=True,
+)
 async def create_fee_master(
     data: FeeMasterCreate,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_CREATE")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new fee master."""
+    data.organization_id = current_user.organization_id
     service = ProductService(db)
     fee = await service.create_fee_master(data, current_user.id)
     return FeeMasterResponse.model_validate(fee)
 
 
-@router.get("/fee-masters/{fee_id}", response_model=FeeMasterResponse)
+@router.get(
+    "/fee-masters/{fee_id}",
+    response_model=FeeMasterResponse,
+    response_model_by_alias=True,
+)
 async def get_fee_master(
     fee_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
@@ -159,7 +188,11 @@ async def get_fee_master(
     return FeeMasterResponse.model_validate(fee)
 
 
-@router.put("/fee-masters/{fee_id}", response_model=FeeMasterResponse)
+@router.put(
+    "/fee-masters/{fee_id}",
+    response_model=FeeMasterResponse,
+    response_model_by_alias=True,
+)
 async def update_fee_master(
     fee_id: UUID,
     data: FeeMasterUpdate,
@@ -177,14 +210,18 @@ async def update_fee_master(
 # =============================================================================
 
 
-@router.get("", response_model=PaginatedResponse[LoanProductListResponse])
+@router.get(
+    "",
+    response_model=PaginatedResponse[LoanProductListResponse],
+    response_model_by_alias=True,
+)
 async def list_products(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
-    search: Optional[str] = Query(None),
-    category: Optional[ProductCategory] = Query(None),
-    interest_type: Optional[InterestType] = Query(None),
+    search: str | None = Query(None),
+    category: ProductCategory | None = Query(None),
+    interest_type: InterestType | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -204,9 +241,13 @@ async def list_products(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/active", response_model=list[LoanProductListResponse])
+@router.get(
+    "/active",
+    response_model=list[LoanProductListResponse],
+    response_model_by_alias=True,
+)
 async def list_active_products(
-    category: Optional[ProductCategory] = Query(None),
+    category: ProductCategory | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -216,11 +257,15 @@ async def list_active_products(
     return [LoanProductListResponse.model_validate(p) for p in products]
 
 
-@router.get("/eligible", response_model=list[LoanProductListResponse])
+@router.get(
+    "/eligible",
+    response_model=list[LoanProductListResponse],
+    response_model_by_alias=True,
+)
 async def get_eligible_products(
     entity_type: EntityType = Query(..., description="Entity type"),
-    amount: Optional[float] = Query(None),
-    tenure_months: Optional[int] = Query(None),
+    amount: float | None = Query(None),
+    tenure_months: int | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -232,19 +277,28 @@ async def get_eligible_products(
     return [LoanProductListResponse.model_validate(p) for p in products]
 
 
-@router.post("", response_model=LoanProductResponse)
+@router.post(
+    "",
+    response_model=LoanProductResponse,
+    response_model_by_alias=True,
+)
 async def create_product(
     data: LoanProductCreate,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_CREATE")),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new loan product."""
+    data.organization_id = current_user.organization_id
     service = ProductService(db)
     product = await service.create_product(data, current_user.id)
     return LoanProductResponse.model_validate(product)
 
 
-@router.get("/{product_id}", response_model=LoanProductResponse)
+@router.get(
+    "/{product_id}",
+    response_model=LoanProductResponse,
+    response_model_by_alias=True,
+)
 async def get_product(
     product_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
@@ -256,7 +310,11 @@ async def get_product(
     return LoanProductResponse.model_validate(product)
 
 
-@router.get("/{product_id}/details", response_model=LoanProductDetailResponse)
+@router.get(
+    "/{product_id}/details",
+    response_model=LoanProductDetailResponse,
+    response_model_by_alias=True,
+)
 async def get_product_details(
     product_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
@@ -268,7 +326,11 @@ async def get_product_details(
     return LoanProductDetailResponse.model_validate(product)
 
 
-@router.put("/{product_id}", response_model=LoanProductResponse)
+@router.put(
+    "/{product_id}",
+    response_model=LoanProductResponse,
+    response_model_by_alias=True,
+)
 async def update_product(
     product_id: UUID,
     data: LoanProductUpdate,
@@ -298,7 +360,11 @@ async def delete_product(
 # =============================================================================
 
 
-@router.get("/{product_id}/fees", response_model=list[ProductFeeResponse])
+@router.get(
+    "/{product_id}/fees",
+    response_model=list[ProductFeeResponse],
+    response_model_by_alias=True,
+)
 async def list_product_fees(
     product_id: UUID,
     include_inactive: bool = Query(False),
@@ -311,7 +377,11 @@ async def list_product_fees(
     return [ProductFeeResponse.model_validate(f) for f in fees]
 
 
-@router.post("/{product_id}/fees", response_model=ProductFeeResponse)
+@router.post(
+    "/{product_id}/fees",
+    response_model=ProductFeeResponse,
+    response_model_by_alias=True,
+)
 async def add_product_fee(
     product_id: UUID,
     data: ProductFeeCreate,
@@ -325,7 +395,11 @@ async def add_product_fee(
     return ProductFeeResponse.model_validate(fee)
 
 
-@router.put("/fees/{fee_id}", response_model=ProductFeeResponse)
+@router.put(
+    "/fees/{fee_id}",
+    response_model=ProductFeeResponse,
+    response_model_by_alias=True,
+)
 async def update_product_fee(
     fee_id: UUID,
     data: ProductFeeUpdate,
@@ -355,7 +429,11 @@ async def delete_product_fee(
 # =============================================================================
 
 
-@router.get("/{product_id}/checklist", response_model=list[DocumentChecklistResponse])
+@router.get(
+    "/{product_id}/checklist",
+    response_model=list[DocumentChecklistResponse],
+    response_model_by_alias=True,
+)
 async def list_document_checklist(
     product_id: UUID,
     include_inactive: bool = Query(False),
@@ -368,11 +446,15 @@ async def list_document_checklist(
     return [DocumentChecklistResponse.model_validate(c) for c in checklist]
 
 
-@router.get("/{product_id}/checklist/by-stage", response_model=list[DocumentChecklistResponse])
+@router.get(
+    "/{product_id}/checklist/by-stage",
+    response_model=list[DocumentChecklistResponse],
+    response_model_by_alias=True,
+)
 async def get_checklist_by_stage(
     product_id: UUID,
     stage: DocumentStage = Query(...),
-    entity_type: Optional[EntityType] = Query(None),
+    entity_type: EntityType | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -382,11 +464,15 @@ async def get_checklist_by_stage(
     return [DocumentChecklistResponse.model_validate(c) for c in checklist]
 
 
-@router.get("/{product_id}/checklist/mandatory", response_model=list[DocumentChecklistResponse])
+@router.get(
+    "/{product_id}/checklist/mandatory",
+    response_model=list[DocumentChecklistResponse],
+    response_model_by_alias=True,
+)
 async def get_mandatory_documents(
     product_id: UUID,
-    stage: Optional[DocumentStage] = Query(None),
-    entity_type: Optional[EntityType] = Query(None),
+    stage: DocumentStage | None = Query(None),
+    entity_type: EntityType | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_PRODUCT_VIEW")),
     db: AsyncSession = Depends(get_db),
 ):
@@ -396,7 +482,11 @@ async def get_mandatory_documents(
     return [DocumentChecklistResponse.model_validate(c) for c in checklist]
 
 
-@router.post("/{product_id}/checklist", response_model=DocumentChecklistResponse)
+@router.post(
+    "/{product_id}/checklist",
+    response_model=DocumentChecklistResponse,
+    response_model_by_alias=True,
+)
 async def add_document_checklist(
     product_id: UUID,
     data: DocumentChecklistCreate,
@@ -410,7 +500,11 @@ async def add_document_checklist(
     return DocumentChecklistResponse.model_validate(checklist)
 
 
-@router.put("/checklist/{checklist_id}", response_model=DocumentChecklistResponse)
+@router.put(
+    "/checklist/{checklist_id}",
+    response_model=DocumentChecklistResponse,
+    response_model_by_alias=True,
+)
 async def update_document_checklist(
     checklist_id: UUID,
     data: DocumentChecklistUpdate,

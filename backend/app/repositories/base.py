@@ -1,9 +1,9 @@
 """Base repository with generic CRUD operations."""
 
-from typing import Any, Dict, Generic, List, Optional, Type, TypeVar
+from typing import Any, Generic, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.base import BaseModel
@@ -14,11 +14,11 @@ ModelType = TypeVar("ModelType", bound=BaseModel)
 class BaseRepository(Generic[ModelType]):
     """Base repository providing generic CRUD operations."""
 
-    def __init__(self, model: Type[ModelType], session: AsyncSession):
+    def __init__(self, model: type[ModelType], session: AsyncSession):
         self.model = model
         self.session = session
 
-    async def get(self, id: UUID) -> Optional[ModelType]:
+    async def get(self, id: UUID) -> ModelType | None:
         """Get a record by ID."""
         query = select(self.model).where(
             and_(
@@ -29,7 +29,7 @@ class BaseRepository(Generic[ModelType]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_by_id(self, id: UUID, include_inactive: bool = False) -> Optional[ModelType]:
+    async def get_by_id(self, id: UUID, include_inactive: bool = False) -> ModelType | None:
         """Get a record by ID with option to include inactive."""
         query = select(self.model).where(self.model.id == id)
         if not include_inactive:
@@ -42,7 +42,7 @@ class BaseRepository(Generic[ModelType]):
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """Get all records with pagination."""
         query = select(self.model)
         if not include_inactive:
@@ -59,7 +59,22 @@ class BaseRepository(Generic[ModelType]):
         result = await self.session.execute(query)
         return result.scalar() or 0
 
-    async def create(self, obj_in: Dict[str, Any]) -> ModelType:
+    async def _paginate(
+        self, query: Any, skip: int = 0, limit: int = 100
+    ) -> tuple[list[ModelType], int]:
+        """Generic count + paginated-select helper.
+
+        Returns ``(items, total)``. Treats ``query`` as the base select; the
+        count is derived from the same WHERE-clause subquery so it ignores
+        ORDER BY / OFFSET / LIMIT applied by callers.
+        """
+        count_q = select(func.count()).select_from(query.subquery())
+        total_result = await self.session.execute(count_q)
+        total = total_result.scalar() or 0
+        result = await self.session.execute(query.offset(skip).limit(limit))
+        return list(result.scalars().all()), total
+
+    async def create(self, obj_in: dict[str, Any]) -> ModelType:
         """Create a new record."""
         db_obj = self.model(**obj_in)
         self.session.add(db_obj)
@@ -70,7 +85,7 @@ class BaseRepository(Generic[ModelType]):
     async def update(
         self,
         db_obj: ModelType,
-        obj_in: Dict[str, Any],
+        obj_in: dict[str, Any],
     ) -> ModelType:
         """Update an existing record."""
         for field, value in obj_in.items():
@@ -92,8 +107,8 @@ class BaseRepository(Generic[ModelType]):
     async def soft_delete(
         self,
         id: UUID,
-        deleted_by: Optional[UUID] = None,
-    ) -> Optional[ModelType]:
+        deleted_by: UUID | None = None,
+    ) -> ModelType | None:
         """Soft delete a record."""
         db_obj = await self.get(id)
         if db_obj:
@@ -103,7 +118,7 @@ class BaseRepository(Generic[ModelType]):
             return db_obj
         return None
 
-    async def restore(self, id: UUID) -> Optional[ModelType]:
+    async def restore(self, id: UUID) -> ModelType | None:
         """Restore a soft-deleted record."""
         db_obj = await self.get_by_id(id, include_inactive=True)
         if db_obj and not db_obj.is_active:
@@ -129,7 +144,7 @@ class BaseRepository(Generic[ModelType]):
         field: str,
         value: Any,
         include_inactive: bool = False,
-    ) -> Optional[ModelType]:
+    ) -> ModelType | None:
         """Get a record by a specific field."""
         query = select(self.model).where(getattr(self.model, field) == value)
         if not include_inactive:
@@ -142,7 +157,7 @@ class BaseRepository(Generic[ModelType]):
         field: str,
         value: Any,
         include_inactive: bool = False,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """Get multiple records by a specific field."""
         query = select(self.model).where(getattr(self.model, field) == value)
         if not include_inactive:

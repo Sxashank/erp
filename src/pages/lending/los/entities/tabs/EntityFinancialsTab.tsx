@@ -3,14 +3,17 @@
  * Inline management of entity financial statements (NO MODALS)
  */
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Edit, Trash2, X, Check, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Edit, Trash2, X, Check, Loader2 } from 'lucide-react';
 
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Form,
@@ -21,29 +24,24 @@ import {
   FormMessage,
   FormDescription,
 } from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-
-import { AmountInput } from '@/components/lending/common/AmountInput';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-
+import { Input } from '@/components/ui/input';
 import { entityApi } from '@/services/lending';
 import type { EntityFinancial } from '@/types/lending';
 
 const financialSchema = z.object({
-  financial_year: z.string().regex(/^\d{4}-\d{2}$/, 'Format: YYYY-YY (e.g., 2024-25)'),
+  financialYear: z.string().regex(/^\d{4}-\d{2}$/, 'Format: YYYY-YY (e.g., 2024-25)'),
   revenue: z.number().nonnegative().optional(),
   ebitda: z.number().optional(),
   depreciation: z.number().nonnegative().optional(),
-  interest_expense: z.number().nonnegative().optional(),
-  pbt: z.number().optional(),
-  tax: z.number().nonnegative().optional(),
-  net_profit: z.number().optional(),
-  net_worth: z.number().optional(),
-  total_debt: z.number().nonnegative().optional(),
-  current_assets: z.number().nonnegative().optional(),
-  current_liabilities: z.number().nonnegative().optional(),
-  audited: z.boolean().default(false),
+  interestExpense: z.number().nonnegative().optional(),
+  profitBeforeTax: z.number().optional(),
+  taxExpense: z.number().nonnegative().optional(),
+  netProfit: z.number().optional(),
+  netWorth: z.number().optional(),
+  totalDebt: z.number().nonnegative().optional(),
+  currentAssets: z.number().nonnegative().optional(),
+  currentLiabilities: z.number().nonnegative().optional(),
+  isAudited: z.boolean(),
 });
 
 type FinancialFormData = z.infer<typeof financialSchema>;
@@ -60,21 +58,21 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
   const [saving, setSaving] = useState(false);
 
   const form = useForm<FinancialFormData>({
-    resolver: zodResolver(financialSchema) as any,
+    resolver: zodResolver(financialSchema),
     defaultValues: {
-      financial_year: '',
+      financialYear: '',
       revenue: undefined,
       ebitda: undefined,
       depreciation: undefined,
-      interest_expense: undefined,
-      pbt: undefined,
-      tax: undefined,
-      net_profit: undefined,
-      net_worth: undefined,
-      total_debt: undefined,
-      current_assets: undefined,
-      current_liabilities: undefined,
-      audited: false,
+      interestExpense: undefined,
+      profitBeforeTax: undefined,
+      taxExpense: undefined,
+      netProfit: undefined,
+      netWorth: undefined,
+      totalDebt: undefined,
+      currentAssets: undefined,
+      currentLiabilities: undefined,
+      isAudited: false,
     },
   });
 
@@ -87,8 +85,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
     try {
       const data = await entityApi.getEntityFinancials(entityId);
       setFinancials(data);
-    } catch (error) {
-      console.error('Failed to load financials:', error);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -102,19 +99,19 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
     const suggestedFY = `${fyYear}-${(fyYear + 1).toString().slice(-2)}`;
 
     form.reset({
-      financial_year: suggestedFY,
+      financialYear: suggestedFY,
       revenue: undefined,
       ebitda: undefined,
       depreciation: undefined,
-      interest_expense: undefined,
-      pbt: undefined,
-      tax: undefined,
-      net_profit: undefined,
-      net_worth: undefined,
-      total_debt: undefined,
-      current_assets: undefined,
-      current_liabilities: undefined,
-      audited: false,
+      interestExpense: undefined,
+      profitBeforeTax: undefined,
+      taxExpense: undefined,
+      netProfit: undefined,
+      netWorth: undefined,
+      totalDebt: undefined,
+      currentAssets: undefined,
+      currentLiabilities: undefined,
+      isAudited: false,
     });
     setIsAdding(true);
     setEditingId(null);
@@ -122,21 +119,21 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
   const handleEdit = (financial: EntityFinancial) => {
     form.reset({
-      financial_year: financial.financial_year,
+      financialYear: financial.financialYear,
       revenue: financial.revenue || undefined,
       ebitda: financial.ebitda || undefined,
       depreciation: financial.depreciation || undefined,
-      interest_expense: financial.interest_expense || undefined,
-      pbt: financial.pbt || undefined,
-      tax: financial.tax || undefined,
-      net_profit: financial.net_profit || undefined,
-      net_worth: financial.net_worth || undefined,
-      total_debt: financial.total_debt || undefined,
-      current_assets: financial.current_assets || undefined,
-      current_liabilities: financial.current_liabilities || undefined,
-      audited: financial.audited,
+      interestExpense: financial.interestExpense || undefined,
+      profitBeforeTax: financial.profitBeforeTax || undefined,
+      taxExpense: financial.taxExpense || undefined,
+      netProfit: financial.netProfit || undefined,
+      netWorth: financial.netWorth || undefined,
+      totalDebt: financial.totalDebt || undefined,
+      currentAssets: financial.currentAssets || undefined,
+      currentLiabilities: financial.currentLiabilities || undefined,
+      isAudited: financial.isAudited,
     });
-    setEditingId(financial.financial_id);
+    setEditingId(financial.id);
     setIsAdding(false);
   };
 
@@ -156,8 +153,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
       }
       await loadFinancials();
       handleCancel();
-    } catch (error) {
-      console.error('Failed to save financial:', error);
+    } catch {
     } finally {
       setSaving(false);
     }
@@ -168,14 +164,12 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
     try {
       await entityApi.deleteEntityFinancial(entityId, financialId);
       await loadFinancials();
-    } catch (error) {
-      console.error('Failed to delete financial:', error);
-    }
+    } catch {}
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48">
+      <div className="flex h-48 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
       </div>
     );
@@ -200,16 +194,16 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
       <CardContent>
         {/* Add/Edit Form */}
         {(isAdding || editingId) && (
-          <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-            <h4 className="font-medium mb-4">
+          <div className="mb-6 rounded-lg border bg-gray-50 p-4">
+            <h4 className="mb-4 font-medium">
               {editingId ? 'Edit Financial Data' : 'Add Financial Year Data'}
             </h4>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave as any)} className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <form onSubmit={form.handleSubmit(handleSave)} className="space-y-6">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                   <FormField
                     control={form.control}
-                    name="financial_year"
+                    name="financialYear"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Financial Year *</FormLabel>
@@ -224,14 +218,11 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                   <FormField
                     control={form.control}
-                    name="audited"
+                    name="isAudited"
                     render={({ field }) => (
                       <FormItem className="flex items-end space-x-2 space-y-0 pb-2">
                         <FormControl>
-                          <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                         <FormLabel className="font-normal">Audited</FormLabel>
                       </FormItem>
@@ -240,8 +231,8 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
                 </div>
 
                 <div className="border-t pt-4">
-                  <h5 className="text-sm font-medium text-gray-500 mb-4">Profit & Loss</h5>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <h5 className="mb-4 text-sm font-medium text-gray-500">Profit & Loss</h5>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                     <FormField
                       control={form.control}
                       name="revenue"
@@ -298,7 +289,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="interest_expense"
+                      name="interestExpense"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Interest Expense</FormLabel>
@@ -316,7 +307,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="pbt"
+                      name="profitBeforeTax"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>PBT</FormLabel>
@@ -334,7 +325,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="tax"
+                      name="taxExpense"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Tax</FormLabel>
@@ -352,7 +343,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="net_profit"
+                      name="netProfit"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Net Profit</FormLabel>
@@ -371,11 +362,11 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
                 </div>
 
                 <div className="border-t pt-4">
-                  <h5 className="text-sm font-medium text-gray-500 mb-4">Balance Sheet</h5>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <h5 className="mb-4 text-sm font-medium text-gray-500">Balance Sheet</h5>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
                     <FormField
                       control={form.control}
-                      name="net_worth"
+                      name="netWorth"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Net Worth</FormLabel>
@@ -393,7 +384,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="total_debt"
+                      name="totalDebt"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Total Debt</FormLabel>
@@ -411,7 +402,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="current_assets"
+                      name="currentAssets"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Current Assets</FormLabel>
@@ -429,7 +420,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
                     <FormField
                       control={form.control}
-                      name="current_liabilities"
+                      name="currentLiabilities"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Current Liabilities</FormLabel>
@@ -465,7 +456,7 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
 
         {/* Financials Table */}
         {financials.length === 0 && !isAdding ? (
-          <p className="text-center py-8 text-gray-500">
+          <p className="py-8 text-center text-gray-500">
             No financial data added yet. Click "Add Financial Year" to add one.
           </p>
         ) : (
@@ -473,23 +464,20 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left p-2">FY</th>
-                  <th className="text-right p-2">Revenue</th>
-                  <th className="text-right p-2">EBITDA</th>
-                  <th className="text-right p-2">Net Profit</th>
-                  <th className="text-right p-2">Net Worth</th>
-                  <th className="text-right p-2">Total Debt</th>
-                  <th className="text-center p-2">Status</th>
-                  <th className="text-right p-2">Actions</th>
+                  <th className="p-2 text-left">FY</th>
+                  <th className="p-2 text-right">Revenue</th>
+                  <th className="p-2 text-right">EBITDA</th>
+                  <th className="p-2 text-right">Net Profit</th>
+                  <th className="p-2 text-right">Net Worth</th>
+                  <th className="p-2 text-right">Total Debt</th>
+                  <th className="p-2 text-center">Status</th>
+                  <th className="p-2 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {financials.map((fin) => (
-                  <tr
-                    key={fin.financial_id}
-                    className={`border-b ${editingId === fin.financial_id ? 'hidden' : ''}`}
-                  >
-                    <td className="p-2 font-medium">{fin.financial_year}</td>
+                  <tr key={fin.id} className={`border-b ${editingId === fin.id ? 'hidden' : ''}`}>
+                    <td className="p-2 font-medium">{fin.financialYear}</td>
                     <td className="p-2 text-right">
                       <AmountDisplay amount={fin.revenue || 0} />
                     </td>
@@ -497,32 +485,24 @@ export default function EntityFinancialsTab({ entityId }: EntityFinancialsTabPro
                       <AmountDisplay amount={fin.ebitda || 0} />
                     </td>
                     <td className="p-2 text-right">
-                      <AmountDisplay amount={fin.net_profit || 0} />
+                      <AmountDisplay amount={fin.netProfit || 0} />
                     </td>
                     <td className="p-2 text-right">
-                      <AmountDisplay amount={fin.net_worth || 0} />
+                      <AmountDisplay amount={fin.netWorth || 0} />
                     </td>
                     <td className="p-2 text-right">
-                      <AmountDisplay amount={fin.total_debt || 0} />
+                      <AmountDisplay amount={fin.totalDebt || 0} />
                     </td>
                     <td className="p-2 text-center">
-                      <Badge variant={fin.audited ? 'default' : 'secondary'}>
-                        {fin.audited ? 'Audited' : 'Provisional'}
+                      <Badge variant={fin.isAudited ? 'default' : 'secondary'}>
+                        {fin.isAudited ? 'Audited' : 'Provisional'}
                       </Badge>
                     </td>
                     <td className="p-2 text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(fin)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => handleEdit(fin)}>
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(fin.financial_id)}
-                      >
+                      <Button variant="ghost" size="sm" onClick={() => handleDelete(fin.id)}>
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     </td>

@@ -5,20 +5,31 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+    func,
+)
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import BaseModel
 from app.database import Base
+from app.models.base import BaseModel
 
 if TYPE_CHECKING:
     from app.models.masters.organization import Organization
-    from app.models.auth.user import User
 
 
 class IntegrationType(str, enum.Enum):
     """Types of external integrations."""
+
     NACH = "NACH"
     ACCOUNT_AGGREGATOR = "ACCOUNT_AGGREGATOR"
     GSTN = "GSTN"
@@ -31,6 +42,7 @@ class IntegrationType(str, enum.Enum):
 
 class IntegrationProvider(str, enum.Enum):
     """External service providers."""
+
     # NACH Providers
     NPCI_DIRECT = "NPCI_DIRECT"
     RAZORPAY_NACH = "RAZORPAY_NACH"
@@ -60,6 +72,7 @@ class IntegrationProvider(str, enum.Enum):
     PAYU = "PAYU"
     CCAVENUE = "CCAVENUE"
     STRIPE = "STRIPE"
+    PAYTM = "PAYTM"
 
     # SMS Providers
     MSG91 = "MSG91"
@@ -78,6 +91,7 @@ class IntegrationProvider(str, enum.Enum):
 
 class HealthStatus(str, enum.Enum):
     """Health status of integration."""
+
     HEALTHY = "HEALTHY"
     DEGRADED = "DEGRADED"
     DOWN = "DOWN"
@@ -98,7 +112,7 @@ class IntegrationConfig(BaseModel):
             "organization_id",
             "integration_type",
             "provider",
-            name="uq_integration_org_type_provider"
+            name="uq_integration_org_type_provider",
         ),
     )
 
@@ -122,7 +136,7 @@ class IntegrationConfig(BaseModel):
     )
 
     # Display name for UI
-    display_name: Mapped[Optional[str]] = mapped_column(
+    display_name: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
     )
@@ -141,27 +155,27 @@ class IntegrationConfig(BaseModel):
         default=True,
         nullable=False,
     )
-    base_url: Mapped[Optional[str]] = mapped_column(
+    base_url: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
     )
-    sandbox_url: Mapped[Optional[str]] = mapped_column(
+    sandbox_url: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
     )
 
     # Webhook configuration
-    webhook_url: Mapped[Optional[str]] = mapped_column(
+    webhook_url: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
     )
-    webhook_secret: Mapped[Optional[str]] = mapped_column(
+    webhook_secret: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
     )
 
     # Health monitoring
-    last_health_check: Mapped[Optional[datetime]] = mapped_column(
+    last_health_check: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -170,13 +184,13 @@ class IntegrationConfig(BaseModel):
         default=HealthStatus.UNKNOWN,
         nullable=False,
     )
-    last_error_message: Mapped[Optional[str]] = mapped_column(
+    last_error_message: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
 
     # Usage tracking
-    last_used_at: Mapped[Optional[datetime]] = mapped_column(
+    last_used_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
         nullable=True,
     )
@@ -226,7 +240,7 @@ class IntegrationLog(Base):
     )
 
     # Integration reference (optional - may be deleted)
-    integration_config_id: Mapped[Optional[UUID]] = mapped_column(
+    integration_config_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("sys_integration_config.id", ondelete="SET NULL"),
         nullable=True,
@@ -244,30 +258,30 @@ class IntegrationLog(Base):
     )
 
     # Request details
-    request_id: Mapped[Optional[str]] = mapped_column(
+    request_id: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         index=True,
     )
-    endpoint: Mapped[Optional[str]] = mapped_column(
+    endpoint: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
     )
-    method: Mapped[Optional[str]] = mapped_column(
+    method: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
     )
-    request_payload: Mapped[Optional[dict]] = mapped_column(
+    request_payload: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
     )
 
     # Response details
-    response_payload: Mapped[Optional[dict]] = mapped_column(
+    response_payload: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
     )
-    http_status: Mapped[Optional[int]] = mapped_column(
+    http_status: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )
@@ -276,13 +290,13 @@ class IntegrationLog(Base):
         default=False,
         nullable=False,
     )
-    error_message: Mapped[Optional[str]] = mapped_column(
+    error_message: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
     )
 
     # Performance
-    latency_ms: Mapped[Optional[int]] = mapped_column(
+    latency_ms: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )
@@ -296,7 +310,7 @@ class IntegrationLog(Base):
     )
 
     # User who triggered the request (optional)
-    triggered_by: Mapped[Optional[UUID]] = mapped_column(
+    triggered_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,

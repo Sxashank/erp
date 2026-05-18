@@ -22,7 +22,7 @@ from app.schemas.vendor_portal.registration import (
 router = APIRouter()
 
 
-@router.post("/", response_model=VendorRegistrationResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=VendorRegistrationResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_registration(
     data: VendorRegistrationCreate,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -33,7 +33,7 @@ async def create_registration(
     return registration
 
 
-@router.get("/{registration_id}", response_model=VendorRegistrationResponse)
+@router.get("/{registration_id}", response_model=VendorRegistrationResponse, response_model_by_alias=True)
 async def get_registration(
     registration_id: UUID,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -44,7 +44,7 @@ async def get_registration(
     return registration
 
 
-@router.put("/{registration_id}", response_model=VendorRegistrationResponse)
+@router.put("/{registration_id}", response_model=VendorRegistrationResponse, response_model_by_alias=True)
 async def update_registration(
     registration_id: UUID,
     data: VendorRegistrationUpdate,
@@ -56,7 +56,7 @@ async def update_registration(
     return registration
 
 
-@router.post("/{registration_id}/documents", response_model=VendorRegistrationDocumentResponse)
+@router.post("/{registration_id}/documents", response_model=VendorRegistrationDocumentResponse, response_model_by_alias=True)
 async def upload_document(
     registration_id: UUID,
     document_type: str,
@@ -98,7 +98,7 @@ async def upload_document(
     return document
 
 
-@router.post("/{registration_id}/submit", response_model=VendorRegistrationResponse)
+@router.post("/{registration_id}/submit", response_model=VendorRegistrationResponse, response_model_by_alias=True)
 async def submit_registration(
     registration_id: UUID,
     data: VendorRegistrationSubmit,
@@ -115,7 +115,7 @@ async def submit_registration(
 
 
 # Admin endpoints for registration review
-@router.get("/", response_model=VendorRegistrationListResponse)
+@router.get("/", response_model=VendorRegistrationListResponse, response_model_by_alias=True)
 async def list_registrations(
     organization_id: UUID,
     skip: int = Query(0, ge=0),
@@ -141,7 +141,7 @@ async def list_registrations(
     )
 
 
-@router.post("/{registration_id}/approve", response_model=VendorRegistrationResponse)
+@router.post("/{registration_id}/approve", response_model=VendorRegistrationResponse, response_model_by_alias=True)
 async def approve_registration(
     registration_id: UUID,
     reviewed_by: UUID,  # From auth middleware
@@ -158,7 +158,7 @@ async def approve_registration(
     return registration
 
 
-@router.post("/{registration_id}/reject", response_model=VendorRegistrationResponse)
+@router.post("/{registration_id}/reject", response_model=VendorRegistrationResponse, response_model_by_alias=True)
 async def reject_registration(
     registration_id: UUID,
     reviewed_by: UUID,  # From auth middleware
@@ -177,7 +177,7 @@ async def reject_registration(
     return registration
 
 
-@router.post("/{registration_id}/request-info", response_model=VendorRegistrationResponse)
+@router.post("/{registration_id}/request-info", response_model=VendorRegistrationResponse, response_model_by_alias=True)
 async def request_additional_info(
     registration_id: UUID,
     reviewed_by: UUID,  # From auth middleware

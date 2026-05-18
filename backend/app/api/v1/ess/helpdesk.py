@@ -4,13 +4,14 @@ from datetime import date
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.services.ess.helpdesk_service import ESSHelpdeskService
 from app.models.ess.enums import TicketCategory, TicketPriority, TicketStatus
+from app.core.exceptions import BadRequestException, NotFoundException
 
 
 router = APIRouter(prefix="/helpdesk", tags=["ESS Helpdesk"])
@@ -104,7 +105,7 @@ class TicketSummaryResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.get("/categories", response_model=List[TicketCategoryResponse])
+@router.get("/categories", response_model=List[TicketCategoryResponse], response_model_by_alias=True)
 async def get_categories(
     organization_id: UUID,  # From authenticated user
     department: Optional[str] = None,
@@ -131,7 +132,7 @@ async def get_categories(
     ]
 
 
-@router.post("", response_model=TicketResponse)
+@router.post("", response_model=TicketResponse, response_model_by_alias=True)
 async def create_ticket(
     request: TicketCreate,
     organization_id: UUID,  # From authenticated user
@@ -170,7 +171,7 @@ async def create_ticket(
     )
 
 
-@router.get("", response_model=List[TicketResponse])
+@router.get("", response_model=List[TicketResponse], response_model_by_alias=True)
 async def get_tickets(
     employee_id: UUID,  # From authenticated user
     status: Optional[TicketStatus] = None,
@@ -211,7 +212,7 @@ async def get_tickets(
     ]
 
 
-@router.get("/summary", response_model=TicketSummaryResponse)
+@router.get("/summary", response_model=TicketSummaryResponse, response_model_by_alias=True)
 async def get_ticket_summary(
     employee_id: UUID,  # From authenticated user
     session: AsyncSession = Depends(get_session),
@@ -222,7 +223,7 @@ async def get_ticket_summary(
     return TicketSummaryResponse(**summary)
 
 
-@router.get("/{ticket_id}", response_model=TicketDetailResponse)
+@router.get("/{ticket_id}", response_model=TicketDetailResponse, response_model_by_alias=True)
 async def get_ticket_detail(
     ticket_id: UUID,
     session: AsyncSession = Depends(get_session),
@@ -232,10 +233,7 @@ async def get_ticket_detail(
     ticket = await service.get_ticket_by_id(ticket_id, include_comments=True)
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
 
     return TicketDetailResponse(
         id=str(ticket.id),
@@ -276,7 +274,7 @@ async def get_ticket_detail(
     )
 
 
-@router.post("/{ticket_id}/comments", response_model=TicketCommentResponse)
+@router.post("/{ticket_id}/comments", response_model=TicketCommentResponse, response_model_by_alias=True)
 async def add_comment(
     ticket_id: UUID,
     request: CommentCreate,
@@ -294,10 +292,7 @@ async def add_comment(
             ess_user_id=ess_user_id,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     await session.commit()
 
@@ -328,16 +323,10 @@ async def close_ticket(
             remarks=remarks,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
 
     await session.commit()
 
@@ -361,16 +350,10 @@ async def reopen_ticket(
             ess_user_id=ess_user_id,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
 
     await session.commit()
 
@@ -393,16 +376,10 @@ async def submit_feedback(
             feedback=request.feedback,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Ticket not found",
-        )
+        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
 
     await session.commit()
 

@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Clock, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -19,6 +19,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface ShiftFormData {
   organization_id: string;
   shift_code: string;
@@ -112,7 +113,7 @@ export function ShiftForm() {
           setValue('organization_id', orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -132,7 +133,7 @@ export function ShiftForm() {
             }
           });
         } catch (error) {
-          console.error('Failed to fetch shift:', error);
+          logger.error('Failed to fetch shift:', error);
         } finally {
           setLoading(false);
         }
@@ -151,7 +152,7 @@ export function ShiftForm() {
       }
       navigate('/admin/hris/shifts');
     } catch (error) {
-      console.error('Failed to save shift:', error);
+      logger.error('Failed to save shift:', error);
     } finally {
       setSaving(false);
     }

@@ -4,10 +4,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions, DepreciationBook
 from app.core.permissions import PermissionChecker
@@ -22,6 +22,7 @@ from app.schemas.fixed_assets.depreciation import (
 )
 from app.schemas.base import MessageResponse
 from app.services.fixed_assets.it_depreciation_service import ITDepreciationService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -84,13 +85,13 @@ def _block_to_response(block) -> ITBlockSummaryResponse:
     )
 
 
-@router.get("/runs", response_model=dict)
+@router.get("/runs", response_model=dict, response_model_by_alias=True)
 async def list_it_depreciation_runs(
     request: Request,
     organization_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -106,11 +107,11 @@ async def list_it_depreciation_runs(
     }
 
 
-@router.get("/runs/{run_id}", response_model=DepreciationRunResponse)
+@router.get("/runs/{run_id}", response_model=DepreciationRunResponse, response_model_by_alias=True)
 async def get_it_depreciation_run(
     request: Request,
     run_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -118,23 +119,23 @@ async def get_it_depreciation_run(
     service = ITDepreciationService(db)
     run = await service.get_run(run_id)
     if not run:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="IT depreciation run not found",
+            error_code="IT_DEPRECIATION_RUN_NOT_FOUND",
         )
     if run.depreciation_book != DepreciationBook.IT_ACT:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="This is not an IT Act depreciation run",
+            error_code="THIS_IS_NOT_AN_IT_ACT",
         )
     return _run_to_response(run)
 
 
-@router.post("/run", response_model=DepreciationRunResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/run", response_model=DepreciationRunResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def run_it_depreciation(
     request: Request,
     data: ITDepreciationRunCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
 ):
@@ -150,18 +151,15 @@ async def run_it_depreciation(
         run = await service.run_it_depreciation(data, run_by=current_user.id)
         return _run_to_response(run)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/blocks", response_model=dict)
+@router.get("/blocks", response_model=dict, response_model_by_alias=True)
 async def list_block_summaries(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -176,12 +174,12 @@ async def list_block_summaries(
     }
 
 
-@router.post("/blocks/finalize", response_model=dict)
+@router.post("/blocks/finalize", response_model=dict, response_model_by_alias=True)
 async def finalize_block_summaries(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
 ):
@@ -196,18 +194,15 @@ async def finalize_block_summaries(
             "items": [_block_to_response(block) for block in summaries],
         }
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/report", response_model=ITDepreciationReportResponse)
+@router.get("/report", response_model=ITDepreciationReportResponse, response_model_by_alias=True)
 async def get_it_depreciation_report(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -219,13 +214,13 @@ async def get_it_depreciation_report(
     return await service.get_it_depreciation_report(organization_id, financial_year)
 
 
-@router.get("/comparison", response_model=DepreciationComparisonResponse)
+@router.get("/comparison", response_model=DepreciationComparisonResponse, response_model_by_alias=True)
 async def get_depreciation_comparison(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     as_on_date: Optional[date] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -242,12 +237,12 @@ async def get_depreciation_comparison(
     )
 
 
-@router.get("/schedule/{asset_id}", response_model=ITDepreciationScheduleResponse)
+@router.get("/schedule/{asset_id}", response_model=ITDepreciationScheduleResponse, response_model_by_alias=True)
 async def get_it_depreciation_schedule(
     request: Request,
     asset_id: UUID,
     years: int = Query(20, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_VIEW])),
 ):
@@ -260,7 +255,4 @@ async def get_it_depreciation_schedule(
         schedule = await service.generate_it_depreciation_schedule(asset_id, years)
         return schedule
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")

@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -9,11 +7,14 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -38,6 +39,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Regularization {
   id: string;
   employee_id: string;
@@ -72,7 +74,7 @@ const STATUS_OPTIONS = [
   { value: 'REJECTED', label: 'Rejected' },
 ];
 
-const REQUEST_TYPE_LABELS: { [key: string]: string } = {
+const REQUEST_TYPE_LABELS: Record<string, string> = {
   MISSED_PUNCH: 'Missed Punch',
   CORRECTION: 'Time Correction',
   ON_DUTY: 'On Duty',
@@ -122,7 +124,7 @@ export function AttendanceRegularization() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -132,7 +134,7 @@ export function AttendanceRegularization() {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Record<string, unknown> = {
         organization_id: selectedOrgId,
         skip,
         limit: pagination.limit,
@@ -144,7 +146,7 @@ export function AttendanceRegularization() {
       setRegularizations(response.data.items || []);
       setPagination((prev) => ({ ...prev, skip, total: response.data.total || 0 }));
     } catch (error) {
-      console.error('Failed to fetch regularizations:', error);
+      logger.error('Failed to fetch regularizations:', error);
     } finally {
       setLoading(false);
     }
@@ -254,7 +256,7 @@ export function AttendanceRegularization() {
                           <p className="text-xs text-slate-500">{request.employee_code}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{new Date(request.attendance_date).toLocaleDateString()}</TableCell>
+                      <TableCell><DateDisplay date={request.attendance_date} /></TableCell>
                       <TableCell>
                         <Badge variant="outline">
                           {REQUEST_TYPE_LABELS[request.request_type] || request.request_type}
@@ -277,7 +279,7 @@ export function AttendanceRegularization() {
                           {request.status}
                         </Badge>
                       </TableCell>
-                      <TableCell>{new Date(request.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell><DateDisplay date={request.created_at} /></TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

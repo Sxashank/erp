@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   Edit,
@@ -7,11 +5,14 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { HrisConfirmDialog } from '@/components/hris/HrisConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface LeaveType {
   id: string;
   leave_code: string;
@@ -79,6 +81,8 @@ export function LeaveTypeList() {
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrgId, setSelectedOrgId] = useState<string>('');
+  const [deleteLeaveTypeId, setDeleteLeaveTypeId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   useEffect(() => {
     const fetchOrganizations = async () => {
@@ -90,7 +94,7 @@ export function LeaveTypeList() {
           setSelectedOrgId(orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -104,7 +108,7 @@ export function LeaveTypeList() {
         const response = await hrisApi.listLeaveTypes({ organization_id: selectedOrgId });
         setLeaveTypes(response.data.items || response.data || []);
       } catch (error) {
-        console.error('Failed to fetch leave types:', error);
+        logger.error('Failed to fetch leave types:', error);
       } finally {
         setLoading(false);
       }
@@ -112,13 +116,17 @@ export function LeaveTypeList() {
     fetchLeaveTypes();
   }, [selectedOrgId]);
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this leave type?')) return;
+  const executeDelete = async () => {
+    if (!deleteLeaveTypeId) return;
     try {
-      await hrisApi.deleteLeaveType(id);
-      setLeaveTypes(leaveTypes.filter((lt) => lt.id !== id));
+      setDeleteBusy(true);
+      await hrisApi.deleteLeaveType(deleteLeaveTypeId);
+      setLeaveTypes(leaveTypes.filter((lt) => lt.id !== deleteLeaveTypeId));
+      setDeleteLeaveTypeId(null);
     } catch (error) {
-      console.error('Failed to delete leave type:', error);
+      logger.error('Failed to delete leave type:', error);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -228,7 +236,7 @@ export function LeaveTypeList() {
                             Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => handleDelete(leaveType.id)}
+                            onClick={() => setDeleteLeaveTypeId(leaveType.id)}
                             className="text-red-600"
                           >
                             <Trash2 className="mr-2 h-4 w-4" />
@@ -244,6 +252,18 @@ export function LeaveTypeList() {
           )}
         </CardContent>
       </Card>
+      <HrisConfirmDialog
+        open={Boolean(deleteLeaveTypeId)}
+        title="Delete leave type"
+        description="This removes the leave type from future HRIS leave setup. Existing balances and applications should be reviewed before deletion."
+        confirmLabel="Delete leave type"
+        destructive
+        busy={deleteBusy}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteLeaveTypeId(null);
+        }}
+        onConfirm={executeDelete}
+      />
     </div>
   );
 }

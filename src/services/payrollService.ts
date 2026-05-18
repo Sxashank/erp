@@ -13,7 +13,8 @@ export interface SalaryComponent {
   component_name: string;
   component_type: 'EARNING' | 'DEDUCTION';
   category: 'BASIC' | 'ALLOWANCE' | 'REIMBURSEMENT' | 'BONUS' | 'STATUTORY' | 'OTHER';
-  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA';
+  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA' | 'PERCENTAGE_OF_BASIC' | 'PERCENTAGE_OF_GROSS' | 'PERCENTAGE_OF_CTC';
+  default_value?: number;
   percentage_of?: string;
   percentage_value?: number;
   formula?: string;
@@ -33,6 +34,10 @@ export interface SalaryStructure {
   structure_code: string;
   structure_name: string;
   description?: string;
+  effective_from: string;
+  effective_to?: string;
+  payment_mode?: string;
+  pay_frequency?: string;
   ctc_from?: number;
   ctc_to?: number;
   is_active: boolean;
@@ -45,7 +50,7 @@ export interface SalaryStructureComponent {
   structure_id: string;
   component_id: string;
   component?: SalaryComponent;
-  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA';
+  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA' | 'PERCENTAGE_OF_BASIC' | 'PERCENTAGE_OF_GROSS' | 'PERCENTAGE_OF_CTC';
   default_value?: number;
   percentage_of?: string;
   percentage_value?: number;
@@ -89,13 +94,29 @@ export interface StatutorySetup {
   id: string;
   organization_id: string;
   statutory_type: 'PF' | 'ESI' | 'PT' | 'LWF' | 'GRATUITY';
+  pf_employer_rate?: number;
+  pf_employee_rate?: number;
+  pf_admin_charge_rate?: number;
+  pf_edli_rate?: number;
+  pf_wage_ceiling?: number;
+  eps_employer_rate?: number;
+  eps_wage_ceiling?: number;
+  esi_employer_rate?: number;
+  esi_employee_rate?: number;
+  esi_wage_ceiling?: number;
+  pt_state?: string;
+  pt_slabs?: Record<string, unknown>;
+  lwf_employer_contribution?: number;
+  lwf_employee_contribution?: number;
+  lwf_frequency?: string;
   employer_contribution_pct?: number;
   employee_contribution_pct?: number;
   wage_ceiling?: number;
   admin_charges_pct?: number;
   is_applicable: boolean;
   effective_from: string;
-  config_data?: Record<string, any>;
+  effective_to?: string;
+  config_data?: Record<string, unknown>;
   created_at: string;
 }
 
@@ -103,6 +124,7 @@ export interface PayrollBatch {
   id: string;
   organization_id: string;
   batch_reference: string;
+  batch_number?: string;
   payroll_month: number;
   payroll_year: number;
   pay_period_from: string;
@@ -113,6 +135,7 @@ export interface PayrollBatch {
   total_deductions: number;
   total_net: number;
   total_employer_contribution: number;
+  total_employer_statutory?: number;
   processed_at?: string;
   processed_by?: string;
   approved_at?: string;
@@ -147,7 +170,8 @@ export interface Payslip {
   net_salary: number;
   employer_pf?: number;
   employer_esi?: number;
-  status: 'DRAFT' | 'PROCESSED' | 'APPROVED' | 'PAID' | 'CANCELLED';
+  total_earnings?: number;
+  status: 'DRAFT' | 'GENERATED' | 'PROCESSED' | 'APPROVED' | 'PAID' | 'CANCELLED';
   components?: PayslipComponent[];
   statutory?: PayrollStatutory[];
   created_at: string;
@@ -174,6 +198,264 @@ export interface PayrollStatutory {
   remarks?: string;
 }
 
+export interface PayrollBankFile {
+  file_name: string;
+  file_content: string;
+  record_count: number;
+  total_amount: number;
+  generated_at: string;
+}
+
+export interface PayrollGLPostRequest {
+  salary_expense_account_id: string;
+  net_salary_payable_account_id: string;
+  pf_payable_account_id?: string;
+  esi_payable_account_id?: string;
+  pt_payable_account_id?: string;
+  tds_payable_account_id?: string;
+  other_deductions_payable_account_id?: string;
+  employer_contribution_expense_account_id?: string;
+  voucher_date?: string;
+  cost_center_id?: string;
+  narration?: string;
+}
+
+export interface PayrollGLPostResult {
+  posted: boolean;
+  source_reference: string;
+  gl_entry_count: number;
+  voucher_number?: string;
+  total_debit: number;
+  total_credit: number;
+}
+
+// Backend payroll payloads use slightly different field names across phases of
+// the rollout; each normalizer accepts an unknown-value object and projects it
+// to the shape the UI consumes.
+type RawPayload = Record<string, unknown>;
+
+function normalizeComponentCalculation(raw: RawPayload) {
+  const calculationType = String(raw.calculation_type ?? 'FIXED');
+  if (calculationType.startsWith('PERCENTAGE_OF_')) {
+    return {
+      calculation_type: 'PERCENTAGE' as const,
+      percentage_of: calculationType.replace('PERCENTAGE_OF_', ''),
+      percentage_value: Number(raw.default_value ?? raw.value ?? raw.percentage_value ?? 0),
+    };
+  }
+  return {
+    calculation_type: calculationType as SalaryComponent['calculation_type'],
+    percentage_of: raw.percentage_of as string | undefined,
+    percentage_value: raw.percentage_value as number | undefined,
+  };
+}
+
+function toBackendCalculationType(input: {
+  calculation_type?: string;
+  percentage_of?: string;
+}) {
+  if (input.calculation_type === 'PERCENTAGE') {
+    const base = String(input.percentage_of || 'BASIC').toUpperCase();
+    return `PERCENTAGE_OF_${base}`;
+  }
+  return input.calculation_type;
+}
+
+function normalizeSalaryComponent(raw: RawPayload): SalaryComponent {
+  return {
+    ...(raw as unknown as SalaryComponent),
+    ...normalizeComponentCalculation(raw),
+    default_value: raw.default_value == null ? undefined : Number(raw.default_value),
+  };
+}
+
+function salaryComponentToApi(data: Partial<SalaryComponent>) {
+  return {
+    ...data,
+    calculation_type: toBackendCalculationType(data),
+    default_value:
+      data.calculation_type === 'PERCENTAGE'
+        ? data.percentage_value
+        : data.default_value ?? data.percentage_value,
+    percentage_of: undefined,
+    percentage_value: undefined,
+  };
+}
+
+function normalizeSalaryStructureComponent(raw: RawPayload): SalaryStructureComponent {
+  const calculation = normalizeComponentCalculation(raw);
+  return {
+    ...(raw as unknown as SalaryStructureComponent),
+    ...calculation,
+    default_value: (raw.default_value == null ? raw.value : raw.default_value) as number | undefined,
+    component: raw.component
+      ? normalizeSalaryComponent(raw.component as RawPayload)
+      : (raw.component as SalaryComponent | undefined),
+  };
+}
+
+function normalizeSalaryStructure(raw: RawPayload): SalaryStructure {
+  const components = Array.isArray(raw.components) ? (raw.components as RawPayload[]) : [];
+  return {
+    ...(raw as unknown as SalaryStructure),
+    components: components.map(normalizeSalaryStructureComponent),
+  };
+}
+
+function salaryStructureComponentToApi(data: Partial<SalaryStructureComponent>) {
+  const calculationType = toBackendCalculationType(data);
+  return {
+    component_id: data.component_id,
+    calculation_type: calculationType,
+    value:
+      data.calculation_type === 'PERCENTAGE'
+        ? data.percentage_value
+        : data.default_value ?? data.percentage_value,
+    formula: data.formula || undefined,
+    is_mandatory: data.is_mandatory ?? true,
+  };
+}
+
+type SalaryStructureInput = Omit<Partial<SalaryStructure>, 'components'> & {
+  components?: Partial<SalaryStructureComponent>[];
+};
+
+function salaryStructureToApi(data: SalaryStructureInput) {
+  return {
+    organization_id: data.organization_id,
+    structure_code: data.structure_code,
+    structure_name: data.structure_name,
+    description: data.description || undefined,
+    effective_from: data.effective_from,
+    effective_to: data.effective_to || undefined,
+    payment_mode: data.payment_mode ?? 'BANK',
+    pay_frequency: data.pay_frequency ?? 'MONTHLY',
+    is_active: data.is_active ?? true,
+    components: (data.components ?? []).map(salaryStructureComponentToApi),
+  };
+}
+
+function normalizeEmployeeSalary(raw: RawPayload): EmployeeSalary {
+  const employeeName = String(raw.employee_name ?? '').trim();
+  const [firstName = employeeName, ...lastNameParts] = employeeName.split(' ');
+
+  return {
+    ...(raw as unknown as EmployeeSalary),
+    gross_salary: Number(raw.gross_salary ?? raw.monthly_gross ?? 0),
+    net_salary: Number(raw.net_salary ?? raw.monthly_net ?? 0),
+    ctc: Number(raw.ctc ?? raw.monthly_ctc ?? raw.annual_ctc ?? 0),
+    employee: (raw.employee as EmployeeSalary['employee']) ?? {
+      id: String(raw.employee_id ?? ''),
+      employee_code: String(raw.employee_code ?? ''),
+      first_name: firstName,
+      last_name: lastNameParts.join(' '),
+    },
+  };
+}
+
+function normalizePayrollBatch(raw: RawPayload): PayrollBatch {
+  return {
+    ...(raw as unknown as PayrollBatch),
+    batch_reference: String(raw.batch_reference ?? raw.batch_number ?? ''),
+    total_employer_contribution: Number(
+      raw.total_employer_contribution ?? raw.total_employer_statutory ?? 0,
+    ),
+  };
+}
+
+function normalizePayslip(raw: RawPayload): Payslip {
+  const employeeName = String(raw.employee_name ?? '').trim();
+  const [firstName = employeeName, ...lastNameParts] = employeeName.split(' ');
+
+  return {
+    ...(raw as unknown as Payslip),
+    gross_earnings: Number(raw.gross_earnings ?? raw.total_earnings ?? raw.gross_salary ?? 0),
+    employee: (raw.employee as Payslip['employee']) ?? {
+      id: String(raw.employee_id ?? ''),
+      employee_code: String(raw.employee_code ?? ''),
+      first_name: firstName,
+      last_name: lastNameParts.join(' '),
+    },
+  };
+}
+
+function normalizeStatutorySetup(raw: RawPayload): StatutorySetup {
+  const statutoryType = raw.statutory_type;
+  const employerContribution =
+    statutoryType === 'PF'
+      ? raw.pf_employer_rate
+      : statutoryType === 'ESI'
+        ? raw.esi_employer_rate
+        : statutoryType === 'LWF'
+          ? raw.lwf_employer_contribution
+          : undefined;
+  const employeeContribution =
+    statutoryType === 'PF'
+      ? raw.pf_employee_rate
+      : statutoryType === 'ESI'
+        ? raw.esi_employee_rate
+        : statutoryType === 'LWF'
+          ? raw.lwf_employee_contribution
+          : undefined;
+  const wageCeiling =
+    statutoryType === 'PF'
+      ? raw.pf_wage_ceiling
+      : statutoryType === 'ESI'
+        ? raw.esi_wage_ceiling
+        : undefined;
+
+  return {
+    ...(raw as unknown as StatutorySetup),
+    employer_contribution_pct:
+      employerContribution == null ? undefined : Number(employerContribution),
+    employee_contribution_pct:
+      employeeContribution == null ? undefined : Number(employeeContribution),
+    wage_ceiling: wageCeiling == null ? undefined : Number(wageCeiling),
+    admin_charges_pct:
+      raw.pf_admin_charge_rate == null ? undefined : Number(raw.pf_admin_charge_rate),
+    is_applicable: (raw.is_active as boolean | undefined) ?? true,
+  };
+}
+
+function statutorySetupToApi(data: Partial<StatutorySetup>) {
+  const payload: Record<string, unknown> = {
+    organization_id: data.organization_id,
+    statutory_type: data.statutory_type,
+    effective_from: data.effective_from,
+    effective_to: data.effective_to || undefined,
+    is_active: data.is_applicable ?? true,
+  };
+
+  if (data.statutory_type === 'PF') {
+    payload.pf_employer_rate = data.employer_contribution_pct;
+    payload.pf_employee_rate = data.employee_contribution_pct;
+    payload.pf_wage_ceiling = data.wage_ceiling;
+    payload.pf_admin_charge_rate = data.admin_charges_pct;
+    payload.pf_edli_rate = data.pf_edli_rate;
+    payload.eps_employer_rate = data.eps_employer_rate;
+    payload.eps_wage_ceiling = data.eps_wage_ceiling ?? data.wage_ceiling;
+  }
+
+  if (data.statutory_type === 'ESI') {
+    payload.esi_employer_rate = data.employer_contribution_pct;
+    payload.esi_employee_rate = data.employee_contribution_pct;
+    payload.esi_wage_ceiling = data.wage_ceiling;
+  }
+
+  if (data.statutory_type === 'PT') {
+    payload.pt_state = data.pt_state;
+    payload.pt_slabs = data.pt_slabs;
+  }
+
+  if (data.statutory_type === 'LWF') {
+    payload.lwf_employer_contribution = data.employer_contribution_pct;
+    payload.lwf_employee_contribution = data.employee_contribution_pct;
+    payload.lwf_frequency = data.lwf_frequency;
+  }
+
+  return payload;
+}
+
 // Service class
 class PayrollService {
   // ============== Salary Components ==============
@@ -187,22 +469,25 @@ class PayrollService {
     limit?: number;
   }): Promise<{ items: SalaryComponent[]; total: number }> {
     const response = await api.get('/payroll/components', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: (response.data.items ?? []).map(normalizeSalaryComponent),
+    };
   }
 
   async getComponent(id: string): Promise<SalaryComponent> {
     const response = await api.get(`/payroll/components/${id}`);
-    return response.data;
+    return normalizeSalaryComponent(response.data);
   }
 
   async createComponent(data: Partial<SalaryComponent>): Promise<SalaryComponent> {
-    const response = await api.post('/payroll/components', data);
-    return response.data;
+    const response = await api.post('/payroll/components', salaryComponentToApi(data));
+    return normalizeSalaryComponent(response.data);
   }
 
   async updateComponent(id: string, data: Partial<SalaryComponent>): Promise<SalaryComponent> {
-    const response = await api.put(`/payroll/components/${id}`, data);
-    return response.data;
+    const response = await api.put(`/payroll/components/${id}`, salaryComponentToApi(data));
+    return normalizeSalaryComponent(response.data);
   }
 
   async deleteComponent(id: string): Promise<void> {
@@ -218,26 +503,25 @@ class PayrollService {
     limit?: number;
   }): Promise<{ items: SalaryStructure[]; total: number }> {
     const response = await api.get('/payroll/structures', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: (response.data.items ?? []).map(normalizeSalaryStructure),
+    };
   }
 
   async getStructure(id: string): Promise<SalaryStructure> {
     const response = await api.get(`/payroll/structures/${id}`);
-    return response.data;
+    return normalizeSalaryStructure(response.data);
   }
 
-  async createStructure(data: Partial<SalaryStructure> & {
-    components: Partial<SalaryStructureComponent>[];
-  }): Promise<SalaryStructure> {
-    const response = await api.post('/payroll/structures', data);
-    return response.data;
+  async createStructure(data: SalaryStructureInput & { components: Partial<SalaryStructureComponent>[] }): Promise<SalaryStructure> {
+    const response = await api.post('/payroll/structures', salaryStructureToApi(data));
+    return normalizeSalaryStructure(response.data);
   }
 
-  async updateStructure(id: string, data: Partial<SalaryStructure> & {
-    components?: Partial<SalaryStructureComponent>[];
-  }): Promise<SalaryStructure> {
-    const response = await api.put(`/payroll/structures/${id}`, data);
-    return response.data;
+  async updateStructure(id: string, data: SalaryStructureInput): Promise<SalaryStructure> {
+    const response = await api.put(`/payroll/structures/${id}`, salaryStructureToApi(data));
+    return normalizeSalaryStructure(response.data);
   }
 
   async deleteStructure(id: string): Promise<void> {
@@ -253,24 +537,27 @@ class PayrollService {
     limit?: number;
   }): Promise<{ items: EmployeeSalary[]; total: number }> {
     const response = await api.get('/payroll/employee-salaries', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: (response.data.items ?? []).map(normalizeEmployeeSalary),
+    };
   }
 
   async getEmployeeSalary(id: string): Promise<EmployeeSalary> {
     const response = await api.get(`/payroll/employee-salaries/${id}`);
-    return response.data;
+    return normalizeEmployeeSalary(response.data);
   }
 
   async getCurrentEmployeeSalary(employeeId: string): Promise<EmployeeSalary> {
     const response = await api.get(`/payroll/employee-salaries/employee/${employeeId}/current`);
-    return response.data;
+    return normalizeEmployeeSalary(response.data);
   }
 
   async createEmployeeSalary(data: Partial<EmployeeSalary> & {
     components: Partial<EmployeeSalaryComponent>[];
   }): Promise<EmployeeSalary> {
     const response = await api.post('/payroll/employee-salaries', data);
-    return response.data;
+    return normalizeEmployeeSalary(response.data);
   }
 
   // ============== Statutory Setup ==============
@@ -280,22 +567,22 @@ class PayrollService {
     statutory_type?: string;
   }): Promise<StatutorySetup[]> {
     const response = await api.get('/payroll/statutory-setup', { params });
-    return response.data;
+    return (response.data ?? []).map(normalizeStatutorySetup);
   }
 
   async getStatutorySetup(id: string): Promise<StatutorySetup> {
     const response = await api.get(`/payroll/statutory-setup/${id}`);
-    return response.data;
+    return normalizeStatutorySetup(response.data);
   }
 
   async createStatutorySetup(data: Partial<StatutorySetup>): Promise<StatutorySetup> {
-    const response = await api.post('/payroll/statutory-setup', data);
-    return response.data;
+    const response = await api.post('/payroll/statutory-setup', statutorySetupToApi(data));
+    return normalizeStatutorySetup(response.data);
   }
 
   async updateStatutorySetup(id: string, data: Partial<StatutorySetup>): Promise<StatutorySetup> {
-    const response = await api.put(`/payroll/statutory-setup/${id}`, data);
-    return response.data;
+    const response = await api.put(`/payroll/statutory-setup/${id}`, statutorySetupToApi(data));
+    return normalizeStatutorySetup(response.data);
   }
 
   // ============== Payroll Batches ==============
@@ -308,38 +595,53 @@ class PayrollService {
     limit?: number;
   }): Promise<{ items: PayrollBatch[]; total: number }> {
     const response = await api.get('/payroll/batches', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: (response.data.items ?? []).map(normalizePayrollBatch),
+    };
   }
 
   async getBatch(id: string): Promise<PayrollBatch> {
     const response = await api.get(`/payroll/batches/${id}`);
-    return response.data;
+    return normalizePayrollBatch(response.data);
   }
 
   async createBatch(data: Partial<PayrollBatch>): Promise<PayrollBatch> {
     const response = await api.post('/payroll/batches', data);
-    return response.data;
+    return normalizePayrollBatch(response.data);
   }
 
   async updateBatch(id: string, data: Partial<PayrollBatch>): Promise<PayrollBatch> {
     const response = await api.put(`/payroll/batches/${id}`, data);
-    return response.data;
+    return normalizePayrollBatch(response.data);
   }
 
   async processBatch(id: string, employeeIds?: string[]): Promise<PayrollBatch> {
     const response = await api.post(`/payroll/batches/${id}/process`, {
       employee_ids: employeeIds,
     });
-    return response.data;
+    return normalizePayrollBatch(response.data);
   }
 
   async approveBatch(id: string, remarks?: string): Promise<PayrollBatch> {
     const response = await api.post(`/payroll/batches/${id}/approve`, { remarks });
+    return normalizePayrollBatch(response.data);
+  }
+
+  async markBatchPaid(id: string, paymentReference?: string): Promise<PayrollBatch> {
+    const response = await api.post(`/payroll/batches/${id}/mark-paid`, {
+      payment_reference: paymentReference,
+    });
+    return normalizePayrollBatch(response.data);
+  }
+
+  async exportBankFile(id: string): Promise<PayrollBankFile> {
+    const response = await api.get(`/payroll/batches/${id}/bank-file`);
     return response.data;
   }
 
-  async markBatchPaid(id: string): Promise<PayrollBatch> {
-    const response = await api.post(`/payroll/batches/${id}/mark-paid`);
+  async postBatchToGL(id: string, data: PayrollGLPostRequest): Promise<PayrollGLPostResult> {
+    const response = await api.post(`/payroll/batches/${id}/post-gl`, data);
     return response.data;
   }
 
@@ -353,17 +655,20 @@ class PayrollService {
     limit?: number;
   }): Promise<{ items: Payslip[]; total: number }> {
     const response = await api.get('/payroll/payslips', { params });
-    return response.data;
+    return {
+      ...response.data,
+      items: (response.data.items ?? []).map(normalizePayslip),
+    };
   }
 
   async getPayslip(id: string): Promise<Payslip> {
     const response = await api.get(`/payroll/payslips/${id}`);
-    return response.data;
+    return normalizePayslip(response.data);
   }
 
   async updatePayslip(id: string, data: Partial<Payslip>): Promise<Payslip> {
     const response = await api.put(`/payroll/payslips/${id}`, data);
-    return response.data;
+    return normalizePayslip(response.data);
   }
 
   async getEmployeePayslips(params: {
@@ -379,7 +684,10 @@ class PayrollService {
         limit: params.limit,
       },
     });
-    return response.data;
+    return {
+      ...response.data,
+      items: (response.data.items ?? []).map(normalizePayslip),
+    };
   }
 }
 

@@ -1,7 +1,4 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   Briefcase,
   Building2,
   Calendar,
@@ -16,11 +13,14 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table,
   TableBody,
@@ -29,8 +29,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { hrisApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Employee {
   id: string;
   employee_code: string;
@@ -209,25 +211,17 @@ export function EmployeeView() {
       if (!id) return;
       try {
         setLoading(true);
-        const [
-          empRes,
-          docsRes,
-          familyRes,
-          bankRes,
-          eduRes,
-          expRes,
-          statRes,
-          lifecycleRes,
-        ] = await Promise.all([
-          hrisApi.getEmployee(id),
-          hrisApi.listEmployeeDocuments(id),
-          hrisApi.listEmployeeFamily(id),
-          hrisApi.listEmployeeBankAccounts(id),
-          hrisApi.listEmployeeEducation(id),
-          hrisApi.listEmployeeExperience(id),
-          hrisApi.getEmployeeStatutory(id).catch(() => ({ data: null })),
-          hrisApi.listEmployeeLifecycle(id),
-        ]);
+        const [empRes, docsRes, familyRes, bankRes, eduRes, expRes, statRes, lifecycleRes] =
+          await Promise.all([
+            hrisApi.getEmployee(id),
+            hrisApi.listEmployeeDocuments(id),
+            hrisApi.listEmployeeFamily(id),
+            hrisApi.listEmployeeBankAccounts(id),
+            hrisApi.listEmployeeEducation(id),
+            hrisApi.listEmployeeExperience(id),
+            hrisApi.getEmployeeStatutory(id).catch(() => ({ data: null })),
+            hrisApi.listEmployeeLifecycle(id),
+          ]);
 
         setEmployee(empRes.data);
         setDocuments(docsRes.data.items || docsRes.data || []);
@@ -238,7 +232,7 @@ export function EmployeeView() {
         setStatutory(statRes.data);
         setLifecycle(lifecycleRes.data.items || lifecycleRes.data || []);
       } catch (error) {
-        console.error('Failed to fetch employee data:', error);
+        logger.error('Failed to fetch employee data:', error);
       } finally {
         setLoading(false);
       }
@@ -268,29 +262,25 @@ export function EmployeeView() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/hris/employees')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{employee.full_name}</h1>
-            <p className="text-sm text-slate-500">
-              {employee.employee_code} • {employee.designation_name || 'No Designation'}
-            </p>
+      <PageHeader
+        title={employee.full_name}
+        subtitle={`${employee.employee_code} • ${employee.designation_name || 'No Designation'}`}
+        breadcrumbs={[
+          { label: 'Employees', to: '/admin/hris/employees' },
+          { label: employee.employee_code },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Badge className={getStatusBadgeColor(employee.employment_status)}>
+              {employee.employment_status}
+            </Badge>
+            <Button onClick={() => navigate(`/admin/hris/employees/${id}/edit`)}>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </Button>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge className={getStatusBadgeColor(employee.employment_status)}>
-            {employee.employment_status}
-          </Badge>
-          <Button onClick={() => navigate(`/admin/hris/employees/${id}/edit`)}>
-            <Edit className="mr-2 h-4 w-4" />
-            Edit
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Quick Info Card */}
       <Card>
@@ -311,7 +301,9 @@ export function EmployeeView() {
               </div>
               <div>
                 <p className="text-xs text-slate-500">Joining Date</p>
-                <p className="font-medium">{new Date(employee.date_of_joining).toLocaleDateString()}</p>
+                <p className="font-medium">
+                  <DateDisplay date={employee.date_of_joining} />
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -329,7 +321,9 @@ export function EmployeeView() {
               </div>
               <div>
                 <p className="text-xs text-slate-500">Email</p>
-                <p className="font-medium">{employee.official_email || employee.personal_email || '-'}</p>
+                <p className="font-medium">
+                  {employee.official_email || employee.personal_email || '-'}
+                </p>
               </div>
             </div>
           </div>
@@ -397,9 +391,7 @@ export function EmployeeView() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Date of Birth</span>
-                      <span className="font-medium">
-                        {employee.date_of_birth ? new Date(employee.date_of_birth).toLocaleDateString() : '-'}
-                      </span>
+                      <DateDisplay date={employee.date_of_birth} className="font-medium" />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Gender</span>
@@ -448,31 +440,61 @@ export function EmployeeView() {
 
               <div className="mt-6 grid gap-6 md:grid-cols-2">
                 <div className="space-y-4">
-                  <h4 className="font-medium text-slate-900 flex items-center gap-2">
+                  <h4 className="flex items-center gap-2 font-medium text-slate-900">
                     <Home className="h-4 w-4" />
                     Current Address
                   </h4>
                   <p className="text-sm text-slate-600">
                     {employee.current_address_line1 || '-'}
-                    {employee.current_address_line2 && <><br />{employee.current_address_line2}</>}
-                    {employee.current_city && <><br />{employee.current_city}</>}
+                    {employee.current_address_line2 && (
+                      <>
+                        <br />
+                        {employee.current_address_line2}
+                      </>
+                    )}
+                    {employee.current_city && (
+                      <>
+                        <br />
+                        {employee.current_city}
+                      </>
+                    )}
                     {employee.current_state && <>, {employee.current_state}</>}
                     {employee.current_pincode && <> - {employee.current_pincode}</>}
-                    {employee.current_country && <><br />{employee.current_country}</>}
+                    {employee.current_country && (
+                      <>
+                        <br />
+                        {employee.current_country}
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="space-y-4">
-                  <h4 className="font-medium text-slate-900 flex items-center gap-2">
+                  <h4 className="flex items-center gap-2 font-medium text-slate-900">
                     <Home className="h-4 w-4" />
                     Permanent Address
                   </h4>
                   <p className="text-sm text-slate-600">
                     {employee.permanent_address_line1 || '-'}
-                    {employee.permanent_address_line2 && <><br />{employee.permanent_address_line2}</>}
-                    {employee.permanent_city && <><br />{employee.permanent_city}</>}
+                    {employee.permanent_address_line2 && (
+                      <>
+                        <br />
+                        {employee.permanent_address_line2}
+                      </>
+                    )}
+                    {employee.permanent_city && (
+                      <>
+                        <br />
+                        {employee.permanent_city}
+                      </>
+                    )}
                     {employee.permanent_state && <>, {employee.permanent_state}</>}
                     {employee.permanent_pincode && <> - {employee.permanent_pincode}</>}
-                    {employee.permanent_country && <><br />{employee.permanent_country}</>}
+                    {employee.permanent_country && (
+                      <>
+                        <br />
+                        {employee.permanent_country}
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -539,13 +561,11 @@ export function EmployeeView() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Date of Joining</span>
-                      <span className="font-medium">{new Date(employee.date_of_joining).toLocaleDateString()}</span>
+                      <DateDisplay date={employee.date_of_joining} className="font-medium" />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Confirmation Date</span>
-                      <span className="font-medium">
-                        {employee.date_of_confirmation ? new Date(employee.date_of_confirmation).toLocaleDateString() : '-'}
-                      </span>
+                      <DateDisplay date={employee.date_of_confirmation} className="font-medium" />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Notice Period (Days)</span>
@@ -583,7 +603,7 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {documents.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No documents uploaded</p>
+                <p className="py-8 text-center text-sm text-slate-500">No documents uploaded</p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -600,8 +620,12 @@ export function EmployeeView() {
                       <TableRow key={doc.id}>
                         <TableCell className="font-medium">{doc.document_type}</TableCell>
                         <TableCell>{doc.document_number}</TableCell>
-                        <TableCell>{doc.issue_date ? new Date(doc.issue_date).toLocaleDateString() : '-'}</TableCell>
-                        <TableCell>{doc.expiry_date ? new Date(doc.expiry_date).toLocaleDateString() : '-'}</TableCell>
+                        <TableCell>
+                          <DateDisplay date={doc.issue_date} />
+                        </TableCell>
+                        <TableCell>
+                          <DateDisplay date={doc.expiry_date} />
+                        </TableCell>
                         <TableCell>
                           <Badge variant={doc.is_verified ? 'default' : 'secondary'}>
                             {doc.is_verified ? 'Verified' : 'Pending'}
@@ -627,7 +651,7 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {family.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No family members added</p>
+                <p className="py-8 text-center text-sm text-slate-500">No family members added</p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -646,7 +670,7 @@ export function EmployeeView() {
                         <TableCell className="font-medium">{member.name}</TableCell>
                         <TableCell>{member.relation}</TableCell>
                         <TableCell>
-                          {member.date_of_birth ? new Date(member.date_of_birth).toLocaleDateString() : '-'}
+                          <DateDisplay date={member.date_of_birth} />
                         </TableCell>
                         <TableCell>{member.contact_number || '-'}</TableCell>
                         <TableCell>
@@ -681,7 +705,9 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {education.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No education records added</p>
+                <p className="py-8 text-center text-sm text-slate-500">
+                  No education records added
+                </p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -701,7 +727,9 @@ export function EmployeeView() {
                           <div className="flex items-center gap-2">
                             {edu.education_level}
                             {edu.is_highest_qualification && (
-                              <Badge variant="outline" className="text-xs">Highest</Badge>
+                              <Badge variant="outline" className="text-xs">
+                                Highest
+                              </Badge>
                             )}
                           </div>
                         </TableCell>
@@ -709,9 +737,13 @@ export function EmployeeView() {
                         <TableCell>{edu.institution_name}</TableCell>
                         <TableCell>{edu.specialization || '-'}</TableCell>
                         <TableCell>
-                          {edu.start_year && edu.end_year ? `${edu.start_year} - ${edu.end_year}` : '-'}
+                          {edu.start_year && edu.end_year
+                            ? `${edu.start_year} - ${edu.end_year}`
+                            : '-'}
                         </TableCell>
-                        <TableCell>{edu.percentage_cgpa ? `${edu.percentage_cgpa}%` : '-'}</TableCell>
+                        <TableCell>
+                          {edu.percentage_cgpa ? `${edu.percentage_cgpa}%` : '-'}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -732,7 +764,9 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {experience.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No experience records added</p>
+                <p className="py-8 text-center text-sm text-slate-500">
+                  No experience records added
+                </p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -751,10 +785,11 @@ export function EmployeeView() {
                         <TableCell>{exp.designation}</TableCell>
                         <TableCell>{exp.department || '-'}</TableCell>
                         <TableCell>
-                          {new Date(exp.from_date).toLocaleDateString()} -{' '}
-                          {exp.is_current ? 'Present' : exp.to_date ? new Date(exp.to_date).toLocaleDateString() : '-'}
+                          <DateDisplay date={exp.from_date} /> - {exp.is_current ? 'Present' : <DateDisplay date={exp.to_date} />}
                         </TableCell>
-                        <TableCell>{exp.last_ctc ? `₹${exp.last_ctc.toLocaleString()}` : '-'}</TableCell>
+                        <TableCell>
+                          {exp.last_ctc ? `₹${exp.last_ctc.toLocaleString()}` : '-'}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -775,7 +810,7 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {bankAccounts.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No bank accounts added</p>
+                <p className="py-8 text-center text-sm text-slate-500">No bank accounts added</p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -821,7 +856,9 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {!statutory ? (
-                <p className="text-sm text-slate-500 text-center py-8">No statutory information added</p>
+                <p className="py-8 text-center text-sm text-slate-500">
+                  No statutory information added
+                </p>
               ) : (
                 <div className="grid gap-6 md:grid-cols-2">
                   <div className="space-y-4">
@@ -895,7 +932,9 @@ export function EmployeeView() {
             </CardHeader>
             <CardContent>
               {lifecycle.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-8">No lifecycle events recorded</p>
+                <p className="py-8 text-center text-sm text-slate-500">
+                  No lifecycle events recorded
+                </p>
               ) : (
                 <Table>
                   <TableHeader>
@@ -913,8 +952,8 @@ export function EmployeeView() {
                         <TableCell>
                           <Badge variant="outline">{event.event_type}</Badge>
                         </TableCell>
-                        <TableCell>{new Date(event.event_date).toLocaleDateString()}</TableCell>
-                        <TableCell>{new Date(event.effective_date).toLocaleDateString()}</TableCell>
+                        <TableCell><DateDisplay date={event.event_date} /></TableCell>
+                        <TableCell><DateDisplay date={event.effective_date} /></TableCell>
                         <TableCell>{event.description || '-'}</TableCell>
                         <TableCell>{event.remarks || '-'}</TableCell>
                       </TableRow>

@@ -3,31 +3,6 @@
  * Service requests and support tickets
  */
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   HelpCircle,
   MessageSquare,
@@ -42,10 +17,38 @@ import {
   Calendar,
   IndianRupee,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { portalServiceRequestApi, portalCommunicationApi, portalDashboardApi } from '@/services/portalApi';
 import type { ServiceRequest, SupportTicket, LoanSummary } from '@/types/portal';
 
-const requestTypeLabels: Record<string, { label: string; description: string; icon: any }> = {
+import { logger } from "@/lib/logger";
+const requestTypeLabels: Record<string, { label: string; description: string; icon: React.ComponentType<{ className?: string }> }> = {
   PREPAYMENT: {
     label: 'Prepayment Request',
     description: 'Request for part prepayment of your loan',
@@ -142,7 +145,7 @@ export default function PortalSupport() {
       setTickets(ticketsRes.data);
       setLoans(loansRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -163,7 +166,7 @@ export default function PortalSupport() {
       resetRequestForm();
       fetchData();
     } catch (error) {
-      console.error('Failed to create request:', error);
+      logger.error('Failed to create request:', error);
     } finally {
       setSubmitting(false);
     }
@@ -184,7 +187,7 @@ export default function PortalSupport() {
       resetTicketForm();
       fetchData();
     } catch (error) {
-      console.error('Failed to create ticket:', error);
+      logger.error('Failed to create ticket:', error);
     } finally {
       setSubmitting(false);
     }
@@ -201,7 +204,7 @@ export default function PortalSupport() {
       const response = await portalCommunicationApi.getTicket(selectedTicket.id);
       setSelectedTicket(response.data);
     } catch (error) {
-      console.error('Failed to send reply:', error);
+      logger.error('Failed to send reply:', error);
     } finally {
       setSendingReply(false);
     }
@@ -296,9 +299,7 @@ export default function PortalSupport() {
                             {request.request_number} •{' '}
                             {requestTypeLabels[request.request_type]?.label || request.request_type}
                           </p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(request.created_at).toLocaleDateString()}
-                          </p>
+                          <DateDisplay date={request.created_at} className="text-xs text-gray-400" />
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -353,9 +354,7 @@ export default function PortalSupport() {
                           <p className="text-sm text-gray-500">
                             {ticket.ticket_number} • {ticket.category}
                           </p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(ticket.created_at).toLocaleDateString()}
-                          </p>
+                          <DateDisplay date={ticket.created_at} className="text-xs text-gray-400" />
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -564,8 +563,7 @@ export default function PortalSupport() {
                   </Badge>
                 </div>
                 <DialogDescription>
-                  {selectedRequest.request_number} • Created on{' '}
-                  {new Date(selectedRequest.created_at).toLocaleDateString()}
+                  {selectedRequest.request_number} • Created on <DateDisplay date={selectedRequest.created_at} />
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">

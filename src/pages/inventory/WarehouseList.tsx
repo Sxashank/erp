@@ -1,10 +1,12 @@
+import { Plus, Search, Edit, Trash2, Warehouse, MapPin, Star } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Link, useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -13,7 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Plus, Search, Edit, Trash2, Warehouse, MapPin, Star } from 'lucide-react';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -93,12 +94,13 @@ const warehouses = [
 
 export default function WarehouseList() {
   const [searchTerm, setSearchTerm] = useState('');
+  const navigate = useNavigate();
 
   const filteredWarehouses = warehouses.filter(
     (wh) =>
       wh.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       wh.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      wh.city.toLowerCase().includes(searchTerm.toLowerCase())
+      wh.city.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   const getTypeVariant = (type: string) => {
@@ -115,16 +117,14 @@ export default function WarehouseList() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Warehouses"
         subtitle="Manage storage locations"
         actions={
-          <Button asChild>
-            <Link to="/inventory/warehouses/new">
-              <Plus className="h-4 w-4 mr-2" />
-              Add Warehouse
-            </Link>
+          <Button onClick={() => navigate('/admin/inventory/warehouses/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Warehouse
           </Button>
         }
       />
@@ -133,7 +133,7 @@ export default function WarehouseList() {
       <Card>
         <CardContent className="pt-6">
           <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
             <Input
               placeholder="Search warehouses..."
               value={searchTerm}
@@ -173,9 +173,7 @@ export default function WarehouseList() {
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       {wh.code}
-                      {wh.isDefault && (
-                        <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-                      )}
+                      {wh.isDefault && <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />}
                     </div>
                   </TableCell>
                   <TableCell>{wh.name}</TableCell>
@@ -195,9 +193,7 @@ export default function WarehouseList() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">{wh.totalItems}</TableCell>
-                  <TableCell className="text-right">
-                    {formatCurrency(wh.totalValue)}
-                  </TableCell>
+                  <TableCell className="text-right">{formatCurrency(wh.totalValue)}</TableCell>
                   <TableCell>
                     <Badge variant={wh.status === 'ACTIVE' ? 'default' : 'secondary'}>
                       {wh.status}
@@ -206,7 +202,7 @@ export default function WarehouseList() {
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-2">
                       <Button variant="ghost" size="icon" asChild>
-                        <Link to={`/inventory/warehouses/${wh.id}/edit`}>
+                        <Link to={`/admin/inventory/warehouses/${wh.id}/edit`}>
                           <Edit className="h-4 w-4" />
                         </Link>
                       </Button>

@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save, Plus, Trash2, ArrowRightLeft, MoveRight } from 'lucide-react';
+import { useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -16,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -31,9 +33,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, Plus, Trash2, ArrowRightLeft, MoveRight } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const transferLineSchema = z.object({
   itemId: z.string().min(1, 'Item is required'),
@@ -45,19 +45,21 @@ const transferLineSchema = z.object({
   remarks: z.string().optional(),
 });
 
-const stockTransferSchema = z.object({
-  fromWarehouseId: z.string().min(1, 'Source warehouse is required'),
-  toWarehouseId: z.string().min(1, 'Destination warehouse is required'),
-  transactionDate: z.string().min(1, 'Date is required'),
-  transferType: z.enum(['DIRECT', 'TRANSIT']),
-  requestedBy: z.string().optional(),
-  approvedBy: z.string().optional(),
-  remarks: z.string().optional(),
-  lines: z.array(transferLineSchema).min(1, 'At least one item is required'),
-}).refine((data) => data.fromWarehouseId !== data.toWarehouseId, {
-  message: 'Source and destination warehouses must be different',
-  path: ['toWarehouseId'],
-});
+const stockTransferSchema = z
+  .object({
+    fromWarehouseId: z.string().min(1, 'Source warehouse is required'),
+    toWarehouseId: z.string().min(1, 'Destination warehouse is required'),
+    transactionDate: z.string().min(1, 'Date is required'),
+    transferType: z.enum(['DIRECT', 'TRANSIT']),
+    requestedBy: z.string().optional(),
+    approvedBy: z.string().optional(),
+    remarks: z.string().optional(),
+    lines: z.array(transferLineSchema).min(1, 'At least one item is required'),
+  })
+  .refine((data) => data.fromWarehouseId !== data.toWarehouseId, {
+    message: 'Source and destination warehouses must be different',
+    path: ['toWarehouseId'],
+  });
 
 type StockTransferFormData = z.infer<typeof stockTransferSchema>;
 
@@ -77,7 +79,11 @@ const items = [
 ];
 
 const transferTypes = [
-  { value: 'DIRECT', label: 'Direct Transfer', description: 'Stock moves directly between warehouses' },
+  {
+    value: 'DIRECT',
+    label: 'Direct Transfer',
+    description: 'Stock moves directly between warehouses',
+  },
   { value: 'TRANSIT', label: 'Via Transit', description: 'Stock goes through transit warehouse' },
 ];
 
@@ -138,7 +144,7 @@ export default function StockTransfer() {
     }
 
     logger.debug('Stock Transfer submitted:', data);
-    navigate('/inventory/dashboard');
+    navigate('/admin/inventory/dashboard');
   };
 
   const totalItems = fields.reduce((sum, _, index) => {
@@ -149,14 +155,11 @@ export default function StockTransfer() {
   const toWarehouse = warehouses.find((w) => w.id === toWarehouseId);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Stock Transfer"
         subtitle="Transfer stock between warehouses"
-        breadcrumbs={[
-          { label: 'Inventory', to: '/inventory' },
-          { label: 'Transfer' },
-        ]}
+        breadcrumbs={[{ label: 'Inventory', to: '/admin/inventory' }, { label: 'Transfer' }]}
       />
 
       <Form {...form}>
@@ -167,29 +170,25 @@ export default function StockTransfer() {
             </CardHeader>
             <CardContent className="space-y-6">
               {/* Transfer Visual */}
-              <div className="flex items-center justify-center gap-4 p-4 bg-muted rounded-lg">
+              <div className="flex items-center justify-center gap-4 rounded-lg bg-muted p-4">
                 <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-1">From</div>
-                  <div className="font-semibold text-lg">
+                  <div className="mb-1 text-sm text-muted-foreground">From</div>
+                  <div className="text-lg font-semibold">
                     {fromWarehouse ? fromWarehouse.name : 'Select Source'}
                   </div>
-                  {fromWarehouse && (
-                    <Badge variant="outline">{fromWarehouse.code}</Badge>
-                  )}
+                  {fromWarehouse && <Badge variant="outline">{fromWarehouse.code}</Badge>}
                 </div>
                 <MoveRight className="h-8 w-8 text-muted-foreground" />
                 <div className="text-center">
-                  <div className="text-sm text-muted-foreground mb-1">To</div>
-                  <div className="font-semibold text-lg">
+                  <div className="mb-1 text-sm text-muted-foreground">To</div>
+                  <div className="text-lg font-semibold">
                     {toWarehouse ? toWarehouse.name : 'Select Destination'}
                   </div>
-                  {toWarehouse && (
-                    <Badge variant="outline">{toWarehouse.code}</Badge>
-                  )}
+                  {toWarehouse && <Badge variant="outline">{toWarehouse.code}</Badge>}
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <FormField
                   control={form.control}
                   name="fromWarehouseId"
@@ -346,7 +345,13 @@ export default function StockTransfer() {
                   disabled={!fromWarehouseId}
                 >
                   <SelectTrigger className="max-w-md">
-                    <SelectValue placeholder={fromWarehouseId ? "Select item to transfer" : "Select source warehouse first"} />
+                    <SelectValue
+                      placeholder={
+                        fromWarehouseId
+                          ? 'Select item to transfer'
+                          : 'Select source warehouse first'
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {items.map((item) => (
@@ -357,7 +362,7 @@ export default function StockTransfer() {
                   </SelectContent>
                 </Select>
                 <Button type="button" onClick={addItem} disabled={!selectedItem}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
               </div>
@@ -447,14 +452,14 @@ export default function StockTransfer() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="py-8 text-center text-muted-foreground">
                   No items added. Select a source warehouse and add items to transfer.
                 </div>
               )}
 
               {fields.length > 0 && (
                 <div className="flex justify-end">
-                  <div className="bg-muted p-4 rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <div className="text-sm text-muted-foreground">Total Items to Transfer</div>
                     <div className="text-2xl font-bold">{totalItems} units</div>
                   </div>
@@ -471,7 +476,7 @@ export default function StockTransfer() {
               type="submit"
               disabled={fields.length === 0 || !fromWarehouseId || !toWarehouseId}
             >
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               Create Transfer
             </Button>
           </div>

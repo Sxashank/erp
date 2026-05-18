@@ -1,21 +1,12 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Calculator, Calendar, Download, Eye } from 'lucide-react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { Calculator, Calendar, Download, ArrowLeft, Eye } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -25,6 +16,14 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -33,115 +32,86 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { usePreviewSchedule } from '@/hooks/lending/usePreviewSchedule';
+import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import type { SchedulePreviewLine, SchedulePreviewSummary } from '@/services/lending/scheduleApi';
 
 const scheduleSchema = z.object({
-  loan_account_id: z.string().min(1, 'Loan account is required'),
+  // Picker is forward-looking — preview endpoint is account-agnostic.
+  loanAccountId: z.string().optional().default(''),
   principal: z.string().min(1, 'Principal amount is required'),
-  interest_rate: z.string().min(1, 'Interest rate is required'),
-  tenure_months: z.string().min(1, 'Tenure is required'),
-  disbursement_date: z.string().min(1, 'Start date is required'),
-  emi_day: z.string().default('1'),
-  calculation_method: z.string().default('reducing_balance'),
-  moratorium_months: z.string().default('0'),
+  interestRate: z.string().min(1, 'Interest rate is required'),
+  tenureMonths: z.string().min(1, 'Tenure is required'),
+  disbursementDate: z.string().min(1, 'Start date is required'),
+  emiDay: z.string().default('1'),
+  calculationMethod: z.string().default('reducing_balance'),
+  moratoriumMonths: z.string().default('0'),
 });
 
-type ScheduleFormData = z.infer<typeof scheduleSchema>;
+type ScheduleFormInput = z.input<typeof scheduleSchema>;
+type ScheduleFormData = z.output<typeof scheduleSchema>;
 
-// Mock loan accounts
-const loanAccounts = [
-  { id: '1', number: 'SMFC/LA/2025/00145', entity: 'Sunrise Industries', sanctioned: 15000000 },
-  { id: '2', number: 'SMFC/LA/2025/00146', entity: 'Metro Logistics', sanctioned: 25000000 },
-  { id: '3', number: 'SMFC/LA/2025/00147', entity: 'Eastern Trading', sanctioned: 10000000 },
-];
+// Loan accounts picker. Wires to GET /lending/loan-accounts via
+// useLoanAccounts; render-empty until reused here.
+interface LoanAccountOption {
+  id: string;
+  number: string;
+  entity: string;
+  sanctioned: number;
+}
+
+const loanAccounts: LoanAccountOption[] = [];
 
 export default function ScheduleGenerate() {
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  const [schedule, setSchedule] = useState<any[] | null>(null);
-  const [summary, setSummary] = useState<any | null>(null);
+  // navigate kept available via router context; back navigation handled by
+  // the surrounding shell. Picker list is still empty (see note above).
+  useNavigate();
+  const { toast } = useToast();
+  const previewMutation = usePreviewSchedule();
 
-  const form = useForm<ScheduleFormData>({
-    resolver: zodResolver(scheduleSchema) as any,
+  const form = useForm<ScheduleFormInput, unknown, ScheduleFormData>({
+    resolver: zodResolver(scheduleSchema),
     defaultValues: {
-      emi_day: '1',
-      calculation_method: 'reducing_balance',
-      moratorium_months: '0',
+      loanAccountId: '',
+      emiDay: '1',
+      calculationMethod: 'reducing_balance',
+      moratoriumMonths: '0',
     },
   });
 
-  const generateSchedule = async (data: ScheduleFormData) => {
-    setIsLoading(true);
+  const schedule: SchedulePreviewLine[] | null = previewMutation.data?.entries ?? null;
+  const summary: SchedulePreviewSummary | null = previewMutation.data?.summary ?? null;
+  const isLoading = previewMutation.isPending;
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    const principal = parseFloat(data.principal);
-    const rate = parseFloat(data.interest_rate);
-    const tenure = parseInt(data.tenure_months);
-    const moratorium = parseInt(data.moratorium_months);
-    const startDate = new Date(data.disbursement_date);
-    const emiDay = parseInt(data.emi_day);
-
-    // Calculate EMI for reducing balance
-    const monthlyRate = rate / 12 / 100;
-    const effectiveTenure = tenure - moratorium;
-    const emi = effectiveTenure > 0
-      ? (principal * monthlyRate * Math.pow(1 + monthlyRate, effectiveTenure)) /
-        (Math.pow(1 + monthlyRate, effectiveTenure) - 1)
-      : principal / Math.max(tenure, 1);
-
-    // Generate schedule
-    const entries = [];
-    let balance = principal;
-    let totalInterest = 0;
-    let totalPrincipal = 0;
-
-    for (let i = 0; i < tenure; i++) {
-      const dueDate = new Date(startDate);
-      dueDate.setMonth(dueDate.getMonth() + i + 1);
-      dueDate.setDate(Math.min(emiDay, 28));
-
-      const isMoratorium = i < moratorium;
-      const interest = balance * monthlyRate;
-      let principalPaid = 0;
-
-      if (isMoratorium) {
-        principalPaid = 0;
-      } else if (i === tenure - 1) {
-        principalPaid = balance;
-      } else {
-        principalPaid = emi - interest;
-      }
-
-      const opening = balance;
-      balance = Math.max(0, balance - principalPaid);
-
-      entries.push({
-        installment_number: i + 1,
-        due_date: dueDate.toISOString().split('T')[0],
-        principal_amount: principalPaid,
-        interest_amount: interest,
-        total_amount: principalPaid + interest,
-        opening_balance: opening,
-        closing_balance: balance,
-        is_moratorium: isMoratorium,
-      });
-
-      totalInterest += interest;
-      totalPrincipal += principalPaid;
-    }
-
-    setSchedule(entries);
-    setSummary({
-      total_installments: tenure,
-      total_principal: totalPrincipal,
-      total_interest: totalInterest,
-      total_amount: totalPrincipal + totalInterest,
-      emi: emi,
-    });
-
-    setIsLoading(false);
+  const generateSchedule = (data: ScheduleFormData) => {
+    previewMutation.mutate(
+      {
+        // Decimal as string on the wire — backend parses to Decimal (§6.2).
+        principal: data.principal,
+        interestRate: data.interestRate,
+        tenureMonths: parseInt(data.tenureMonths, 10),
+        disbursementDate: data.disbursementDate,
+        emiDay: parseInt(data.emiDay, 10),
+        calculationMethod: data.calculationMethod,
+        moratoriumMonths: parseInt(data.moratoriumMonths, 10),
+      },
+      {
+        onSuccess: (result) => {
+          toast({
+            title: 'Schedule generated',
+            description: `${result.summary.totalInstallments} installments computed.`,
+          });
+        },
+        onError: (err) => {
+          toast({
+            title: 'Could not generate schedule',
+            description: err.message,
+            variant: 'destructive',
+          });
+        },
+      },
+    );
   };
 
   return (
@@ -151,7 +121,7 @@ export default function ScheduleGenerate() {
         subtitle="Create loan repayment schedule with different calculation methods"
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Form */}
         <Card className="lg:col-span-1">
           <CardHeader>
@@ -160,10 +130,10 @@ export default function ScheduleGenerate() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(generateSchedule as any)} className="space-y-4">
+              <form onSubmit={form.handleSubmit(generateSchedule)} className="space-y-4">
                 <FormField
                   control={form.control}
-                  name="loan_account_id"
+                  name="loanAccountId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Loan Account</FormLabel>
@@ -202,7 +172,7 @@ export default function ScheduleGenerate() {
 
                 <FormField
                   control={form.control}
-                  name="interest_rate"
+                  name="interestRate"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Annual Interest Rate (%)</FormLabel>
@@ -216,7 +186,7 @@ export default function ScheduleGenerate() {
 
                 <FormField
                   control={form.control}
-                  name="tenure_months"
+                  name="tenureMonths"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Tenure (Months)</FormLabel>
@@ -230,7 +200,7 @@ export default function ScheduleGenerate() {
 
                 <FormField
                   control={form.control}
-                  name="disbursement_date"
+                  name="disbursementDate"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Start Date</FormLabel>
@@ -244,7 +214,7 @@ export default function ScheduleGenerate() {
 
                 <FormField
                   control={form.control}
-                  name="emi_day"
+                  name="emiDay"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>EMI Day</FormLabel>
@@ -269,7 +239,7 @@ export default function ScheduleGenerate() {
 
                 <FormField
                   control={form.control}
-                  name="calculation_method"
+                  name="calculationMethod"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Calculation Method</FormLabel>
@@ -293,7 +263,7 @@ export default function ScheduleGenerate() {
 
                 <FormField
                   control={form.control}
-                  name="moratorium_months"
+                  name="moratoriumMonths"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Moratorium (Months)</FormLabel>
@@ -307,7 +277,7 @@ export default function ScheduleGenerate() {
                 />
 
                 <Button type="submit" className="w-full" disabled={isLoading}>
-                  <Calculator className="h-4 w-4 mr-2" />
+                  <Calculator className="mr-2 h-4 w-4" />
                   {isLoading ? 'Generating...' : 'Generate Schedule'}
                 </Button>
               </form>
@@ -327,11 +297,11 @@ export default function ScheduleGenerate() {
             {schedule && (
               <div className="flex gap-2">
                 <Button variant="outline" size="sm">
-                  <Eye className="h-4 w-4 mr-2" />
+                  <Eye className="mr-2 h-4 w-4" />
                   Preview
                 </Button>
                 <Button variant="outline" size="sm">
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="mr-2 h-4 w-4" />
                   Export
                 </Button>
               </div>
@@ -339,22 +309,22 @@ export default function ScheduleGenerate() {
           </CardHeader>
           <CardContent>
             {summary && (
-              <div className="grid grid-cols-4 gap-4 mb-6 p-4 bg-muted rounded-lg">
+              <div className="mb-6 grid grid-cols-4 gap-4 rounded-lg bg-muted p-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Principal</p>
-                  <p className="text-lg font-semibold">{formatCurrency(summary.total_principal)}</p>
+                  <p className="text-lg font-semibold">{formatCurrency(summary.totalPrincipal)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Interest</p>
-                  <p className="text-lg font-semibold">{formatCurrency(summary.total_interest)}</p>
+                  <p className="text-lg font-semibold">{formatCurrency(summary.totalInterest)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Total Payment</p>
-                  <p className="text-lg font-semibold">{formatCurrency(summary.total_amount)}</p>
+                  <p className="text-lg font-semibold">{formatCurrency(summary.totalAmount)}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Monthly EMI</p>
-                  <p className="text-lg font-semibold">{formatCurrency(summary.emi)}</p>
+                  <p className="text-lg font-semibold">{formatCurrency(summary.emiAmount)}</p>
                 </div>
               </div>
             )}
@@ -376,30 +346,30 @@ export default function ScheduleGenerate() {
                   <TableBody>
                     {schedule.map((entry) => (
                       <TableRow
-                        key={entry.installment_number}
-                        className={entry.is_moratorium ? 'bg-muted/50' : ''}
+                        key={entry.installmentNumber}
+                        className={entry.isMoratorium ? 'bg-muted/50' : ''}
                       >
                         <TableCell className="font-medium">
-                          {entry.installment_number}
-                          {entry.is_moratorium && (
-                            <span className="text-xs text-muted-foreground ml-1">(M)</span>
+                          {entry.installmentNumber}
+                          {entry.isMoratorium && (
+                            <span className="ml-1 text-xs text-muted-foreground">(M)</span>
                           )}
                         </TableCell>
-                        <TableCell>{formatDate(entry.due_date)}</TableCell>
+                        <TableCell>{formatDate(entry.dueDate)}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(entry.opening_balance)}
+                          {formatCurrency(entry.openingBalance)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(entry.principal_amount)}
+                          {formatCurrency(entry.principalAmount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(entry.interest_amount)}
+                          {formatCurrency(entry.interestAmount)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(entry.total_amount)}
+                          {formatCurrency(entry.totalAmount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(entry.closing_balance)}
+                          {formatCurrency(entry.closingBalance)}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -408,7 +378,7 @@ export default function ScheduleGenerate() {
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <Calendar className="h-12 w-12 text-muted-foreground mb-4" />
+                <Calendar className="mb-4 h-12 w-12 text-muted-foreground" />
                 <h3 className="text-lg font-medium">No Schedule Generated</h3>
                 <p className="text-muted-foreground">
                   Enter loan parameters and click Generate to create a schedule

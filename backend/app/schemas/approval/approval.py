@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import BaseSchema, AuditSchema
+from app.schemas.base import CamelSchema
 from app.core.constants import (
     ApprovalWorkflowType,
     ApprovalRequestStatus,
@@ -19,7 +19,18 @@ from app.core.constants import (
 # Workflow Level Schemas
 # ============================================
 
-class ApprovalWorkflowLevelCreate(BaseSchema):
+class ApprovalAuditSchema(CamelSchema):
+    """CamelCase audit fields for approval APIs consumed by the frontend."""
+
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    created_by: Optional[UUID] = None
+    updated_by: Optional[UUID] = None
+    is_active: bool = True
+    version: int = 1
+
+
+class ApprovalWorkflowLevelCreate(CamelSchema):
     """Schema for creating an approval workflow level."""
 
     level_number: int = Field(..., ge=1, le=5, description="Level order (1-5)")
@@ -53,7 +64,7 @@ class ApprovalWorkflowLevelCreate(BaseSchema):
     )
 
 
-class ApprovalWorkflowLevelResponse(AuditSchema):
+class ApprovalWorkflowLevelResponse(ApprovalAuditSchema):
     """Response schema for approval workflow level."""
 
     id: UUID
@@ -72,7 +83,7 @@ class ApprovalWorkflowLevelResponse(AuditSchema):
 # Workflow Configuration Schemas
 # ============================================
 
-class ApprovalWorkflowCreate(BaseSchema):
+class ApprovalWorkflowCreate(CamelSchema):
     """Schema for creating an approval workflow."""
 
     organization_id: UUID
@@ -100,7 +111,7 @@ class ApprovalWorkflowCreate(BaseSchema):
     )
 
 
-class ApprovalWorkflowUpdate(BaseSchema):
+class ApprovalWorkflowUpdate(CamelSchema):
     """Schema for updating an approval workflow."""
 
     workflow_name: Optional[str] = Field(None, max_length=100)
@@ -116,9 +127,10 @@ class ApprovalWorkflowUpdate(BaseSchema):
     notify_on_approval: Optional[bool] = None
     notify_on_rejection: Optional[bool] = None
     is_active: Optional[bool] = None
+    levels: Optional[List[ApprovalWorkflowLevelCreate]] = None
 
 
-class ApprovalWorkflowResponse(AuditSchema):
+class ApprovalWorkflowResponse(ApprovalAuditSchema):
     """Response schema for approval workflow."""
 
     id: UUID
@@ -143,7 +155,7 @@ class ApprovalWorkflowResponse(AuditSchema):
 # Approval Request Schemas
 # ============================================
 
-class ApprovalRequestCreate(BaseSchema):
+class ApprovalRequestCreate(CamelSchema):
     """Schema for creating an approval request (internal use)."""
 
     organization_id: UUID
@@ -155,14 +167,14 @@ class ApprovalRequestCreate(BaseSchema):
     request_details: Optional[dict] = None
 
 
-class ApprovalRequestActionCreate(BaseSchema):
+class ApprovalRequestActionCreate(CamelSchema):
     """Schema for taking action on an approval request."""
 
     action: ApprovalAction
     comments: Optional[str] = Field(None, max_length=1000)
 
 
-class ApprovalRequestActionResponse(AuditSchema):
+class ApprovalRequestActionResponse(ApprovalAuditSchema):
     """Response schema for approval action."""
 
     id: UUID
@@ -175,7 +187,7 @@ class ApprovalRequestActionResponse(AuditSchema):
     actor_name: Optional[str] = None
 
 
-class ApprovalRequestResponse(AuditSchema):
+class ApprovalRequestResponse(ApprovalAuditSchema):
     """Response schema for approval request."""
 
     id: UUID
@@ -205,7 +217,7 @@ class ApprovalRequestResponse(AuditSchema):
     can_approve: Optional[bool] = None  # Set based on current user
 
 
-class ApprovalRequestListResponse(BaseSchema):
+class ApprovalRequestListResponse(CamelSchema):
     """List response for approval requests."""
 
     id: UUID
@@ -229,7 +241,7 @@ class ApprovalRequestListResponse(BaseSchema):
 # Query/Filter Schemas
 # ============================================
 
-class ApprovalRequestFilter(BaseSchema):
+class ApprovalRequestFilter(CamelSchema):
     """Filter parameters for approval requests."""
 
     organization_id: Optional[UUID] = None
@@ -245,7 +257,7 @@ class ApprovalRequestFilter(BaseSchema):
     )
 
 
-class PendingApprovalResponse(BaseSchema):
+class PendingApprovalResponse(CamelSchema):
     """Response for pending approvals summary."""
 
     request_id: UUID
@@ -268,7 +280,7 @@ class PendingApprovalResponse(BaseSchema):
 # Dashboard Schemas
 # ============================================
 
-class ApprovalDashboardResponse(BaseSchema):
+class ApprovalDashboardResponse(CamelSchema):
     """Dashboard response for approval overview."""
 
     # Summary counts
@@ -294,7 +306,7 @@ class ApprovalDashboardResponse(BaseSchema):
 # Approval Check Result (Internal Use)
 # ============================================
 
-class ApprovalCheckResult(BaseSchema):
+class ApprovalCheckResult(CamelSchema):
     """Result of checking if approval is required."""
 
     requires_approval: bool

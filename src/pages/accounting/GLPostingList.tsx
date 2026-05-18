@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import {
+  Plus,
+  Search,
+  Filter,
+  Eye,
+  Edit,
+  CheckCircle,
+  XCircle,
+  Clock,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -20,21 +31,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  BookOpen,
-  Plus,
-  Search,
-  Filter,
-  Eye,
-  Edit,
-  CheckCircle,
-  XCircle,
-  Clock,
-  AlertTriangle,
-  Download,
-  Calendar,
-} from 'lucide-react';
+import { vouchersApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+import { logger } from "@/lib/logger";
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -43,90 +43,75 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-// Mock GL postings data
-const glPostings = [
-  {
-    id: '1',
-    postingId: 'GLP2025010001',
-    description: 'Interest Accrual - January 2025',
-    postingDate: '2025-01-15',
-    period: 'Jan 2025',
-    debitAmount: 1250000,
-    creditAmount: 1250000,
-    entries: 45,
-    status: 'POSTED',
-    createdBy: 'Finance Team',
-    createdAt: '2025-01-15 10:30:00',
-    approvedBy: 'CFO',
-    approvedAt: '2025-01-15 14:00:00',
-  },
-  {
-    id: '2',
-    postingId: 'GLP2025010002',
-    description: 'Provision for NPA - Q4',
-    postingDate: '2025-01-14',
-    period: 'Jan 2025',
-    debitAmount: 850000,
-    creditAmount: 850000,
-    entries: 12,
-    status: 'PENDING_APPROVAL',
-    createdBy: 'Risk Team',
-    createdAt: '2025-01-14 16:45:00',
-    approvedBy: null,
-    approvedAt: null,
-  },
-  {
-    id: '3',
-    postingId: 'GLP2025010003',
-    description: 'Depreciation Entry - Fixed Assets',
-    postingDate: '2025-01-13',
-    period: 'Jan 2025',
-    debitAmount: 125000,
-    creditAmount: 125000,
-    entries: 8,
-    status: 'DRAFT',
-    createdBy: 'Accounts Team',
-    createdAt: '2025-01-13 11:00:00',
-    approvedBy: null,
-    approvedAt: null,
-  },
-  {
-    id: '4',
-    postingId: 'GLP2025010004',
-    description: 'Salary Accrual - January 2025',
-    postingDate: '2025-01-12',
-    period: 'Jan 2025',
-    debitAmount: 2500000,
-    creditAmount: 2500000,
-    entries: 25,
-    status: 'REJECTED',
-    createdBy: 'HR Finance',
-    createdAt: '2025-01-12 09:30:00',
-    approvedBy: null,
-    approvedAt: null,
-    rejectionReason: 'Incorrect account mapping',
-  },
-  {
-    id: '5',
-    postingId: 'GLP2024120015',
-    description: 'Year-end Closing Entries',
-    postingDate: '2024-12-31',
-    period: 'Dec 2024',
-    debitAmount: 5800000,
-    creditAmount: 5800000,
-    entries: 120,
-    status: 'POSTED',
-    createdBy: 'Finance Team',
-    createdAt: '2024-12-31 18:00:00',
-    approvedBy: 'CFO',
-    approvedAt: '2024-12-31 20:00:00',
-  },
-];
+interface GLPosting {
+  id: string;
+  postingId: string;
+  description: string;
+  postingDate: string;
+  period: string;
+  debitAmount: number;
+  creditAmount: number;
+  entries: number;
+  status: string;
+  createdBy: string;
+}
+
+interface VoucherListItem {
+  id: string;
+  voucher_number?: string | null;
+  narration?: string | null;
+  voucher_type_name?: string | null;
+  voucher_date?: string | null;
+  financial_year_code?: string | null;
+  total_debit?: number | string | null;
+  total_credit?: number | string | null;
+  status?: string | null;
+  created_by?: string | null;
+}
 
 export default function GLPostingList() {
+  const organizationId = useActiveOrganizationId();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [periodFilter, setPeriodFilter] = useState('all');
+  const [glPostings, setGlPostings] = useState<GLPosting[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadPostings = async () => {
+      if (!organizationId) return;
+      setLoading(true);
+      try {
+        const response = await vouchersApi.list({
+          organization_id: organizationId,
+          page_size: 100,
+          ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+        });
+        const items = (response.data.items || []) as VoucherListItem[];
+        setGlPostings(
+          items.map((voucher) => ({
+            id: voucher.id,
+            postingId: voucher.voucher_number || '-',
+            description: voucher.narration || voucher.voucher_type_name || 'Voucher posting',
+            postingDate: voucher.voucher_date || '-',
+            period: voucher.financial_year_code || '-',
+            debitAmount: Number(voucher.total_debit || 0),
+            creditAmount: Number(voucher.total_credit || 0),
+            entries: 0,
+            status: voucher.status || 'DRAFT',
+            createdBy: voucher.created_by || '-',
+          })),
+        );
+      } catch (error) {
+        logger.error('Failed to load GL postings:', error);
+        setGlPostings([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPostings();
+  }, [organizationId, statusFilter]);
 
   const filteredPostings = glPostings.filter(posting => {
     const matchesSearch =
@@ -244,9 +229,11 @@ export default function GLPostingList() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Periods</SelectItem>
-                <SelectItem value="Jan 2025">Jan 2025</SelectItem>
-                <SelectItem value="Dec 2024">Dec 2024</SelectItem>
-                <SelectItem value="Nov 2024">Nov 2024</SelectItem>
+                {[...new Set(glPostings.map((posting) => posting.period))].map((period) => (
+                  <SelectItem key={period} value={period}>
+                    {period}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -258,7 +245,9 @@ export default function GLPostingList() {
         <CardHeader>
           <CardTitle>GL Posting Entries</CardTitle>
           <CardDescription>
-            Showing {filteredPostings.length} of {glPostings.length} postings
+            {loading
+              ? 'Loading postings'
+              : `Showing ${filteredPostings.length} of ${glPostings.length} postings`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -312,6 +301,13 @@ export default function GLPostingList() {
                   </TableCell>
                 </TableRow>
               ))}
+              {!loading && filteredPostings.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
+                    No GL postings found for the selected filters.
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

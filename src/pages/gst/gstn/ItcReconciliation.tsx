@@ -1,34 +1,30 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { format, subMonths } from 'date-fns';
 import {
-  ArrowLeft,
-  Scale,
-  RefreshCw,
-  CheckCircle,
   AlertCircle,
   AlertTriangle,
-  Loader2,
+  Check,
+  CheckCircle,
   Download,
   Filter,
-  FileSpreadsheet,
+  Loader2,
+  RefreshCw,
+  Scale,
   XCircle,
-  Check,
-  Search,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DataTable, type Column } from '@/components/common/DataTable';
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { EmptyState } from '@/components/common/EmptyState';
+import { FilterBar } from '@/components/common/FilterBar';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { ItcMismatchTypeBadge, ItcResolutionStatusBadge } from '@/components/gst/GstnStatusBadge';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -37,6 +33,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -44,287 +42,344 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { gstnApi, gstRegistrationsApi } from '@/services/api';
-import { useAuth } from '@/contexts/AuthContext';
+import {
+  getApiErrorMessage,
+  useFetchGstr2b,
+  useItcMismatches,
+  useResolveItcMismatch,
+  useRunItcReconciliation,
+  type ItcMismatch,
+} from '@/hooks/tax/useGstn';
+import { useGSTRegistrations } from '@/hooks/tax/useTaxation';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
-import { format, subMonths } from 'date-fns';
-
-interface ITCMismatch {
-  id: string;
-  supplier_gstin: string;
-  supplier_name: string;
-  invoice_number: string;
-  invoice_date: string;
-  book_taxable_value: number;
-  book_igst: number;
-  book_cgst: number;
-  book_sgst: number;
-  gstr2b_taxable_value: number;
-  gstr2b_igst: number;
-  gstr2b_cgst: number;
-  gstr2b_sgst: number;
-  variance_amount: number;
-  mismatch_type: string;
-  resolution_status: string;
-  resolution_notes?: string;
-}
 
 interface ReconciliationSummary {
-  total_book_value: number;
-  total_gstr2b_value: number;
-  matched_count: number;
-  matched_value: number;
-  missing_in_2b_count: number;
-  missing_in_2b_value: number;
-  missing_in_books_count: number;
-  missing_in_books_value: number;
-  amount_mismatch_count: number;
-  amount_mismatch_variance: number;
+  totalBookValue: number;
+  totalGstr2bValue: number;
+  matchedCount: number;
+  matchedValue: number;
+  missingIn2bCount: number;
+  missingIn2bValue: number;
+  missingInBooksCount: number;
+  missingInBooksValue: number;
+  amountMismatchCount: number;
+  amountMismatchVariance: number;
 }
 
-const formatAmount = (amount: number | undefined) => {
-  if (amount === undefined || amount === null) return '₹ 0.00';
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 2,
-  }).format(amount);
-};
+function formatReturnPeriod(period: string) {
+  if (!period || period.length !== 6) {
+    return period;
+  }
 
-const formatPeriod = (period: string) => {
-  if (!period || period.length !== 6) return period;
-  const month = period.substring(0, 2);
+  const month = Number.parseInt(period.substring(0, 2), 10);
   const year = period.substring(2, 6);
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${monthNames[parseInt(month) - 1]} ${year}`;
-};
+  return `${monthNames[month - 1]} ${year}`;
+}
 
-const getMismatchTypeBadge = (type: string) => {
-  const config: Record<string, { className: string; label: string }> = {
-    MATCHED: { className: 'bg-green-100 text-green-700', label: 'Matched' },
-    MISSING_IN_2B: { className: 'bg-red-100 text-red-700', label: 'Missing in GSTR-2B' },
-    MISSING_IN_BOOKS: { className: 'bg-amber-100 text-amber-700', label: 'Missing in Books' },
-    AMOUNT_MISMATCH: { className: 'bg-purple-100 text-purple-700', label: 'Amount Mismatch' },
-    GSTIN_MISMATCH: { className: 'bg-orange-100 text-orange-700', label: 'GSTIN Mismatch' },
-  };
-  const { className, label } = config[type] || config.AMOUNT_MISMATCH;
-  return <Badge className={className}>{label}</Badge>;
-};
-
-const getResolutionBadge = (status: string) => {
-  const config: Record<string, { className: string; label: string }> = {
-    PENDING: { className: 'bg-slate-100 text-slate-700', label: 'Pending' },
-    ACCEPTED: { className: 'bg-green-100 text-green-700', label: 'Accepted' },
-    REJECTED: { className: 'bg-red-100 text-red-700', label: 'Rejected' },
-    UNDER_REVIEW: { className: 'bg-blue-100 text-blue-700', label: 'Under Review' },
-    FOLLOW_UP: { className: 'bg-amber-100 text-amber-700', label: 'Follow Up' },
-  };
-  const { className, label } = config[status] || config.PENDING;
-  return <Badge className={className}>{label}</Badge>;
-};
+function getInitialReturnPeriod() {
+  return format(subMonths(new Date(), 1), 'MMyyyy');
+}
 
 export function ItcReconciliation() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
   const activeOrganizationId = useActiveOrganizationId();
   const [gstin, setGstin] = useState(searchParams.get('gstin') || '');
-  const [returnPeriod, setReturnPeriod] = useState(format(subMonths(new Date(), 1), 'MMyyyy'));
-  const [loading, setLoading] = useState(false);
-  const [fetching2b, setFetching2b] = useState(false);
-  const [reconciling, setReconciling] = useState(false);
+  const [returnPeriod, setReturnPeriod] = useState(getInitialReturnPeriod());
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [summary, setSummary] = useState<ReconciliationSummary | null>(null);
-  const [mismatches, setMismatches] = useState<ITCMismatch[]>([]);
-  const [filteredType, setFilteredType] = useState<string>('all');
-  const [filteredStatus, setFilteredStatus] = useState<string>('all');
+  const [filteredType, setFilteredType] = useState('all');
+  const [filteredStatus, setFilteredStatus] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [registrations, setRegistrations] = useState<any[]>([]);
-  const [selectedMismatch, setSelectedMismatch] = useState<ITCMismatch | null>(null);
+  const [selectedMismatch, setSelectedMismatch] = useState<ItcMismatch | null>(null);
   const [showResolveDialog, setShowResolveDialog] = useState(false);
   const [resolutionStatus, setResolutionStatus] = useState('');
   const [resolutionNotes, setResolutionNotes] = useState('');
-  const [resolving, setResolving] = useState(false);
   const [activeTab, setActiveTab] = useState('summary');
 
-  useEffect(() => {
-    fetchRegistrations();
-  }, []);
+  const registrationsQuery = useGSTRegistrations({
+    organizationId: activeOrganizationId ?? undefined,
+    includeInactive: false,
+    pageSize: 100,
+  });
+  const registrations = registrationsQuery.data?.items;
 
   useEffect(() => {
-    if (gstin && returnPeriod) {
-      fetchMismatches();
+    if (!gstin && registrations && registrations.length > 0) {
+      setGstin(registrations[0].gstin);
     }
-  }, [gstin, returnPeriod]);
+  }, [gstin, registrations]);
 
-  const fetchRegistrations = async () => {
-    try {
-      const response = await gstRegistrationsApi.list({
-        organization_id: activeOrganizationId ?? undefined,
-        include_inactive: false,
-      });
-      const data = response.data.items || response.data;
-      setRegistrations(data);
-      if (!gstin && data.length > 0) {
-        setGstin(data[0].gstin);
-      }
-    } catch (error) {
-      console.error('Failed to fetch registrations:', error);
+  const mismatchesQuery = useItcMismatches({
+    gstin: gstin || undefined,
+    returnPeriod,
+    mismatchType: filteredType === 'all' ? undefined : filteredType,
+    resolutionStatus: filteredStatus === 'all' ? undefined : filteredStatus,
+    page: 1,
+    pageSize: 100,
+  });
+  const fetchGstr2b = useFetchGstr2b(gstin || undefined, returnPeriod);
+  const runReconciliation = useRunItcReconciliation(gstin || undefined, returnPeriod);
+  const resolveMismatch = useResolveItcMismatch();
+
+  const mismatches = mismatchesQuery.data?.items;
+  const selectedRegistration = registrations?.find((registration) => registration.gstin === gstin);
+
+  const filteredMismatches = useMemo(
+    () =>
+      (mismatches ?? []).filter((mismatch) => {
+        if (!searchTerm) {
+          return true;
+        }
+
+        const normalizedSearch = searchTerm.toLowerCase();
+        return (
+          mismatch.supplierGstin.toLowerCase().includes(normalizedSearch) ||
+          mismatch.supplierName.toLowerCase().includes(normalizedSearch) ||
+          mismatch.invoiceNumber.toLowerCase().includes(normalizedSearch)
+        );
+      }),
+    [mismatches, searchTerm],
+  );
+
+  const summary = useMemo<ReconciliationSummary | null>(() => {
+    if (!mismatches || mismatches.length === 0) {
+      return null;
     }
-  };
 
-  const fetchMismatches = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const params: any = { gstin, return_period: returnPeriod };
-      if (filteredType !== 'all') params.mismatch_type = filteredType;
-      if (filteredStatus !== 'all') params.resolution_status = filteredStatus;
+    return mismatches.reduce<ReconciliationSummary>(
+      (accumulator, mismatch) => {
+        accumulator.totalBookValue += mismatch.bookTaxableValue;
+        accumulator.totalGstr2bValue += mismatch.gstr2bTaxableValue;
 
-      const response = await gstnApi.getMismatches(params);
-      setMismatches(response.data.items || []);
-      calculateSummary(response.data.items || []);
-    } catch (err: any) {
-      if (err.response?.status !== 404) {
-        setError('Failed to fetch mismatches');
-      }
-      setMismatches([]);
-      setSummary(null);
-    } finally {
-      setLoading(false);
-    }
-  };
+        switch (mismatch.mismatchType) {
+          case 'MATCHED':
+            accumulator.matchedCount += 1;
+            accumulator.matchedValue += mismatch.bookTaxableValue;
+            break;
+          case 'MISSING_IN_2B':
+            accumulator.missingIn2bCount += 1;
+            accumulator.missingIn2bValue += mismatch.bookTaxableValue;
+            break;
+          case 'MISSING_IN_BOOKS':
+            accumulator.missingInBooksCount += 1;
+            accumulator.missingInBooksValue += mismatch.gstr2bTaxableValue;
+            break;
+          case 'AMOUNT_MISMATCH':
+            accumulator.amountMismatchCount += 1;
+            accumulator.amountMismatchVariance += Math.abs(mismatch.varianceAmount);
+            break;
+          default:
+            break;
+        }
 
-  const calculateSummary = (data: ITCMismatch[]) => {
-    const summary: ReconciliationSummary = {
-      total_book_value: 0,
-      total_gstr2b_value: 0,
-      matched_count: 0,
-      matched_value: 0,
-      missing_in_2b_count: 0,
-      missing_in_2b_value: 0,
-      missing_in_books_count: 0,
-      missing_in_books_value: 0,
-      amount_mismatch_count: 0,
-      amount_mismatch_variance: 0,
-    };
+        return accumulator;
+      },
+      {
+        totalBookValue: 0,
+        totalGstr2bValue: 0,
+        matchedCount: 0,
+        matchedValue: 0,
+        missingIn2bCount: 0,
+        missingIn2bValue: 0,
+        missingInBooksCount: 0,
+        missingInBooksValue: 0,
+        amountMismatchCount: 0,
+        amountMismatchVariance: 0,
+      },
+    );
+  }, [mismatches]);
 
-    data.forEach(item => {
-      summary.total_book_value += item.book_taxable_value || 0;
-      summary.total_gstr2b_value += item.gstr2b_taxable_value || 0;
+  const pendingCount = (mismatches ?? []).filter(
+    (mismatch) => mismatch.resolutionStatus === 'PENDING',
+  ).length;
 
-      switch (item.mismatch_type) {
-        case 'MATCHED':
-          summary.matched_count++;
-          summary.matched_value += item.book_taxable_value || 0;
-          break;
-        case 'MISSING_IN_2B':
-          summary.missing_in_2b_count++;
-          summary.missing_in_2b_value += item.book_taxable_value || 0;
-          break;
-        case 'MISSING_IN_BOOKS':
-          summary.missing_in_books_count++;
-          summary.missing_in_books_value += item.gstr2b_taxable_value || 0;
-          break;
-        case 'AMOUNT_MISMATCH':
-          summary.amount_mismatch_count++;
-          summary.amount_mismatch_variance += Math.abs(item.variance_amount || 0);
-          break;
-      }
-    });
+  const mismatchColumns = useMemo<Column<ItcMismatch>[]>(
+    () => [
+      {
+        key: 'supplier',
+        header: 'Supplier',
+        render: (mismatch) => (
+          <div>
+            <p className="font-medium">{mismatch.supplierName}</p>
+            <p className="font-mono text-sm text-muted-foreground">{mismatch.supplierGstin}</p>
+          </div>
+        ),
+      },
+      {
+        key: 'invoice',
+        header: 'Invoice',
+        render: (mismatch) => (
+          <div>
+            <p className="font-medium">{mismatch.invoiceNumber}</p>
+            <DateDisplay date={mismatch.invoiceDate} className="text-sm text-muted-foreground" />
+          </div>
+        ),
+      },
+      {
+        key: 'bookTaxableValue',
+        header: 'Book Value',
+        align: 'right',
+        sortable: true,
+        render: (mismatch) => <AmountDisplay amount={mismatch.bookTaxableValue} />,
+      },
+      {
+        key: 'gstr2bTaxableValue',
+        header: 'GSTR-2B Value',
+        align: 'right',
+        sortable: true,
+        render: (mismatch) => <AmountDisplay amount={mismatch.gstr2bTaxableValue} />,
+      },
+      {
+        key: 'varianceAmount',
+        header: 'Variance',
+        align: 'right',
+        sortable: true,
+        render: (mismatch) => (
+          <span
+            className={
+              mismatch.varianceAmount > 0
+                ? 'text-red-600'
+                : mismatch.varianceAmount < 0
+                  ? 'text-amber-600'
+                  : ''
+            }
+          >
+            <AmountDisplay amount={mismatch.varianceAmount} />
+          </span>
+        ),
+      },
+      {
+        key: 'mismatchType',
+        header: 'Type',
+        render: (mismatch) => <ItcMismatchTypeBadge status={mismatch.mismatchType} />,
+      },
+      {
+        key: 'resolutionStatus',
+        header: 'Status',
+        render: (mismatch) => <ItcResolutionStatusBadge status={mismatch.resolutionStatus} />,
+      },
+      {
+        key: 'actions',
+        header: 'Action',
+        align: 'right',
+        render: (mismatch) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(event) => {
+              event.stopPropagation();
+              setSelectedMismatch(mismatch);
+              setResolutionStatus(mismatch.resolutionStatus);
+              setResolutionNotes(mismatch.resolutionNotes || '');
+              setShowResolveDialog(true);
+            }}
+          >
+            Resolve
+          </Button>
+        ),
+      },
+    ],
+    [],
+  );
 
-    setSummary(summary);
-  };
-
-  const handleFetch2B = async () => {
-    setFetching2b(true);
+  async function handleFetch2B() {
     setError('');
     setSuccess('');
     try {
-      await gstnApi.fetchGstr2b(gstin, returnPeriod);
-      setSuccess('GSTR-2B data fetched successfully');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to fetch GSTR-2B');
-    } finally {
-      setFetching2b(false);
+      await fetchGstr2b.mutateAsync();
+      setSuccess('GSTR-2B data fetched successfully.');
+      await mismatchesQuery.refetch();
+    } catch (mutationError) {
+      setError(getApiErrorMessage(mutationError, 'Failed to fetch GSTR-2B.'));
     }
-  };
+  }
 
-  const handleReconcile = async () => {
-    setReconciling(true);
+  async function handleReconcile() {
     setError('');
     setSuccess('');
     try {
-      await gstnApi.runReconciliation(gstin, returnPeriod);
-      setSuccess('Reconciliation completed successfully');
-      await fetchMismatches();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to run reconciliation');
-    } finally {
-      setReconciling(false);
+      await runReconciliation.mutateAsync();
+      setSuccess('Reconciliation completed successfully.');
+      await mismatchesQuery.refetch();
+    } catch (mutationError) {
+      setError(getApiErrorMessage(mutationError, 'Failed to run reconciliation.'));
     }
-  };
+  }
 
-  const handleResolve = async () => {
-    if (!selectedMismatch || !resolutionStatus) return;
+  async function handleResolve() {
+    if (!selectedMismatch || !resolutionStatus) {
+      return;
+    }
 
-    setResolving(true);
     try {
-      await gstnApi.resolveMismatch(selectedMismatch.id, {
-        resolution_status: resolutionStatus,
-        resolution_notes: resolutionNotes,
+      await resolveMismatch.mutateAsync({
+        mismatchId: selectedMismatch.id,
+        input: {
+          resolutionStatus,
+          resolutionNotes: resolutionNotes || undefined,
+        },
       });
-      setSuccess('Mismatch resolved successfully');
+      setSuccess('Mismatch resolution saved successfully.');
       setShowResolveDialog(false);
       setSelectedMismatch(null);
       setResolutionStatus('');
       setResolutionNotes('');
-      await fetchMismatches();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to resolve mismatch');
-    } finally {
-      setResolving(false);
+      await mismatchesQuery.refetch();
+    } catch (mutationError) {
+      setError(getApiErrorMessage(mutationError, 'Failed to save mismatch resolution.'));
     }
-  };
+  }
 
-  const openResolveDialog = (mismatch: ITCMismatch) => {
-    setSelectedMismatch(mismatch);
-    setResolutionStatus(mismatch.resolution_status);
-    setResolutionNotes(mismatch.resolution_notes || '');
-    setShowResolveDialog(true);
-  };
+  if (registrationsQuery.isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="ITC Reconciliation"
+          subtitle="Match purchase records with GSTR-2B"
+          breadcrumbs={[{ label: 'GSTN Portal', to: '/admin/gst/gstn' }, { label: 'ITC Reconciliation' }]}
+        />
+        <div className="flex h-40 items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </div>
+    );
+  }
 
-  const filteredMismatches = mismatches.filter(m => {
-    if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      if (!m.supplier_gstin.toLowerCase().includes(search) &&
-          !m.supplier_name?.toLowerCase().includes(search) &&
-          !m.invoice_number?.toLowerCase().includes(search)) {
-        return false;
-      }
-    }
-    return true;
-  });
-
-  const pendingCount = mismatches.filter(m => m.resolution_status === 'PENDING').length;
+  if (!registrations || registrations.length === 0) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="ITC Reconciliation"
+          subtitle="Match purchase records with GSTR-2B"
+          breadcrumbs={[{ label: 'GSTN Portal', to: '/admin/gst/gstn' }, { label: 'ITC Reconciliation' }]}
+        />
+        <EmptyState
+          title="No GST registrations"
+          subtitle="Add a GST registration before reconciling ITC."
+          action={
+            <Button onClick={() => navigate('/admin/gst/registrations')}>
+              Manage GST Registrations
+            </Button>
+          }
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="ITC Reconciliation"
         subtitle="Match purchase records with GSTR-2B"
-        breadcrumbs={[
-          { label: 'GSTN Portal', to: '/admin/gst/gstn' },
-          { label: 'ITC Reconciliation' },
-        ]}
+        breadcrumbs={[{ label: 'GSTN Portal', to: '/admin/gst/gstn' }, { label: 'ITC Reconciliation' }]}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleFetch2B} disabled={fetching2b}>
-              {fetching2b ? (
+            <Button variant="outline" onClick={handleFetch2B} disabled={fetchGstr2b.isPending || !gstin} data-testid="itc-fetch-gstr2b">
+              {fetchGstr2b.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Fetching...
@@ -336,8 +391,8 @@ export function ItcReconciliation() {
                 </>
               )}
             </Button>
-            <Button onClick={handleReconcile} disabled={reconciling}>
-              {reconciling ? (
+            <Button onClick={handleReconcile} disabled={runReconciliation.isPending || !gstin} data-testid="itc-run-reconciliation">
+              {runReconciliation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Reconciling...
@@ -353,330 +408,294 @@ export function ItcReconciliation() {
         }
       />
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-end gap-4">
-            <div className="flex-1">
-              <Label>GSTIN</Label>
-              <select
-                value={gstin}
-                onChange={(e) => setGstin(e.target.value)}
-                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm mt-1"
-              >
-                {registrations.map((reg) => (
-                  <option key={reg.id} value={reg.gstin}>
-                    {reg.gstin} - {reg.trade_name || reg.legal_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="w-48">
-              <Label>Return Period</Label>
-              <Input
-                type="month"
-                value={`${returnPeriod.substring(2, 6)}-${returnPeriod.substring(0, 2)}`}
-                onChange={(e) => {
-                  const [year, month] = e.target.value.split('-');
-                  setReturnPeriod(`${month}${year}`);
-                }}
-                className="mt-1"
-              />
-            </div>
-            <Button variant="outline" onClick={fetchMismatches} disabled={loading}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+      <FilterBar
+        onClear={() => {
+          setError('');
+          setSuccess('');
+        }}
+      >
+        <div className="min-w-[320px]">
+          <Label htmlFor="itc-gstin">GSTIN</Label>
+          <Select value={gstin} onValueChange={setGstin}>
+            <SelectTrigger id="itc-gstin" className="mt-1">
+              <SelectValue placeholder="Select GSTIN" />
+            </SelectTrigger>
+            <SelectContent>
+              {registrations.map((registration) => (
+                <SelectItem key={registration.id} value={registration.gstin}>
+                  {registration.gstin} · {registration.tradeName || registration.legalName}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="w-48">
+          <Label htmlFor="itc-period">Return Period</Label>
+          <Input
+            id="itc-period"
+            type="month"
+            value={`${returnPeriod.substring(2, 6)}-${returnPeriod.substring(0, 2)}`}
+            onChange={(event) => {
+              const [year, month] = event.target.value.split('-');
+              if (year && month) {
+                setReturnPeriod(`${month}${year}`);
+              }
+            }}
+            className="mt-1"
+          />
+        </div>
+        <Button
+          variant="outline"
+          onClick={() => mismatchesQuery.refetch()}
+          disabled={!gstin || mismatchesQuery.isFetching}
+          className="self-end"
+        >
+          {mismatchesQuery.isFetching ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+        </Button>
+      </FilterBar>
 
-      {error && (
+      {error ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>{error}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
-      {success && (
-        <Alert className="bg-green-50 border-green-200">
+      {success ? (
+        <Alert className="border-green-200 bg-green-50">
           <CheckCircle className="h-4 w-4 text-green-600" />
           <AlertDescription className="text-green-800">{success}</AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="summary">Summary</TabsTrigger>
           <TabsTrigger value="mismatches">
             Mismatches
-            {pendingCount > 0 && (
+            {pendingCount > 0 ? (
               <Badge className="ml-2 bg-red-100 text-red-700">{pendingCount}</Badge>
-            )}
+            ) : null}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="summary" className="space-y-4">
-          {/* Summary Cards */}
           {summary ? (
             <>
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
                       <CheckCircle className="h-4 w-4 text-green-500" />
                       Matched
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-green-600">{summary.matched_count}</div>
-                    <p className="text-sm text-muted-foreground">{formatAmount(summary.matched_value)}</p>
+                    <div className="text-2xl font-bold text-green-600">{summary.matchedCount}</div>
+                    <p className="text-sm text-muted-foreground">
+                      <AmountDisplay amount={summary.matchedValue} />
+                    </p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
                       <XCircle className="h-4 w-4 text-red-500" />
                       Missing in GSTR-2B
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-red-600">{summary.missing_in_2b_count}</div>
-                    <p className="text-sm text-muted-foreground">{formatAmount(summary.missing_in_2b_value)}</p>
+                    <div className="text-2xl font-bold text-red-600">{summary.missingIn2bCount}</div>
+                    <p className="text-sm text-muted-foreground">
+                      <AmountDisplay amount={summary.missingIn2bValue} />
+                    </p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
                       <AlertTriangle className="h-4 w-4 text-amber-500" />
                       Missing in Books
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-amber-600">{summary.missing_in_books_count}</div>
-                    <p className="text-sm text-muted-foreground">{formatAmount(summary.missing_in_books_value)}</p>
+                    <div className="text-2xl font-bold text-amber-600">{summary.missingInBooksCount}</div>
+                    <p className="text-sm text-muted-foreground">
+                      <AmountDisplay amount={summary.missingInBooksValue} />
+                    </p>
                   </CardContent>
                 </Card>
                 <Card>
                   <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    <CardTitle className="flex items-center gap-2 text-sm font-medium">
                       <AlertCircle className="h-4 w-4 text-purple-500" />
                       Amount Mismatch
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="text-2xl font-bold text-purple-600">{summary.amount_mismatch_count}</div>
-                    <p className="text-sm text-muted-foreground">Variance: {formatAmount(summary.amount_mismatch_variance)}</p>
+                    <div className="text-2xl font-bold text-purple-600">{summary.amountMismatchCount}</div>
+                    <p className="text-sm text-muted-foreground">
+                      Variance <AmountDisplay amount={summary.amountMismatchVariance} />
+                    </p>
                   </CardContent>
                 </Card>
               </div>
 
-              {/* Summary Table */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Reconciliation Summary for {formatPeriod(returnPeriod)}</CardTitle>
+                  <CardTitle>Reconciliation Summary for {formatReturnPeriod(returnPeriod)}</CardTitle>
+                  <CardDescription>
+                    {selectedRegistration
+                      ? `${selectedRegistration.tradeName || selectedRegistration.legalName} · ${gstin}`
+                      : 'Book vs GSTR-2B comparison'}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <Table>
-                    <TableBody>
-                      <TableRow>
-                        <TableCell className="font-medium">Total ITC as per Books</TableCell>
-                        <TableCell className="text-right font-semibold">{formatAmount(summary.total_book_value)}</TableCell>
-                      </TableRow>
-                      <TableRow>
-                        <TableCell className="font-medium">Total ITC as per GSTR-2B</TableCell>
-                        <TableCell className="text-right font-semibold">{formatAmount(summary.total_gstr2b_value)}</TableCell>
-                      </TableRow>
-                      <TableRow className="bg-slate-50">
-                        <TableCell className="font-medium">Difference</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {formatAmount(summary.total_book_value - summary.total_gstr2b_value)}
-                        </TableCell>
-                      </TableRow>
-                    </TableBody>
-                  </Table>
+                  <div className="grid gap-4 md:grid-cols-3">
+                    <div className="rounded-lg border p-4">
+                      <p className="text-sm text-muted-foreground">Books</p>
+                      <p className="text-xl font-semibold">
+                        <AmountDisplay amount={summary.totalBookValue} />
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-4">
+                      <p className="text-sm text-muted-foreground">GSTR-2B</p>
+                      <p className="text-xl font-semibold">
+                        <AmountDisplay amount={summary.totalGstr2bValue} />
+                      </p>
+                    </div>
+                    <div className="rounded-lg border p-4">
+                      <p className="text-sm text-muted-foreground">Difference</p>
+                      <p className="text-xl font-semibold">
+                        <AmountDisplay amount={summary.totalBookValue - summary.totalGstr2bValue} />
+                      </p>
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </>
           ) : (
-            <Card>
-              <CardContent className="py-12">
-                <div className="text-center">
-                  <Scale className="h-12 w-12 mx-auto mb-4 text-slate-300" />
-                  <h3 className="text-lg font-medium mb-2">No Reconciliation Data</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Fetch GSTR-2B and run reconciliation to compare with your books
-                  </p>
-                  <div className="flex gap-2 justify-center">
-                    <Button variant="outline" onClick={handleFetch2B} disabled={fetching2b}>
-                      <Download className="mr-2 h-4 w-4" />
-                      Fetch GSTR-2B
-                    </Button>
-                    <Button onClick={handleReconcile} disabled={reconciling}>
-                      <Scale className="mr-2 h-4 w-4" />
-                      Run Reconciliation
-                    </Button>
-                  </div>
+            <EmptyState
+              title="No reconciliation data"
+              subtitle="Fetch GSTR-2B and run reconciliation to compare GST input credits with your books."
+              action={
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={handleFetch2B} disabled={fetchGstr2b.isPending || !gstin}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Fetch GSTR-2B
+                  </Button>
+                  <Button onClick={handleReconcile} disabled={runReconciliation.isPending || !gstin}>
+                    <Scale className="mr-2 h-4 w-4" />
+                    Run Reconciliation
+                  </Button>
                 </div>
-              </CardContent>
-            </Card>
+              }
+            />
           )}
         </TabsContent>
 
         <TabsContent value="mismatches" className="space-y-4">
-          {/* Mismatch Filters */}
-          <Card>
-            <CardContent className="pt-6">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Search by GSTIN, supplier name, or invoice..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-9"
-                    />
-                  </div>
-                </div>
-                <div className="w-48">
-                  <Select value={filteredType} onValueChange={setFilteredType}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Mismatch Type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="MISSING_IN_2B">Missing in GSTR-2B</SelectItem>
-                      <SelectItem value="MISSING_IN_BOOKS">Missing in Books</SelectItem>
-                      <SelectItem value="AMOUNT_MISMATCH">Amount Mismatch</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-48">
-                  <Select value={filteredStatus} onValueChange={setFilteredStatus}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Resolution Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="PENDING">Pending</SelectItem>
-                      <SelectItem value="ACCEPTED">Accepted</SelectItem>
-                      <SelectItem value="REJECTED">Rejected</SelectItem>
-                      <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
-                      <SelectItem value="FOLLOW_UP">Follow Up</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button variant="outline" onClick={fetchMismatches}>
-                  <Filter className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <FilterBar
+            search={searchTerm}
+            onSearchChange={setSearchTerm}
+            searchPlaceholder="Search by GSTIN, supplier, or invoice"
+            onClear={() => {
+              setSearchTerm('');
+              setFilteredType('all');
+              setFilteredStatus('all');
+            }}
+          >
+            <div className="w-48">
+              <Select value={filteredType} onValueChange={setFilteredType}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Mismatch Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="MATCHED">Matched</SelectItem>
+                  <SelectItem value="MISSING_IN_2B">Missing in GSTR-2B</SelectItem>
+                  <SelectItem value="MISSING_IN_BOOKS">Missing in Books</SelectItem>
+                  <SelectItem value="AMOUNT_MISMATCH">Amount Mismatch</SelectItem>
+                  <SelectItem value="GSTIN_MISMATCH">GSTIN Mismatch</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="w-48">
+              <Select value={filteredStatus} onValueChange={setFilteredStatus}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Resolution Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
+                  <SelectItem value="ACCEPTED">Accepted</SelectItem>
+                  <SelectItem value="REJECTED">Rejected</SelectItem>
+                  <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
+                  <SelectItem value="FOLLOW_UP">Follow Up</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" onClick={() => mismatchesQuery.refetch()}>
+              <Filter className="h-4 w-4" />
+            </Button>
+          </FilterBar>
 
-          {/* Mismatch Table */}
           <Card>
             <CardHeader>
               <CardTitle>ITC Mismatches</CardTitle>
               <CardDescription>
-                {filteredMismatches.length} records found for {formatPeriod(returnPeriod)}
+                {filteredMismatches.length} records found for {formatReturnPeriod(returnPeriod)}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-                </div>
-              ) : filteredMismatches.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
-                  <p>No mismatches found. All records are reconciled!</p>
-                </div>
+              {filteredMismatches.length === 0 ? (
+                <EmptyState
+                  title="No mismatches found"
+                  subtitle="Either the books are fully reconciled or the current filters returned no results."
+                />
               ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Supplier</TableHead>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead className="text-right">Book Value</TableHead>
-                      <TableHead className="text-right">GSTR-2B Value</TableHead>
-                      <TableHead className="text-right">Variance</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[70px]">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredMismatches.map((mismatch) => (
-                      <TableRow key={mismatch.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{mismatch.supplier_name}</p>
-                            <p className="text-sm text-muted-foreground font-mono">{mismatch.supplier_gstin}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{mismatch.invoice_number}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {mismatch.invoice_date ? format(new Date(mismatch.invoice_date), 'dd MMM yyyy') : '-'}
-                            </p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(mismatch.book_taxable_value)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          {formatAmount(mismatch.gstr2b_taxable_value)}
-                        </TableCell>
-                        <TableCell className="text-right font-medium">
-                          <span className={mismatch.variance_amount > 0 ? 'text-red-600' : mismatch.variance_amount < 0 ? 'text-amber-600' : ''}>
-                            {formatAmount(mismatch.variance_amount)}
-                          </span>
-                        </TableCell>
-                        <TableCell>{getMismatchTypeBadge(mismatch.mismatch_type)}</TableCell>
-                        <TableCell>{getResolutionBadge(mismatch.resolution_status)}</TableCell>
-                        <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openResolveDialog(mismatch)}
-                          >
-                            Resolve
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                <DataTable
+                  data={filteredMismatches}
+                  columns={mismatchColumns}
+                  getRowId={(mismatch) => mismatch.id}
+                  isLoading={mismatchesQuery.isLoading}
+                  error={mismatchesQuery.error}
+                  onRetry={() => mismatchesQuery.refetch()}
+                />
               )}
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
 
-      {/* Resolve Dialog */}
       <Dialog open={showResolveDialog} onOpenChange={setShowResolveDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Resolve Mismatch</DialogTitle>
             <DialogDescription>
-              Update the resolution status for this ITC mismatch
+              Update the resolution status and notes for this ITC mismatch.
             </DialogDescription>
           </DialogHeader>
-          {selectedMismatch && (
+          {selectedMismatch ? (
             <div className="space-y-4 py-4">
-              <div className="p-3 bg-slate-50 rounded-lg space-y-2">
+              <div className="space-y-2 rounded-lg bg-slate-50 p-3">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Supplier</span>
-                  <span className="font-medium">{selectedMismatch.supplier_name}</span>
+                  <span className="font-medium">{selectedMismatch.supplierName}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Invoice</span>
-                  <span className="font-medium">{selectedMismatch.invoice_number}</span>
+                  <span className="font-medium">{selectedMismatch.invoiceNumber}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Variance</span>
-                  <span className="font-medium">{formatAmount(selectedMismatch.variance_amount)}</span>
+                  <span className="font-medium">
+                    <AmountDisplay amount={selectedMismatch.varianceAmount} />
+                  </span>
                 </div>
               </div>
 
@@ -688,8 +707,8 @@ export function ItcReconciliation() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="PENDING">Pending</SelectItem>
-                    <SelectItem value="ACCEPTED">Accepted (Claim ITC)</SelectItem>
-                    <SelectItem value="REJECTED">Rejected (Do not claim)</SelectItem>
+                    <SelectItem value="ACCEPTED">Accepted (claim ITC)</SelectItem>
+                    <SelectItem value="REJECTED">Rejected (do not claim)</SelectItem>
                     <SelectItem value="UNDER_REVIEW">Under Review</SelectItem>
                     <SelectItem value="FOLLOW_UP">Follow Up with Supplier</SelectItem>
                   </SelectContent>
@@ -700,19 +719,19 @@ export function ItcReconciliation() {
                 <Label>Notes</Label>
                 <Textarea
                   value={resolutionNotes}
-                  onChange={(e) => setResolutionNotes(e.target.value)}
-                  placeholder="Add notes about the resolution..."
+                  onChange={(event) => setResolutionNotes(event.target.value)}
+                  placeholder="Add notes about the resolution"
                   rows={3}
                 />
               </div>
             </div>
-          )}
+          ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowResolveDialog(false)}>
               Cancel
             </Button>
-            <Button onClick={handleResolve} disabled={resolving || !resolutionStatus}>
-              {resolving ? (
+            <Button onClick={handleResolve} disabled={resolveMismatch.isPending || !resolutionStatus}>
+              {resolveMismatch.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Saving...

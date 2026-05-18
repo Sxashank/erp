@@ -2,29 +2,43 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import TYPE_CHECKING, Optional, List
+from typing import TYPE_CHECKING, Optional
 from uuid import UUID
 
 from sqlalchemy import (
-    Boolean, Date, Enum, ForeignKey, Integer,
-    Numeric, String, Text, Index, UniqueConstraint, CheckConstraint
+    Boolean,
+    CheckConstraint,
+    Date,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.lending.enums import (
-    EntityType, EntityStatus, ContactType, AddressType,
-    RelationType, RiskCategory, IndustrySector
+    AddressType,
+    ContactType,
+    EntityStatus,
+    EntityType,
+    IndustrySector,
+    RelationType,
+    RiskCategory,
 )
 
-
 if TYPE_CHECKING:
-    from app.models.masters.organization import Organization
     from app.models.auth.user import User
-    from app.models.lending.kyc import EntityKYCDocument, BureauPull
-    from app.models.lending.rating import EntityRating
     from app.models.lending.application import LoanApplication
+    from app.models.lending.kyc import BureauPull, EntityKYCDocument
+    from app.models.lending.rating import EntityRating
+    from app.models.masters.organization import Organization
 
 
 class Entity(BaseModel):
@@ -59,7 +73,7 @@ class Entity(BaseModel):
         nullable=False,
         comment="Legal/registered name of the entity",
     )
-    trade_name: Mapped[Optional[str]] = mapped_column(
+    trade_name: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Trading/brand name if different from legal name",
@@ -72,34 +86,34 @@ class Entity(BaseModel):
         index=True,
         comment="PAN number (mandatory)",
     )
-    cin: Mapped[Optional[str]] = mapped_column(
+    cin: Mapped[str | None] = mapped_column(
         String(21),
         nullable=True,
         comment="Corporate Identification Number (for companies)",
     )
-    llpin: Mapped[Optional[str]] = mapped_column(
+    llpin: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="LLP Identification Number",
     )
-    gstin: Mapped[Optional[str]] = mapped_column(
+    gstin: Mapped[str | None] = mapped_column(
         String(15),
         nullable=True,
         comment="GST Identification Number",
     )
-    udyam_number: Mapped[Optional[str]] = mapped_column(
+    udyam_number: Mapped[str | None] = mapped_column(
         String(25),
         nullable=True,
         comment="UDYAM registration number for MSMEs",
     )
-    tan: Mapped[Optional[str]] = mapped_column(
+    tan: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="Tax Deduction Account Number",
     )
 
     # KYC/CKYC
-    ckyc_number: Mapped[Optional[str]] = mapped_column(
+    ckyc_number: Mapped[str | None] = mapped_column(
         String(14),
         nullable=True,
         index=True,
@@ -111,24 +125,24 @@ class Entity(BaseModel):
         default=False,
         comment="KYC verification status",
     )
-    kyc_verified_date: Mapped[Optional[date]] = mapped_column(
+    kyc_verified_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of KYC verification",
     )
 
     # Incorporation/Registration details
-    date_of_incorporation: Mapped[Optional[date]] = mapped_column(
+    date_of_incorporation: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of incorporation/registration",
     )
-    date_of_birth: Mapped[Optional[date]] = mapped_column(
+    date_of_birth: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of birth (for individuals)",
     )
-    place_of_incorporation: Mapped[Optional[str]] = mapped_column(
+    place_of_incorporation: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="City/State of incorporation",
@@ -141,18 +155,18 @@ class Entity(BaseModel):
     )
 
     # Industry classification
-    industry_sector: Mapped[Optional[IndustrySector]] = mapped_column(
+    industry_sector: Mapped[IndustrySector | None] = mapped_column(
         Enum(IndustrySector),
         nullable=True,
         index=True,
         comment="Primary industry sector",
     )
-    industry_sub_sector: Mapped[Optional[str]] = mapped_column(
+    industry_sub_sector: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Industry sub-sector/NIC code",
     )
-    nic_code: Mapped[Optional[str]] = mapped_column(
+    nic_code: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="National Industrial Classification code",
@@ -166,81 +180,81 @@ class Entity(BaseModel):
         index=True,
         comment="Risk category - LOW, MEDIUM, HIGH, VERY_HIGH",
     )
-    internal_rating: Mapped[Optional[str]] = mapped_column(
+    internal_rating: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="Internal credit rating (AAA to D)",
     )
-    external_rating: Mapped[Optional[str]] = mapped_column(
+    external_rating: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="External credit rating (CRISIL, ICRA, etc.)",
     )
-    external_rating_agency: Mapped[Optional[str]] = mapped_column(
+    external_rating_agency: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="External rating agency name",
     )
 
     # Financial information
-    authorized_capital: Mapped[Optional[Decimal]] = mapped_column(
+    authorized_capital: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Authorized share capital",
     )
-    paid_up_capital: Mapped[Optional[Decimal]] = mapped_column(
+    paid_up_capital: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Paid-up share capital",
     )
-    net_worth: Mapped[Optional[Decimal]] = mapped_column(
+    net_worth: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Latest net worth",
     )
-    turnover: Mapped[Optional[Decimal]] = mapped_column(
+    turnover: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Latest annual turnover",
     )
-    employee_count: Mapped[Optional[int]] = mapped_column(
+    employee_count: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
         comment="Number of employees",
     )
 
     # Contact information
-    primary_email: Mapped[Optional[str]] = mapped_column(
+    primary_email: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
         comment="Primary email address",
     )
-    primary_phone: Mapped[Optional[str]] = mapped_column(
+    primary_phone: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Primary phone number",
     )
-    website: Mapped[Optional[str]] = mapped_column(
+    website: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
         comment="Website URL",
     )
 
     # Relationship management
-    relationship_manager_id: Mapped[Optional[UUID]] = mapped_column(
+    relationship_manager_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
         comment="Assigned relationship manager",
     )
-    branch_id: Mapped[Optional[UUID]] = mapped_column(
+    branch_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         nullable=True,
         index=True,
         comment="Branch handling this entity",
     )
-    region: Mapped[Optional[str]] = mapped_column(
+    region: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Region/Zone",
@@ -254,24 +268,24 @@ class Entity(BaseModel):
         index=True,
         comment="Entity status - PROSPECT, ACTIVE, INACTIVE, BLACKLISTED",
     )
-    onboarding_date: Mapped[Optional[date]] = mapped_column(
+    onboarding_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date when entity became active customer",
     )
-    blacklist_reason: Mapped[Optional[str]] = mapped_column(
+    blacklist_reason: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Reason for blacklisting if applicable",
     )
 
     # Additional data
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Internal remarks/notes",
     )
-    extra_data: Mapped[Optional[dict]] = mapped_column(
+    extra_data: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="Additional metadata as JSON",
@@ -287,56 +301,56 @@ class Entity(BaseModel):
         lazy="selectin",
         foreign_keys=[relationship_manager_id],
     )
-    contacts: Mapped[List["EntityContact"]] = relationship(
+    contacts: Mapped[list["EntityContact"]] = relationship(
         "EntityContact",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    addresses: Mapped[List["EntityAddress"]] = relationship(
+    addresses: Mapped[list["EntityAddress"]] = relationship(
         "EntityAddress",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    bank_accounts: Mapped[List["EntityBankAccount"]] = relationship(
+    bank_accounts: Mapped[list["EntityBankAccount"]] = relationship(
         "EntityBankAccount",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="selectin",
     )
-    relations: Mapped[List["EntityRelation"]] = relationship(
+    relations: Mapped[list["EntityRelation"]] = relationship(
         "EntityRelation",
         back_populates="entity",
         cascade="all, delete-orphan",
         foreign_keys="EntityRelation.entity_id",
         lazy="noload",
     )
-    financials: Mapped[List["EntityFinancial"]] = relationship(
+    financials: Mapped[list["EntityFinancial"]] = relationship(
         "EntityFinancial",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    kyc_documents: Mapped[List["EntityKYCDocument"]] = relationship(
+    kyc_documents: Mapped[list["EntityKYCDocument"]] = relationship(
         "EntityKYCDocument",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    bureau_pulls: Mapped[List["BureauPull"]] = relationship(
+    bureau_pulls: Mapped[list["BureauPull"]] = relationship(
         "BureauPull",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    ratings: Mapped[List["EntityRating"]] = relationship(
+    ratings: Mapped[list["EntityRating"]] = relationship(
         "EntityRating",
         back_populates="entity",
         cascade="all, delete-orphan",
         lazy="noload",
     )
-    applications: Mapped[List["LoanApplication"]] = relationship(
+    applications: Mapped[list["LoanApplication"]] = relationship(
         "LoanApplication",
         back_populates="entity",
         lazy="noload",
@@ -375,7 +389,7 @@ class EntityContact(BaseModel):
         nullable=False,
         comment="Type of contact - DIRECTOR, PROMOTER, GUARANTOR, etc.",
     )
-    designation: Mapped[Optional[str]] = mapped_column(
+    designation: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Designation/title",
@@ -394,7 +408,7 @@ class EntityContact(BaseModel):
     )
 
     # Personal details
-    salutation: Mapped[Optional[str]] = mapped_column(
+    salutation: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="Mr/Mrs/Ms/Dr etc.",
@@ -404,7 +418,7 @@ class EntityContact(BaseModel):
         nullable=False,
         comment="First name",
     )
-    middle_name: Mapped[Optional[str]] = mapped_column(
+    middle_name: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Middle name",
@@ -414,12 +428,12 @@ class EntityContact(BaseModel):
         nullable=False,
         comment="Last name/surname",
     )
-    date_of_birth: Mapped[Optional[date]] = mapped_column(
+    date_of_birth: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of birth",
     )
-    gender: Mapped[Optional[str]] = mapped_column(
+    gender: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="Gender - MALE, FEMALE, OTHER",
@@ -432,72 +446,72 @@ class EntityContact(BaseModel):
     )
 
     # Identification
-    pan: Mapped[Optional[str]] = mapped_column(
+    pan: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         index=True,
         comment="PAN number",
     )
-    aadhaar_masked: Mapped[Optional[str]] = mapped_column(
+    aadhaar_masked: Mapped[str | None] = mapped_column(
         String(12),
         nullable=True,
         comment="Masked Aadhaar (XXXX-XXXX-1234)",
     )
-    din: Mapped[Optional[str]] = mapped_column(
+    din: Mapped[str | None] = mapped_column(
         String(8),
         nullable=True,
         comment="Director Identification Number",
     )
-    dpin: Mapped[Optional[str]] = mapped_column(
+    dpin: Mapped[str | None] = mapped_column(
         String(8),
         nullable=True,
         comment="Designated Partner Identification Number (for LLP)",
     )
-    passport_number: Mapped[Optional[str]] = mapped_column(
+    passport_number: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Passport number",
     )
 
     # Contact information
-    email: Mapped[Optional[str]] = mapped_column(
+    email: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,
         comment="Email address",
     )
-    mobile: Mapped[Optional[str]] = mapped_column(
+    mobile: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Mobile number",
     )
-    phone: Mapped[Optional[str]] = mapped_column(
+    phone: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Landline number",
     )
 
     # Address
-    address_line1: Mapped[Optional[str]] = mapped_column(
+    address_line1: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Address line 1",
     )
-    address_line2: Mapped[Optional[str]] = mapped_column(
+    address_line2: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Address line 2",
     )
-    city: Mapped[Optional[str]] = mapped_column(
+    city: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="City",
     )
-    state: Mapped[Optional[str]] = mapped_column(
+    state: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="State",
     )
-    pincode: Mapped[Optional[str]] = mapped_column(
+    pincode: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="PIN code",
@@ -510,24 +524,24 @@ class EntityContact(BaseModel):
     )
 
     # Shareholding (for promoters/directors)
-    shareholding_percentage: Mapped[Optional[Decimal]] = mapped_column(
+    shareholding_percentage: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Shareholding percentage",
     )
-    shareholding_value: Mapped[Optional[Decimal]] = mapped_column(
+    shareholding_value: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Shareholding value in INR",
     )
 
     # Director/Partner specific
-    appointment_date: Mapped[Optional[date]] = mapped_column(
+    appointment_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of appointment",
     )
-    cessation_date: Mapped[Optional[date]] = mapped_column(
+    cessation_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of cessation (if applicable)",
@@ -540,14 +554,14 @@ class EntityContact(BaseModel):
         default=False,
         comment="KYC verification status",
     )
-    ckyc_number: Mapped[Optional[str]] = mapped_column(
+    ckyc_number: Mapped[str | None] = mapped_column(
         String(14),
         nullable=True,
         comment="Central KYC Identifier",
     )
 
     # Additional info
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Remarks/notes",
@@ -561,7 +575,6 @@ class EntityContact(BaseModel):
 
     __table_args__ = (
         Index("ix_los_entity_contact_entity_type", "entity_id", "contact_type"),
-        Index("ix_los_entity_contact_pan", "pan"),
     )
 
     @property
@@ -572,6 +585,11 @@ class EntityContact(BaseModel):
             parts.append(self.middle_name)
         parts.append(self.last_name)
         return " ".join(parts)
+
+    @property
+    def name(self) -> str:
+        """API-facing display name for contact."""
+        return self.full_name
 
     def __repr__(self) -> str:
         return f"<EntityContact(name={self.full_name}, type={self.contact_type})>"
@@ -610,12 +628,12 @@ class EntityAddress(BaseModel):
         nullable=False,
         comment="Address line 1",
     )
-    address_line2: Mapped[Optional[str]] = mapped_column(
+    address_line2: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Address line 2",
     )
-    address_line3: Mapped[Optional[str]] = mapped_column(
+    address_line3: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Address line 3/landmark",
@@ -625,7 +643,7 @@ class EntityAddress(BaseModel):
         nullable=False,
         comment="City",
     )
-    district: Mapped[Optional[str]] = mapped_column(
+    district: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="District",
@@ -635,7 +653,7 @@ class EntityAddress(BaseModel):
         nullable=False,
         comment="State",
     )
-    state_code: Mapped[Optional[str]] = mapped_column(
+    state_code: Mapped[str | None] = mapped_column(
         String(2),
         nullable=True,
         comment="State code (for GST)",
@@ -659,24 +677,24 @@ class EntityAddress(BaseModel):
     )
 
     # Geo coordinates (for site visits)
-    latitude: Mapped[Optional[Decimal]] = mapped_column(
+    latitude: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 7),
         nullable=True,
         comment="Latitude coordinate",
     )
-    longitude: Mapped[Optional[Decimal]] = mapped_column(
+    longitude: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 7),
         nullable=True,
         comment="Longitude coordinate",
     )
 
     # Contact at address
-    contact_person: Mapped[Optional[str]] = mapped_column(
+    contact_person: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Contact person at this address",
     )
-    contact_phone: Mapped[Optional[str]] = mapped_column(
+    contact_phone: Mapped[str | None] = mapped_column(
         String(20),
         nullable=True,
         comment="Contact phone at this address",
@@ -689,24 +707,24 @@ class EntityAddress(BaseModel):
         default=False,
         comment="Address verification status",
     )
-    verified_date: Mapped[Optional[date]] = mapped_column(
+    verified_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of verification",
     )
-    verified_by: Mapped[Optional[str]] = mapped_column(
+    verified_by: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Verified by (person/agency)",
     )
 
     # Ownership
-    ownership_type: Mapped[Optional[str]] = mapped_column(
+    ownership_type: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="OWNED, RENTED, LEASED",
     )
-    occupied_since: Mapped[Optional[date]] = mapped_column(
+    occupied_since: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Occupied since date",
@@ -718,9 +736,7 @@ class EntityAddress(BaseModel):
         back_populates="addresses",
     )
 
-    __table_args__ = (
-        Index("ix_los_entity_address_entity_type", "entity_id", "address_type"),
-    )
+    __table_args__ = (Index("ix_los_entity_address_entity_type", "entity_id", "address_type"),)
 
     @property
     def full_address(self) -> str:
@@ -763,7 +779,7 @@ class EntityBankAccount(BaseModel):
         nullable=False,
         comment="Branch name",
     )
-    branch_address: Mapped[Optional[str]] = mapped_column(
+    branch_address: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Branch address",
@@ -774,7 +790,7 @@ class EntityBankAccount(BaseModel):
         index=True,
         comment="IFSC code",
     )
-    micr_code: Mapped[Optional[str]] = mapped_column(
+    micr_code: Mapped[str | None] = mapped_column(
         String(9),
         nullable=True,
         comment="MICR code",
@@ -830,17 +846,17 @@ class EntityBankAccount(BaseModel):
         default=False,
         comment="Bank account verification status",
     )
-    verified_date: Mapped[Optional[date]] = mapped_column(
+    verified_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of verification",
     )
-    verification_method: Mapped[Optional[str]] = mapped_column(
+    verification_method: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="Verification method - PENNY_DROP, CANCELLED_CHEQUE, BANK_STATEMENT",
     )
-    penny_drop_reference: Mapped[Optional[str]] = mapped_column(
+    penny_drop_reference: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Penny drop transaction reference",
@@ -853,22 +869,22 @@ class EntityBankAccount(BaseModel):
         default=False,
         comment="NACH mandate registered?",
     )
-    nach_umrn: Mapped[Optional[str]] = mapped_column(
+    nach_umrn: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="NACH Unique Mandate Reference Number",
     )
-    nach_max_amount: Mapped[Optional[Decimal]] = mapped_column(
+    nach_max_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(18, 2),
         nullable=True,
         comment="NACH maximum amount",
     )
-    nach_start_date: Mapped[Optional[date]] = mapped_column(
+    nach_start_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="NACH mandate start date",
     )
-    nach_end_date: Mapped[Optional[date]] = mapped_column(
+    nach_end_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="NACH mandate end date",
@@ -882,10 +898,7 @@ class EntityBankAccount(BaseModel):
 
     __table_args__ = (
         Index("ix_los_entity_bank_ifsc", "ifsc_code"),
-        UniqueConstraint(
-            "entity_id", "account_number", "ifsc_code",
-            name="uq_entity_bank_account"
-        ),
+        UniqueConstraint("entity_id", "account_number", "ifsc_code", name="uq_entity_bank_account"),
         CheckConstraint("LENGTH(ifsc_code) = 11", name="ck_bank_ifsc_length"),
     )
 
@@ -908,7 +921,7 @@ class EntityRelation(BaseModel):
     )
 
     # Related entity
-    related_entity_id: Mapped[Optional[UUID]] = mapped_column(
+    related_entity_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("los_entity.id", ondelete="SET NULL"),
         nullable=True,
@@ -924,58 +937,58 @@ class EntityRelation(BaseModel):
     )
 
     # If related entity not registered, store basic info
-    related_entity_name: Mapped[Optional[str]] = mapped_column(
+    related_entity_name: Mapped[str | None] = mapped_column(
         String(500),
         nullable=True,
         comment="Related entity name (if not registered)",
     )
-    related_entity_pan: Mapped[Optional[str]] = mapped_column(
+    related_entity_pan: Mapped[str | None] = mapped_column(
         String(10),
         nullable=True,
         comment="Related entity PAN (if not registered)",
     )
-    related_entity_cin: Mapped[Optional[str]] = mapped_column(
+    related_entity_cin: Mapped[str | None] = mapped_column(
         String(21),
         nullable=True,
         comment="Related entity CIN (if not registered)",
     )
 
     # Shareholding/ownership details
-    shareholding_percentage: Mapped[Optional[Decimal]] = mapped_column(
+    shareholding_percentage: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Shareholding percentage",
     )
-    voting_percentage: Mapped[Optional[Decimal]] = mapped_column(
+    voting_percentage: Mapped[Decimal | None] = mapped_column(
         Numeric(5, 2),
         nullable=True,
         comment="Voting rights percentage",
     )
 
     # Guarantee details (if guarantor)
-    guarantee_amount: Mapped[Optional[Decimal]] = mapped_column(
+    guarantee_amount: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Guarantee amount (for guarantors)",
     )
-    guarantee_type: Mapped[Optional[str]] = mapped_column(
+    guarantee_type: Mapped[str | None] = mapped_column(
         String(50),
         nullable=True,
         comment="PERSONAL, CORPORATE, LIMITED",
     )
 
     # Additional info
-    effective_from: Mapped[Optional[date]] = mapped_column(
+    effective_from: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Relationship effective from",
     )
-    effective_to: Mapped[Optional[date]] = mapped_column(
+    effective_to: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Relationship effective until",
     )
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Remarks/notes",
@@ -993,9 +1006,7 @@ class EntityRelation(BaseModel):
         lazy="selectin",
     )
 
-    __table_args__ = (
-        Index("ix_los_entity_relation_type", "entity_id", "relation_type"),
-    )
+    __table_args__ = (Index("ix_los_entity_relation_type", "entity_id", "relation_type"),)
 
     def __repr__(self) -> str:
         return f"<EntityRelation(entity={self.entity_id}, type={self.relation_type})>"
@@ -1027,224 +1038,224 @@ class EntityFinancial(BaseModel):
         default=False,
         comment="Is this audited data?",
     )
-    audit_date: Mapped[Optional[date]] = mapped_column(
+    audit_date: Mapped[date | None] = mapped_column(
         Date,
         nullable=True,
         comment="Date of audit report",
     )
-    auditor_name: Mapped[Optional[str]] = mapped_column(
+    auditor_name: Mapped[str | None] = mapped_column(
         String(200),
         nullable=True,
         comment="Auditor firm name",
     )
 
     # Income statement
-    revenue: Mapped[Optional[Decimal]] = mapped_column(
+    revenue: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Total revenue/turnover",
     )
-    other_income: Mapped[Optional[Decimal]] = mapped_column(
+    other_income: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Other income",
     )
-    total_income: Mapped[Optional[Decimal]] = mapped_column(
+    total_income: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Total income",
     )
-    cost_of_goods_sold: Mapped[Optional[Decimal]] = mapped_column(
+    cost_of_goods_sold: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Cost of goods sold",
     )
-    gross_profit: Mapped[Optional[Decimal]] = mapped_column(
+    gross_profit: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Gross profit",
     )
-    operating_expenses: Mapped[Optional[Decimal]] = mapped_column(
+    operating_expenses: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Operating expenses",
     )
-    ebitda: Mapped[Optional[Decimal]] = mapped_column(
+    ebitda: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="EBITDA",
     )
-    depreciation: Mapped[Optional[Decimal]] = mapped_column(
+    depreciation: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Depreciation and amortization",
     )
-    interest_expense: Mapped[Optional[Decimal]] = mapped_column(
+    interest_expense: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Interest expense",
     )
-    profit_before_tax: Mapped[Optional[Decimal]] = mapped_column(
+    profit_before_tax: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Profit before tax",
     )
-    tax_expense: Mapped[Optional[Decimal]] = mapped_column(
+    tax_expense: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Tax expense",
     )
-    net_profit: Mapped[Optional[Decimal]] = mapped_column(
+    net_profit: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Net profit after tax",
     )
 
     # Balance sheet - Assets
-    total_assets: Mapped[Optional[Decimal]] = mapped_column(
+    total_assets: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Total assets",
     )
-    fixed_assets: Mapped[Optional[Decimal]] = mapped_column(
+    fixed_assets: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Fixed assets (net)",
     )
-    current_assets: Mapped[Optional[Decimal]] = mapped_column(
+    current_assets: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Current assets",
     )
-    inventory: Mapped[Optional[Decimal]] = mapped_column(
+    inventory: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Inventory",
     )
-    receivables: Mapped[Optional[Decimal]] = mapped_column(
+    receivables: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Trade receivables",
     )
-    cash_and_equivalents: Mapped[Optional[Decimal]] = mapped_column(
+    cash_and_equivalents: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Cash and cash equivalents",
     )
 
     # Balance sheet - Liabilities
-    total_liabilities: Mapped[Optional[Decimal]] = mapped_column(
+    total_liabilities: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Total liabilities",
     )
-    share_capital: Mapped[Optional[Decimal]] = mapped_column(
+    share_capital: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Share capital",
     )
-    reserves_surplus: Mapped[Optional[Decimal]] = mapped_column(
+    reserves_surplus: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Reserves and surplus",
     )
-    net_worth: Mapped[Optional[Decimal]] = mapped_column(
+    net_worth: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Net worth (equity)",
     )
-    long_term_debt: Mapped[Optional[Decimal]] = mapped_column(
+    long_term_debt: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Long term debt",
     )
-    short_term_debt: Mapped[Optional[Decimal]] = mapped_column(
+    short_term_debt: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Short term debt",
     )
-    total_debt: Mapped[Optional[Decimal]] = mapped_column(
+    total_debt: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Total debt",
     )
-    current_liabilities: Mapped[Optional[Decimal]] = mapped_column(
+    current_liabilities: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Current liabilities",
     )
-    payables: Mapped[Optional[Decimal]] = mapped_column(
+    payables: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Trade payables",
     )
 
     # Cash flow
-    operating_cash_flow: Mapped[Optional[Decimal]] = mapped_column(
+    operating_cash_flow: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Cash flow from operations",
     )
-    investing_cash_flow: Mapped[Optional[Decimal]] = mapped_column(
+    investing_cash_flow: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Cash flow from investing",
     )
-    financing_cash_flow: Mapped[Optional[Decimal]] = mapped_column(
+    financing_cash_flow: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Cash flow from financing",
     )
-    net_cash_flow: Mapped[Optional[Decimal]] = mapped_column(
+    net_cash_flow: Mapped[Decimal | None] = mapped_column(
         Numeric(20, 2),
         nullable=True,
         comment="Net cash flow",
     )
 
     # Key ratios (computed)
-    current_ratio: Mapped[Optional[Decimal]] = mapped_column(
+    current_ratio: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Current ratio",
     )
-    debt_equity_ratio: Mapped[Optional[Decimal]] = mapped_column(
+    debt_equity_ratio: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Debt to equity ratio",
     )
-    interest_coverage_ratio: Mapped[Optional[Decimal]] = mapped_column(
+    interest_coverage_ratio: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Interest coverage ratio",
     )
-    dscr: Mapped[Optional[Decimal]] = mapped_column(
+    dscr: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Debt service coverage ratio",
     )
-    net_profit_margin: Mapped[Optional[Decimal]] = mapped_column(
+    net_profit_margin: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Net profit margin %",
     )
-    return_on_equity: Mapped[Optional[Decimal]] = mapped_column(
+    return_on_equity: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Return on equity %",
     )
-    return_on_assets: Mapped[Optional[Decimal]] = mapped_column(
+    return_on_assets: Mapped[Decimal | None] = mapped_column(
         Numeric(10, 2),
         nullable=True,
         comment="Return on assets %",
     )
 
     # Additional data
-    remarks: Mapped[Optional[str]] = mapped_column(
+    remarks: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
         comment="Remarks/notes",
     )
-    raw_data: Mapped[Optional[dict]] = mapped_column(
+    raw_data: Mapped[dict | None] = mapped_column(
         JSONB,
         nullable=True,
         comment="Additional financial data as JSON",
@@ -1257,10 +1268,7 @@ class EntityFinancial(BaseModel):
     )
 
     __table_args__ = (
-        UniqueConstraint(
-            "entity_id", "financial_year",
-            name="uq_entity_financial_year"
-        ),
+        UniqueConstraint("entity_id", "financial_year", name="uq_entity_financial_year"),
         Index("ix_los_entity_financial_year", "entity_id", "financial_year"),
     )
 

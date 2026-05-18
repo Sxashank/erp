@@ -48,7 +48,7 @@ class ItemCategoryService:
 
         category = ItemCategory(**category_data)
         self.session.add(category)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(category)
         return category
 
@@ -105,7 +105,7 @@ class ItemCategoryService:
         if updated_by:
             category.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(category)
         return category
 
@@ -130,7 +130,7 @@ class ItemCategoryService:
             raise ValueError("Cannot delete category with sub-categories")
 
         category.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
         return True
 
     async def list_by_organization(

@@ -1,21 +1,12 @@
+import { Check, CheckCircle, Edit, Loader2, Printer, Send, X, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Check,
-  CheckCircle,
-  Edit,
-  Loader2,
-  Printer,
-  Send,
-  X,
-  XCircle,
-} from 'lucide-react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import {
   Table,
   TableBody,
@@ -28,6 +19,7 @@ import { vouchersApi } from '@/services/api';
 import type { Voucher } from '@/types';
 import { VOUCHER_STATUSES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function VoucherView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -47,7 +39,7 @@ export function VoucherView() {
       const response = await vouchersApi.get(voucherId);
       setVoucher(response.data);
     } catch (error) {
-      console.error('Failed to fetch voucher:', error);
+      logger.error('Failed to fetch voucher:', error);
     } finally {
       setLoading(false);
     }
@@ -60,7 +52,7 @@ export function VoucherView() {
       await vouchersApi.submit(id);
       fetchVoucher(id);
     } catch (error) {
-      console.error('Failed to submit voucher:', error);
+      logger.error('Failed to submit voucher:', error);
     } finally {
       setActionLoading(false);
     }
@@ -73,7 +65,7 @@ export function VoucherView() {
       await vouchersApi.approve(id);
       fetchVoucher(id);
     } catch (error) {
-      console.error('Failed to approve voucher:', error);
+      logger.error('Failed to approve voucher:', error);
     } finally {
       setActionLoading(false);
     }
@@ -88,7 +80,7 @@ export function VoucherView() {
       await vouchersApi.reject(id, reason);
       fetchVoucher(id);
     } catch (error) {
-      console.error('Failed to reject voucher:', error);
+      logger.error('Failed to reject voucher:', error);
     } finally {
       setActionLoading(false);
     }
@@ -101,7 +93,7 @@ export function VoucherView() {
       await vouchersApi.post(id);
       fetchVoucher(id);
     } catch (error) {
-      console.error('Failed to post voucher:', error);
+      logger.error('Failed to post voucher:', error);
     } finally {
       setActionLoading(false);
     }
@@ -116,7 +108,7 @@ export function VoucherView() {
       await vouchersApi.cancel(id, reason);
       fetchVoucher(id);
     } catch (error) {
-      console.error('Failed to cancel voucher:', error);
+      logger.error('Failed to cancel voucher:', error);
     } finally {
       setActionLoading(false);
     }
@@ -182,106 +174,101 @@ export function VoucherView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/vouchers')}>
-            <ArrowLeft className="h-5 w-5" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-slate-900">{voucher.voucher_number}</h1>
-              {getStatusBadge(voucher.status)}
-            </div>
-            <p className="text-sm text-slate-500">
-              {voucher.voucher_type_name} | {formatDate(voucher.voucher_date)}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm">
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
+      <PageHeader
+        title={voucher.voucher_number}
+        subtitle={`${voucher.voucher_type_name} | ${formatDate(voucher.voucher_date)}`}
+        breadcrumbs={[
+          { label: 'Vouchers', to: '/admin/finance/vouchers' },
+          { label: voucher.voucher_number },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            {getStatusBadge(voucher.status)}
+            <Button variant="outline" size="sm">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
+            </Button>
 
-          {voucher.status === 'DRAFT' && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate(`/admin/finance/vouchers/${id}/edit`)}
-              >
-                <Edit className="mr-2 h-4 w-4" />
-                Edit
-              </Button>
-              <Button size="sm" onClick={handleSubmit} disabled={actionLoading}>
-                <Send className="mr-2 h-4 w-4" />
-                Submit for Approval
-              </Button>
-            </>
-          )}
+            {voucher.status === 'DRAFT' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate(`/admin/finance/vouchers/${id}/edit`)}
+                >
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </Button>
+                <Button size="sm" onClick={handleSubmit} disabled={actionLoading}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit for Approval
+                </Button>
+              </>
+            )}
 
-          {voucher.status === 'PENDING_APPROVAL' && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleReject}
-                disabled={actionLoading}
-                className="text-red-600 border-red-200 hover:bg-red-50"
-              >
-                <XCircle className="mr-2 h-4 w-4" />
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                onClick={handleApprove}
-                disabled={actionLoading}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                <CheckCircle className="mr-2 h-4 w-4" />
-                Approve
-              </Button>
-            </>
-          )}
+            {voucher.status === 'PENDING_APPROVAL' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleReject}
+                  disabled={actionLoading}
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  <XCircle className="mr-2 h-4 w-4" />
+                  Reject
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleApprove}
+                  disabled={actionLoading}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <CheckCircle className="mr-2 h-4 w-4" />
+                  Approve
+                </Button>
+              </>
+            )}
 
-          {voucher.status === 'APPROVED' && (
-            <>
+            {voucher.status === 'APPROVED' && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancel}
+                  disabled={actionLoading}
+                  className="border-red-200 text-red-600 hover:bg-red-50"
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handlePost}
+                  disabled={actionLoading}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  Post to Ledger
+                </Button>
+              </>
+            )}
+
+            {voucher.status === 'POSTED' && (
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleCancel}
                 disabled={actionLoading}
-                className="text-red-600 border-red-200 hover:bg-red-50"
+                className="border-red-200 text-red-600 hover:bg-red-50"
               >
                 <X className="mr-2 h-4 w-4" />
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                onClick={handlePost}
-                disabled={actionLoading}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <Check className="mr-2 h-4 w-4" />
-                Post to Ledger
-              </Button>
-            </>
-          )}
-
-          {voucher.status === 'POSTED' && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleCancel}
-              disabled={actionLoading}
-              className="text-red-600 border-red-200 hover:bg-red-50"
-            >
-              <X className="mr-2 h-4 w-4" />
-              Cancel
-            </Button>
-          )}
-        </div>
-      </div>
+            )}
+          </div>
+        }
+      />
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
@@ -296,7 +283,7 @@ export function VoucherView() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Voucher Date</p>
-                <p className="font-medium">{formatDate(voucher.voucher_date)}</p>
+                <p className="font-medium"><DateDisplay date={voucher.voucher_date} /></p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Voucher Type</p>

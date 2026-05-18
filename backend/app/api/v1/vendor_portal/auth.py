@@ -44,7 +44,7 @@ def get_device_type(request: Request) -> str:
     return "desktop"
 
 
-@router.post("/login", response_model=VendorLoginResponse)
+@router.post("/login", response_model=VendorLoginResponse, response_model_by_alias=True)
 @portal_login_limit()
 async def login(
     request: Request,
@@ -224,7 +224,7 @@ async def change_password(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.get("/me", response_model=VendorUserProfile)
+@router.get("/me", response_model=VendorUserProfile, response_model_by_alias=True)
 async def get_current_user(
     user_id: UUID,  # From auth middleware
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -259,7 +259,7 @@ async def get_current_user(
     )
 
 
-@router.put("/me", response_model=VendorUserProfile)
+@router.put("/me", response_model=VendorUserProfile, response_model_by_alias=True)
 async def update_current_user(
     user_id: UUID,  # From auth middleware
     data: VendorUserProfileUpdate,

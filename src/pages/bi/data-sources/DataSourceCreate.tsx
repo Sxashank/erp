@@ -2,15 +2,16 @@
  * Data Source Create Page
  */
 
+import { Loader2, Save } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -18,9 +19,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biDataSourceApi } from '@/services/biApi';
-import { DataSourceCreate as DataSourceCreateType, DataSourceType, APIMethod } from '@/types/bi';
+import { logger } from "@/lib/logger";
+import type {
+  DataSourceCreate as DataSourceCreateType,
+  DataSourceType,
+  APIMethod,
+} from '@/types/bi';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface FormData {
   code: string;
@@ -141,11 +149,11 @@ export function DataSourceCreate() {
       });
 
       navigate('/admin/bi/data-sources');
-    } catch (error: any) {
-      console.error('Error creating data source:', error);
+    } catch (error: unknown) {
+      logger.error('Error creating data source:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create data source',
+        description: getErrorMessage(error, 'Failed to create data source'),
         variant: 'destructive',
       });
     } finally {
@@ -155,21 +163,11 @@ export function DataSourceCreate() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/admin/bi/data-sources')}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Create Data Source</h1>
-          <p className="text-muted-foreground">
-            Configure a new data source for BI widgets
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Create Data Source"
+        subtitle="Configure a new data source for BI widgets"
+        breadcrumbs={[{ label: 'Data Sources', to: '/admin/bi/data-sources' }, { label: 'New' }]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-2 gap-6">
@@ -192,9 +190,7 @@ export function DataSourceCreate() {
                       },
                     })}
                   />
-                  {errors.code && (
-                    <p className="text-sm text-red-500">{errors.code.message}</p>
-                  )}
+                  {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -204,9 +200,7 @@ export function DataSourceCreate() {
                     placeholder="Revenue MTD Data"
                     {...register('name', { required: 'Name is required' })}
                   />
-                  {errors.name && (
-                    <p className="text-sm text-red-500">{errors.name.message}</p>
-                  )}
+                  {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
                 </div>
               </div>
 
@@ -234,7 +228,7 @@ export function DataSourceCreate() {
                       <SelectItem key={t.value} value={t.value}>
                         <div>
                           <span className="font-medium">{t.label}</span>
-                          <span className="text-muted-foreground ml-2 text-sm">
+                          <span className="ml-2 text-sm text-muted-foreground">
                             - {t.description}
                           </span>
                         </div>
@@ -280,7 +274,8 @@ export function DataSourceCreate() {
                     <Input
                       placeholder="/api/v1/reports/revenue"
                       {...register('api_endpoint', {
-                        required: sourceType === 'API_ENDPOINT' ? 'API endpoint is required' : false,
+                        required:
+                          sourceType === 'API_ENDPOINT' ? 'API endpoint is required' : false,
                       })}
                     />
                     {errors.api_endpoint && (
@@ -383,7 +378,7 @@ export function DataSourceCreate() {
           </CardContent>
         </Card>
 
-        <div className="flex justify-end gap-4 mt-6">
+        <div className="mt-6 flex justify-end gap-4">
           <Button
             type="button"
             variant="outline"
@@ -392,8 +387,8 @@ export function DataSourceCreate() {
             Cancel
           </Button>
           <Button type="submit" disabled={submitting}>
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            <Save className="h-4 w-4 mr-2" />
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Save className="mr-2 h-4 w-4" />
             Create Data Source
           </Button>
         </div>

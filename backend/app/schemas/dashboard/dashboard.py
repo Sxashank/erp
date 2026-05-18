@@ -5,10 +5,11 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
-class AgingBucket(BaseModel):
+class AgingBucket(CamelSchema):
     """Aging bucket for AP/AR analysis."""
 
     label: str  # "0-30", "31-60", "61-90", "90+"
@@ -17,7 +18,7 @@ class AgingBucket(BaseModel):
     percentage: float = 0.0
 
 
-class TopParty(BaseModel):
+class TopParty(CamelSchema):
     """Top vendor/customer by outstanding amount."""
 
     id: UUID
@@ -27,7 +28,7 @@ class TopParty(BaseModel):
     overdue: Decimal = Field(default=Decimal("0"))
 
 
-class APSummary(BaseModel):
+class APSummary(CamelSchema):
     """Accounts Payable summary for dashboard."""
 
     total_outstanding: Decimal = Field(default=Decimal("0"))
@@ -43,7 +44,7 @@ class APSummary(BaseModel):
     overdue_change: float = 0.0
 
 
-class ARSummary(BaseModel):
+class ARSummary(CamelSchema):
     """Accounts Receivable summary for dashboard."""
 
     total_outstanding: Decimal = Field(default=Decimal("0"))
@@ -60,7 +61,7 @@ class ARSummary(BaseModel):
     collection_rate: float = 0.0  # Collections / Opening AR
 
 
-class CashFlowSummary(BaseModel):
+class CashFlowSummary(CamelSchema):
     """Cash flow summary for dashboard."""
 
     # Current balances
@@ -86,14 +87,14 @@ class CashFlowSummary(BaseModel):
     pending_cheque_payments: Decimal = Field(default=Decimal("0"))
 
 
-class TrendDataPoint(BaseModel):
+class TrendDataPoint(CamelSchema):
     """Single data point for trend charts."""
 
     period: str  # "Jan 2024", "Feb 2024", etc.
     value: Decimal
 
 
-class TrendData(BaseModel):
+class TrendData(CamelSchema):
     """Trend data for charts."""
 
     revenue: List[TrendDataPoint] = []
@@ -103,7 +104,7 @@ class TrendData(BaseModel):
     net_profit: List[TrendDataPoint] = []
 
 
-class RecentActivity(BaseModel):
+class RecentActivity(CamelSchema):
     """Recent transaction activity item."""
 
     id: UUID
@@ -117,7 +118,7 @@ class RecentActivity(BaseModel):
     created_by_name: Optional[str] = None
 
 
-class DashboardSummary(BaseModel):
+class DashboardSummary(CamelSchema):
     """Overall dashboard summary."""
 
     # Quick stats
@@ -139,7 +140,7 @@ class DashboardSummary(BaseModel):
     as_on_date: date = Field(default_factory=date.today)
 
 
-class PendingApprovalItem(BaseModel):
+class PendingApprovalItem(CamelSchema):
     """Pending approval item for dashboard widget."""
 
     id: UUID

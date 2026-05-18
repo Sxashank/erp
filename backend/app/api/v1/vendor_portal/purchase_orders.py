@@ -22,10 +22,11 @@ from app.schemas.vendor_portal.purchase_order import (
     POAcknowledgementSummary,
 )
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter()
 
 
-@router.get("/", response_model=VendorPOListResponse)
+@router.get("/", response_model=VendorPOListResponse, response_model_by_alias=True)
 async def list_purchase_orders(
     vendor_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
@@ -34,7 +35,7 @@ async def list_purchase_orders(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     search: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List purchase orders for vendor."""
     service = VendorPOService(db)
@@ -55,10 +56,10 @@ async def list_purchase_orders(
     )
 
 
-@router.get("/pending", response_model=List[dict])
+@router.get("/pending", response_model=List[dict], response_model_by_alias=True)
 async def list_pending_acknowledgements(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """List POs pending acknowledgement."""
     service = VendorPOService(db)
@@ -66,10 +67,10 @@ async def list_pending_acknowledgements(
     return pending
 
 
-@router.get("/summary", response_model=POAcknowledgementSummary)
+@router.get("/summary", response_model=POAcknowledgementSummary, response_model_by_alias=True)
 async def get_acknowledgement_summary(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get acknowledgement summary."""
     service = VendorPOService(db)
@@ -77,11 +78,11 @@ async def get_acknowledgement_summary(
     return summary
 
 
-@router.get("/{po_id}", response_model=VendorPODetailResponse)
+@router.get("/{po_id}", response_model=VendorPODetailResponse, response_model_by_alias=True)
 async def get_purchase_order(
     vendor_id: UUID,  # From auth middleware
     po_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get purchase order details."""
     service = VendorPOService(db)
@@ -93,7 +94,7 @@ async def get_purchase_order(
 async def get_po_lines(
     vendor_id: UUID,  # From auth middleware
     po_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get PO line items."""
     service = VendorPOService(db)
@@ -101,13 +102,13 @@ async def get_po_lines(
     return lines
 
 
-@router.post("/{po_id}/acknowledge", response_model=POAcknowledgementResponse)
+@router.post("/{po_id}/acknowledge", response_model=POAcknowledgementResponse, response_model_by_alias=True)
 async def acknowledge_po(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     po_id: UUID,
     data: POAcknowledgementCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Acknowledge a purchase order."""
     service = VendorPOService(db)
@@ -115,13 +116,13 @@ async def acknowledge_po(
     return acknowledgement
 
 
-@router.post("/{po_id}/reject", response_model=POAcknowledgementResponse)
+@router.post("/{po_id}/reject", response_model=POAcknowledgementResponse, response_model_by_alias=True)
 async def reject_po(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     po_id: UUID,
     data: PORejectRequest,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Reject a purchase order."""
     service = VendorPOService(db)
@@ -129,13 +130,13 @@ async def reject_po(
     return acknowledgement
 
 
-@router.post("/{po_id}/request-change", response_model=POChangeRequestResponse)
+@router.post("/{po_id}/request-change", response_model=POChangeRequestResponse, response_model_by_alias=True)
 async def request_change(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     po_id: UUID,
     data: POChangeRequestCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Request a change to a purchase order."""
     service = VendorPOService(db)
@@ -147,7 +148,7 @@ async def request_change(
 async def download_po_pdf(
     vendor_id: UUID,  # From auth middleware
     po_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Download PO as PDF."""
     service = VendorPOService(db)
@@ -162,14 +163,14 @@ async def download_po_pdf(
 
 
 # Change request endpoints
-@router.get("/change-requests", response_model=POChangeRequestListResponse)
+@router.get("/change-requests", response_model=POChangeRequestListResponse, response_model_by_alias=True)
 async def list_change_requests(
     vendor_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     po_id: Optional[UUID] = None,
     status: Optional[POChangeRequestStatus] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List change requests."""
     service = VendorPOService(db)
@@ -188,11 +189,11 @@ async def list_change_requests(
     )
 
 
-@router.get("/change-requests/{request_id}", response_model=POChangeRequestResponse)
+@router.get("/change-requests/{request_id}", response_model=POChangeRequestResponse, response_model_by_alias=True)
 async def get_change_request(
     vendor_id: UUID,  # From auth middleware
     request_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get change request details."""
     service = VendorPOService(db)
@@ -200,13 +201,13 @@ async def get_change_request(
     return request
 
 
-@router.post("/change-requests/{request_id}/cancel", response_model=POChangeRequestResponse)
+@router.post("/change-requests/{request_id}/cancel", response_model=POChangeRequestResponse, response_model_by_alias=True)
 async def cancel_change_request(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     request_id: UUID,
     reason: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel a pending change request."""
     service = VendorPOService(db)

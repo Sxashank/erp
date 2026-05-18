@@ -44,7 +44,7 @@ class ComplianceItemService:
             created_by=created_by
         )
         self.db.add(item)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(item)
         return item
 
@@ -117,7 +117,7 @@ class ComplianceItemService:
             setattr(item, field, value)
         item.updated_by = updated_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(item)
         return item
 
@@ -128,7 +128,7 @@ class ComplianceItemService:
             return False
 
         item.is_active = False
-        await self.db.commit()
+        await self.db.flush()
         return True
 
 
@@ -151,7 +151,7 @@ class ComplianceInstanceService:
             created_by=created_by
         )
         self.db.add(instance)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(instance)
         return await self.get(instance.id)
 
@@ -256,7 +256,7 @@ class ComplianceInstanceService:
             setattr(instance, field, value)
         instance.updated_by = updated_by
 
-        await self.db.commit()
+        await self.db.flush()
         return await self.get(id)
 
     async def get_summary(self, organization_id: UUID, year: Optional[int] = None) -> ComplianceSummary:
@@ -429,7 +429,7 @@ class ComplianceInstanceService:
             created_instances.append(instance)
 
         if created_instances:
-            await self.db.commit()
+            await self.db.flush()
             for inst in created_instances:
                 await self.db.refresh(inst)
 
@@ -481,7 +481,7 @@ class ComplianceDocumentService:
             uploaded_by=uploaded_by
         )
         self.db.add(doc)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(doc)
         return doc
 
@@ -509,5 +509,5 @@ class ComplianceDocumentService:
             return False
 
         doc.is_active = False
-        await self.db.commit()
+        await self.db.flush()
         return True

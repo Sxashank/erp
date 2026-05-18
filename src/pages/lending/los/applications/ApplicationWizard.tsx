@@ -3,17 +3,9 @@
  * 6-step wizard for creating/editing loan applications (NO MODALS)
  */
 
+import { Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Loader2 } from 'lucide-react';
-
-import { Button } from '@/components/ui/button';
-
-import { WizardContainer } from '@/components/lending/wizard/WizardContainer';
-import { WizardStep } from '@/components/lending/wizard/WizardStep';
-
-import { applicationApi } from '@/services/lending';
-import type { LoanApplication } from '@/types/lending';
 
 // Import step components
 import Step1EntityProduct from './steps/Step1EntityProduct';
@@ -22,6 +14,14 @@ import Step3ProjectDetails from './steps/Step3ProjectDetails';
 import Step4Security from './steps/Step4Security';
 import Step5Documents from './steps/Step5Documents';
 import Step6Review from './steps/Step6Review';
+import StepFundUtilization, { type UtilizationLineDraft } from './steps/StepFundUtilization';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { WizardContainer } from '@/components/lending/wizard/WizardContainer';
+import { WizardStep } from '@/components/lending/wizard/WizardStep';
+import { applicationApi } from '@/services/lending';
+import { applicationUtilizationApi } from '@/services/lending/iifApi';
+import type { CreateApplicationRequest, LoanApplication } from '@/types/lending';
 
 const WIZARD_STEPS = [
   {
@@ -50,11 +50,47 @@ const WIZARD_STEPS = [
     description: 'Upload required documents',
   },
   {
+    id: 'fund-utilization',
+    title: 'Fund Utilization',
+    description: 'Split the requested amount across IIF utilization categories',
+  },
+  {
     id: 'review',
     title: 'Review & Submit',
     description: 'Review and submit application',
   },
 ];
+
+type EntityProductStepData = Pick<CreateApplicationRequest, 'entityId' | 'productId'>;
+type LoanDetailsStepData = Pick<
+  CreateApplicationRequest,
+  | 'requestedAmount'
+  | 'requestedTenureMonths'
+  | 'purpose'
+  | 'preferredInterestType'
+  | 'proposedRate'
+  | 'requestedMoratoriumMonths'
+  | 'preferredRepaymentFrequency'
+  | 'preferredRepaymentMode'
+>;
+type ProjectDetailsStepData = Pick<
+  CreateApplicationRequest,
+  | 'isProjectFinance'
+  | 'projectName'
+  | 'projectCost'
+  | 'promoterContribution'
+  | 'bankFinance'
+  | 'projectStartDate'
+  | 'projectCompletionDate'
+>;
+
+function buildApplicationPayload(data: Record<string, unknown>): CreateApplicationRequest {
+  return {
+    ...((data['entity-product'] as Partial<EntityProductStepData>) || {}),
+    ...((data['loan-details'] as Partial<LoanDetailsStepData>) || {}),
+    ...((data['project-details'] as Partial<ProjectDetailsStepData>) || {}),
+  } as CreateApplicationRequest;
+}
 
 export default function ApplicationWizard() {
   const navigate = useNavigate();
@@ -75,7 +111,7 @@ export default function ApplicationWizard() {
       loadApplication(id);
     } else if (preSelectedEntityId) {
       setInitialData({
-        'entity-product': { entity_id: preSelectedEntityId },
+        'entity-product': { entityId: preSelectedEntityId },
       });
     }
   }, [id, isEditMode, preSelectedEntityId]);
@@ -89,29 +125,32 @@ export default function ApplicationWizard() {
       // Convert application data to wizard step data format
       setInitialData({
         'entity-product': {
-          entity_id: data.entity_id,
-          product_id: data.product_id,
+          entityId: data.entityId,
+          productId: data.productId,
         },
         'loan-details': {
-          requested_amount: data.requested_amount,
-          requested_tenure_months: data.requested_tenure_months,
+          requestedAmount: Number(data.requestedAmount),
+          requestedTenureMonths: data.requestedTenureMonths,
           purpose: data.purpose,
-          interest_type: data.interest_type,
-          proposed_rate: data.proposed_rate,
-          moratorium_months: data.moratorium_months,
-          repayment_frequency: data.repayment_frequency,
+          preferredInterestType: data.preferredInterestType,
+          proposedRate: data.proposedRate ? Number(data.proposedRate) : undefined,
+          requestedMoratoriumMonths: data.requestedMoratoriumMonths,
+          preferredRepaymentFrequency: data.preferredRepaymentFrequency,
+          preferredRepaymentMode: data.preferredRepaymentMode,
         },
         'project-details': {
-          project_name: data.project_name,
-          project_cost: data.project_cost,
-          promoter_contribution: data.promoter_contribution,
-          bank_finance: data.bank_finance,
-          project_start_date: data.project_start_date,
-          project_end_date: data.project_end_date,
+          isProjectFinance: data.isProjectFinance,
+          projectName: data.projectName,
+          projectCost: data.projectCost ? Number(data.projectCost) : undefined,
+          promoterContribution: data.promoterContribution
+            ? Number(data.promoterContribution)
+            : undefined,
+          bankFinance: data.bankFinance ? Number(data.bankFinance) : undefined,
+          projectStartDate: data.projectStartDate,
+          projectCompletionDate: data.projectCompletionDate,
         },
       });
-    } catch (error) {
-      console.error('Failed to load application:', error);
+    } catch {
       navigate('/admin/lending/applications');
     } finally {
       setLoading(false);
@@ -121,53 +160,67 @@ export default function ApplicationWizard() {
   // Handle wizard completion
   const handleComplete = async (data: Record<string, unknown>) => {
     try {
-      // Flatten wizard data into single application object
-      const applicationData = {
-        ...(data['entity-product'] as Record<string, unknown> || {}),
-        ...(data['loan-details'] as Record<string, unknown> || {}),
-        ...(data['project-details'] as Record<string, unknown> || {}),
-      } as Record<string, unknown>;
+      const applicationData = buildApplicationPayload(data);
 
+      let savedApplicationId: string;
       if (isEditMode && id) {
         await applicationApi.updateApplication(id, applicationData);
-        navigate(`/admin/lending/applications/${id}`);
+        savedApplicationId = id;
       } else {
-        const newApp = await applicationApi.createApplication(applicationData as any);
-        // Submit the application after creation
-        await applicationApi.submitApplication(newApp.application_id);
-        navigate(`/admin/lending/applications/${newApp.application_id}`);
+        const newApp = await applicationApi.createApplication(applicationData);
+        savedApplicationId = newApp.id;
       }
-    } catch (error) {
-      console.error('Failed to save application:', error);
-    }
+
+      // Persist IIF fund-utilization lines (if any). The step writes its lines
+      // under `fund-utilization`. CLAUDE.md §6.2: amount stays as string on
+      // the wire.
+      const utilizationStep = data['fund-utilization'] as
+        | { lines?: UtilizationLineDraft[]; override?: boolean }
+        | undefined;
+      const utilizationLines = utilizationStep?.lines ?? [];
+      const utilizationOverride = Boolean(utilizationStep?.override);
+      if (utilizationLines.length > 0) {
+        const overrideNote = utilizationOverride
+          ? 'OVERRIDE: total does not match requested amount.'
+          : null;
+        const payloadLines = utilizationLines.map((l) => ({
+          categoryId: l.categoryId,
+          amount: l.amount === '' ? '0' : l.amount,
+          remarks:
+            overrideNote && !l.remarks
+              ? overrideNote
+              : overrideNote && l.remarks
+                ? `${l.remarks} — ${overrideNote}`
+                : l.remarks,
+        }));
+        await applicationUtilizationApi.bulkReplace(savedApplicationId, payloadLines);
+      }
+
+      if (!isEditMode) {
+        // Submit the application after creation + utilization persistence.
+        await applicationApi.submitApplication(savedApplicationId);
+      }
+      navigate(`/admin/lending/applications/${savedApplicationId}`);
+    } catch {}
   };
 
   // Handle draft save
   const handleSaveDraft = async (data: Record<string, unknown>) => {
     try {
-      const applicationData = {
-        ...(data['entity-product'] as Record<string, unknown> || {}),
-        ...(data['loan-details'] as Record<string, unknown> || {}),
-        ...(data['project-details'] as Record<string, unknown> || {}),
-      } as Record<string, unknown>;
+      const applicationData = buildApplicationPayload(data);
 
-      const result = await applicationApi.saveDraft(
-        isEditMode && id ? id : null,
-        applicationData as any
-      );
+      const result = await applicationApi.saveDraft(isEditMode && id ? id : null, applicationData);
 
       if (!isEditMode) {
         // Redirect to edit mode for the new draft
-        navigate(`/admin/lending/applications/${result.application_id}/edit`, { replace: true });
+        navigate(`/admin/lending/applications/${result.id}/edit`, { replace: true });
       }
-    } catch (error) {
-      console.error('Failed to save draft:', error);
-    }
+    } catch {}
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-96">
+      <div className="flex h-96 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
       </div>
     );
@@ -175,29 +228,25 @@ export default function ApplicationWizard() {
 
   return (
     <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold text-gray-900">
-            {isEditMode ? 'Edit Application' : 'New Loan Application'}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {isEditMode
-              ? `Editing application ${application?.application_number}`
-              : 'Create a new loan application in 6 easy steps'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEditMode ? 'Edit Application' : 'New Loan Application'}
+        subtitle={
+          isEditMode
+            ? `Editing application ${application?.applicationNumber}`
+            : 'Create a new loan application in 6 easy steps'
+        }
+        breadcrumbs={[
+          { label: 'Applications', to: '/admin/lending/applications' },
+          { label: isEditMode ? 'Edit' : 'New' },
+        ]}
+      />
 
       {/* Wizard */}
       <WizardContainer
         steps={WIZARD_STEPS}
         initialData={initialData}
-        onSubmit={handleComplete as unknown as () => Promise<void>}
-        onSaveDraft={handleSaveDraft as unknown as () => Promise<void>}
+        onSubmit={handleComplete}
+        onSaveDraft={handleSaveDraft}
         layout="sidebar"
       >
         <WizardStep stepId="entity-product">
@@ -213,15 +262,19 @@ export default function ApplicationWizard() {
         </WizardStep>
 
         <WizardStep stepId="security">
-          <Step4Security applicationId={application?.application_id} />
+          <Step4Security applicationId={application?.id} />
         </WizardStep>
 
         <WizardStep stepId="documents">
-          <Step5Documents applicationId={application?.application_id} />
+          <Step5Documents applicationId={application?.id} />
+        </WizardStep>
+
+        <WizardStep stepId="fund-utilization">
+          <StepFundUtilization applicationId={application?.id} />
         </WizardStep>
 
         <WizardStep stepId="review">
-          <Step6Review applicationId={application?.application_id} />
+          <Step6Review applicationId={application?.id} />
         </WizardStep>
       </WizardContainer>
     </div>

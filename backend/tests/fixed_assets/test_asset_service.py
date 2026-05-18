@@ -18,13 +18,7 @@ from app.core.constants import (
     AssetAcquisitionType,
     DepreciationMethod,
     AssetType,
-    DisposalType,
-)
-from app.core.exceptions.fixed_assets import (
-    AssetNotFoundError,
-    InvalidStatusTransitionError,
-    ClosedPeriodError,
-    ConcurrentModificationError,
+    AssetDisposalType,
 )
 
 
@@ -84,7 +78,7 @@ class TestAssetStatusTransitions:
 
     def test_valid_transitions_from_draft(self):
         """Test valid status transitions from DRAFT."""
-        valid_from_draft = [AssetStatus.ACTIVE, AssetStatus.CANCELLED]
+        valid_from_draft = [AssetStatus.ACTIVE]
         current_status = AssetStatus.DRAFT
 
         for new_status in valid_from_draft:
@@ -122,12 +116,9 @@ class TestAssetStatusTransitions:
         # This is a terminal state
         assert current_status == AssetStatus.DISPOSED
 
-    def test_cancelled_is_terminal(self):
-        """Test CANCELLED is a terminal status."""
-        current_status = AssetStatus.CANCELLED
-
-        # Once cancelled, cannot transition to any other status
-        assert current_status == AssetStatus.CANCELLED
+    def test_no_cancelled_asset_status(self):
+        """Test asset status model does not expose a cancelled state."""
+        assert not hasattr(AssetStatus, "CANCELLED")
 
 
 class TestAssetCapitalization:
@@ -202,7 +193,7 @@ class TestAssetDisposal:
 
     def test_disposal_scrap_value(self):
         """Test disposal with scrap value."""
-        disposal_type = DisposalType.SCRAPPED
+        disposal_type = AssetDisposalType.SCRAP
         book_value = Decimal("40000.00")
         scrap_value = Decimal("5000.00")
 
@@ -212,7 +203,7 @@ class TestAssetDisposal:
 
     def test_disposal_write_off(self):
         """Test disposal via write-off."""
-        disposal_type = DisposalType.WRITE_OFF
+        disposal_type = AssetDisposalType.WRITE_OFF
         book_value = Decimal("40000.00")
         proceeds = Decimal("0.00")
 

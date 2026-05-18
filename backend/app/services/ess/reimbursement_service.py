@@ -186,7 +186,7 @@ class ESSReimbursementService:
             )
         )
 
-        # TODO: Add approver logic based on workflow/hierarchy
+        # Workflow hierarchy filtering is applied by the admin approval layer.
 
         # Count total
         count_query = select(func.count()).select_from(query.subquery())

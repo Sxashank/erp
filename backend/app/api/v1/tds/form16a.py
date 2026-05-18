@@ -11,9 +11,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.tds.form16a_service import Form16AService
+from app.core.exceptions import NotFoundException
 
 router = APIRouter()
 
@@ -34,7 +35,6 @@ class DeducteeForCertificate(BaseModel):
 class CertificateGenerationRequest(BaseModel):
     """Request to generate Form 16A certificate."""
 
-    organization_id: UUID
     deductee_pan: str = Field(..., max_length=10)
     tds_section_id: UUID
     financial_year: str = Field(..., max_length=10)
@@ -44,7 +44,6 @@ class CertificateGenerationRequest(BaseModel):
 class BulkCertificateRequest(BaseModel):
     """Request to generate bulk Form 16A certificates."""
 
-    organization_id: UUID
     financial_year: str = Field(..., max_length=10)
     quarter: str = Field(..., max_length=2, description="Q1, Q2, Q3, or Q4")
 
@@ -85,34 +84,33 @@ class CertificateResponse(BaseModel):
     generated_date: date
 
 
-@router.get("/deductees", response_model=List[DeducteeForCertificate])
+@router.get("/deductees", response_model=List[DeducteeForCertificate], response_model_by_alias=True)
 async def get_deductees_for_certificates(
-    organization_id: UUID = Query(...),
     financial_year: str = Query(...),
     quarter: str = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get list of deductees eligible for Form 16A certificates."""
     service = Form16AService(db)
     deductees = await service.get_deductees_for_certificates(
-        organization_id,
+        current_user.organization_id,
         financial_year,
         quarter,
     )
     return [DeducteeForCertificate(**d) for d in deductees]
 
 
-@router.post("/generate", response_model=CertificateResponse)
+@router.post("/generate", response_model=CertificateResponse, response_model_by_alias=True)
 async def generate_certificate(
     data: CertificateGenerationRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate Form 16A certificate for a deductee."""
     service = Form16AService(db)
     cert = await service.generate_certificate(
-        data.organization_id,
+        current_user.organization_id,
         data.deductee_pan,
         data.tds_section_id,
         data.financial_year,
@@ -139,16 +137,16 @@ async def generate_certificate(
     )
 
 
-@router.post("/generate-bulk", response_model=List[CertificateResponse])
+@router.post("/generate-bulk", response_model=List[CertificateResponse], response_model_by_alias=True)
 async def generate_bulk_certificates(
     data: BulkCertificateRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate Form 16A certificates for all eligible deductees."""
     service = Form16AService(db)
     certificates = await service.generate_bulk_certificates(
-        data.organization_id,
+        current_user.organization_id,
         data.financial_year,
         data.quarter,
     )
@@ -179,22 +177,21 @@ async def generate_bulk_certificates(
 @router.get("/download/{certificate_number}")
 async def download_certificate(
     certificate_number: str,
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Download Form 16A certificate as HTML/PDF."""
     service = Form16AService(db)
 
     # Get certificate data
     cert_info = await service.get_certificate_by_number(
-        organization_id,
+        current_user.organization_id,
         certificate_number,
     )
 
     if not cert_info:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Certificate not found")
+        raise NotFoundException(detail="Certificate not found", error_code="CERTIFICATE_NOT_FOUND")
 
     # Generate full certificate (need to regenerate to get all data)
     # In production, you'd store the certificate data
@@ -220,40 +217,38 @@ async def download_certificate(
     return HTMLResponse(content=html_content)
 
 
-@router.get("/list", response_model=List[CertificateInfo])
+@router.get("/list", response_model=List[CertificateInfo], response_model_by_alias=True)
 async def list_certificates(
-    organization_id: UUID = Query(...),
     financial_year: str = Query(...),
     quarter: Optional[str] = Query(None),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get list of generated certificates."""
     service = Form16AService(db)
     certificates = await service.get_generated_certificates(
-        organization_id,
+        current_user.organization_id,
         financial_year,
         quarter,
     )
     return [CertificateInfo(**c) for c in certificates]
 
 
-@router.get("/{certificate_number}", response_model=CertificateInfo)
+@router.get("/{certificate_number}", response_model=CertificateInfo, response_model_by_alias=True)
 async def get_certificate(
     certificate_number: str,
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get certificate details by number."""
     service = Form16AService(db)
     cert = await service.get_certificate_by_number(
-        organization_id,
+        current_user.organization_id,
         certificate_number,
     )
 
     if not cert:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Certificate not found")
+        raise NotFoundException(detail="Certificate not found", error_code="CERTIFICATE_NOT_FOUND")
 
     return CertificateInfo(**cert)

@@ -1,27 +1,36 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle,
   Clock,
   Eye,
-  Filter,
+  Loader2,
   MoreHorizontal,
   ThumbsDown,
   ThumbsUp,
   User,
 } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
+import { DateDisplay, EmptyState, ErrorState, PageHeader, SkeletonTable } from '@/components/common';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -38,187 +47,136 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+import { useOrganization } from '@/hooks/useOrganization';
+import {
+  useApproveTask,
+  useDelegateTask,
+  usePendingTasks,
+} from '@/hooks/workflow/useWorkflowTasks';
+import { showErrorToast } from '@/lib/errorToast';
+import type { TaskStatus, WorkflowTaskResponse } from '@/services/workflow/workflowApi';
 
-interface WorkflowTask {
-  id: string;
-  workflow_name: string;
-  workflow_code: string;
-  step_name: string;
-  entity_type: string;
-  entity_id: string;
-  entity_reference: string;
-  entity_description: string;
-  assigned_to_id: string;
-  assigned_to_name: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'ESCALATED';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-  due_date?: string;
-  created_at: string;
-  completed_at?: string;
-  remarks?: string;
-  is_overdue: boolean;
-}
-
-const STATUSES = [
+const STATUS_FILTERS: { value: 'all' | TaskStatus; label: string }[] = [
   { value: 'all', label: 'All Statuses' },
   { value: 'PENDING', label: 'Pending' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'ESCALATED', label: 'Escalated' },
+  { value: 'SKIPPED', label: 'Skipped' },
 ];
 
-const PRIORITIES = [
-  { value: 'all', label: 'All Priorities' },
-  { value: 'LOW', label: 'Low' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HIGH', label: 'High' },
-  { value: 'CRITICAL', label: 'Critical' },
-];
+function getStatusBadge(status: TaskStatus): JSX.Element {
+  switch (status) {
+    case 'PENDING':
+      return <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">Pending</Badge>;
+    case 'APPROVED':
+      return <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">Approved</Badge>;
+    case 'REJECTED':
+      return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Rejected</Badge>;
+    case 'ESCALATED':
+      return <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Escalated</Badge>;
+    case 'SKIPPED':
+      return <Badge variant="outline">Skipped</Badge>;
+    default:
+      return <Badge variant="outline">{status}</Badge>;
+  }
+}
 
-export function WorkflowTaskList() {
-  const navigate = useNavigate();
-  const [tasks, setTasks] = useState<WorkflowTask[]>([]);
-  const [selectedStatus, setSelectedStatus] = useState<string>('PENDING');
-  const [selectedPriority, setSelectedPriority] = useState<string>('all');
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>('my-tasks');
+interface ApprovalDialogState {
+  task: WorkflowTaskResponse;
+  action: 'APPROVE' | 'REJECT';
+}
 
-  useEffect(() => {
-    fetchTasks();
-  }, [selectedStatus, selectedPriority, activeTab]);
+export function WorkflowTaskList(): JSX.Element {
+  const { toast } = useToast();
+  const { activeOrganizationId } = useOrganization();
 
-  const fetchTasks = async () => {
-    try {
-      setLoading(true);
-      // Mock data - replace with actual API call
-      const mockTasks: WorkflowTask[] = [
-        {
-          id: '1',
-          workflow_name: 'Loan Application Approval',
-          workflow_code: 'WF-LOAN-APP',
-          step_name: 'Credit Manager Approval',
-          entity_type: 'loan_application',
-          entity_id: 'app1',
-          entity_reference: 'LOAN-2024-001234',
-          entity_description: 'Personal Loan - John Doe - ₹5,00,000',
-          assigned_to_id: 'user1',
-          assigned_to_name: 'Current User',
-          status: 'PENDING',
-          priority: 'HIGH',
-          due_date: '2024-12-15',
-          created_at: '2024-12-10',
-          is_overdue: false,
+  const [statusFilter, setStatusFilter] = useState<'all' | TaskStatus>('PENDING');
+  const [activeTab, setActiveTab] = useState<'my-tasks' | 'completed'>('my-tasks');
+
+  const [approvalDialog, setApprovalDialog] = useState<ApprovalDialogState | null>(null);
+  const [approvalComments, setApprovalComments] = useState('');
+
+  const [delegateDialog, setDelegateDialog] = useState<WorkflowTaskResponse | null>(null);
+  const [delegateTo, setDelegateTo] = useState('');
+  const [delegateReason, setDelegateReason] = useState('');
+
+  const tasksQuery = usePendingTasks(
+    activeOrganizationId ? { organization_id: activeOrganizationId } : undefined,
+  );
+  const approveMutation = useApproveTask();
+  const delegateMutation = useDelegateTask();
+
+  const allTasks = tasksQuery.data ?? [];
+
+  const filteredTasks = useMemo(() => {
+    if (statusFilter === 'all') return allTasks;
+    return allTasks.filter((t) => t.status === statusFilter);
+  }, [allTasks, statusFilter]);
+
+  const pendingTasks = allTasks.filter((t) => t.status === 'PENDING');
+  const overdueTasks = pendingTasks.filter((t) => t.is_overdue);
+  const escalatedTasks = allTasks.filter((t) => t.status === 'ESCALATED');
+  const completedTasks = allTasks.filter((t) => t.status === 'APPROVED' || t.status === 'REJECTED');
+
+  const handleApprovalSubmit = () => {
+    if (!approvalDialog) return;
+    approveMutation.mutate(
+      {
+        id: approvalDialog.task.id,
+        body: {
+          action: approvalDialog.action,
+          comments: approvalComments.trim() || undefined,
         },
-        {
-          id: '2',
-          workflow_name: 'Disbursement Approval',
-          workflow_code: 'WF-DISB-APP',
-          step_name: 'Finance Head Approval',
-          entity_type: 'disbursement',
-          entity_id: 'disb1',
-          entity_reference: 'DISB-2024-000456',
-          entity_description: 'Business Loan Disbursement - ABC Corp - ₹25,00,000',
-          assigned_to_id: 'user1',
-          assigned_to_name: 'Current User',
-          status: 'PENDING',
-          priority: 'CRITICAL',
-          due_date: '2024-12-12',
-          created_at: '2024-12-08',
-          is_overdue: true,
+      },
+      {
+        onSuccess: () => {
+          toast({
+            title: approvalDialog.action === 'APPROVE' ? 'Task approved' : 'Task rejected',
+            description: `${approvalDialog.task.step_name ?? 'Step'} updated.`,
+          });
+          setApprovalDialog(null);
+          setApprovalComments('');
         },
-        {
-          id: '3',
-          workflow_name: 'Journal Voucher Approval',
-          workflow_code: 'WF-VOUCHER',
-          step_name: 'Accountant Review',
-          entity_type: 'voucher',
-          entity_id: 'voucher1',
-          entity_reference: 'JV-2024-001234',
-          entity_description: 'Salary Provision Entry - Dec 2024',
-          assigned_to_id: 'user1',
-          assigned_to_name: 'Current User',
-          status: 'PENDING',
-          priority: 'MEDIUM',
-          due_date: '2024-12-20',
-          created_at: '2024-12-12',
-          is_overdue: false,
-        },
-        {
-          id: '4',
-          workflow_name: 'Leave Application Approval',
-          workflow_code: 'WF-LEAVE',
-          step_name: 'Manager Approval',
-          entity_type: 'leave_application',
-          entity_id: 'leave1',
-          entity_reference: 'LV-2024-000789',
-          entity_description: 'Annual Leave - Jane Smith - 5 days',
-          assigned_to_id: 'user1',
-          assigned_to_name: 'Current User',
-          status: 'APPROVED',
-          priority: 'LOW',
-          created_at: '2024-12-05',
-          completed_at: '2024-12-06',
-          is_overdue: false,
-          remarks: 'Approved as requested',
-        },
-      ];
-      setTasks(mockTasks);
-    } catch (error) {
-      console.error('Failed to fetch tasks:', error);
-    } finally {
-      setLoading(false);
+        onError: (err) => showErrorToast(err, toast),
+      },
+    );
+  };
+
+  const handleDelegateSubmit = () => {
+    if (!delegateDialog) return;
+    const reason = delegateReason.trim();
+    const userId = delegateTo.trim();
+    if (!userId || !reason) {
+      toast({
+        title: 'Missing information',
+        description: 'Please provide both a delegate user ID and a reason.',
+        variant: 'destructive',
+      });
+      return;
     }
+    delegateMutation.mutate(
+      { id: delegateDialog.id, body: { delegate_to: userId, reason } },
+      {
+        onSuccess: () => {
+          toast({
+            title: 'Task delegated',
+            description: 'The task has been re-assigned.',
+          });
+          setDelegateDialog(null);
+          setDelegateTo('');
+          setDelegateReason('');
+        },
+        onError: (err) => showErrorToast(err, toast),
+      },
+    );
   };
-
-  const formatDate = (dateString?: string) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'PENDING':
-        return <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">Pending</Badge>;
-      case 'APPROVED':
-        return <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">Approved</Badge>;
-      case 'REJECTED':
-        return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Rejected</Badge>;
-      case 'ESCALATED':
-        return <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Escalated</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case 'LOW':
-        return <Badge variant="outline">Low</Badge>;
-      case 'MEDIUM':
-        return <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Medium</Badge>;
-      case 'HIGH':
-        return <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">High</Badge>;
-      case 'CRITICAL':
-        return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Critical</Badge>;
-      default:
-        return <Badge variant="outline">{priority}</Badge>;
-    }
-  };
-
-  const pendingTasks = tasks.filter(t => t.status === 'PENDING');
-  const overdueTasks = pendingTasks.filter(t => t.is_overdue);
-  const completedTasks = tasks.filter(t => t.status === 'APPROVED' || t.status === 'REJECTED');
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Workflow Tasks"
-        subtitle="Manage your pending approvals and tasks"
-      />
+      <PageHeader title="Workflow Tasks" subtitle="Manage your pending approvals and tasks" />
 
       {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-4">
@@ -229,7 +187,7 @@ export function WorkflowTaskList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">{pendingTasks.length}</div>
-            <p className="text-xs text-slate-500">Awaiting your action</p>
+            <p className="text-xs text-muted-foreground">Awaiting your action</p>
           </CardContent>
         </Card>
         <Card>
@@ -239,37 +197,38 @@ export function WorkflowTaskList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">{overdueTasks.length}</div>
-            <p className="text-xs text-slate-500">Past due date</p>
+            <p className="text-xs text-muted-foreground">Past due date</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Completed Today</CardTitle>
+            <CardTitle className="text-sm font-medium">Escalated</CardTitle>
+            <AlertCircle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{escalatedTasks.length}</div>
+            <p className="text-xs text-muted-foreground">Need attention</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Completed</CardTitle>
             <CheckCircle className="h-4 w-4 text-emerald-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-emerald-600">{completedTasks.length}</div>
-            <p className="text-xs text-slate-500">Tasks completed</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Critical Priority</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {pendingTasks.filter(t => t.priority === 'CRITICAL').length}
-            </div>
-            <p className="text-xs text-slate-500">Need immediate attention</p>
+            <p className="text-xs text-muted-foreground">Tasks completed</p>
           </CardContent>
         </Card>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs
+        value={activeTab}
+        onValueChange={(v) => setActiveTab(v as typeof activeTab)}
+        className="space-y-4"
+      >
         <TabsList>
           <TabsTrigger value="my-tasks">My Tasks</TabsTrigger>
-          <TabsTrigger value="all-tasks">All Tasks</TabsTrigger>
           <TabsTrigger value="completed">Completed</TabsTrigger>
         </TabsList>
 
@@ -279,14 +238,17 @@ export function WorkflowTaskList() {
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle>Pending Approvals</CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Select value={selectedPriority} onValueChange={setSelectedPriority}>
-                    <SelectTrigger className="w-[140px]">
-                      <SelectValue placeholder="All Priorities" />
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(v) => setStatusFilter(v as 'all' | TaskStatus)}
+                  >
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="All Statuses" />
                     </SelectTrigger>
                     <SelectContent>
-                      {PRIORITIES.map((priority) => (
-                        <SelectItem key={priority.value} value={priority.value}>
-                          {priority.label}
+                      {STATUS_FILTERS.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>
+                          {s.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -295,52 +257,68 @@ export function WorkflowTaskList() {
               </div>
             </CardHeader>
             <CardContent>
-              {loading ? (
-                <div className="flex items-center justify-center py-8">
-                  <p className="text-sm text-slate-500">Loading...</p>
-                </div>
-              ) : pendingTasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <CheckCircle className="mb-4 h-12 w-12 text-emerald-300" />
-                  <p className="text-sm text-slate-500">No pending tasks. You're all caught up!</p>
-                </div>
+              {tasksQuery.isLoading ? (
+                <SkeletonTable rows={6} columns={7} />
+              ) : tasksQuery.isError ? (
+                <ErrorState error={tasksQuery.error} onRetry={() => tasksQuery.refetch()} />
+              ) : filteredTasks.length === 0 ? (
+                <EmptyState
+                  title="No pending tasks"
+                  subtitle="You're all caught up. New approvals will appear here when assigned to you."
+                  icon={CheckCircle}
+                />
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Workflow</TableHead>
                       <TableHead>Step</TableHead>
-                      <TableHead>Priority</TableHead>
+                      <TableHead>Assigned</TableHead>
                       <TableHead>Due Date</TableHead>
+                      <TableHead>Escalation</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead className="w-[100px]">Actions</TableHead>
+                      <TableHead className="w-[140px]">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {pendingTasks.map((task) => (
+                    {filteredTasks.map((task) => (
                       <TableRow key={task.id} className={task.is_overdue ? 'bg-red-50/50' : ''}>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{task.entity_reference}</p>
-                            <p className="text-sm text-slate-500">{task.entity_description}</p>
+                            <p className="font-medium">
+                              {task.step_name ?? 'Step'}{' '}
+                              {task.step_number !== null && (
+                                <span className="text-muted-foreground">(#{task.step_number})</span>
+                              )}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Task {task.id.slice(0, 8)}
+                            </p>
                           </div>
                         </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{task.workflow_code}</p>
-                            <p className="text-sm text-slate-500">{task.workflow_name}</p>
-                          </div>
+                        <TableCell className="text-sm tabular-nums">
+                          <DateDisplay date={task.assigned_at} />
                         </TableCell>
-                        <TableCell>{task.step_name}</TableCell>
-                        <TableCell>{getPriorityBadge(task.priority)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
                             {task.is_overdue && <AlertCircle className="h-3 w-3 text-red-500" />}
-                            <span className={task.is_overdue ? 'text-red-600 font-medium' : ''}>
-                              {formatDate(task.due_date)}
-                            </span>
+                            <DateDisplay
+                              date={task.due_at}
+                              className={
+                                task.is_overdue
+                                  ? 'font-medium tabular-nums text-red-600'
+                                  : 'tabular-nums'
+                              }
+                            />
                           </div>
+                        </TableCell>
+                        <TableCell className="tabular-nums">
+                          {task.escalation_level > 0 ? (
+                            <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">
+                              Level {task.escalation_level}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </TableCell>
                         <TableCell>{getStatusBadge(task.status)}</TableCell>
                         <TableCell>
@@ -348,16 +326,26 @@ export function WorkflowTaskList() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                              className="h-8 w-8 text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
                               title="Approve"
+                              disabled={task.status !== 'PENDING' || approveMutation.isPending}
+                              onClick={() => {
+                                setApprovalDialog({ task, action: 'APPROVE' });
+                                setApprovalComments('');
+                              }}
                             >
                               <ThumbsUp className="h-4 w-4" />
                             </Button>
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="h-8 w-8 text-red-600 hover:bg-red-50 hover:text-red-700"
                               title="Reject"
+                              disabled={task.status !== 'PENDING' || approveMutation.isPending}
+                              onClick={() => {
+                                setApprovalDialog({ task, action: 'REJECT' });
+                                setApprovalComments('');
+                              }}
                             >
                               <ThumbsDown className="h-4 w-4" />
                             </Button>
@@ -372,7 +360,14 @@ export function WorkflowTaskList() {
                                   <Eye className="mr-2 h-4 w-4" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
+                                <DropdownMenuItem
+                                  disabled={task.status !== 'PENDING'}
+                                  onClick={() => {
+                                    setDelegateDialog(task);
+                                    setDelegateTo('');
+                                    setDelegateReason('');
+                                  }}
+                                >
                                   <User className="mr-2 h-4 w-4" />
                                   Delegate
                                 </DropdownMenuItem>
@@ -389,52 +384,41 @@ export function WorkflowTaskList() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="all-tasks">
-          <Card>
-            <CardHeader>
-              <CardTitle>All Tasks</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-slate-500">View all tasks across the organization</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
         <TabsContent value="completed">
           <Card>
             <CardHeader>
               <CardTitle>Completed Tasks</CardTitle>
             </CardHeader>
             <CardContent>
-              {completedTasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <Clock className="mb-4 h-12 w-12 text-slate-300" />
-                  <p className="text-sm text-slate-500">No completed tasks yet</p>
-                </div>
+              {tasksQuery.isLoading ? (
+                <SkeletonTable rows={4} columns={4} />
+              ) : completedTasks.length === 0 ? (
+                <EmptyState
+                  title="No completed tasks yet"
+                  subtitle="Tasks you've actioned will appear here."
+                  icon={Clock}
+                />
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Workflow</TableHead>
-                      <TableHead>Completed</TableHead>
+                      <TableHead>Step</TableHead>
+                      <TableHead>Acted</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Remarks</TableHead>
+                      <TableHead>Comments</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {completedTasks.map((task) => (
                       <TableRow key={task.id}>
                         <TableCell>
-                          <div>
-                            <p className="font-medium">{task.entity_reference}</p>
-                            <p className="text-sm text-slate-500">{task.entity_description}</p>
-                          </div>
+                          <p className="font-medium">{task.step_name ?? 'Step'}</p>
                         </TableCell>
-                        <TableCell>{task.workflow_name}</TableCell>
-                        <TableCell>{formatDate(task.completed_at)}</TableCell>
+                        <TableCell className="text-sm tabular-nums">
+                          <DateDisplay date={task.acted_at} />
+                        </TableCell>
                         <TableCell>{getStatusBadge(task.status)}</TableCell>
-                        <TableCell>{task.remarks || '-'}</TableCell>
+                        <TableCell>{task.comments ?? '—'}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -444,6 +428,115 @@ export function WorkflowTaskList() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Approve / Reject Dialog */}
+      <Dialog
+        open={approvalDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setApprovalDialog(null);
+            setApprovalComments('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {approvalDialog?.action === 'APPROVE' ? 'Approve task' : 'Reject task'}
+            </DialogTitle>
+            <DialogDescription>
+              {approvalDialog?.task.step_name ?? 'Step'} — task{' '}
+              {approvalDialog?.task.id.slice(0, 8)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="approval-comments">Comments</Label>
+            <Textarea
+              id="approval-comments"
+              placeholder={
+                approvalDialog?.action === 'REJECT'
+                  ? 'Reason for rejection (recommended)'
+                  : 'Optional comments'
+              }
+              value={approvalComments}
+              onChange={(e) => setApprovalComments(e.target.value)}
+              rows={3}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setApprovalDialog(null)}
+              disabled={approveMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={approvalDialog?.action === 'REJECT' ? 'destructive' : 'default'}
+              disabled={approveMutation.isPending}
+              onClick={handleApprovalSubmit}
+            >
+              {approveMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {approvalDialog?.action === 'APPROVE' ? 'Approve' : 'Reject'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delegate Dialog */}
+      <Dialog
+        open={delegateDialog !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDelegateDialog(null);
+            setDelegateTo('');
+            setDelegateReason('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delegate task</DialogTitle>
+            <DialogDescription>
+              Reassign this task to another user. They will be responsible for the approval.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label htmlFor="delegate-to">Delegate to (user ID)</Label>
+              <Input
+                id="delegate-to"
+                placeholder="UUID of the target user"
+                value={delegateTo}
+                onChange={(e) => setDelegateTo(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="delegate-reason">Reason</Label>
+              <Textarea
+                id="delegate-reason"
+                placeholder="Why is this being delegated?"
+                value={delegateReason}
+                onChange={(e) => setDelegateReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDelegateDialog(null)}
+              disabled={delegateMutation.isPending}
+            >
+              Cancel
+            </Button>
+            <Button disabled={delegateMutation.isPending} onClick={handleDelegateSubmit}>
+              {delegateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delegate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

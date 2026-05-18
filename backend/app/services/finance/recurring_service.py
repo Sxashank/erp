@@ -235,7 +235,7 @@ class RecurringVoucherService:
                 recurring.day_of_week,
             )
 
-        recurring.modified_by = user_id
+        recurring.updated_by = user_id
 
         await self.db.flush()
         await self.db.refresh(recurring)
@@ -260,7 +260,7 @@ class RecurringVoucherService:
         stmt = (
             select(RecurringVoucher)
             .where(RecurringVoucher.organization_id == organization_id)
-            .where(RecurringVoucher.is_deleted == False)
+            .where(RecurringVoucher.is_active == True)
         )
 
         if status:
@@ -355,7 +355,7 @@ class RecurringVoucherService:
             notify_on_generation=recurring.notify_on_generation,
             notify_days_before=recurring.notify_days_before,
             created_at=recurring.created_at,
-            updated_at=recurring.modified_at,
+            updated_at=recurring.updated_at,
         )
 
     async def pause(
@@ -373,7 +373,7 @@ class RecurringVoucherService:
             raise ValueError("Can only pause active recurring vouchers")
 
         recurring.status = RecurringVoucherStatus.PAUSED
-        recurring.modified_by = user_id
+        recurring.updated_by = user_id
 
         await self.db.flush()
         return recurring
@@ -402,7 +402,7 @@ class RecurringVoucherService:
                 recurring.day_of_week,
             )
 
-        recurring.modified_by = user_id
+        recurring.updated_by = user_id
 
         await self.db.flush()
         return recurring
@@ -423,7 +423,7 @@ class RecurringVoucherService:
 
         recurring.status = RecurringVoucherStatus.CANCELLED
         recurring.next_run_date = None
-        recurring.modified_by = user_id
+        recurring.updated_by = user_id
 
         await self.db.flush()
         return recurring
@@ -560,6 +560,7 @@ class RecurringVoucherService:
 
         # Create log entry
         log_entry = RecurringVoucherLog(
+            organization_id=recurring.organization_id,
             recurring_voucher_id=recurring.id,
             voucher_id=voucher.id,
             scheduled_date=target_date,
@@ -604,7 +605,7 @@ class RecurringVoucherService:
                 RecurringVoucher.organization_id == organization_id,
                 RecurringVoucher.status == RecurringVoucherStatus.ACTIVE,
                 RecurringVoucher.next_run_date <= target_date,
-                RecurringVoucher.is_deleted == False,
+                RecurringVoucher.is_active == True,
             )
         )
 
@@ -641,7 +642,7 @@ class RecurringVoucherService:
                 RecurringVoucher.status == RecurringVoucherStatus.ACTIVE,
                 RecurringVoucher.next_run_date.isnot(None),
                 RecurringVoucher.next_run_date <= end_date,
-                RecurringVoucher.is_deleted == False,
+                RecurringVoucher.is_active == True,
             )
         ).order_by(RecurringVoucher.next_run_date.asc())
 
@@ -672,7 +673,7 @@ class RecurringVoucherService:
             and_(
                 RecurringVoucher.organization_id == organization_id,
                 RecurringVoucher.status == RecurringVoucherStatus.ACTIVE,
-                RecurringVoucher.is_deleted == False,
+                RecurringVoucher.is_active == True,
             )
         )
         total_active = (await self.db.execute(active_stmt)).scalar() or 0
@@ -682,7 +683,7 @@ class RecurringVoucherService:
             and_(
                 RecurringVoucher.organization_id == organization_id,
                 RecurringVoucher.status == RecurringVoucherStatus.PAUSED,
-                RecurringVoucher.is_deleted == False,
+                RecurringVoucher.is_active == True,
             )
         )
         total_paused = (await self.db.execute(paused_stmt)).scalar() or 0
@@ -693,7 +694,7 @@ class RecurringVoucherService:
                 RecurringVoucher.organization_id == organization_id,
                 RecurringVoucher.status == RecurringVoucherStatus.ACTIVE,
                 RecurringVoucher.next_run_date == today,
-                RecurringVoucher.is_deleted == False,
+                RecurringVoucher.is_active == True,
             )
         )
         due_today = (await self.db.execute(due_today_stmt)).scalar() or 0
@@ -704,7 +705,7 @@ class RecurringVoucherService:
                 RecurringVoucher.organization_id == organization_id,
                 RecurringVoucher.status == RecurringVoucherStatus.ACTIVE,
                 RecurringVoucher.next_run_date <= week_end,
-                RecurringVoucher.is_deleted == False,
+                RecurringVoucher.is_active == True,
             )
         )
         due_this_week = (await self.db.execute(due_week_stmt)).scalar() or 0
@@ -792,10 +793,10 @@ class RecurringVoucherService:
         if not recurring:
             return False
 
-        recurring.is_deleted = True
+        recurring.soft_delete(user_id)
         recurring.status = RecurringVoucherStatus.CANCELLED
         recurring.next_run_date = None
-        recurring.modified_by = user_id
+        recurring.updated_by = user_id
 
         await self.db.flush()
         return True

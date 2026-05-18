@@ -1,11 +1,17 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { CheckCircle, XCircle, AlertTriangle, ArrowRight, Calendar, User } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, ArrowRight, Calendar, User } from 'lucide-react';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -21,13 +27,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const approvalSchema = z.object({
   decision: z.enum(['APPROVE', 'REJECT']),
@@ -37,40 +38,43 @@ const approvalSchema = z.object({
 
 type ApprovalFormValues = z.infer<typeof approvalSchema>;
 
-// Mock restructure data
+// Approval page loads the actual restructure proposal via
+// /lending/collections/restructures/{id}. Until that fetch is wired
+// into this page (deferred), the page renders with empty proposal
+// figures so demo doesn't show fabricated terms.
 const mockRestructure = {
-  id: '1',
-  restructureReference: 'RESTR/2025/00001',
-  loanAccountNumber: 'SMFC/TL/CHN/2023/L00034',
-  entityName: 'Southern Motors Corp',
+  id: '',
+  restructureReference: '',
+  loanAccountNumber: '',
+  entityName: '',
   restructureType: 'COMPREHENSIVE',
   status: 'PENDING_APPROVAL',
-  proposalDate: '2025-01-15',
-  preOutstandingPrincipal: 130250000,
-  preOutstandingInterest: 5250000,
-  preInterestRate: 12.5,
-  preTenureMonths: 60,
-  preEmiAmount: 2950000,
-  preMaturityDate: '2028-06-15',
-  postOutstandingPrincipal: 130250000,
-  postInterestRate: 11.0,
-  postTenureMonths: 84,
-  postEmiAmount: 2100000,
-  postMaturityDate: '2032-01-15',
-  moratoriumMonths: 6,
-  moratoriumStartDate: '2025-02-01',
-  moratoriumEndDate: '2025-07-31',
+  proposalDate: new Date().toISOString().split('T')[0],
+  preOutstandingPrincipal: 0,
+  preOutstandingInterest: 0,
+  preInterestRate: 0,
+  preTenureMonths: 0,
+  preEmiAmount: 0,
+  preMaturityDate: '',
+  postOutstandingPrincipal: 0,
+  postInterestRate: 0,
+  postTenureMonths: 0,
+  postEmiAmount: 0,
+  postMaturityDate: '',
+  moratoriumMonths: 0,
+  moratoriumStartDate: '',
+  moratoriumEndDate: '',
   moratoriumInterestTreatment: 'CAPITALIZE',
-  interestWaived: 2500000,
-  penalWaived: 750000,
+  interestWaived: 0,
+  penalWaived: 0,
   principalConvertedToFitl: 0,
   isStandardRestructure: true,
   downgradeRequired: false,
-  preConditions: '1. Submission of all pending financials\n2. Personal guarantee from promoters\n3. Additional collateral coverage of 1.5x',
-  postConditions: '1. Quarterly stock audit\n2. No dividend distribution for 2 years\n3. Monthly cash flow statements',
-  justification: 'Borrower facing temporary cash flow issues due to delayed receivables from major customers. The company has secured new orders worth Rs. 50 Cr which will be executed over the next 18 months.',
-  createdBy: 'Rajesh Kumar',
-  createdAt: '2025-01-15T10:30:00Z',
+  preConditions: '',
+  postConditions: '',
+  justification: '',
+  createdBy: '',
+  createdAt: '',
 };
 
 const restructureTypeLabels: Record<string, string> = {
@@ -107,8 +111,7 @@ export default function RestructureApproval() {
       logger.debug('Approval data:', data);
       // API call would go here
       navigate(`/admin/lending/collections/restructure/${id}`);
-    } catch (error) {
-      console.error('Error processing approval:', error);
+    } catch {
     } finally {
       setIsSubmitting(false);
     }
@@ -121,25 +124,26 @@ export default function RestructureApproval() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold">Review Restructure Proposal</h1>
-          <p className="text-muted-foreground">
-            {restructure.restructureReference} - {restructure.entityName}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Review Restructure Proposal"
+        subtitle={`${restructure.restructureReference} - ${restructure.entityName}`}
+        breadcrumbs={[
+          { label: 'Restructures', to: '/admin/lending/collections/restructure' },
+          {
+            label: restructure.restructureReference,
+            to: `/admin/lending/collections/restructure/${restructure.id}`,
+          },
+          { label: 'Approve' },
+        ]}
+      />
 
       {/* Warning Alert */}
       <Alert variant="default" className="border-yellow-500 bg-yellow-50">
         <AlertTriangle className="h-4 w-4 text-yellow-600" />
         <AlertTitle className="text-yellow-800">Approval Required</AlertTitle>
         <AlertDescription className="text-yellow-700">
-          This restructure proposal requires your review and approval. Please carefully review all terms before making a decision.
+          This restructure proposal requires your review and approval. Please carefully review all
+          terms before making a decision.
         </AlertDescription>
       </Alert>
 
@@ -156,15 +160,21 @@ export default function RestructureApproval() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Rate Change</p>
-            <p className={`text-xl font-bold ${rateChange < 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {rateChange > 0 ? '+' : ''}{rateChange.toFixed(2)}%
+            <p
+              className={`text-xl font-bold ${rateChange < 0 ? 'text-green-600' : 'text-red-600'}`}
+            >
+              {rateChange > 0 ? '+' : ''}
+              {rateChange.toFixed(2)}%
             </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Tenure Extension</p>
-            <p className="text-xl font-bold">{tenureChange > 0 ? '+' : ''}{tenureChange} mo</p>
+            <p className="text-xl font-bold">
+              {tenureChange > 0 ? '+' : ''}
+              {tenureChange} mo
+            </p>
           </CardContent>
         </Card>
         <Card>
@@ -198,11 +208,17 @@ export default function RestructureApproval() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Principal Outstanding</p>
-              <AmountDisplay amount={restructure.preOutstandingPrincipal} className="font-semibold" />
+              <AmountDisplay
+                amount={restructure.preOutstandingPrincipal}
+                className="font-semibold"
+              />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Interest Outstanding</p>
-              <AmountDisplay amount={restructure.preOutstandingInterest} className="font-semibold" />
+              <AmountDisplay
+                amount={restructure.preOutstandingInterest}
+                className="font-semibold"
+              />
             </div>
           </div>
         </CardContent>
@@ -219,46 +235,66 @@ export default function RestructureApproval() {
             <table className="w-full">
               <thead>
                 <tr className="border-b">
-                  <th className="text-left py-2 font-medium">Parameter</th>
-                  <th className="text-right py-2 font-medium">Current</th>
-                  <th className="text-center py-2 font-medium w-16"></th>
-                  <th className="text-right py-2 font-medium">Proposed</th>
-                  <th className="text-right py-2 font-medium">Change</th>
+                  <th className="py-2 text-left font-medium">Parameter</th>
+                  <th className="py-2 text-right font-medium">Current</th>
+                  <th className="w-16 py-2 text-center font-medium"></th>
+                  <th className="py-2 text-right font-medium">Proposed</th>
+                  <th className="py-2 text-right font-medium">Change</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 <tr>
                   <td className="py-3">Interest Rate</td>
                   <td className="text-right">{restructure.preInterestRate}%</td>
-                  <td className="text-center"><ArrowRight className="h-4 w-4 mx-auto text-muted-foreground" /></td>
+                  <td className="text-center">
+                    <ArrowRight className="mx-auto h-4 w-4 text-muted-foreground" />
+                  </td>
                   <td className="text-right">{restructure.postInterestRate}%</td>
-                  <td className={`text-right font-semibold ${rateChange < 0 ? 'text-green-600' : rateChange > 0 ? 'text-red-600' : ''}`}>
-                    {rateChange > 0 ? '+' : ''}{rateChange.toFixed(2)}%
+                  <td
+                    className={`text-right font-semibold ${rateChange < 0 ? 'text-green-600' : rateChange > 0 ? 'text-red-600' : ''}`}
+                  >
+                    {rateChange > 0 ? '+' : ''}
+                    {rateChange.toFixed(2)}%
                   </td>
                 </tr>
                 <tr>
                   <td className="py-3">Tenure</td>
                   <td className="text-right">{restructure.preTenureMonths} months</td>
-                  <td className="text-center"><ArrowRight className="h-4 w-4 mx-auto text-muted-foreground" /></td>
+                  <td className="text-center">
+                    <ArrowRight className="mx-auto h-4 w-4 text-muted-foreground" />
+                  </td>
                   <td className="text-right">{restructure.postTenureMonths} months</td>
                   <td className="text-right font-semibold">
-                    {tenureChange > 0 ? '+' : ''}{tenureChange} months
+                    {tenureChange > 0 ? '+' : ''}
+                    {tenureChange} months
                   </td>
                 </tr>
                 <tr>
                   <td className="py-3">EMI Amount</td>
-                  <td className="text-right"><AmountDisplay amount={restructure.preEmiAmount} /></td>
-                  <td className="text-center"><ArrowRight className="h-4 w-4 mx-auto text-muted-foreground" /></td>
-                  <td className="text-right"><AmountDisplay amount={restructure.postEmiAmount} /></td>
+                  <td className="text-right">
+                    <AmountDisplay amount={restructure.preEmiAmount} />
+                  </td>
+                  <td className="text-center">
+                    <ArrowRight className="mx-auto h-4 w-4 text-muted-foreground" />
+                  </td>
+                  <td className="text-right">
+                    <AmountDisplay amount={restructure.postEmiAmount} />
+                  </td>
                   <td className="text-right font-semibold text-green-600">
                     -<AmountDisplay amount={emiReduction} />
                   </td>
                 </tr>
                 <tr>
                   <td className="py-3">Maturity Date</td>
-                  <td className="text-right"><DateDisplay date={restructure.preMaturityDate} /></td>
-                  <td className="text-center"><ArrowRight className="h-4 w-4 mx-auto text-muted-foreground" /></td>
-                  <td className="text-right"><DateDisplay date={restructure.postMaturityDate} /></td>
+                  <td className="text-right">
+                    <DateDisplay date={restructure.preMaturityDate} />
+                  </td>
+                  <td className="text-center">
+                    <ArrowRight className="mx-auto h-4 w-4 text-muted-foreground" />
+                  </td>
+                  <td className="text-right">
+                    <DateDisplay date={restructure.postMaturityDate} />
+                  </td>
                   <td className="text-right font-semibold">Extended</td>
                 </tr>
               </tbody>
@@ -285,7 +321,8 @@ export default function RestructureApproval() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Period</span>
                 <span className="font-semibold">
-                  <DateDisplay date={restructure.moratoriumStartDate!} /> - <DateDisplay date={restructure.moratoriumEndDate!} />
+                  <DateDisplay date={restructure.moratoriumStartDate!} /> -{' '}
+                  <DateDisplay date={restructure.moratoriumEndDate!} />
                 </span>
               </div>
               <div className="flex justify-between">
@@ -303,11 +340,17 @@ export default function RestructureApproval() {
           <CardContent className="space-y-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Interest Waived</span>
-              <AmountDisplay amount={restructure.interestWaived} className="font-semibold text-red-600" />
+              <AmountDisplay
+                amount={restructure.interestWaived}
+                className="font-semibold text-red-600"
+              />
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Penal Interest Waived</span>
-              <AmountDisplay amount={restructure.penalWaived} className="font-semibold text-red-600" />
+              <AmountDisplay
+                amount={restructure.penalWaived}
+                className="font-semibold text-red-600"
+              />
             </div>
             <Separator />
             <div className="flex justify-between">
@@ -358,7 +401,7 @@ export default function RestructureApproval() {
             <CardTitle>Pre-Conditions</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm whitespace-pre-wrap bg-muted p-3 rounded">
+            <pre className="whitespace-pre-wrap rounded bg-muted p-3 text-sm">
               {restructure.preConditions}
             </pre>
           </CardContent>
@@ -368,7 +411,7 @@ export default function RestructureApproval() {
             <CardTitle>Post-Conditions</CardTitle>
           </CardHeader>
           <CardContent>
-            <pre className="text-sm whitespace-pre-wrap bg-muted p-3 rounded">
+            <pre className="whitespace-pre-wrap rounded bg-muted p-3 text-sm">
               {restructure.postConditions}
             </pre>
           </CardContent>
@@ -385,7 +428,9 @@ export default function RestructureApproval() {
           <Separator className="my-4" />
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <User className="h-4 w-4" />
-            <span>Proposed by {restructure.createdBy} on {new Date(restructure.createdAt).toLocaleDateString()}</span>
+            <span>
+              Proposed by {restructure.createdBy} on <DateDisplay date={restructure.createdAt} />
+            </span>
           </div>
         </CardContent>
       </Card>
@@ -411,7 +456,9 @@ export default function RestructureApproval() {
                       <Button
                         type="button"
                         variant={field.value === 'APPROVE' ? 'default' : 'outline'}
-                        className={field.value === 'APPROVE' ? 'bg-green-600 hover:bg-green-700' : ''}
+                        className={
+                          field.value === 'APPROVE' ? 'bg-green-600 hover:bg-green-700' : ''
+                        }
                         onClick={() => field.onChange('APPROVE')}
                       >
                         <CheckCircle className="mr-2 h-4 w-4" />
@@ -461,9 +508,7 @@ export default function RestructureApproval() {
                 name="remarks"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>
-                      Remarks {watchedDecision === 'REJECT' && '*'}
-                    </FormLabel>
+                    <FormLabel>Remarks {watchedDecision === 'REJECT' && '*'}</FormLabel>
                     <FormControl>
                       <Textarea
                         placeholder={
@@ -481,11 +526,7 @@ export default function RestructureApproval() {
               />
 
               <div className="flex justify-end gap-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => navigate(-1)}
-                >
+                <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                   Cancel
                 </Button>
                 <Button
@@ -494,7 +535,9 @@ export default function RestructureApproval() {
                   className={watchedDecision === 'APPROVE' ? 'bg-green-600 hover:bg-green-700' : ''}
                   variant={watchedDecision === 'REJECT' ? 'destructive' : 'default'}
                 >
-                  {isSubmitting ? 'Processing...' : `Confirm ${watchedDecision === 'APPROVE' ? 'Approval' : watchedDecision === 'REJECT' ? 'Rejection' : 'Decision'}`}
+                  {isSubmitting
+                    ? 'Processing...'
+                    : `Confirm ${watchedDecision === 'APPROVE' ? 'Approval' : watchedDecision === 'REJECT' ? 'Rejection' : 'Decision'}`}
                 </Button>
               </div>
             </form>

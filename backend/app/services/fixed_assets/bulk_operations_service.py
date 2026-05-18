@@ -234,7 +234,7 @@ class BulkOperationsService:
                 failed += 1
 
         if not data.validation_only:
-            await self.session.commit()
+            await self.session.flush()
 
         return BulkAssetUpdateResponse(
             total=len(data.assets),
@@ -334,7 +334,7 @@ class BulkOperationsService:
                 ))
                 failed += 1
 
-        await self.session.commit()
+        await self.session.flush()
 
         return BulkTransferResponse(
             total=len(data.assets),

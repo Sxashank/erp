@@ -1,13 +1,13 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save, Plus, Trash2, PackagePlus } from 'lucide-react';
+import { useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -16,6 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -31,8 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Save, Plus, Trash2, PackagePlus } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const stockInLineSchema = z.object({
   itemId: z.string().min(1, 'Item is required'),
@@ -64,11 +64,46 @@ const warehouses = [
 ];
 
 const items = [
-  { id: '1', code: 'ITM-001', name: 'A4 Paper (500 sheets)', uom: 'Pack', requiresBatch: true, requiresSerial: false },
-  { id: '2', code: 'ITM-002', name: 'Ball Pen Blue', uom: 'Pcs', requiresBatch: false, requiresSerial: false },
-  { id: '3', code: 'ITM-003', name: 'HP LaserJet Toner', uom: 'Pcs', requiresBatch: true, requiresSerial: false },
-  { id: '4', code: 'ITM-004', name: 'Dell Laptop', uom: 'Pcs', requiresBatch: false, requiresSerial: true },
-  { id: '5', code: 'ITM-005', name: 'Office Chair', uom: 'Pcs', requiresBatch: false, requiresSerial: true },
+  {
+    id: '1',
+    code: 'ITM-001',
+    name: 'A4 Paper (500 sheets)',
+    uom: 'Pack',
+    requiresBatch: true,
+    requiresSerial: false,
+  },
+  {
+    id: '2',
+    code: 'ITM-002',
+    name: 'Ball Pen Blue',
+    uom: 'Pcs',
+    requiresBatch: false,
+    requiresSerial: false,
+  },
+  {
+    id: '3',
+    code: 'ITM-003',
+    name: 'HP LaserJet Toner',
+    uom: 'Pcs',
+    requiresBatch: true,
+    requiresSerial: false,
+  },
+  {
+    id: '4',
+    code: 'ITM-004',
+    name: 'Dell Laptop',
+    uom: 'Pcs',
+    requiresBatch: false,
+    requiresSerial: true,
+  },
+  {
+    id: '5',
+    code: 'ITM-005',
+    name: 'Office Chair',
+    uom: 'Pcs',
+    requiresBatch: false,
+    requiresSerial: true,
+  },
 ];
 
 const referenceTypes = [
@@ -128,7 +163,7 @@ export default function StockIn() {
 
   const onSubmit = (data: StockInFormData) => {
     logger.debug('Stock In submitted:', data);
-    navigate('/inventory/dashboard');
+    navigate('/admin/inventory/dashboard');
   };
 
   const totalValue = fields.reduce((sum, _, index) => {
@@ -138,14 +173,11 @@ export default function StockIn() {
   }, 0);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Stock In"
         subtitle="Record incoming stock"
-        breadcrumbs={[
-          { label: 'Inventory', to: '/inventory' },
-          { label: 'Stock In' },
-        ]}
+        breadcrumbs={[{ label: 'Inventory', to: '/admin/inventory' }, { label: 'Stock In' }]}
       />
 
       <Form {...form}>
@@ -154,7 +186,7 @@ export default function StockIn() {
             <CardHeader>
               <CardTitle>Transaction Details</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <FormField
                 control={form.control}
                 name="warehouseId"
@@ -270,7 +302,7 @@ export default function StockIn() {
                   </SelectContent>
                 </Select>
                 <Button type="button" onClick={addItem} disabled={!selectedItem}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
               </div>
@@ -285,7 +317,7 @@ export default function StockIn() {
                       <TableHead className="w-32">Unit Cost</TableHead>
                       <TableHead className="w-32">Batch #</TableHead>
                       <TableHead className="w-32">Expiry Date</TableHead>
-                      <TableHead className="text-right w-32">Total</TableHead>
+                      <TableHead className="w-32 text-right">Total</TableHead>
                       <TableHead className="w-16"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -377,14 +409,14 @@ export default function StockIn() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="py-8 text-center text-muted-foreground">
                   No items added. Select an item and click "Add Item" to begin.
                 </div>
               )}
 
               {fields.length > 0 && (
                 <div className="flex justify-end">
-                  <div className="bg-muted p-4 rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <div className="text-sm text-muted-foreground">Total Value</div>
                     <div className="text-2xl font-bold">
                       {totalValue.toLocaleString('en-IN', {
@@ -404,7 +436,7 @@ export default function StockIn() {
               Cancel
             </Button>
             <Button type="submit" disabled={fields.length === 0}>
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               Save Stock In
             </Button>
           </div>

@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Building2, Loader2, Mail } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/services/api';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface ForgotPasswordForm {
   email: string;
@@ -42,8 +43,8 @@ export function ForgotPassword() {
       if (response.data.data?.reset_token) {
         setResetToken(response.data.data.reset_token);
       }
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to send reset email. Please try again.');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to send reset email. Please try again.'));
     } finally {
       setLoading(false);
     }

@@ -4,10 +4,10 @@ from datetime import date
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -22,6 +22,7 @@ from app.schemas.inventory.stock import (
 )
 from app.schemas.base import MessageResponse
 from app.services.inventory.stock_service import StockService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -97,7 +98,7 @@ def _to_transaction_response(txn) -> StockTransactionResponse:
 # Stock Balance Endpoints
 # ==========================================
 
-@router.get("/balances", response_model=dict)
+@router.get("/balances", response_model=dict, response_model_by_alias=True)
 async def list_stock_balances(
     request: Request,
     organization_id: UUID,
@@ -106,7 +107,7 @@ async def list_stock_balances(
     low_stock_only: bool = False,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_VIEW])),
 ):
@@ -125,12 +126,12 @@ async def list_stock_balances(
     }
 
 
-@router.get("/balances/{item_id}/{warehouse_id}", response_model=StockBalanceResponse)
+@router.get("/balances/{item_id}/{warehouse_id}", response_model=StockBalanceResponse, response_model_by_alias=True)
 async def get_stock_balance(
     request: Request,
     item_id: UUID,
     warehouse_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_VIEW])),
 ):
@@ -138,10 +139,7 @@ async def get_stock_balance(
     service = StockService(db)
     balance = await service.get_balance(item_id, warehouse_id)
     if not balance:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Stock balance not found",
-        )
+        raise NotFoundException(detail="Stock balance not found", error_code="STOCK_BALANCE_NOT_FOUND")
     return _to_balance_response(balance)
 
 
@@ -149,7 +147,7 @@ async def get_stock_balance(
 # Stock Transaction Endpoints
 # ==========================================
 
-@router.get("/transactions", response_model=dict)
+@router.get("/transactions", response_model=dict, response_model_by_alias=True)
 async def list_transactions(
     request: Request,
     organization_id: UUID,
@@ -161,7 +159,7 @@ async def list_transactions(
     to_date: Optional[date] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_VIEW])),
 ):
@@ -183,11 +181,11 @@ async def list_transactions(
     }
 
 
-@router.get("/transactions/{id}", response_model=StockTransactionResponse)
+@router.get("/transactions/{id}", response_model=StockTransactionResponse, response_model_by_alias=True)
 async def get_transaction(
     request: Request,
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_VIEW])),
 ):
@@ -195,10 +193,7 @@ async def get_transaction(
     service = StockService(db)
     txn = await service.get_transaction(id)
     if not txn:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Transaction not found",
-        )
+        raise NotFoundException(detail="Transaction not found", error_code="TRANSACTION_NOT_FOUND")
     return _to_transaction_response(txn)
 
 
@@ -206,11 +201,11 @@ async def get_transaction(
 # Stock In Endpoints
 # ==========================================
 
-@router.post("/in", response_model=StockTransactionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/in", response_model=StockTransactionResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_stock_in(
     request: Request,
     data: StockInCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_IN])),
 ):
@@ -220,21 +215,18 @@ async def create_stock_in(
         txn = await service.create_stock_in(data, created_by=current_user.id)
         return _to_transaction_response(txn)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ==========================================
 # Stock Out Endpoints
 # ==========================================
 
-@router.post("/out", response_model=StockTransactionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/out", response_model=StockTransactionResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_stock_out(
     request: Request,
     data: StockOutCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_OUT])),
 ):
@@ -244,21 +236,18 @@ async def create_stock_out(
         txn = await service.create_stock_out(data, created_by=current_user.id)
         return _to_transaction_response(txn)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ==========================================
 # Stock Transfer Endpoints
 # ==========================================
 
-@router.post("/transfer", response_model=dict, status_code=status.HTTP_201_CREATED)
+@router.post("/transfer", response_model=dict, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_stock_transfer(
     request: Request,
     data: StockTransferCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_TRANSFER])),
 ):
@@ -273,21 +262,18 @@ async def create_stock_transfer(
             "transfer_in": _to_transaction_response(transfer_in),
         }
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ==========================================
 # Stock Adjustment Endpoints
 # ==========================================
 
-@router.post("/adjustment", response_model=StockTransactionResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/adjustment", response_model=StockTransactionResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_stock_adjustment(
     request: Request,
     data: StockAdjustmentCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_ADJUST])),
 ):
@@ -297,21 +283,18 @@ async def create_stock_adjustment(
         txn = await service.create_stock_adjustment(data, created_by=current_user.id)
         return _to_transaction_response(txn)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ==========================================
 # Approval Endpoints
 # ==========================================
 
-@router.post("/transactions/{id}/approve", response_model=StockTransactionResponse)
+@router.post("/transactions/{id}/approve", response_model=StockTransactionResponse, response_model_by_alias=True)
 async def approve_transaction(
     request: Request,
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_APPROVE])),
 ):
@@ -321,18 +304,15 @@ async def approve_transaction(
         txn = await service.approve_transaction(id, approved_by=current_user.id)
         return _to_transaction_response(txn)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/transactions/{id}/reject", response_model=StockTransactionResponse)
+@router.post("/transactions/{id}/reject", response_model=StockTransactionResponse, response_model_by_alias=True)
 async def reject_transaction(
     request: Request,
     id: UUID,
     rejection_reason: str = Query(..., min_length=1),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_APPROVE])),
 ):
@@ -344,7 +324,4 @@ async def reject_transaction(
         )
         return _to_transaction_response(txn)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")

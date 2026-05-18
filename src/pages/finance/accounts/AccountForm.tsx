@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Loader2, Save } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,9 +18,17 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { accountsApi, accountGroupsApi, organizationsApi } from '@/services/api';
-import type { Account, AccountCreate, AccountUpdate, AccountGroup, Organization, PaginatedResponse } from '@/types';
+import type {
+  Account,
+  AccountCreate,
+  AccountUpdate,
+  AccountGroup,
+  Organization,
+  PaginatedResponse,
+} from '@/types';
 import { ACCOUNT_TYPES, BALANCE_TYPES } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function AccountForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -44,36 +53,20 @@ export function AccountForm() {
   const accountType = watch('account_type');
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchAccount(id);
-    }
-  }, [id, isEdit]);
-
-  useEffect(() => {
-    if (selectedOrg) {
-      fetchAccountGroups();
-    }
-  }, [selectedOrg]);
-
-  useEffect(() => {
     setShowBankFields(accountType === 'BANK');
   }, [accountType]);
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchAccountGroups = async () => {
+  const fetchAccountGroups = useCallback(async () => {
     if (!selectedOrg) return;
     try {
       const response = await accountGroupsApi.list({
@@ -83,11 +76,11 @@ export function AccountForm() {
       const data: PaginatedResponse<AccountGroup> = response.data;
       setAccountGroups(data.items);
     } catch (error) {
-      console.error('Failed to fetch account groups:', error);
+      logger.error('Failed to fetch account groups:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const fetchAccount = async (accountId: string) => {
+  const fetchAccount = useCallback(async (accountId: string) => {
     try {
       setLoading(true);
       const response = await accountsApi.get(accountId);
@@ -116,11 +109,27 @@ export function AccountForm() {
         organization_id: account.organization_id,
       });
     } catch (error) {
-      console.error('Failed to fetch account:', error);
+      logger.error('Failed to fetch account:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [reset]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      fetchAccount(id);
+    }
+  }, [fetchAccount, id, isEdit]);
+
+  useEffect(() => {
+    if (selectedOrg) {
+      fetchAccountGroups();
+    }
+  }, [fetchAccountGroups, selectedOrg]);
 
   const onSubmit = async (data: AccountCreate | AccountUpdate) => {
     try {
@@ -132,7 +141,7 @@ export function AccountForm() {
       }
       navigate('/admin/finance/accounts');
     } catch (error) {
-      console.error('Failed to save account:', error);
+      logger.error('Failed to save account:', error);
     } finally {
       setSubmitting(false);
     }
@@ -155,19 +164,14 @@ export function AccountForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/accounts')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Account' : 'New Account'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {isEdit ? 'Update account details' : 'Create a new ledger account'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Account' : 'New Account'}
+        subtitle={isEdit ? 'Update account details' : 'Create a new ledger account'}
+        breadcrumbs={[
+          { label: 'Accounts', to: '/admin/finance/accounts' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         <Card>
@@ -179,11 +183,7 @@ export function AccountForm() {
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
                 <Label htmlFor="organization_id">Organization *</Label>
-                <Select
-                  value={selectedOrg}
-                  onValueChange={handleOrgChange}
-                  disabled={isEdit}
-                >
+                <Select value={selectedOrg} onValueChange={handleOrgChange} disabled={isEdit}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select organization" />
                   </SelectTrigger>
@@ -226,9 +226,7 @@ export function AccountForm() {
                   placeholder="1001"
                   disabled={isEdit}
                 />
-                {errors.code && (
-                  <p className="text-sm text-red-500">{errors.code.message}</p>
-                )}
+                {errors.code && <p className="text-sm text-red-500">{errors.code.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Account Name *</Label>
@@ -237,15 +235,13 @@ export function AccountForm() {
                   {...register('name', { required: 'Name is required' })}
                   placeholder="Cash in Hand"
                 />
-                {errors.name && (
-                  <p className="text-sm text-red-500">{errors.name.message}</p>
-                )}
+                {errors.name && <p className="text-sm text-red-500">{errors.name.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="account_type">Account Type *</Label>
                 <Select
                   value={watch('account_type') || 'LEDGER'}
-                  onValueChange={(value) => setValue('account_type', value as any)}
+                  onValueChange={(value) => setValue('account_type', value as AccountCreate['account_type'])}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -312,7 +308,9 @@ export function AccountForm() {
                 <Label htmlFor="opening_balance_type">Balance Type</Label>
                 <Select
                   value={watch('opening_balance_type') || 'DR'}
-                  onValueChange={(value) => setValue('opening_balance_type', value as any)}
+                  onValueChange={(value) =>
+                    setValue('opening_balance_type', value as AccountCreate['opening_balance_type'])
+                  }
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select type" />
@@ -348,11 +346,7 @@ export function AccountForm() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bank_branch">Branch</Label>
-                  <Input
-                    id="bank_branch"
-                    {...register('bank_branch')}
-                    placeholder="Main Branch"
-                  />
+                  <Input id="bank_branch" {...register('bank_branch')} placeholder="Main Branch" />
                 </div>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
@@ -366,11 +360,7 @@ export function AccountForm() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="bank_ifsc">IFSC Code</Label>
-                  <Input
-                    id="bank_ifsc"
-                    {...register('bank_ifsc')}
-                    placeholder="SBIN0001234"
-                  />
+                  <Input id="bank_ifsc" {...register('bank_ifsc')} placeholder="SBIN0001234" />
                 </div>
               </div>
             </CardContent>
@@ -420,11 +410,7 @@ export function AccountForm() {
                 {watch('gst_applicable') && (
                   <div className="space-y-2">
                     <Label htmlFor="hsn_sac_code">HSN/SAC Code</Label>
-                    <Input
-                      id="hsn_sac_code"
-                      {...register('hsn_sac_code')}
-                      placeholder="998314"
-                    />
+                    <Input id="hsn_sac_code" {...register('hsn_sac_code')} placeholder="998314" />
                   </div>
                 )}
               </div>

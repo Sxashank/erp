@@ -3,37 +3,6 @@
  * View and manage empanelled law firms
  */
 
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Building,
   Plus,
@@ -46,9 +15,42 @@ import {
   Mail,
   MapPin,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { lawFirmApi } from '@/services/legalApi';
 import type { LawFirm } from '@/types/legal';
 
+import { logger } from "@/lib/logger";
 export default function LawFirmList() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -82,9 +84,9 @@ export default function LawFirmList() {
   const fetchLawFirms = async () => {
     try {
       const response = await lawFirmApi.getList({ search: searchQuery });
-      setLawFirms(response.data);
+      setLawFirms(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch law firms:', error);
+      logger.error('Failed to fetch law firms:', error);
     } finally {
       setLoading(false);
     }
@@ -140,7 +142,7 @@ export default function LawFirmList() {
       setShowDialog(false);
       fetchLawFirms();
     } catch (error) {
-      console.error('Failed to save law firm:', error);
+      logger.error('Failed to save law firm:', error);
     } finally {
       setSubmitting(false);
     }
@@ -153,13 +155,13 @@ export default function LawFirmList() {
       await lawFirmApi.delete(id);
       fetchLawFirms();
     } catch (error) {
-      console.error('Failed to delete law firm:', error);
+      logger.error('Failed to delete law firm:', error);
     }
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -172,7 +174,7 @@ export default function LawFirmList() {
         subtitle="Manage empanelled law firms"
         actions={
           <Button onClick={() => handleOpenDialog()}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Add Law Firm
           </Button>
         }
@@ -182,7 +184,7 @@ export default function LawFirmList() {
       <Card>
         <CardContent className="p-4">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <Input
               placeholder="Search law firms..."
               value={searchQuery}
@@ -226,7 +228,7 @@ export default function LawFirmList() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="text-sm space-y-1">
+                    <div className="space-y-1 text-sm">
                       {firm.phone && (
                         <div className="flex items-center gap-1">
                           <Phone className="h-3 w-3 text-gray-400" />
@@ -250,9 +252,7 @@ export default function LawFirmList() {
                   <TableCell>
                     <Badge
                       className={
-                        firm.is_active
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-700'
+                        firm.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
                       }
                     >
                       {firm.is_active ? 'Active' : 'Inactive'}
@@ -267,14 +267,14 @@ export default function LawFirmList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleOpenDialog(firm)}>
-                          <Edit className="h-4 w-4 mr-2" />
+                          <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleDelete(firm.id)}
                           className="text-red-600"
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
+                          <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -284,8 +284,8 @@ export default function LawFirmList() {
               ))}
               {lawFirms.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-gray-500">
-                    <Building className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <TableCell colSpan={6} className="py-8 text-center text-gray-500">
+                    <Building className="mx-auto mb-4 h-12 w-12 opacity-50" />
                     <p>No law firms found</p>
                   </TableCell>
                 </TableRow>
@@ -297,15 +297,11 @@ export default function LawFirmList() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {editingFirm ? 'Edit Law Firm' : 'Add Law Firm'}
-            </DialogTitle>
+            <DialogTitle>{editingFirm ? 'Edit Law Firm' : 'Add Law Firm'}</DialogTitle>
             <DialogDescription>
-              {editingFirm
-                ? 'Update law firm details'
-                : 'Register a new empanelled law firm'}
+              {editingFirm ? 'Update law firm details' : 'Register a new empanelled law firm'}
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
@@ -321,9 +317,7 @@ export default function LawFirmList() {
               <Label>Registration Number</Label>
               <Input
                 value={formData.registration_number}
-                onChange={(e) =>
-                  setFormData({ ...formData, registration_number: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, registration_number: e.target.value })}
               />
             </div>
             <div className="space-y-2">

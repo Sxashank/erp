@@ -1,52 +1,56 @@
 """Payment Service for business logic."""
 
+from collections.abc import Sequence
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any
 from uuid import UUID
 
-from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import GLEntrySourceType
+from app.core.constants import PartyType as GLPartyType
 from app.core.exceptions import (
     BadRequestException,
     NotFoundException,
-    ConflictException,
 )
-from app.core.constants import GLEntrySourceType, PartyType as GLPartyType
 from app.models.ap_ar.payment import (
-    Payment,
-    PaymentAllocation,
-    PaymentType,
-    PartyType,
-    PaymentMode,
-    PaymentStatus,
     ChequeStatus,
     DocumentType,
+    PartyType,
+    Payment,
+    PaymentAllocation,
+    PaymentMode,
+    PaymentStatus,
+    PaymentType,
 )
-from app.models.ap_ar.purchase_bill import PurchaseBill, BillStatus, PaymentStatus as BillPaymentStatus
-from app.models.ap_ar.sales_invoice import SalesInvoice, InvoiceStatus, ReceiptStatus
-from app.models.common.audit_log import EntityType, AuditAction
+from app.models.ap_ar.purchase_bill import BillStatus, PurchaseBill
+from app.models.ap_ar.purchase_bill import PaymentStatus as BillPaymentStatus
+from app.models.ap_ar.sales_invoice import InvoiceStatus, ReceiptStatus, SalesInvoice
+from app.models.common.audit_log import AuditAction, EntityType
 from app.models.workflow import WorkflowEntityType, WorkflowInstanceStatus
+from app.repositories.ap_ar.customer_repo import CustomerRepository
 from app.repositories.ap_ar.payment_repo import (
-    PaymentRepository,
-    PaymentAllocationRepository,
     OutstandingDocumentsRepository,
+    PaymentAllocationRepository,
+    PaymentRepository,
 )
 from app.repositories.ap_ar.vendor_repo import VendorRepository
-from app.repositories.ap_ar.customer_repo import CustomerRepository
-from app.repositories.finance.financial_year_repo import FinancialYearRepository, FinancialPeriodRepository
 from app.repositories.finance.account_repo import AccountRepository
+from app.repositories.finance.financial_year_repo import (
+    FinancialPeriodRepository,
+    FinancialYearRepository,
+)
 from app.schemas.ap_ar.payment import (
-    PaymentCreate,
-    PaymentUpdate,
     ChequeStatusUpdate,
     PaymentAllocationCreate,
+    PaymentCreate,
+    PaymentUpdate,
 )
 from app.services.common.audit_service import AuditService, model_to_dict
-from app.services.workflow import WorkflowEngine
 from app.services.finance.gl_posting_service import GLPostingService
 from app.services.tds.tds_entry_service import TDSEntryService
+from app.services.workflow import WorkflowEngine
 
 
 class PaymentService:
@@ -78,18 +82,18 @@ class PaymentService:
         self,
         organization_id: UUID,
         *,
-        search: Optional[str] = None,
-        payment_type: Optional[PaymentType] = None,
-        party_type: Optional[PartyType] = None,
-        vendor_id: Optional[UUID] = None,
-        customer_id: Optional[UUID] = None,
-        payment_mode: Optional[PaymentMode] = None,
-        status: Optional[PaymentStatus] = None,
-        cheque_status: Optional[ChequeStatus] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-        is_posted: Optional[bool] = None,
-        unit_id: Optional[UUID] = None,
+        search: str | None = None,
+        payment_type: PaymentType | None = None,
+        party_type: PartyType | None = None,
+        vendor_id: UUID | None = None,
+        customer_id: UUID | None = None,
+        payment_mode: PaymentMode | None = None,
+        status: PaymentStatus | None = None,
+        cheque_status: ChequeStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        is_posted: bool | None = None,
+        unit_id: UUID | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[Sequence[Payment], int]:
@@ -140,17 +144,10 @@ class PaymentService:
         await self._validate_party(data.party_type, data.vendor_id, data.customer_id)
 
         # Generate payment number
-        payment_number = await self.generate_payment_number(
-            data.organization_id, data.payment_type
-        )
+        payment_number = await self.generate_payment_number(data.organization_id, data.payment_type)
 
         # Calculate net amount
-        net_amount = (
-            data.amount
-            - data.tds_amount
-            - data.discount_amount
-            - data.write_off_amount
-        )
+        net_amount = data.amount - data.tds_amount - data.discount_amount - data.write_off_amount
 
         # Validate allocations
         if data.allocations:
@@ -183,9 +180,7 @@ class PaymentService:
             cheque_bank_name=data.cheque_bank_name,
             cheque_branch=data.cheque_branch,
             cheque_status=(
-                ChequeStatus.ISSUED
-                if data.payment_mode == PaymentMode.CHEQUE
-                else None
+                ChequeStatus.ISSUED if data.payment_mode == PaymentMode.CHEQUE else None
             ),
             reference_number=data.reference_number,
             narration=data.narration,
@@ -199,7 +194,7 @@ class PaymentService:
         if data.allocations:
             await self._create_allocations(payment, data.allocations)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
 
         # Audit log: CREATE
@@ -228,7 +223,9 @@ class PaymentService:
 
         # Capture old state for audit trail
         old_values = model_to_dict(payment)
-        old_allocations = [model_to_dict(alloc) for alloc in payment.allocations] if payment.allocations else []
+        old_allocations = (
+            [model_to_dict(alloc) for alloc in payment.allocations] if payment.allocations else []
+        )
 
         # Update fields
         update_data = data.model_dump(exclude_unset=True, exclude={"allocations"})
@@ -237,10 +234,7 @@ class PaymentService:
 
         # Recalculate net amount if amounts changed
         payment.net_amount = (
-            payment.amount
-            - payment.tds_amount
-            - payment.discount_amount
-            - payment.write_off_amount
+            payment.amount - payment.tds_amount - payment.discount_amount - payment.write_off_amount
         )
 
         # Update cheque status if payment mode changed
@@ -258,7 +252,7 @@ class PaymentService:
             await self.allocation_repo.delete_allocations_for_payment(payment_id)
             await self._create_allocations(payment, data.allocations)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
 
         # Audit log: UPDATE
@@ -274,7 +268,11 @@ class PaymentService:
 
         # Log allocation changes if allocations were updated
         if data.allocations is not None:
-            new_allocations = [model_to_dict(alloc) for alloc in payment.allocations] if payment.allocations else []
+            new_allocations = (
+                [model_to_dict(alloc) for alloc in payment.allocations]
+                if payment.allocations
+                else []
+            )
             await self.audit_service.log_line_changes(
                 parent_audit_id=audit_entry.id,
                 entity_type="PAYMENT_ALLOCATION",
@@ -332,7 +330,7 @@ class PaymentService:
             payment.submitted_at = datetime.utcnow()
             payment.submitted_by_id = submitted_by_id
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
 
         # Audit log: SUBMIT
@@ -354,7 +352,13 @@ class PaymentService:
         payment_id: UUID,
         approved_by_id: UUID,
     ) -> Payment:
-        """Approve payment and post to GL (legacy method for non-workflow approvals)."""
+        """Approve payment and post to GL (legacy method for non-workflow approvals).
+
+        Enforces §8.4 maker-checker: the submitter cannot approve their own
+        payment. Workflow-routed payments are handled by the workflow engine.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         payment = await self.get_by_id(payment_id)
 
         if payment.status != PaymentStatus.SUBMITTED:
@@ -365,6 +369,13 @@ class PaymentService:
             raise BadRequestException(
                 "This payment uses workflow-based approval. Please use the workflow task endpoints."
             )
+
+        # Maker is whoever submitted; fall back to created_by if submission
+        # wasn't captured (legacy rows).
+        ensure_maker_is_not_checker(
+            maker_user_id=payment.submitted_by_id or payment.created_by,
+            checker_user_id=approved_by_id,
+        )
 
         # Capture old state
         old_values = model_to_dict(payment)
@@ -388,7 +399,7 @@ class PaymentService:
         payment.posted_by_id = approved_by_id
         payment.status = PaymentStatus.POSTED
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
 
         # Audit log: APPROVE + POST
@@ -409,7 +420,7 @@ class PaymentService:
         self,
         payment_id: UUID,
         workflow_status: WorkflowInstanceStatus,
-        completed_by: Optional[UUID] = None,
+        completed_by: UUID | None = None,
     ) -> Payment:
         """Handle workflow completion callback to update payment status."""
         payment = await self.get_by_id(payment_id)
@@ -443,7 +454,7 @@ class PaymentService:
             payment.status = PaymentStatus.DRAFT
             payment.workflow_instance_id = None
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
 
         # Audit log
@@ -490,7 +501,7 @@ class PaymentService:
             payment.is_posted = False
             # TODO: Create reversal GL voucher
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
 
         # Audit log: CANCEL
@@ -526,7 +537,11 @@ class PaymentService:
         # Validate status transition
         valid_transitions = {
             ChequeStatus.ISSUED: [ChequeStatus.DEPOSITED, ChequeStatus.CANCELLED],
-            ChequeStatus.DEPOSITED: [ChequeStatus.CLEARED, ChequeStatus.BOUNCED, ChequeStatus.RETURNED],
+            ChequeStatus.DEPOSITED: [
+                ChequeStatus.CLEARED,
+                ChequeStatus.BOUNCED,
+                ChequeStatus.RETURNED,
+            ],
             ChequeStatus.CLEARED: [],  # Final state
             ChequeStatus.BOUNCED: [ChequeStatus.RETURNED],
             ChequeStatus.CANCELLED: [],  # Final state
@@ -537,9 +552,7 @@ class PaymentService:
         new_status = data.cheque_status
 
         if new_status not in valid_transitions.get(current_status, []):
-            raise BadRequestException(
-                f"Cannot transition from {current_status} to {new_status}"
-            )
+            raise BadRequestException(f"Cannot transition from {current_status} to {new_status}")
 
         payment.cheque_status = new_status
         payment.updated_by_id = updated_by_id
@@ -553,7 +566,7 @@ class PaymentService:
             # Reverse document balance updates for bounced cheque
             await self._reverse_document_balances(payment)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(payment)
         return payment
 
@@ -561,9 +574,9 @@ class PaymentService:
         self,
         organization_id: UUID,
         *,
-        party_type: Optional[PartyType] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        party_type: PartyType | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
         skip: int = 0,
         limit: int = 100,
     ) -> tuple[Sequence[Payment], int]:
@@ -585,13 +598,9 @@ class PaymentService:
     ) -> list[dict]:
         """Get outstanding documents for a party."""
         if party_type == PartyType.VENDOR:
-            return await self.outstanding_repo.get_outstanding_bills(
-                party_id, organization_id
-            )
+            return await self.outstanding_repo.get_outstanding_bills(party_id, organization_id)
         else:
-            return await self.outstanding_repo.get_outstanding_invoices(
-                party_id, organization_id
-            )
+            return await self.outstanding_repo.get_outstanding_invoices(party_id, organization_id)
 
     async def delete_payment(
         self,
@@ -610,7 +619,7 @@ class PaymentService:
         payment_number = payment.payment_number
 
         await self.repo.soft_delete(payment_id, deleted_by_id)
-        await self.session.commit()
+        await self.session.flush()
 
         # Audit log: DELETE
         await self.audit_service.log_delete(
@@ -627,13 +636,14 @@ class PaymentService:
     async def _validate_party(
         self,
         party_type: PartyType,
-        vendor_id: Optional[UUID],
-        customer_id: Optional[UUID],
+        vendor_id: UUID | None,
+        customer_id: UUID | None,
     ) -> None:
         """Validate party exists."""
-        from app.models.ap_ar.vendor import Vendor
-        from app.models.ap_ar.customer import Customer
         from sqlalchemy import select
+
+        from app.models.ap_ar.customer import Customer
+        from app.models.ap_ar.vendor import Vendor
 
         if party_type == PartyType.VENDOR:
             if not vendor_id:
@@ -788,7 +798,7 @@ class PaymentService:
                     doc.receipt_status = ReceiptStatus.PARTIALLY_RECEIVED
                     doc.status = InvoiceStatus.PARTIALLY_RECEIVED
 
-    async def _post_to_gl(self, payment: Payment, posted_by: Optional[UUID]) -> None:
+    async def _post_to_gl(self, payment: Payment, posted_by: UUID | None) -> None:
         """
         Post payment to GL.
 
@@ -808,14 +818,16 @@ class PaymentService:
         # Get financial year and period
         fy = await self.fy_repo.get_by_date(payment.organization_id, payment.payment_date)
         if not fy:
-            raise BadRequestException(f"No financial year found for payment date {payment.payment_date}")
+            raise BadRequestException(
+                f"No financial year found for payment date {payment.payment_date}"
+            )
 
         period = await self.period_repo.get_by_date(fy.id, payment.payment_date)
         if not period:
             raise BadRequestException(f"No period found for payment date {payment.payment_date}")
 
         # Build GL entry lines
-        gl_lines: List[Dict[str, Any]] = []
+        gl_lines: list[dict[str, Any]] = []
 
         # Get bank/cash account
         payment_account_id = payment.bank_account_id or payment.cash_account_id
@@ -829,33 +841,39 @@ class PaymentService:
                 raise BadRequestException("Vendor does not have a control account configured")
 
             # Dr. AP Control (pay off vendor liability)
-            gl_lines.append({
-                "account_id": vendor.control_account_id,
-                "debit_amount": payment.amount,
-                "credit_amount": Decimal("0"),
-                "party_type": GLPartyType.VENDOR,
-                "party_id": payment.vendor_id,
-                "narration": f"Payment to {vendor.name}",
-            })
+            gl_lines.append(
+                {
+                    "account_id": vendor.control_account_id,
+                    "debit_amount": payment.amount,
+                    "credit_amount": Decimal("0"),
+                    "party_type": GLPartyType.VENDOR,
+                    "party_id": payment.vendor_id,
+                    "narration": f"Payment to {vendor.name}",
+                }
+            )
 
             # Cr. Bank/Cash Account (net payment after TDS)
-            gl_lines.append({
-                "account_id": payment_account_id,
-                "debit_amount": Decimal("0"),
-                "credit_amount": payment.net_amount,
-                "narration": f"Payment: {payment.payment_number}",
-            })
+            gl_lines.append(
+                {
+                    "account_id": payment_account_id,
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": payment.net_amount,
+                    "narration": f"Payment: {payment.payment_number}",
+                }
+            )
 
             # If TDS was deducted, Dr. TDS Payable (reduce TDS liability as we're settling it)
             if payment.tds_amount and payment.tds_amount > 0:
                 tds_account = await self._get_tds_payable_account(payment.organization_id)
                 if tds_account:
-                    gl_lines.append({
-                        "account_id": tds_account,
-                        "debit_amount": Decimal("0"),
-                        "credit_amount": payment.tds_amount,
-                        "narration": f"TDS on payment {payment.payment_number}",
-                    })
+                    gl_lines.append(
+                        {
+                            "account_id": tds_account,
+                            "debit_amount": Decimal("0"),
+                            "credit_amount": payment.tds_amount,
+                            "narration": f"TDS on payment {payment.payment_number}",
+                        }
+                    )
 
         elif payment.payment_type == PaymentType.CUSTOMER_RECEIPT:
             # Customer Receipt: Dr Bank/Cash, Cr AR
@@ -864,22 +882,26 @@ class PaymentService:
                 raise BadRequestException("Customer does not have a control account configured")
 
             # Dr. Bank/Cash Account
-            gl_lines.append({
-                "account_id": payment_account_id,
-                "debit_amount": payment.net_amount,
-                "credit_amount": Decimal("0"),
-                "narration": f"Receipt: {payment.payment_number}",
-            })
+            gl_lines.append(
+                {
+                    "account_id": payment_account_id,
+                    "debit_amount": payment.net_amount,
+                    "credit_amount": Decimal("0"),
+                    "narration": f"Receipt: {payment.payment_number}",
+                }
+            )
 
             # Cr. AR Control (reduce customer receivable)
-            gl_lines.append({
-                "account_id": customer.control_account_id,
-                "debit_amount": Decimal("0"),
-                "credit_amount": payment.amount,
-                "party_type": GLPartyType.CUSTOMER,
-                "party_id": payment.customer_id,
-                "narration": f"Receipt from {customer.name}",
-            })
+            gl_lines.append(
+                {
+                    "account_id": customer.control_account_id,
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": payment.amount,
+                    "party_type": GLPartyType.CUSTOMER,
+                    "party_id": payment.customer_id,
+                    "narration": f"Receipt from {customer.name}",
+                }
+            )
 
         # Post GL entries
         if gl_lines:
@@ -896,7 +918,7 @@ class PaymentService:
                 posted_by=posted_by,
             )
 
-    async def _create_tds_entry(self, payment: Payment, created_by: Optional[UUID]) -> None:
+    async def _create_tds_entry(self, payment: Payment, created_by: UUID | None) -> None:
         """Create TDS entry for TDS deducted on payment."""
         from app.schemas.tds.tds_entry import TDSEntryCreate
 
@@ -932,7 +954,7 @@ class PaymentService:
 
         await self.tds_entry_service.create(tds_data, created_by)
 
-    async def _get_tds_payable_account(self, organization_id: UUID) -> Optional[UUID]:
+    async def _get_tds_payable_account(self, organization_id: UUID) -> UUID | None:
         """Get TDS payable account for the organization."""
         # Search for TDS Payable account by code pattern
         accounts = await self.account_repo.search(

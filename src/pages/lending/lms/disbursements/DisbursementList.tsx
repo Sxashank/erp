@@ -1,9 +1,37 @@
+import {
+  Plus,
+  Search,
+  Filter,
+  MoreHorizontal,
+  Eye,
+  CheckCircle,
+  Clock,
+  Loader2,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Search, Filter, MoreHorizontal, Eye, CheckCircle, Clock } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -12,91 +40,24 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { useDisbursements } from '@/hooks/lending/useDisbursements';
+import type {
+  DisbursementListItem,
+  DisbursementStatusValue,
+} from '@/services/lending/disbursementApi';
+import type { DisbursementFilters } from '@/types/lending';
 
-interface Disbursement {
-  id: string;
-  disbursementNumber: string;
-  loanAccountNumber: string;
-  entityName: string;
-  tranche: number;
-  amount: number;
-  requestDate: string;
-  disbursementDate: string | null;
-  milestone: string;
-  status: 'PENDING_APPROVAL' | 'APPROVED' | 'PROCESSING' | 'COMPLETED' | 'REJECTED';
-  paymentMode: string;
-  bankAccount: string;
-}
-
-// Mock data
-const mockDisbursements: Disbursement[] = [
-  {
-    id: '1',
-    disbursementNumber: 'DISB/2025/00001',
-    loanAccountNumber: 'SMFC/TL/DEL/2025/L00001',
-    entityName: 'ABC Industries Private Limited',
-    tranche: 1,
-    amount: 50000000,
-    requestDate: '2025-01-18',
-    disbursementDate: '2025-01-20',
-    milestone: 'Land acquisition',
-    status: 'COMPLETED',
-    paymentMode: 'RTGS',
-    bankAccount: 'HDFC Bank - xxxx1234',
-  },
-  {
-    id: '2',
-    disbursementNumber: 'DISB/2025/00002',
-    loanAccountNumber: 'SMFC/TL/DEL/2025/L00001',
-    entityName: 'ABC Industries Private Limited',
-    tranche: 2,
-    amount: 75000000,
-    requestDate: '2025-01-25',
-    disbursementDate: null,
-    milestone: 'Civil construction - Phase 1',
-    status: 'PENDING_APPROVAL',
-    paymentMode: 'RTGS',
-    bankAccount: 'HDFC Bank - xxxx1234',
-  },
-  {
-    id: '3',
-    disbursementNumber: 'DISB/2025/00003',
-    loanAccountNumber: 'SMFC/LAP/BLR/2024/L00045',
-    entityName: 'Tech Solutions India Pvt Ltd',
-    tranche: 1,
-    amount: 75000000,
-    requestDate: '2024-03-08',
-    disbursementDate: '2024-03-10',
-    milestone: 'Full disbursement',
-    status: 'COMPLETED',
-    paymentMode: 'RTGS',
-    bankAccount: 'ICICI Bank - xxxx5678',
-  },
-];
-
-const statusConfig: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive'; icon: React.ElementType }> = {
-  PENDING_APPROVAL: { label: 'Pending Approval', variant: 'secondary', icon: Clock },
+const statusConfig: Record<
+  DisbursementStatusValue,
+  { label: string; variant: 'default' | 'secondary' | 'destructive'; icon: React.ElementType }
+> = {
+  PENDING: { label: 'Pending', variant: 'secondary', icon: Clock },
   APPROVED: { label: 'Approved', variant: 'default', icon: CheckCircle },
-  PROCESSING: { label: 'Processing', variant: 'secondary', icon: Clock },
-  COMPLETED: { label: 'Completed', variant: 'default', icon: CheckCircle },
+  PROCESSED: { label: 'Processed', variant: 'default', icon: CheckCircle },
   REJECTED: { label: 'Rejected', variant: 'destructive', icon: Clock },
+  CANCELLED: { label: 'Cancelled', variant: 'secondary', icon: Clock },
+  FAILED: { label: 'Failed', variant: 'destructive', icon: Clock },
+  REVERSED: { label: 'Reversed', variant: 'secondary', icon: Clock },
 };
 
 export default function DisbursementList() {
@@ -104,22 +65,25 @@ export default function DisbursementList() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
 
-  const filteredDisbursements = mockDisbursements.filter((disb) => {
-    const matchesSearch =
-      disb.disbursementNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      disb.entityName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      disb.loanAccountNumber.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || disb.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filters: DisbursementFilters = {
+    pageSize: 100,
+    ...(searchQuery && { search: searchQuery }),
+    ...(statusFilter !== 'ALL' && {
+      status: statusFilter as DisbursementFilters['status'],
+    }),
+  };
+  const { data, isLoading, isError, error, refetch } = useDisbursements(filters);
 
-  const totalDisbursed = mockDisbursements
-    .filter((d) => d.status === 'COMPLETED')
-    .reduce((sum, d) => sum + d.amount, 0);
-  const pendingAmount = mockDisbursements
-    .filter((d) => ['PENDING_APPROVAL', 'APPROVED', 'PROCESSING'].includes(d.status))
-    .reduce((sum, d) => sum + d.amount, 0);
-  const pendingCount = mockDisbursements.filter((d) => d.status === 'PENDING_APPROVAL').length;
+  const disbursements: DisbursementListItem[] = data?.items ?? [];
+
+  // Wire amounts are strings (Decimal precision); coerce once for display-only sums.
+  const totalDisbursed = disbursements
+    .filter((d) => d.status === 'PROCESSED')
+    .reduce((sum, d) => sum + Number(d.disbursedAmount ?? 0), 0);
+  const pendingAmount = disbursements
+    .filter((d) => d.status === 'PENDING' || d.status === 'APPROVED')
+    .reduce((sum, d) => sum + Number(d.requestedAmount), 0);
+  const pendingCount = disbursements.filter((d) => d.status === 'PENDING').length;
 
   return (
     <div className="space-y-6">
@@ -141,7 +105,7 @@ export default function DisbursementList() {
             <CardTitle className="text-sm font-medium">Total Requests</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{mockDisbursements.length}</div>
+            <div className="text-2xl font-bold">{data?.total ?? disbursements.length}</div>
             <p className="text-xs text-muted-foreground">All time</p>
           </CardContent>
         </Card>
@@ -195,11 +159,13 @@ export default function DisbursementList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Status</SelectItem>
-                  <SelectItem value="PENDING_APPROVAL">Pending Approval</SelectItem>
+                  <SelectItem value="PENDING">Pending</SelectItem>
                   <SelectItem value="APPROVED">Approved</SelectItem>
-                  <SelectItem value="PROCESSING">Processing</SelectItem>
-                  <SelectItem value="COMPLETED">Completed</SelectItem>
+                  <SelectItem value="PROCESSED">Processed</SelectItem>
                   <SelectItem value="REJECTED">Rejected</SelectItem>
+                  <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                  <SelectItem value="FAILED">Failed</SelectItem>
+                  <SelectItem value="REVERSED">Reversed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -218,21 +184,37 @@ export default function DisbursementList() {
                 <TableHead>Entity</TableHead>
                 <TableHead>Tranche</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
-                <TableHead>Milestone</TableHead>
                 <TableHead>Request Date</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredDisbursements.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    No disbursements found matching your criteria
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                    Loading disbursements...
+                  </TableCell>
+                </TableRow>
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8">
+                    <ErrorState
+                      title="Could not load disbursements"
+                      error={error}
+                      onRetry={() => refetch()}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : disbursements.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    No disbursements found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredDisbursements.map((disb) => {
+                disbursements.map((disb) => {
                   const status = statusConfig[disb.status];
                   const StatusIcon = status.icon;
                   return (
@@ -241,16 +223,24 @@ export default function DisbursementList() {
                       className="cursor-pointer hover:bg-muted/50"
                       onClick={() => navigate(`/admin/lending/disbursements/${disb.id}`)}
                     >
-                      <TableCell className="font-mono text-sm">{disb.disbursementNumber}</TableCell>
-                      <TableCell className="font-mono text-sm">{disb.loanAccountNumber}</TableCell>
-                      <TableCell>{disb.entityName}</TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {disb.disbursementReference}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {disb.loanAccountNumber ?? '—'}
+                      </TableCell>
+                      <TableCell>{disb.entityName ?? '—'}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">Tranche {disb.tranche}</Badge>
+                        <Badge variant="outline">Tranche {disb.disbursementNumber}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
-                        <AmountDisplay amount={disb.amount} abbreviated />
+                        <AmountDisplay
+                          amount={
+                            disb.disbursedAmount ?? disb.approvedAmount ?? disb.requestedAmount
+                          }
+                          abbreviated
+                        />
                       </TableCell>
-                      <TableCell>{disb.milestone}</TableCell>
                       <TableCell>
                         <DateDisplay date={disb.requestDate} />
                       </TableCell>
@@ -261,7 +251,7 @@ export default function DisbursementList() {
                             status.variant === 'default' ? 'bg-green-100 text-green-700' : ''
                           }
                         >
-                          <StatusIcon className="h-3 w-3 mr-1" />
+                          <StatusIcon className="mr-1 h-3 w-3" />
                           {status.label}
                         </Badge>
                       </TableCell>
@@ -282,6 +272,28 @@ export default function DisbursementList() {
                               <Eye className="mr-2 h-4 w-4" />
                               View Details
                             </DropdownMenuItem>
+                            {disb.status === 'PENDING' && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/admin/lending/disbursements/${disb.id}/approve`);
+                                }}
+                              >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Approve
+                              </DropdownMenuItem>
+                            )}
+                            {disb.status === 'APPROVED' && (
+                              <DropdownMenuItem
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(`/admin/lending/disbursements/${disb.id}/process`);
+                                }}
+                              >
+                                <CheckCircle className="mr-2 h-4 w-4" />
+                                Process
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>

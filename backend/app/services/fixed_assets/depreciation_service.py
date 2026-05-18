@@ -172,7 +172,7 @@ class DepreciationService:
         dep_run.status = "COMPLETED"
         dep_run.run_completed_at = datetime.now(timezone.utc)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(dep_run)
         return dep_run
 
@@ -230,15 +230,24 @@ class DepreciationService:
         # Mark entries as posted
         for entry in entries:
             entry.is_posted = True
+            entry.voucher_id = dep_run.voucher_id
 
         # Update run
         dep_run.status = "POSTED"
         dep_run.posted_at = datetime.now(timezone.utc)
         dep_run.posted_by = posted_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(dep_run)
         return dep_run
+
+    async def execute_approved_posting_request(
+        self,
+        request,
+        posted_by: Optional[UUID] = None,
+    ) -> DepreciationRun:
+        """Execute the posting mutation for an approved depreciation request."""
+        return await self.post_depreciation_run(request.entity_id, posted_by=posted_by)
 
     async def reverse_depreciation(
         self,
@@ -288,7 +297,7 @@ class DepreciationService:
             if asset.status == AssetStatus.FULLY_DEPRECIATED:
                 asset.status = AssetStatus.ACTIVE
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(reversal)
         return reversal
 
@@ -562,26 +571,35 @@ class DepreciationService:
             if not category or dep_amount <= 0:
                 continue
 
+            if not category.gl_dep_expense_account_id:
+                raise ValueError(
+                    f"Depreciation expense account is not configured for category '{category.category_name}'"
+                )
+            if not category.gl_accum_dep_account_id:
+                raise ValueError(
+                    f"Accumulated depreciation account is not configured for category '{category.category_name}'"
+                )
+
             # Debit: Depreciation Expense
-            if category.gl_depreciation_expense_account_id:
-                gl_lines.append({
-                    "account_id": category.gl_depreciation_expense_account_id,
-                    "debit_amount": dep_amount,
-                    "credit_amount": Decimal("0.00"),
-                    "narration": f"Depreciation for {depreciation_period} - {category.category_name}",
-                })
+            gl_lines.append({
+                "account_id": category.gl_dep_expense_account_id,
+                "debit_amount": dep_amount,
+                "credit_amount": Decimal("0.00"),
+                "narration": f"Depreciation for {depreciation_period} - {category.category_name}",
+            })
 
             # Credit: Accumulated Depreciation
-            if category.gl_accumulated_depreciation_account_id:
-                gl_lines.append({
-                    "account_id": category.gl_accumulated_depreciation_account_id,
-                    "debit_amount": Decimal("0.00"),
-                    "credit_amount": dep_amount,
-                    "narration": f"Accumulated Depreciation for {depreciation_period} - {category.category_name}",
-                })
+            gl_lines.append({
+                "account_id": category.gl_accum_dep_account_id,
+                "debit_amount": Decimal("0.00"),
+                "credit_amount": dep_amount,
+                "narration": f"Accumulated Depreciation for {depreciation_period} - {category.category_name}",
+            })
 
         if not gl_lines:
-            return None
+            raise ValueError(
+                f"No GL lines generated for depreciation run {depreciation_period}"
+            )
 
         # Post GL entries
         entries = await self.gl_posting_service.post_from_source(
@@ -597,4 +615,4 @@ class DepreciationService:
             posted_by=posted_by,
         )
 
-        return run_id if entries else None
+        return entries[0].voucher_id if entries else None

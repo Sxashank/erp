@@ -2,79 +2,84 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import List, Optional
+from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
-from app.services.lending.collections_service import CollectionsService
-from app.schemas.lending.collections import (
-    # Follow-Up
-    CollectionFollowUpCreate,
-    CollectionFollowUpUpdate,
-    CollectionFollowUpExecute,
-    CollectionFollowUpResponse,
-    # Demand Notice
-    DemandNoticeCreate,
-    DemandNoticeUpdate,
-    DemandNoticeResponse,
-    # NPA Record
-    NPARecordCreate,
-    NPARecordUpdate,
-    NPARecordResponse,
-    # Penal Interest
-    PenalInterestCreate,
-    PenalInterestResponse,
-    # Penal Waiver
-    PenalWaiverCreate,
-    PenalWaiverApprove,
-    PenalWaiverResponse,
-    # OTS
-    OTSProposalCreate,
-    OTSProposalUpdate,
-    OTSProposalApprove,
-    OTSBorrowerAccept,
-    OTSPaymentScheduleCreate,
-    OTSProposalResponse,
-    # Restructure
-    LoanRestructureCreate,
-    LoanRestructureUpdate,
-    LoanRestructureApprove,
-    LoanRestructureImplement,
-    LoanRestructureResponse,
-    # Legal Case
-    LegalCaseCreate,
-    LegalCaseUpdate,
-    LegalCaseResponse,
-    # Legal Hearing
-    LegalHearingCreate,
-    LegalHearingUpdate,
-    LegalHearingResponse,
-    # Auction
-    PropertyAuctionCreate,
-    PropertyAuctionUpdate,
-    PropertyAuctionResponse,
-    # Write-Off
-    WriteOffCreate,
-    WriteOffApprove,
-    WriteOffEffect,
-    WriteOffResponse,
-    # Summary
-    NPASummary,
-    CollectionActivitySummary,
-    RecoverySummary,
-)
+from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
 from app.models.lending.enums import (
+    AssetClassification,
     FollowUpStatus,
-    NPAStatus,
+    LegalCaseStatus,
     OTSStatus,
     RestructureStatus,
-    LegalCaseStatus,
-    AuctionStatus,
-    WriteOffStatus,
 )
+from app.schemas.base import PaginatedResponse as PaginatedResponseBase
+from app.schemas.lending.collections import (
+    CollectionActivitySummary,
+    # Follow-Up
+    CollectionFollowUpCreate,
+    CollectionFollowUpExecute,
+    CollectionFollowUpResponse,
+    CollectionFollowUpUpdate,
+    # Demand Notice
+    DemandNoticeCreate,
+    DemandNoticeResponse,
+    DemandNoticeUpdate,
+    FollowUpListResponse,
+    # Legal Case
+    LegalCaseCreate,
+    LegalCaseListResponse,
+    LegalCaseResponse,
+    LegalCaseUpdate,
+    # Legal Hearing
+    LegalHearingCreate,
+    LegalHearingResponse,
+    LegalHearingUpdate,
+    LoanRestructureApprove,
+    # Restructure
+    LoanRestructureCreate,
+    LoanRestructureImplement,
+    LoanRestructureResponse,
+    LoanRestructureUpdate,
+    NPAAccountListResponse,
+    # NPA Record
+    NPARecordCreate,
+    NPARecordResponse,
+    NPARecordUpdate,
+    # Summary
+    NPASummary,
+    OTSBorrowerAccept,
+    OTSPaymentScheduleCreate,
+    OTSProposalApprove,
+    # OTS
+    OTSProposalCreate,
+    # Slim list responses (camelCase)
+    OTSProposalListResponse,
+    OTSProposalResponse,
+    OTSProposalUpdate,
+    # Penal Interest
+    PenalInterestResponse,
+    PenalWaiverApprove,
+    # Penal Waiver
+    PenalWaiverCreate,
+    PenalWaiverResponse,
+    # Auction
+    PropertyAuctionCreate,
+    PropertyAuctionResponse,
+    PropertyAuctionUpdate,
+    RecoverySummary,
+    RestructureListResponse,
+    WriteOffApprove,
+    # Write-Off
+    WriteOffCreate,
+    WriteOffEffect,
+    WriteOffResponse,
+)
+from app.services.lending.collections_service import CollectionsService
+from app.core.exceptions import NotFoundException
 
 router = APIRouter()
 
@@ -83,58 +88,203 @@ router = APIRouter()
 # Summary & Dashboard Endpoints
 # =============================================================================
 
+# =============================================================================
+# Paginated list endpoints (camelCase wire format via CamelSchema)
+# =============================================================================
+
+
+@router.get(
+    "/legal-cases",
+    response_model=PaginatedResponseBase[LegalCaseListResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
+)
+async def list_legal_cases(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    status: LegalCaseStatus | None = Query(None),
+    case_type: str | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Paginated list of legal cases scoped to caller's org."""
+    service = CollectionsService(db)
+    skip = (page - 1) * page_size
+    items, total = await service.list_legal_cases_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        status=status,
+        case_type=case_type,
+    )
+    list_items = [LegalCaseListResponse.model_validate(i) for i in items]
+    return PaginatedResponseBase.create(list_items, total, page, page_size)
+
+
+@router.get(
+    "/npa-accounts",
+    response_model=PaginatedResponseBase[NPAAccountListResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
+)
+async def list_npa_accounts(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    classification: AssetClassification | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Paginated list of NPA-classified loan accounts scoped to caller's org."""
+    service = CollectionsService(db)
+    skip = (page - 1) * page_size
+    rows, total = await service.list_npa_accounts_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        classification=classification,
+    )
+    list_items = [NPAAccountListResponse.model_validate(row) for row in rows]
+    return PaginatedResponseBase.create(list_items, total, page, page_size)
+
+
+@router.get(
+    "/follow-ups",
+    response_model=PaginatedResponseBase[FollowUpListResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
+)
+async def list_follow_ups(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    status: FollowUpStatus | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Paginated list of collection follow-ups scoped to caller's org."""
+    service = CollectionsService(db)
+    skip = (page - 1) * page_size
+    items, total = await service.list_follow_ups_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        status=status,
+    )
+    list_items = [FollowUpListResponse.model_validate(i) for i in items]
+    return PaginatedResponseBase.create(list_items, total, page, page_size)
+
+
+@router.get(
+    "/ots-proposals",
+    response_model=PaginatedResponseBase[OTSProposalListResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
+)
+async def list_ots_proposals(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    status: OTSStatus | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Paginated list of OTS proposals scoped to caller's org."""
+    service = CollectionsService(db)
+    skip = (page - 1) * page_size
+    items, total = await service.list_ots_proposals_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        status=status,
+    )
+    list_items = [OTSProposalListResponse.model_validate(i) for i in items]
+    return PaginatedResponseBase.create(list_items, total, page, page_size)
+
+
+@router.get(
+    "/restructures",
+    response_model=PaginatedResponseBase[RestructureListResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
+)
+async def list_restructures(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    status: RestructureStatus | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Paginated list of loan restructures scoped to caller's org."""
+    service = CollectionsService(db)
+    skip = (page - 1) * page_size
+    items, total = await service.list_restructures_for_org(
+        organization_id=current_user.organization_id,
+        skip=skip,
+        limit=page_size,
+        status=status,
+    )
+    list_items = [RestructureListResponse.model_validate(i) for i in items]
+    return PaginatedResponseBase.create(list_items, total, page, page_size)
+
+
 @router.get(
     "/summary/npa",
     response_model=NPASummary,
-    dependencies=[Depends(RequirePermissions("collections:read"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
 )
 async def get_npa_summary(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
-    """Get NPA portfolio summary."""
+    """Get NPA portfolio summary (camelCase, scoped to caller's org)."""
     service = CollectionsService(db)
-    return await service.get_npa_summary()
+    return await service.get_npa_summary(current_user.organization_id)
 
 
 @router.get(
     "/summary/collection",
     response_model=CollectionActivitySummary,
-    dependencies=[Depends(RequirePermissions("collections:read"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
 )
 async def get_collection_summary(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
-    """Get collection activity summary."""
+    """Get collection activity summary (camelCase, scoped to caller's org)."""
     service = CollectionsService(db)
-    return await service.get_collection_summary()
+    return await service.get_collection_summary(current_user.organization_id)
 
 
 @router.get(
     "/summary/recovery",
     response_model=RecoverySummary,
-    dependencies=[Depends(RequirePermissions("collections:read"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
 )
 async def get_recovery_summary(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
-    """Get recovery summary."""
+    """Get recovery summary (camelCase, scoped to caller's org)."""
     service = CollectionsService(db)
-    return await service.get_recovery_summary()
+    return await service.get_recovery_summary(current_user.organization_id)
 
 
 # =============================================================================
 # Collection Follow-Up Endpoints
 # =============================================================================
 
+
 @router.post(
     "/follow-ups",
     response_model=CollectionFollowUpResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("collections:create"))],
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_CREATE"))],
 )
 async def create_follow_up(
     data: CollectionFollowUpCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a collection follow-up."""
@@ -145,13 +295,14 @@ async def create_follow_up(
 
 @router.get(
     "/follow-ups/scheduled",
-    response_model=List[CollectionFollowUpResponse],
-    dependencies=[Depends(RequirePermissions("collections:read"))],
+    response_model=list[CollectionFollowUpResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
 )
 async def get_scheduled_follow_ups(
     scheduled_date: date = Query(...),
-    assigned_to_id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db),
+    assigned_to_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get follow-ups scheduled for a specific date."""
     service = CollectionsService(db)
@@ -162,12 +313,13 @@ async def get_scheduled_follow_ups(
 @router.put(
     "/follow-ups/{follow_up_id}",
     response_model=CollectionFollowUpResponse,
-    dependencies=[Depends(RequirePermissions("collections:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_UPDATE"))],
 )
 async def update_follow_up(
     follow_up_id: UUID,
     data: CollectionFollowUpUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update a collection follow-up."""
@@ -179,12 +331,13 @@ async def update_follow_up(
 @router.post(
     "/follow-ups/{follow_up_id}/execute",
     response_model=CollectionFollowUpResponse,
-    dependencies=[Depends(RequirePermissions("collections:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_UPDATE"))],
 )
 async def execute_follow_up(
     follow_up_id: UUID,
     data: CollectionFollowUpExecute,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Record follow-up execution outcome."""
@@ -196,11 +349,12 @@ async def execute_follow_up(
 @router.post(
     "/follow-ups/{follow_up_id}/mark-ptp-broken",
     response_model=CollectionFollowUpResponse,
-    dependencies=[Depends(RequirePermissions("collections:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_UPDATE"))],
 )
 async def mark_ptp_broken(
     follow_up_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Mark a Promise to Pay as broken."""
@@ -213,15 +367,17 @@ async def mark_ptp_broken(
 # Demand Notice Endpoints
 # =============================================================================
 
+
 @router.post(
     "/demand-notices",
     response_model=DemandNoticeResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("collections:create"))],
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_CREATE"))],
 )
 async def create_demand_notice(
     data: DemandNoticeCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a demand notice."""
@@ -232,14 +388,15 @@ async def create_demand_notice(
 
 @router.get(
     "/loan-accounts/{loan_account_id}/demand-notices",
-    response_model=List[DemandNoticeResponse],
-    dependencies=[Depends(RequirePermissions("collections:read"))],
+    response_model=list[DemandNoticeResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
 )
 async def get_demand_notices(
     loan_account_id: UUID,
     skip: int = 0,
     limit: int = 100,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get demand notices for a loan account."""
     service = CollectionsService(db)
@@ -250,12 +407,13 @@ async def get_demand_notices(
 @router.put(
     "/demand-notices/{notice_id}",
     response_model=DemandNoticeResponse,
-    dependencies=[Depends(RequirePermissions("collections:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_UPDATE"))],
 )
 async def update_demand_notice(
     notice_id: UUID,
     data: DemandNoticeUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update a demand notice."""
@@ -268,15 +426,17 @@ async def update_demand_notice(
 # NPA Record Endpoints
 # =============================================================================
 
+
 @router.post(
     "/npa-records",
     response_model=NPARecordResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("npa:create"))],
+    dependencies=[Depends(RequirePermissions("NPA_CREATE"))],
 )
 async def create_npa_record(
     data: NPARecordCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create an NPA record for a loan account."""
@@ -288,11 +448,12 @@ async def create_npa_record(
 @router.get(
     "/loan-accounts/{loan_account_id}/npa-record",
     response_model=Optional[NPARecordResponse],
-    dependencies=[Depends(RequirePermissions("npa:read"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("NPA_READ"))],
 )
 async def get_npa_record(
     loan_account_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get NPA record for a loan account."""
     service = CollectionsService(db)
@@ -303,12 +464,13 @@ async def get_npa_record(
 @router.put(
     "/npa-records/{npa_record_id}",
     response_model=NPARecordResponse,
-    dependencies=[Depends(RequirePermissions("npa:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("NPA_UPDATE"))],
 )
 async def update_npa_record(
     npa_record_id: UUID,
     data: NPARecordUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update an NPA record."""
@@ -320,12 +482,13 @@ async def update_npa_record(
 @router.post(
     "/loan-accounts/{loan_account_id}/upgrade-npa",
     response_model=NPARecordResponse,
-    dependencies=[Depends(RequirePermissions("npa:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("NPA_UPDATE"))],
 )
 async def upgrade_npa_account(
     loan_account_id: UUID,
     upgrade_date: date = Query(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Upgrade an NPA account back to standard."""
@@ -338,16 +501,18 @@ async def upgrade_npa_account(
 # Penal Interest & Waiver Endpoints
 # =============================================================================
 
+
 @router.post(
     "/loan-accounts/{loan_account_id}/calculate-penal",
     response_model=PenalInterestResponse,
-    dependencies=[Depends(RequirePermissions("collections:create"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_CREATE"))],
 )
 async def calculate_penal_interest(
     loan_account_id: UUID,
     period_start: date = Query(...),
     period_end: date = Query(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Calculate penal interest for a loan account."""
@@ -361,12 +526,13 @@ async def calculate_penal_interest(
 @router.post(
     "/penal-waivers",
     response_model=PenalWaiverResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("collections:create"))],
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_CREATE"))],
 )
 async def create_penal_waiver(
     data: PenalWaiverCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a penal waiver request."""
@@ -378,12 +544,13 @@ async def create_penal_waiver(
 @router.post(
     "/penal-waivers/{waiver_id}/approve",
     response_model=PenalWaiverResponse,
-    dependencies=[Depends(RequirePermissions("collections:approve"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_APPROVE"))],
 )
 async def approve_penal_waiver(
     waiver_id: UUID,
     data: PenalWaiverApprove,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Approve a penal waiver."""
@@ -396,16 +563,18 @@ async def approve_penal_waiver(
 # OTS Proposal Endpoints
 # =============================================================================
 
+
 @router.post(
     "/ots-proposals",
     response_model=OTSProposalResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("ots:create"))],
+    dependencies=[Depends(RequirePermissions("OTS_CREATE"))],
 )
 async def create_ots_proposal(
     data: OTSProposalCreate,
-    payment_schedule: Optional[List[OTSPaymentScheduleCreate]] = None,
-    db: AsyncSession = Depends(get_db),
+    payment_schedule: list[OTSPaymentScheduleCreate] | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create an OTS proposal."""
@@ -417,12 +586,13 @@ async def create_ots_proposal(
 @router.put(
     "/ots-proposals/{proposal_id}",
     response_model=OTSProposalResponse,
-    dependencies=[Depends(RequirePermissions("ots:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("OTS_UPDATE"))],
 )
 async def update_ots_proposal(
     proposal_id: UUID,
     data: OTSProposalUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update an OTS proposal."""
@@ -434,12 +604,13 @@ async def update_ots_proposal(
 @router.post(
     "/ots-proposals/{proposal_id}/approve",
     response_model=OTSProposalResponse,
-    dependencies=[Depends(RequirePermissions("ots:approve"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("OTS_APPROVE"))],
 )
 async def approve_ots_proposal(
     proposal_id: UUID,
     data: OTSProposalApprove,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Approve an OTS proposal."""
@@ -451,12 +622,13 @@ async def approve_ots_proposal(
 @router.post(
     "/ots-proposals/{proposal_id}/accept",
     response_model=OTSProposalResponse,
-    dependencies=[Depends(RequirePermissions("ots:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("OTS_UPDATE"))],
 )
 async def accept_ots_by_borrower(
     proposal_id: UUID,
     data: OTSBorrowerAccept,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Record borrower acceptance of OTS."""
@@ -468,14 +640,15 @@ async def accept_ots_by_borrower(
 @router.post(
     "/ots-proposals/{proposal_id}/record-payment",
     response_model=OTSProposalResponse,
-    dependencies=[Depends(RequirePermissions("ots:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("OTS_UPDATE"))],
 )
 async def record_ots_payment(
     proposal_id: UUID,
     amount: Decimal = Query(...),
     payment_date: date = Query(...),
     receipt_reference: str = Query(...),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Record payment against OTS proposal."""
@@ -490,15 +663,17 @@ async def record_ots_payment(
 # Loan Restructure Endpoints
 # =============================================================================
 
+
 @router.post(
     "/restructures",
     response_model=LoanRestructureResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("restructure:create"))],
+    dependencies=[Depends(RequirePermissions("RESTRUCTURE_CREATE"))],
 )
 async def create_restructure(
     data: LoanRestructureCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a loan restructure proposal."""
@@ -507,15 +682,37 @@ async def create_restructure(
     return LoanRestructureResponse.model_validate(restructure)
 
 
+@router.get(
+    "/restructures/{restructure_id}",
+    response_model=LoanRestructureResponse,
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("COLLECTIONS_READ"))],
+)
+async def get_restructure(
+    restructure_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Fetch a single restructure proposal by ID."""
+    service = CollectionsService(db)
+    restructure = await service.restructure_repo.get(restructure_id)
+    if not restructure:
+        from fastapi import HTTPException
+
+        raise NotFoundException(detail="Restructure not found", error_code="RESTRUCTURE_NOT_FOUND")
+    return LoanRestructureResponse.model_validate(restructure)
+
+
 @router.put(
     "/restructures/{restructure_id}",
     response_model=LoanRestructureResponse,
-    dependencies=[Depends(RequirePermissions("restructure:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("RESTRUCTURE_UPDATE"))],
 )
 async def update_restructure(
     restructure_id: UUID,
     data: LoanRestructureUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update a restructure proposal."""
@@ -527,12 +724,13 @@ async def update_restructure(
 @router.post(
     "/restructures/{restructure_id}/approve",
     response_model=LoanRestructureResponse,
-    dependencies=[Depends(RequirePermissions("restructure:approve"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("RESTRUCTURE_APPROVE"))],
 )
 async def approve_restructure(
     restructure_id: UUID,
     data: LoanRestructureApprove,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Approve a restructure."""
@@ -544,12 +742,13 @@ async def approve_restructure(
 @router.post(
     "/restructures/{restructure_id}/implement",
     response_model=LoanRestructureResponse,
-    dependencies=[Depends(RequirePermissions("restructure:approve"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("RESTRUCTURE_APPROVE"))],
 )
 async def implement_restructure(
     restructure_id: UUID,
     data: LoanRestructureImplement,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Implement an approved restructure."""
@@ -562,15 +761,17 @@ async def implement_restructure(
 # Legal Case Endpoints
 # =============================================================================
 
+
 @router.post(
     "/legal-cases",
     response_model=LegalCaseResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("legal:create"))],
+    dependencies=[Depends(RequirePermissions("LEGAL_CREATE"))],
 )
 async def create_legal_case(
     data: LegalCaseCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a legal case."""
@@ -582,12 +783,13 @@ async def create_legal_case(
 @router.put(
     "/legal-cases/{case_id}",
     response_model=LegalCaseResponse,
-    dependencies=[Depends(RequirePermissions("legal:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("LEGAL_UPDATE"))],
 )
 async def update_legal_case(
     case_id: UUID,
     data: LegalCaseUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update a legal case."""
@@ -598,12 +800,13 @@ async def update_legal_case(
 
 @router.get(
     "/legal-cases/upcoming-hearings",
-    response_model=List[LegalCaseResponse],
-    dependencies=[Depends(RequirePermissions("legal:read"))],
+    response_model=list[LegalCaseResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("LEGAL_READ"))],
 )
 async def get_upcoming_hearings(
     days: int = Query(7, ge=1, le=90),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get cases with upcoming hearings."""
     service = CollectionsService(db)
@@ -614,13 +817,14 @@ async def get_upcoming_hearings(
 @router.post(
     "/legal-cases/{case_id}/hearings",
     response_model=LegalHearingResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("legal:create"))],
+    dependencies=[Depends(RequirePermissions("LEGAL_CREATE"))],
 )
 async def create_hearing(
     case_id: UUID,
     data: LegalHearingCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a hearing for a legal case."""
@@ -633,12 +837,13 @@ async def create_hearing(
 @router.put(
     "/hearings/{hearing_id}",
     response_model=LegalHearingResponse,
-    dependencies=[Depends(RequirePermissions("legal:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("LEGAL_UPDATE"))],
 )
 async def update_hearing(
     hearing_id: UUID,
     data: LegalHearingUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update a hearing."""
@@ -651,15 +856,17 @@ async def update_hearing(
 # Property Auction Endpoints
 # =============================================================================
 
+
 @router.post(
     "/auctions",
     response_model=PropertyAuctionResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("legal:create"))],
+    dependencies=[Depends(RequirePermissions("LEGAL_CREATE"))],
 )
 async def create_auction(
     data: PropertyAuctionCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a property auction."""
@@ -671,12 +878,13 @@ async def create_auction(
 @router.put(
     "/auctions/{auction_id}",
     response_model=PropertyAuctionResponse,
-    dependencies=[Depends(RequirePermissions("legal:update"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("LEGAL_UPDATE"))],
 )
 async def update_auction(
     auction_id: UUID,
     data: PropertyAuctionUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Update an auction."""
@@ -687,12 +895,13 @@ async def update_auction(
 
 @router.get(
     "/auctions/upcoming",
-    response_model=List[PropertyAuctionResponse],
-    dependencies=[Depends(RequirePermissions("legal:read"))],
+    response_model=list[PropertyAuctionResponse],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("LEGAL_READ"))],
 )
 async def get_upcoming_auctions(
     days: int = Query(30, ge=1, le=180),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get upcoming auctions."""
     service = CollectionsService(db)
@@ -704,15 +913,17 @@ async def get_upcoming_auctions(
 # Write-Off Endpoints
 # =============================================================================
 
+
 @router.post(
     "/write-offs",
     response_model=WriteOffResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("writeoff:create"))],
+    dependencies=[Depends(RequirePermissions("WRITEOFF_CREATE"))],
 )
 async def create_write_off(
     data: WriteOffCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create a write-off proposal."""
@@ -724,12 +935,13 @@ async def create_write_off(
 @router.post(
     "/write-offs/{write_off_id}/approve",
     response_model=WriteOffResponse,
-    dependencies=[Depends(RequirePermissions("writeoff:approve"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("WRITEOFF_APPROVE"))],
 )
 async def approve_write_off(
     write_off_id: UUID,
     data: WriteOffApprove,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Approve a write-off."""
@@ -741,12 +953,13 @@ async def approve_write_off(
 @router.post(
     "/write-offs/{write_off_id}/effect",
     response_model=WriteOffResponse,
-    dependencies=[Depends(RequirePermissions("writeoff:approve"))],
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("WRITEOFF_APPROVE"))],
 )
 async def effect_write_off(
     write_off_id: UUID,
     data: WriteOffEffect,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Effect an approved write-off."""

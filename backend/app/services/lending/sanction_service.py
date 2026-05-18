@@ -1,43 +1,54 @@
 """Loan Sanction service for the lending module."""
 
-from datetime import date, datetime
+import logging
+from datetime import date
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.lending.sanction import (
-    LoanSanction,
-    SanctionCondition,
-    LoanSecurity,
+logger = logging.getLogger(__name__)
+
+from app.core.exceptions import (
+    BadRequestException,
+    ConflictException,
+    NotFoundException,
+    ValidationException,
 )
 from app.models.lending.enums import (
-    SanctionStatus,
-    ConditionType,
-    ConditionComplianceStatus,
-    SecurityCategory,
-    SecurityStatus,
     ApplicationStage,
     ApplicationStatus,
+    ConditionComplianceStatus,
+    ConditionType,
+    SanctionStatus,
+    SecurityCategory,
+    SecurityStatus,
 )
-from app.schemas.lending.sanction import (
-    LoanSanctionCreate,
-    LoanSanctionUpdate,
-    SanctionConditionCreate,
-    SanctionConditionUpdate,
-    LoanSecurityCreate,
-    LoanSecurityUpdate,
-)
-from app.repositories.lending.sanction_repo import (
-    LoanSanctionRepository,
-    SanctionConditionRepository,
-    LoanSecurityRepository,
+from app.models.lending.sanction import (
+    LoanSanction,
+    LoanSecurity,
+    SanctionCondition,
 )
 from app.repositories.lending.application_repo import LoanApplicationRepository
 from app.repositories.lending.entity_repo import EntityRepository
 from app.repositories.lending.product_repo import LoanProductRepository
-from app.core.exceptions import NotFoundException, ConflictException, ValidationException
+from app.repositories.lending.sanction_repo import (
+    LoanSanctionRepository,
+    LoanSecurityRepository,
+    SanctionConditionRepository,
+)
+from app.schemas.lending.sanction import (
+    LoanSanctionCreate,
+    LoanSanctionUpdate,
+    LoanSecurityCreate,
+    LoanSecurityUpdate,
+    SanctionConditionCreate,
+    SanctionConditionUpdate,
+)
+from app.services.lending.checklist.loan_checklist_service import (
+    LoanChecklistService,
+)
 
 
 class SanctionService:
@@ -56,9 +67,7 @@ class SanctionService:
     # Loan Sanction Operations
     # =========================================================================
 
-    async def create_sanction(
-        self, data: LoanSanctionCreate, created_by: UUID
-    ) -> LoanSanction:
+    async def create_sanction(self, data: LoanSanctionCreate, created_by: UUID) -> LoanSanction:
         """Create a new loan sanction."""
         # Verify application exists
         application = await self.app_repo.get(data.application_id)
@@ -73,13 +82,18 @@ class SanctionService:
         # Get product for generating sanction number
         product = await self.product_repo.get(application.product_id)
 
+        organization_id = data.organization_id or application.organization_id
+        entity_id = data.entity_id or application.entity_id
+
         # Generate sanction number
         sanction_number = await self.sanction_repo.generate_sanction_number(
-            data.organization_id, product.code if product else "GEN"
+            organization_id, product.code if product else "GEN"
         )
 
         # Create sanction
         sanction_data = data.model_dump(exclude={"conditions", "securities"})
+        sanction_data["organization_id"] = organization_id
+        sanction_data["entity_id"] = entity_id
         sanction = LoanSanction(
             **sanction_data,
             product_id=application.product_id,
@@ -92,24 +106,36 @@ class SanctionService:
         await self.session.flush()
 
         # Add conditions
-        for condition_data in data.conditions:
+        for index, condition_data in enumerate(data.conditions, start=1):
+            condition_payload = condition_data.model_dump(exclude={"sanction_id"})
+            condition_payload["condition_number"] = (
+                condition_payload.get("condition_number") or index
+            )
             condition = SanctionCondition(
                 sanction_id=sanction.id,
-                **condition_data.model_dump(exclude={"sanction_id"}),
+                **condition_payload,
                 created_by=created_by,
             )
             self.session.add(condition)
 
         # Add securities
-        for security_data in data.securities:
+        for index, security_data in enumerate(data.securities, start=1):
+            security_payload = security_data.model_dump(exclude={"sanction_id"})
+            security_payload["security_number"] = security_payload.get("security_number") or index
+            if security_payload.get("net_value") is None:
+                acceptable_value = security_payload.get("acceptable_value") or Decimal("0")
+                margin_percentage = security_payload.get("margin_percentage") or Decimal("0")
+                security_payload["net_value"] = (
+                    acceptable_value * (Decimal("100") - margin_percentage) / Decimal("100")
+                )
             security = LoanSecurity(
                 sanction_id=sanction.id,
-                **security_data.model_dump(exclude={"sanction_id"}),
+                **security_payload,
                 created_by=created_by,
             )
             self.session.add(security)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(sanction)
         return sanction
 
@@ -129,13 +155,11 @@ class SanctionService:
             setattr(sanction, field, value)
         sanction.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(sanction)
         return sanction
 
-    async def submit_for_approval(
-        self, id: UUID, submitted_by: UUID
-    ) -> LoanSanction:
+    async def submit_for_approval(self, id: UUID, submitted_by: UUID) -> LoanSanction:
         """Submit sanction for approval."""
         sanction = await self.sanction_repo.get(id)
         if not sanction:
@@ -150,11 +174,10 @@ class SanctionService:
         # Route through the workflow engine. `build_workflow_request`
         # infers the required approval level from the sanctioned amount
         # (Officer → GM → ED → CMD → Board) per the delegation matrix in
-        # app/core/maker_checker.py. The workflow engine is a separate
-        # service; we construct the request here and enqueue it, but the
-        # actual processing (escalation, SLA, maker-checker check at the
-        # approval site) lives in app.services.workflow. See CLAUDE.md §8.4.
+        # app/core/maker_checker.py. See CLAUDE.md §8.4.
         from app.core.maker_checker import build_workflow_request
+        from app.models.workflow.enums import WorkflowEntityType
+        from app.services.workflow.workflow_engine import WorkflowEngine
 
         self._pending_workflow_request = build_workflow_request(
             workflow_code="LOAN_SANCTION_APPROVAL",
@@ -165,7 +188,28 @@ class SanctionService:
             amount=sanction.sanctioned_amount,
         )
 
-        await self.session.commit()
+        # Dispatch. Gracefully skip if no WorkflowDefinition is seeded yet.
+        try:
+            workflow_instance = await WorkflowEngine(self.session).start_workflow(
+                entity_type=WorkflowEntityType.LOAN_SANCTION,
+                entity_id=sanction.id,
+                entity_reference=sanction.sanction_number,
+                organization_id=sanction.organization_id,
+                context={
+                    "amount": (
+                        float(sanction.sanctioned_amount)
+                        if sanction.sanctioned_amount is not None
+                        else None
+                    ),
+                    "sanction_number": sanction.sanction_number,
+                },
+                started_by=submitted_by,
+            )
+            sanction.workflow_instance_id = workflow_instance.id
+        except NotFoundException:
+            pass
+
+        await self.session.flush()
         await self.session.refresh(sanction)
         return sanction
 
@@ -173,7 +217,7 @@ class SanctionService:
         self,
         id: UUID,
         approver_user_id: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> LoanSanction:
         """Approve a sanction, enforcing the maker ≠ checker invariant.
 
@@ -194,15 +238,63 @@ class SanctionService:
         return await self.approve_sanction(id, approver_user_id, remarks)
 
     async def approve_sanction(
-        self, id: UUID, approved_by: UUID, remarks: Optional[str] = None
+        self, id: UUID, approved_by: UUID, remarks: str | None = None
     ) -> LoanSanction:
-        """Approve a sanction."""
+        """Approve a sanction.
+
+        Enforces the **mandatory-checklist gate** (CLAUDE.md §8.4
+        maker-checker / domain invariant): every mandatory item in the
+        application's live checklist must be MET / WAIVED /
+        NOT_APPLICABLE before approval can proceed. Raises
+        ``BadRequestException`` with ``error_code=
+        "MANDATORY_CHECKLIST_INCOMPLETE"`` listing the first five
+        offending labels. If no checklist exists for the application,
+        the gate logs a warning and proceeds — not every org uses
+        checklists.
+        """
         sanction = await self.sanction_repo.get(id)
         if not sanction:
             raise NotFoundException("Sanction not found")
 
         if sanction.status != SanctionStatus.PENDING_APPROVAL:
             raise ValidationException("Sanction is not pending approval")
+
+        # ---- Checklist gate ---------------------------------------------
+        checklist_service = LoanChecklistService(self.session)
+        pending_items = await checklist_service.list_pending_mandatory_items(
+            organization_id=sanction.organization_id,
+            application_id=sanction.application_id,
+        )
+        if pending_items:
+            labels = [item.label for item in pending_items[:5]]
+            extra = len(pending_items) - len(labels)
+            message_tail = ", ".join(labels)
+            if extra > 0:
+                message_tail = f"{message_tail}, …and {extra} more"
+            raise BadRequestException(
+                (
+                    "Cannot approve sanction — the following mandatory "
+                    f"checklist items are still pending: {message_tail}"
+                ),
+                error_code="MANDATORY_CHECKLIST_INCOMPLETE",
+            )
+        # If no checklist exists at all, log + proceed (some orgs opt out).
+        no_checklist = (
+            await checklist_service._get_live_checklist(  # noqa: SLF001
+                sanction.organization_id, sanction.application_id
+            )
+            is None
+        )
+        if no_checklist:
+            logger.warning(
+                "Sanction approved without checklist",
+                extra={
+                    "sanction_id": str(sanction.id),
+                    "application_id": str(sanction.application_id),
+                    "organization_id": str(sanction.organization_id),
+                },
+            )
+        # ---- /Checklist gate --------------------------------------------
 
         sanction.status = SanctionStatus.APPROVED
         sanction.sanctioned_by_id = approved_by
@@ -214,7 +306,7 @@ class SanctionService:
             application.stage = ApplicationStage.SANCTION
             application.status = ApplicationStatus.SANCTIONED
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(sanction)
         return sanction
 
@@ -222,7 +314,7 @@ class SanctionService:
         self,
         id: UUID,
         acceptance_date: date,
-        document_path: Optional[str],
+        document_path: str | None,
         updated_by: UUID,
     ) -> LoanSanction:
         """Record borrower acceptance of sanction."""
@@ -243,7 +335,7 @@ class SanctionService:
         if application:
             application.stage = ApplicationStage.POST_SANCTION
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(sanction)
         return sanction
 
@@ -254,18 +346,14 @@ class SanctionService:
             raise NotFoundException("Sanction not found")
         return sanction
 
-    async def get_sanction_with_details(
-        self, id: UUID
-    ) -> LoanSanction:
+    async def get_sanction_with_details(self, id: UUID) -> LoanSanction:
         """Get sanction with conditions and securities."""
         sanction = await self.sanction_repo.get_with_details(id)
         if not sanction:
             raise NotFoundException("Sanction not found")
         return sanction
 
-    async def get_sanction_by_application(
-        self, application_id: UUID
-    ) -> Optional[LoanSanction]:
+    async def get_sanction_by_application(self, application_id: UUID) -> LoanSanction | None:
         """Get sanction for an application."""
         return await self.sanction_repo.get_by_application(application_id)
 
@@ -275,12 +363,12 @@ class SanctionService:
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        status: Optional[SanctionStatus] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> Tuple[List[LoanSanction], int]:
+        search: str | None = None,
+        entity_id: UUID | None = None,
+        status: SanctionStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> tuple[list[LoanSanction], int]:
         """Get all sanctions with filters."""
         return await self.sanction_repo.get_all_by_organization(
             organization_id=organization_id,
@@ -296,15 +384,15 @@ class SanctionService:
 
     async def get_entity_sanctions(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[LoanSanction]:
+    ) -> list[LoanSanction]:
         """Get all sanctions for an entity."""
         return await self.sanction_repo.get_by_entity(entity_id, include_inactive)
 
     async def get_total_sanctioned_amount(
         self,
         organization_id: UUID,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
     ) -> float:
         """Get total sanctioned amount."""
         return await self.sanction_repo.get_total_sanctioned_amount(
@@ -323,12 +411,17 @@ class SanctionService:
         if not sanction:
             raise NotFoundException("Sanction not found")
 
+        condition_payload = data.model_dump()
+        if condition_payload.get("condition_number") is None:
+            existing_conditions = await self.condition_repo.get_by_sanction(data.sanction_id)
+            condition_payload["condition_number"] = len(existing_conditions) + 1
+
         condition = SanctionCondition(
-            **data.model_dump(),
+            **condition_payload,
             created_by=created_by,
         )
         self.session.add(condition)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(condition)
         return condition
 
@@ -345,7 +438,7 @@ class SanctionService:
             setattr(condition, field, value)
         condition.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(condition)
         return condition
 
@@ -354,8 +447,8 @@ class SanctionService:
         id: UUID,
         complied_on: date,
         verified_by: UUID,
-        remarks: Optional[str] = None,
-        document_path: Optional[str] = None,
+        remarks: str | None = None,
+        document_path: str | None = None,
     ) -> SanctionCondition:
         """Mark a condition as complied."""
         condition = await self.condition_repo.get(id)
@@ -363,13 +456,15 @@ class SanctionService:
             raise NotFoundException("Condition not found")
 
         condition.compliance_status = ConditionComplianceStatus.COMPLIED
-        condition.complied_on = complied_on
-        condition.verified_by_id = verified_by
+        condition.compliance_date = complied_on
+        condition.compliance_verified_by = verified_by
         condition.compliance_remarks = remarks
-        condition.compliance_document_path = document_path
+        condition.uploaded_documents = (
+            [{"documentPath": document_path}] if document_path else condition.uploaded_documents
+        )
         condition.updated_by = verified_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(condition)
         return condition
 
@@ -385,31 +480,28 @@ class SanctionService:
             raise NotFoundException("Condition not found")
 
         condition.compliance_status = ConditionComplianceStatus.WAIVED
-        condition.waived_by_id = waived_by
-        condition.waiver_remarks = waiver_remarks
+        condition.waiver_date = date.today()
+        condition.waiver_approved_by = waived_by
+        condition.waiver_reason = waiver_remarks
         condition.updated_by = waived_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(condition)
         return condition
 
     async def get_sanction_conditions(
         self, sanction_id: UUID, include_inactive: bool = False
-    ) -> List[SanctionCondition]:
+    ) -> list[SanctionCondition]:
         """Get all conditions for a sanction."""
         return await self.condition_repo.get_by_sanction(sanction_id, include_inactive)
 
     async def get_pending_conditions(
-        self, sanction_id: UUID, condition_type: Optional[ConditionType] = None
-    ) -> List[SanctionCondition]:
+        self, sanction_id: UUID, condition_type: ConditionType | None = None
+    ) -> list[SanctionCondition]:
         """Get pending conditions for a sanction."""
-        return await self.condition_repo.get_pending_conditions(
-            sanction_id, condition_type
-        )
+        return await self.condition_repo.get_pending_conditions(sanction_id, condition_type)
 
-    async def check_disbursement_eligible(
-        self, sanction_id: UUID
-    ) -> Dict[str, Any]:
+    async def check_disbursement_eligible(self, sanction_id: UUID) -> dict[str, Any]:
         """Check if sanction is eligible for disbursement."""
         sanction = await self.sanction_repo.get(sanction_id)
         if not sanction:
@@ -426,8 +518,7 @@ class SanctionService:
         # Check security status
         securities = await self.security_repo.get_by_sanction(sanction_id)
         securities_created = all(
-            s.status in [SecurityStatus.CREATED, SecurityStatus.REGISTERED]
-            for s in securities
+            s.status in [SecurityStatus.CREATED, SecurityStatus.REGISTERED] for s in securities
         )
 
         is_eligible = (
@@ -448,20 +539,29 @@ class SanctionService:
     # Loan Security Operations
     # =========================================================================
 
-    async def add_security(
-        self, data: LoanSecurityCreate, created_by: UUID
-    ) -> LoanSecurity:
+    async def add_security(self, data: LoanSecurityCreate, created_by: UUID) -> LoanSecurity:
         """Add a security to a sanction."""
         sanction = await self.sanction_repo.get(data.sanction_id)
         if not sanction:
             raise NotFoundException("Sanction not found")
 
+        security_payload = data.model_dump()
+        if security_payload.get("security_number") is None:
+            existing_securities = await self.security_repo.get_by_sanction(data.sanction_id)
+            security_payload["security_number"] = len(existing_securities) + 1
+        if security_payload.get("net_value") is None:
+            acceptable_value = security_payload.get("acceptable_value") or Decimal("0")
+            margin_percentage = security_payload.get("margin_percentage") or Decimal("0")
+            security_payload["net_value"] = (
+                acceptable_value * (Decimal("100") - margin_percentage) / Decimal("100")
+            )
+
         security = LoanSecurity(
-            **data.model_dump(),
+            **security_payload,
             created_by=created_by,
         )
         self.session.add(security)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(security)
 
         # Update sanction security totals
@@ -482,7 +582,7 @@ class SanctionService:
             setattr(security, field, value)
         security.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(security)
 
         # Update sanction security totals
@@ -503,23 +603,21 @@ class SanctionService:
             raise NotFoundException("Security not found")
 
         security.status = SecurityStatus.REGISTERED
-        security.cersai_registration_id = cersai_registration_id
+        security.cersai_id = cersai_registration_id
         security.cersai_registration_date = registration_date
         security.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(security)
         return security
 
     async def get_sanction_securities(
         self, sanction_id: UUID, include_inactive: bool = False
-    ) -> List[LoanSecurity]:
+    ) -> list[LoanSecurity]:
         """Get all securities for a sanction."""
         return await self.security_repo.get_by_sanction(sanction_id, include_inactive)
 
-    async def get_security_summary(
-        self, sanction_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_security_summary(self, sanction_id: UUID) -> dict[str, Any]:
         """Get security summary for a sanction."""
         securities = await self.security_repo.get_by_sanction(sanction_id)
         total_market = await self.security_repo.get_total_security_value(sanction_id)

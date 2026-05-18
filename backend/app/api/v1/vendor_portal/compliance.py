@@ -21,14 +21,15 @@ from app.schemas.vendor_portal.compliance import (
     NotificationListResponse,
 )
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter()
 
 
-@router.get("/", response_model=ComplianceDocumentListResponse)
+@router.get("/", response_model=ComplianceDocumentListResponse, response_model_by_alias=True)
 async def list_documents(
     vendor_id: UUID,  # From auth middleware
     include_inactive: bool = Query(False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List compliance documents for vendor."""
     service = VendorComplianceService(db)
@@ -39,10 +40,10 @@ async def list_documents(
     )
 
 
-@router.get("/summary", response_model=ComplianceSummary)
+@router.get("/summary", response_model=ComplianceSummary, response_model_by_alias=True)
 async def get_summary(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get compliance summary."""
     service = VendorComplianceService(db)
@@ -50,11 +51,11 @@ async def get_summary(
     return summary
 
 
-@router.get("/required", response_model=RequiredDocuments)
+@router.get("/required", response_model=RequiredDocuments, response_model_by_alias=True)
 async def get_required_documents(
     vendor_id: UUID,  # From auth middleware
     organization_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get required documents status."""
     service = VendorComplianceService(db)
@@ -62,11 +63,11 @@ async def get_required_documents(
     return result
 
 
-@router.get("/expiring", response_model=List[ComplianceDocumentResponse])
+@router.get("/expiring", response_model=List[ComplianceDocumentResponse], response_model_by_alias=True)
 async def get_expiring_documents(
     vendor_id: UUID,  # From auth middleware
     days: int = Query(30, ge=1, le=365),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get documents expiring within days."""
     service = VendorComplianceService(db)
@@ -74,10 +75,10 @@ async def get_expiring_documents(
     return documents
 
 
-@router.get("/expired", response_model=List[ComplianceDocumentResponse])
+@router.get("/expired", response_model=List[ComplianceDocumentResponse], response_model_by_alias=True)
 async def get_expired_documents(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get expired documents."""
     service = VendorComplianceService(db)
@@ -85,7 +86,7 @@ async def get_expired_documents(
     return documents
 
 
-@router.post("/", response_model=ComplianceDocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ComplianceDocumentResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     vendor_id: UUID,  # From auth middleware
     organization_id: UUID,  # From auth middleware
@@ -97,7 +98,7 @@ async def upload_document(
     issue_date: Optional[str] = None,
     expiry_date: Optional[str] = None,
     is_perpetual: bool = False,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Upload a compliance document."""
     from datetime import date
@@ -132,11 +133,11 @@ async def upload_document(
     return document
 
 
-@router.get("/{document_id}", response_model=ComplianceDocumentResponse)
+@router.get("/{document_id}", response_model=ComplianceDocumentResponse, response_model_by_alias=True)
 async def get_document(
     vendor_id: UUID,  # From auth middleware
     document_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get document details."""
     service = VendorComplianceService(db)
@@ -144,12 +145,12 @@ async def get_document(
     return document
 
 
-@router.put("/{document_id}", response_model=ComplianceDocumentResponse)
+@router.put("/{document_id}", response_model=ComplianceDocumentResponse, response_model_by_alias=True)
 async def update_document(
     vendor_id: UUID,  # From auth middleware
     document_id: UUID,
     data: ComplianceDocumentUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update document details."""
     service = VendorComplianceService(db)
@@ -161,7 +162,7 @@ async def update_document(
 async def delete_document(
     vendor_id: UUID,  # From auth middleware
     document_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Delete a document."""
     service = VendorComplianceService(db)
@@ -169,12 +170,12 @@ async def delete_document(
 
 
 # Admin endpoint for document verification
-@router.post("/{document_id}/verify", response_model=ComplianceDocumentResponse)
+@router.post("/{document_id}/verify", response_model=ComplianceDocumentResponse, response_model_by_alias=True)
 async def verify_document(
     document_id: UUID,
     user_id: UUID,  # From auth middleware (verifier)
     data: ComplianceVerification,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Verify a compliance document (admin)."""
     service = VendorComplianceService(db)
@@ -183,13 +184,13 @@ async def verify_document(
 
 
 # Notification endpoints
-@router.get("/notifications", response_model=NotificationListResponse)
+@router.get("/notifications", response_model=NotificationListResponse, response_model_by_alias=True)
 async def list_notifications(
     vendor_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     unread_only: bool = Query(False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List notifications for vendor."""
     service = VendorComplianceService(db)
@@ -204,13 +205,13 @@ async def list_notifications(
     )
 
 
-@router.get("/notifications/user", response_model=NotificationListResponse)
+@router.get("/notifications/user", response_model=NotificationListResponse, response_model_by_alias=True)
 async def list_user_notifications(
     user_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     unread_only: bool = Query(False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List notifications for current user."""
     service = VendorComplianceService(db)
@@ -228,7 +229,7 @@ async def list_user_notifications(
 @router.get("/notifications/unread-count")
 async def count_unread_notifications(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Count unread notifications."""
     service = VendorComplianceService(db)
@@ -236,11 +237,11 @@ async def count_unread_notifications(
     return {"unread_count": count}
 
 
-@router.post("/notifications/{notification_id}/read", response_model=NotificationResponse)
+@router.post("/notifications/{notification_id}/read", response_model=NotificationResponse, response_model_by_alias=True)
 async def mark_notification_read(
     notification_id: UUID,
     user_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Mark notification as read."""
     service = VendorComplianceService(db)
@@ -252,7 +253,7 @@ async def mark_notification_read(
 async def mark_all_notifications_read(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Mark all notifications as read."""
     service = VendorComplianceService(db)
@@ -264,7 +265,7 @@ async def mark_all_notifications_read(
 @router.post("/check-expiry")
 async def check_document_expiry(
     organization_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Check and send expiry alerts (admin/scheduled job)."""
     service = VendorComplianceService(db)
@@ -275,7 +276,7 @@ async def check_document_expiry(
 @router.post("/update-expiry-status")
 async def update_expiry_status(
     organization_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update expiry status for all documents (admin/scheduled job)."""
     service = VendorComplianceService(db)

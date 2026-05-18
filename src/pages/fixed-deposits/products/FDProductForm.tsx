@@ -2,16 +2,15 @@
  * FD Product Form Page
  */
 
+import { ArrowLeft, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -19,14 +18,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, {
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type {
   FDProduct,
   FDInterestPayoutFrequency,
   FDCompoundingFrequency,
 } from '@/services/fixedDepositService';
-import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import fixedDepositService from '@/services/fixedDepositService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const INTEREST_PAYOUT_OPTIONS: { value: FDInterestPayoutFrequency; label: string }[] = [
   { value: 'MONTHLY', label: 'Monthly' },
@@ -86,6 +88,16 @@ export default function FDProductForm() {
     }
   }, [id]);
 
+  useEffect(() => {
+    if (isEdit) {
+      return;
+    }
+    setFormData((current) => ({
+      ...current,
+      organization_id: organizationId,
+    }));
+  }, [isEdit, organizationId]);
+
   const loadProduct = async (productId: string) => {
     try {
       setLoading(true);
@@ -131,10 +143,10 @@ export default function FDProductForm() {
         });
       }
       navigate('/admin/fixed-deposits/products');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save product',
+        description: getErrorMessage(error, 'Failed to save product'),
         variant: 'destructive',
       });
     } finally {

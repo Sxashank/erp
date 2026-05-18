@@ -19,8 +19,8 @@ from app.core.constants import (
     AssetAcquisitionType,
     DepreciationMethod,
     AssetType,
-    DisposalType,
-    ApprovalStatus,
+    AssetDisposalType,
+    ApprovalRequestStatus,
     ApprovalWorkflowType,
 )
 
@@ -96,7 +96,7 @@ class TestAssetLifecycle:
 
         # Step 6: Simulate disposal
         disposal_date = date(2025, 6, 30)
-        disposal_type = DisposalType.SOLD
+        disposal_type = AssetDisposalType.SALE
         sale_proceeds = Decimal("70000.00")
 
         # Assume 1.5 years depreciation
@@ -206,7 +206,7 @@ class TestApprovalWorkflow:
         # Step 1: Configure workflow
         workflow_config = {
             "organization_id": test_organization.id,
-            "workflow_type": ApprovalWorkflowType.ASSET_DISPOSAL,
+            "workflow_type": ApprovalWorkflowType.FA_ASSET_DISPOSAL,
             "approval_levels": 2,
             "threshold_amount": Decimal("0.00"),  # All require approval
         }
@@ -215,14 +215,14 @@ class TestApprovalWorkflow:
         disposal_request = {
             "entity_type": "FIXED_ASSET",
             "entity_id": uuid4(),
-            "workflow_type": ApprovalWorkflowType.ASSET_DISPOSAL,
+            "workflow_type": ApprovalWorkflowType.FA_ASSET_DISPOSAL,
             "requested_by": test_user.id,
             "amount": Decimal("500000.00"),
-            "status": ApprovalStatus.PENDING,
+            "status": ApprovalRequestStatus.PENDING,
             "current_level": 1,
         }
 
-        assert disposal_request["status"] == ApprovalStatus.PENDING
+        assert disposal_request["status"] == ApprovalRequestStatus.PENDING
         assert disposal_request["current_level"] == 1
 
         # Step 3: Level 1 approval
@@ -234,9 +234,9 @@ class TestApprovalWorkflow:
 
         # Step 4: Level 2 approval
         level_2_approver = uuid4()
-        disposal_request["status"] = ApprovalStatus.APPROVED
+        disposal_request["status"] = ApprovalRequestStatus.APPROVED
 
-        assert disposal_request["status"] == ApprovalStatus.APPROVED
+        assert disposal_request["status"] == ApprovalRequestStatus.APPROVED
 
         # Step 5: Execute disposal after approval
         asset_status = AssetStatus.DISPOSED
@@ -254,17 +254,17 @@ class TestApprovalWorkflow:
         request = {
             "entity_type": "FIXED_ASSET",
             "entity_id": uuid4(),
-            "workflow_type": ApprovalWorkflowType.ASSET_DISPOSAL,
+            "workflow_type": ApprovalWorkflowType.FA_ASSET_DISPOSAL,
             "requested_by": test_user.id,
-            "status": ApprovalStatus.PENDING,
+            "status": ApprovalRequestStatus.PENDING,
             "current_level": 1,
         }
 
         # Step 2: Level 1 rejects
-        request["status"] = ApprovalStatus.REJECTED
+        request["status"] = ApprovalRequestStatus.REJECTED
         rejection_reason = "Insufficient justification"
 
-        assert request["status"] == ApprovalStatus.REJECTED
+        assert request["status"] == ApprovalRequestStatus.REJECTED
 
         # Step 3: Verify asset status unchanged
         asset_status = AssetStatus.ACTIVE  # Remains active
@@ -420,11 +420,11 @@ class TestRevaluationWorkflow:
             "old_book_value": asset["book_value"],
             "new_revalued_amount": revalued_amount,
             "revaluation_surplus": revaluation_surplus,
-            "status": ApprovalStatus.PENDING,
+            "status": ApprovalRequestStatus.PENDING,
         }
 
         # Step 5: After approval, update asset
-        revaluation_request["status"] = ApprovalStatus.APPROVED
+        revaluation_request["status"] = ApprovalRequestStatus.APPROVED
 
         # Update asset values
         asset["total_cost"] = revalued_amount

@@ -22,8 +22,9 @@ Per-job decorators enforce:
 from __future__ import annotations
 
 import json
+from collections.abc import Awaitable, Callable
 from datetime import timedelta
-from typing import Any, Awaitable, Callable
+from typing import Any
 from uuid import UUID
 
 import structlog
@@ -42,6 +43,7 @@ DEFAULT_JOB_TIMEOUT = timedelta(minutes=10)
 # from pydantic-settings. Arq needs its own settings object on the worker.
 # ---------------------------------------------------------------------------
 
+
 def _redis_settings() -> RedisSettings:
     return RedisSettings.from_dsn(settings.REDIS_URL)
 
@@ -52,6 +54,7 @@ def _redis_settings() -> RedisSettings:
 # The `ctx` dict carries `redis`, `job_id`, `job_try`, and anything the
 # lifespan installed (db session factory etc.).
 # ---------------------------------------------------------------------------
+
 
 async def reclassify_npa_batch(
     ctx: dict[str, Any],
@@ -233,6 +236,36 @@ async def portal_daily_reminders(ctx: dict[str, Any]) -> dict[str, Any]:
     return _to_jsonable(result)
 
 
+async def archive_audit_rows(
+    ctx: dict[str, Any],
+    dry_run: bool = False,
+) -> dict[str, Any]:
+    """Move audit-log rows past retention into per-year cold tables.
+
+    STAGE-5-PENDING-003: 7-year retention for financial events, 2-year for
+    logins. Runs nightly; safe to run multiple times (idempotent — eligible
+    rows decrease as they're moved). See ``app/services/audit/audit_archival``.
+    """
+    from app.services.audit.audit_archival import archive_old_audit_rows
+
+    logger.info("audit_archival_start", job_id=ctx.get("job_id"), dry_run=dry_run)
+    session_factory = ctx.get("session_factory") or _session_factory
+    async with session_factory() as session:  # type: ignore[misc]
+        async with session.begin():
+            result = await archive_old_audit_rows(session, dry_run=dry_run)
+    logger.info(
+        "audit_archival_done",
+        rows_archived=result.rows_archived,
+        tables_used=result.archive_tables_used,
+        dry_run=dry_run,
+    )
+    return {
+        "rows_archived": result.rows_archived,
+        "archive_tables_used": result.archive_tables_used,
+        "dry_run": dry_run,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Worker settings. Arq discovers this class by path (arq.WorkerSettings).
 # Startup/shutdown hooks run ONCE per worker process, not per job.
@@ -246,6 +279,7 @@ FUNCTIONS: list[Callable[..., Awaitable[Any]]] = [
     generate_gstr_dump,
     fa_bulk_import,
     portal_daily_reminders,
+    archive_audit_rows,
 ]
 
 
@@ -314,6 +348,7 @@ async def enqueue(
 # ---------------------------------------------------------------------------
 # Helpers.
 # ---------------------------------------------------------------------------
+
 
 def _session_factory():
     """Indirection so the worker picks up whatever `app.database.async_session_factory`

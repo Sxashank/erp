@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -23,8 +25,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { logger } from "@/lib/logger";
 import {
   salesInvoicesApi,
   organizationsApi,
@@ -38,6 +41,8 @@ interface Organization {
   id: string;
   code: string;
   name: string;
+  reg_state_code?: string | null;
+  state_code?: string | null;
 }
 
 interface Unit {
@@ -60,10 +65,10 @@ interface GSTRate {
   code: string;
   name: string;
   rate: number;
-  cgst_rate: number;
-  sgst_rate: number;
-  igst_rate: number;
-  cess_rate: number;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
+  cessRate: number;
 }
 
 interface Account {
@@ -94,6 +99,65 @@ interface InvoiceLine {
   total_amount: number;
   revenue_account_id: string;
 }
+
+interface InvoiceLineApi {
+  id?: string;
+  lineNumber: number;
+  description: string;
+  hsnSacCode?: string | null;
+  quantity: number;
+  unitPrice: number;
+  discountPercent?: number | null;
+  discountAmount?: number | null;
+  taxableAmount: number;
+  gstRateId?: string | null;
+  cgstRate?: number | null;
+  cgstAmount?: number | null;
+  sgstRate?: number | null;
+  sgstAmount?: number | null;
+  igstRate?: number | null;
+  igstAmount?: number | null;
+  cessRate?: number | null;
+  cessAmount?: number | null;
+  totalAmount: number;
+  revenueAccountId?: string | null;
+}
+
+interface SalesInvoiceApi {
+  organizationId: string;
+  unitId?: string | null;
+  customerId: string;
+  invoiceDate: string;
+  dueDate: string;
+  placeOfSupply?: string | null;
+  isReverseCharge?: boolean | null;
+  eInvoiceRequired?: boolean | null;
+  irn?: string | null;
+  irnDate?: string | null;
+  ackNumber?: string | null;
+  ackDate?: string | null;
+  eInvoiceStatus?: string | null;
+  tcsAmount?: number | null;
+  roundOff?: number | null;
+  narration?: string | null;
+  referenceNumber?: string | null;
+  poNumber?: string | null;
+  poDate?: string | null;
+  shippingAddress?: string | null;
+  transporterName?: string | null;
+  vehicleNumber?: string | null;
+  ewayBillNumber?: string | null;
+  ewayBillDate?: string | null;
+  lines?: InvoiceLineApi[];
+}
+
+const recalculatedLineFields: (keyof InvoiceLine)[] = [
+  'quantity',
+  'unit_price',
+  'discount_percent',
+  'discount_amount',
+  'gst_rate_id',
+];
 
 const stateList = [
   { code: '01', name: 'Jammu & Kashmir' },
@@ -158,6 +222,11 @@ export function SalesInvoiceForm() {
   const [placeOfSupply, setPlaceOfSupply] = useState<string>('');
   const [isReverseCharge, setIsReverseCharge] = useState(false);
   const [eInvoiceRequired, setEInvoiceRequired] = useState(false);
+  const [irn, setIrn] = useState<string>('');
+  const [irnDate, setIrnDate] = useState<string>('');
+  const [ackNumber, setAckNumber] = useState<string>('');
+  const [ackDate, setAckDate] = useState<string>('');
+  const [eInvoiceStatus, setEInvoiceStatus] = useState<string>('NOT_APPLICABLE');
   const [tcsAmount, setTcsAmount] = useState<number>(0);
   const [roundOff, setRoundOff] = useState<number>(0);
   const [narration, setNarration] = useState<string>('');
@@ -208,182 +277,134 @@ export function SalesInvoiceForm() {
     };
   }
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      loadUnits();
-      loadCustomers();
-      loadGstRates();
-      loadRevenueAccounts();
-    }
-  }, [selectedOrgId]);
-
-  useEffect(() => {
-    if (isEdit && id && selectedOrgId) {
-      loadInvoice(id);
-    }
-  }, [id, isEdit, selectedOrgId]);
-
-  useEffect(() => {
-    calculateTotals();
-  }, [lines, tcsAmount, roundOff]);
-
-  useEffect(() => {
-    // Auto-set place of supply when customer changes
-    if (customerId) {
-      const customer = customers.find((c) => c.id === customerId);
-      if (customer?.billing_state_code) {
-        setPlaceOfSupply(customer.billing_state_code);
-      }
-    }
-  }, [customerId, customers]);
-
-  useEffect(() => {
-    // Recalculate GST when place of supply changes
-    recalculateGst();
-  }, [placeOfSupply, orgStateCode]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0 && !isEdit) {
         setSelectedOrgId(orgs[0].id);
-        // Get org's state code - default to Maharashtra
-        setOrgStateCode('27');
+        setOrgStateCode(orgs[0].reg_state_code || orgs[0].state_code || '');
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
     }
-  };
+  }, [isEdit]);
 
-  const loadUnits = async () => {
+  const loadUnits = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await unitsApi.list({ organization_id: selectedOrgId, page_size: 100 });
       setUnits(response.data.items || []);
     } catch (error) {
-      console.error('Failed to load units:', error);
+      logger.error('Failed to load units:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await customersApi.getActive({ organization_id: selectedOrgId });
       setCustomers(response.data || []);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      logger.error('Failed to load customers:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadGstRates = async () => {
+  const loadGstRates = useCallback(async () => {
     try {
       const response = await gstRatesApi.getActive({});
-      setGstRates(response.data || []);
+      setGstRates(response.data.items || []);
     } catch (error) {
-      console.error('Failed to load GST rates:', error);
+      logger.error('Failed to load GST rates:', error);
     }
-  };
+  }, []);
 
-  const loadRevenueAccounts = async () => {
+  const loadRevenueAccounts = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await accountsApi.list({
         organization_id: selectedOrgId,
-        page_size: 200,
+        page_size: 100,
       });
       // Filter for revenue accounts (nature = INCOME)
       const accounts = response.data.items || [];
       setRevenueAccounts(accounts);
     } catch (error) {
-      console.error('Failed to load accounts:', error);
+      logger.error('Failed to load accounts:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadInvoice = async (invoiceId: string) => {
+  const loadInvoice = useCallback(async (invoiceId: string) => {
     try {
       setLoading(true);
       const response = await salesInvoicesApi.get(invoiceId);
-      const invoice = response.data;
+      const invoice = response.data as SalesInvoiceApi;
 
-      setSelectedOrgId(invoice.organization_id);
-      setUnitId(invoice.unit_id || '');
-      setCustomerId(invoice.customer_id);
-      setInvoiceDate(invoice.invoice_date);
-      setDueDate(invoice.due_date);
-      setPlaceOfSupply(invoice.place_of_supply || '');
-      setIsReverseCharge(invoice.is_reverse_charge || false);
-      setEInvoiceRequired(invoice.e_invoice_required || false);
-      setTcsAmount(invoice.tcs_amount || 0);
-      setRoundOff(invoice.round_off || 0);
+      setSelectedOrgId(invoice.organizationId);
+      setUnitId(invoice.unitId || '');
+      setCustomerId(invoice.customerId);
+      setInvoiceDate(invoice.invoiceDate);
+      setDueDate(invoice.dueDate);
+      setPlaceOfSupply(invoice.placeOfSupply || '');
+      setIsReverseCharge(invoice.isReverseCharge || false);
+      setEInvoiceRequired(invoice.eInvoiceRequired || false);
+      setIrn(invoice.irn || '');
+      setIrnDate(invoice.irnDate ? invoice.irnDate.slice(0, 16) : '');
+      setAckNumber(invoice.ackNumber || '');
+      setAckDate(invoice.ackDate ? invoice.ackDate.slice(0, 16) : '');
+      setEInvoiceStatus(invoice.eInvoiceStatus || 'NOT_APPLICABLE');
+      setTcsAmount(invoice.tcsAmount || 0);
+      setRoundOff(invoice.roundOff || 0);
       setNarration(invoice.narration || '');
-      setReferenceNumber(invoice.reference_number || '');
-      setPoNumber(invoice.po_number || '');
-      setPoDate(invoice.po_date || '');
-      setShippingAddress(invoice.shipping_address || '');
-      setTransporterName(invoice.transporter_name || '');
-      setVehicleNumber(invoice.vehicle_number || '');
-      setEwayBillNumber(invoice.eway_bill_number || '');
-      setEwayBillDate(invoice.eway_bill_date || '');
+      setReferenceNumber(invoice.referenceNumber || '');
+      setPoNumber(invoice.poNumber || '');
+      setPoDate(invoice.poDate || '');
+      setShippingAddress(invoice.shippingAddress || '');
+      setTransporterName(invoice.transporterName || '');
+      setVehicleNumber(invoice.vehicleNumber || '');
+      setEwayBillNumber(invoice.ewayBillNumber || '');
+      setEwayBillDate(invoice.ewayBillDate || '');
 
       if (invoice.lines && invoice.lines.length > 0) {
         setLines(
-          invoice.lines.map((line: any) => ({
+          invoice.lines.map((line) => ({
             id: line.id,
-            line_number: line.line_number,
+            line_number: line.lineNumber,
             description: line.description,
-            hsn_sac_code: line.hsn_sac_code || '',
+            hsn_sac_code: line.hsnSacCode || '',
             quantity: line.quantity,
-            unit_price: line.unit_price,
-            discount_percent: line.discount_percent || 0,
-            discount_amount: line.discount_amount || 0,
-            taxable_amount: line.taxable_amount,
-            gst_rate_id: line.gst_rate_id || '',
-            cgst_rate: line.cgst_rate || 0,
-            cgst_amount: line.cgst_amount || 0,
-            sgst_rate: line.sgst_rate || 0,
-            sgst_amount: line.sgst_amount || 0,
-            igst_rate: line.igst_rate || 0,
-            igst_amount: line.igst_amount || 0,
-            cess_rate: line.cess_rate || 0,
-            cess_amount: line.cess_amount || 0,
-            total_amount: line.total_amount,
-            revenue_account_id: line.revenue_account_id || '',
+            unit_price: line.unitPrice,
+            discount_percent: line.discountPercent || 0,
+            discount_amount: line.discountAmount || 0,
+            taxable_amount: line.taxableAmount,
+            gst_rate_id: line.gstRateId || '',
+            cgst_rate: line.cgstRate || 0,
+            cgst_amount: line.cgstAmount || 0,
+            sgst_rate: line.sgstRate || 0,
+            sgst_amount: line.sgstAmount || 0,
+            igst_rate: line.igstRate || 0,
+            igst_amount: line.igstAmount || 0,
+            cess_rate: line.cessRate || 0,
+            cess_amount: line.cessAmount || 0,
+            total_amount: line.totalAmount,
+            revenue_account_id: line.revenueAccountId || '',
           }))
         );
       }
     } catch (error) {
-      console.error('Failed to load invoice:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load sales invoice',
-        variant: 'destructive',
-      });
+      logger.error('Failed to load invoice:', error);
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const isIntraState = () => {
+  const isIntraState = useCallback(() => {
     return placeOfSupply === orgStateCode;
-  };
+  }, [orgStateCode, placeOfSupply]);
 
-  const recalculateGst = () => {
-    const newLines = lines.map((line) => {
-      if (line.gst_rate_id) {
-        return calculateLine(line);
-      }
-      return line;
-    });
-    setLines(newLines);
-  };
-
-  const calculateLine = (line: InvoiceLine): InvoiceLine => {
+  const calculateLine = useCallback((line: InvoiceLine): InvoiceLine => {
     const grossAmount = line.quantity * line.unit_price;
     const discountAmount = line.discount_percent > 0
       ? (grossAmount * line.discount_percent) / 100
@@ -394,16 +415,16 @@ export function SalesInvoiceForm() {
     let cgstRate = 0, cgstAmount = 0, sgstRate = 0, sgstAmount = 0, igstRate = 0, igstAmount = 0, cessRate = 0, cessAmount = 0;
 
     if (gstRate) {
-      cessRate = gstRate.cess_rate || 0;
+      cessRate = gstRate.cessRate || 0;
       cessAmount = (taxableAmount * cessRate) / 100;
 
       if (isIntraState()) {
-        cgstRate = gstRate.cgst_rate;
-        sgstRate = gstRate.sgst_rate;
+        cgstRate = gstRate.cgstRate;
+        sgstRate = gstRate.sgstRate;
         cgstAmount = (taxableAmount * cgstRate) / 100;
         sgstAmount = (taxableAmount * sgstRate) / 100;
       } else {
-        igstRate = gstRate.igst_rate;
+        igstRate = gstRate.igstRate;
         igstAmount = (taxableAmount * igstRate) / 100;
       }
     }
@@ -424,9 +445,20 @@ export function SalesInvoiceForm() {
       cess_amount: cessAmount,
       total_amount: totalAmount,
     };
-  };
+  }, [gstRates, isIntraState]);
 
-  const calculateTotals = () => {
+  const recalculateGst = useCallback(() => {
+    setLines((currentLines) =>
+      currentLines.map((line) => {
+        if (line.gst_rate_id) {
+          return calculateLine(line);
+        }
+        return line;
+      })
+    );
+  }, [calculateLine]);
+
+  const calculateTotals = useCallback(() => {
     let sub = 0, disc = 0, taxable = 0, cgst = 0, sgst = 0, igst = 0, cess = 0;
 
     lines.forEach((line) => {
@@ -447,7 +479,45 @@ export function SalesInvoiceForm() {
     setTotalIgst(igst);
     setTotalCess(cess);
     setGrandTotal(taxable + cgst + sgst + igst + cess + tcsAmount + roundOff);
-  };
+  }, [lines, roundOff, tcsAmount]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      const selectedOrg = organizations.find((org) => org.id === selectedOrgId);
+      setOrgStateCode(selectedOrg?.reg_state_code || selectedOrg?.state_code || '');
+      loadUnits();
+      loadCustomers();
+      loadGstRates();
+      loadRevenueAccounts();
+    }
+  }, [loadCustomers, loadGstRates, loadRevenueAccounts, loadUnits, organizations, selectedOrgId]);
+
+  useEffect(() => {
+    if (isEdit && id && selectedOrgId) {
+      loadInvoice(id);
+    }
+  }, [id, isEdit, loadInvoice, selectedOrgId]);
+
+  useEffect(() => {
+    calculateTotals();
+  }, [calculateTotals]);
+
+  useEffect(() => {
+    if (customerId) {
+      const customer = customers.find((c) => c.id === customerId);
+      if (customer?.billing_state_code) {
+        setPlaceOfSupply(customer.billing_state_code);
+      }
+    }
+  }, [customerId, customers]);
+
+  useEffect(() => {
+    recalculateGst();
+  }, [orgStateCode, placeOfSupply, recalculateGst]);
 
   const handleAddLine = () => {
     setLines([...lines, createEmptyLine(lines.length + 1)]);
@@ -462,15 +532,19 @@ export function SalesInvoiceForm() {
     setLines(newLines);
   };
 
-  const handleLineChange = (index: number, field: keyof InvoiceLine, value: any) => {
+  const handleLineChange = (
+    index: number,
+    field: keyof InvoiceLine,
+    value: InvoiceLine[keyof InvoiceLine]
+  ) => {
     const newLines = [...lines];
-    (newLines[index] as any)[field] = value;
+    const updatedLine = { ...newLines[index], [field]: value } as InvoiceLine;
 
-    // Recalculate line when relevant fields change
-    if (['quantity', 'unit_price', 'discount_percent', 'discount_amount', 'gst_rate_id'].includes(field)) {
-      newLines[index] = calculateLine(newLines[index]);
+    if (recalculatedLineFields.includes(field)) {
+      newLines[index] = calculateLine(updatedLine);
+    } else {
+      newLines[index] = updatedLine;
     }
-
     setLines(newLines);
   };
 
@@ -506,48 +580,53 @@ export function SalesInvoiceForm() {
       setSubmitting(true);
 
       const invoiceData = {
-        customer_id: customerId,
-        invoice_date: invoiceDate,
-        due_date: dueDate,
-        organization_id: selectedOrgId,
-        unit_id: unitId || undefined,
-        place_of_supply: placeOfSupply || undefined,
-        is_reverse_charge: isReverseCharge,
-        supply_type: isIntraState() ? 'INTRA_STATE' : 'INTER_STATE',
-        e_invoice_required: eInvoiceRequired,
-        tcs_amount: tcsAmount,
-        round_off: roundOff,
+        customerId,
+        invoiceDate,
+        dueDate,
+        organizationId: selectedOrgId,
+        unitId: unitId || undefined,
+        placeOfSupply: placeOfSupply || undefined,
+        isReverseCharge,
+        supplyType: isIntraState() ? 'INTRA_STATE' : 'INTER_STATE',
+        eInvoiceRequired,
+        irn: irn || undefined,
+        irnDate: irnDate || undefined,
+        ackNumber: ackNumber || undefined,
+        ackDate: ackDate || undefined,
+        eInvoiceStatus,
+        tcsAmount,
+        roundOff,
         narration: narration || undefined,
-        reference_number: referenceNumber || undefined,
-        po_number: poNumber || undefined,
-        po_date: poDate || undefined,
-        shipping_address: shippingAddress || undefined,
-        transporter_name: transporterName || undefined,
-        vehicle_number: vehicleNumber || undefined,
-        eway_bill_number: ewayBillNumber || undefined,
-        eway_bill_date: ewayBillDate || undefined,
+        referenceNumber: referenceNumber || undefined,
+        poNumber: poNumber || undefined,
+        poDate: poDate || undefined,
+        shippingAddress: shippingAddress || undefined,
+        transporterName: transporterName || undefined,
+        vehicleNumber: vehicleNumber || undefined,
+        ewayBillNumber: ewayBillNumber || undefined,
+        ewayBillDate: ewayBillDate || undefined,
         lines: lines
           .filter((l) => l.description && l.taxable_amount > 0)
           .map((l) => ({
-            line_number: l.line_number,
+            lineNumber: l.line_number,
             description: l.description,
-            hsn_sac_code: l.hsn_sac_code || undefined,
+            hsnSacCode: l.hsn_sac_code || undefined,
             quantity: l.quantity,
-            unit_price: l.unit_price,
-            discount_percent: l.discount_percent,
-            discount_amount: l.discount_amount,
-            taxable_amount: l.taxable_amount,
-            gst_rate_id: l.gst_rate_id || undefined,
-            cgst_rate: l.cgst_rate,
-            cgst_amount: l.cgst_amount,
-            sgst_rate: l.sgst_rate,
-            sgst_amount: l.sgst_amount,
-            igst_rate: l.igst_rate,
-            igst_amount: l.igst_amount,
-            cess_rate: l.cess_rate,
-            cess_amount: l.cess_amount,
-            total_amount: l.total_amount,
-            revenue_account_id: l.revenue_account_id || undefined,
+            unitPrice: l.unit_price,
+            discountPercent: l.discount_percent,
+            discountAmount: l.discount_amount,
+            taxableAmount: l.taxable_amount,
+            gstRateId: l.gst_rate_id || undefined,
+            cgstRate: l.cgst_rate,
+            cgstAmount: l.cgst_amount,
+            sgstRate: l.sgst_rate,
+            sgstAmount: l.sgst_amount,
+            igstRate: l.igst_rate,
+            igstAmount: l.igst_amount,
+            cessRate: l.cess_rate,
+            cessAmount: l.cess_amount,
+            totalAmount: l.total_amount,
+            revenueAccountId: l.revenue_account_id || undefined,
           })),
       };
 
@@ -566,24 +645,12 @@ export function SalesInvoiceForm() {
       }
 
       navigate('/admin/ap-ar/sales-invoices');
-    } catch (error: any) {
-      console.error('Failed to save sales invoice:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save sales invoice',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      logger.error('Failed to save sales invoice:', error);
+      showErrorToast(error, toast);
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
   };
 
   if (loading) {
@@ -635,12 +702,15 @@ export function SalesInvoiceForm() {
               </div>
               <div className="space-y-2">
                 <Label>Unit</Label>
-                <Select value={unitId} onValueChange={setUnitId}>
+                <Select
+                  value={unitId || '__all_units__'}
+                  onValueChange={(value) => setUnitId(value === '__all_units__' ? '' : value)}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select unit" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Units</SelectItem>
+                    <SelectItem value="__all_units__">All Units</SelectItem>
                     {units.map((unit) => (
                       <SelectItem key={unit.id} value={unit.id}>
                         {unit.code} - {unit.name}
@@ -739,11 +809,72 @@ export function SalesInvoiceForm() {
                 <Checkbox
                   id="eInvoice"
                   checked={eInvoiceRequired}
-                  onCheckedChange={(checked) => setEInvoiceRequired(checked === true)}
+                  onCheckedChange={(checked) => {
+                    const required = checked === true;
+                    setEInvoiceRequired(required);
+                    setEInvoiceStatus(required ? 'PENDING' : 'NOT_APPLICABLE');
+                  }}
                 />
                 <label htmlFor="eInvoice" className="text-sm">
                   E-Invoice Required
                 </label>
+              </div>
+              <div className="space-y-2">
+                <Label>E-Invoice Status</Label>
+                <Select value={eInvoiceStatus} onValueChange={setEInvoiceStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NOT_APPLICABLE">Not Applicable</SelectItem>
+                    <SelectItem value="PENDING">Pending</SelectItem>
+                    <SelectItem value="GENERATED">Generated</SelectItem>
+                    <SelectItem value="CANCELLED">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="space-y-2">
+                <Label>IRN</Label>
+                <Input
+                  value={irn}
+                  onChange={(e) => {
+                    setIrn(e.target.value);
+                    if (
+                      e.target.value &&
+                      ['NOT_APPLICABLE', 'PENDING'].includes(eInvoiceStatus)
+                    ) {
+                      setEInvoiceStatus('GENERATED');
+                    }
+                  }}
+                  placeholder="Invoice Reference Number"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>IRN Date</Label>
+                <Input
+                  type="datetime-local"
+                  value={irnDate}
+                  onChange={(e) => setIrnDate(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Ack Number</Label>
+                <Input
+                  value={ackNumber}
+                  onChange={(e) => setAckNumber(e.target.value)}
+                  placeholder="Acknowledgement no."
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Ack Date</Label>
+                <Input
+                  type="datetime-local"
+                  value={ackDate}
+                  onChange={(e) => setAckDate(e.target.value)}
+                />
               </div>
             </div>
           </CardContent>
@@ -849,20 +980,20 @@ export function SalesInvoiceForm() {
                         </Select>
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(line.taxable_amount)}
+                        <AmountDisplay amount={line.taxable_amount} />
                       </TableCell>
                       <TableCell className="text-right text-sm">
                         {isIntraState() ? (
                           <span>
-                            C: {formatCurrency(line.cgst_amount)}<br />
-                            S: {formatCurrency(line.sgst_amount)}
+                            C: <AmountDisplay amount={line.cgst_amount} /><br />
+                            S: <AmountDisplay amount={line.sgst_amount} />
                           </span>
                         ) : (
-                          <span>I: {formatCurrency(line.igst_amount)}</span>
+                          <span>I: <AmountDisplay amount={line.igst_amount} /></span>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(line.total_amount)}
+                        <AmountDisplay amount={line.total_amount} />
                       </TableCell>
                       <TableCell>
                         <Select
@@ -976,39 +1107,39 @@ export function SalesInvoiceForm() {
             <CardContent className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-slate-600">Subtotal</span>
-                <span>{formatCurrency(subtotal)}</span>
+                <AmountDisplay amount={subtotal} />
               </div>
               {totalDiscount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Discount</span>
-                  <span>- {formatCurrency(totalDiscount)}</span>
+                  <span>- <AmountDisplay amount={totalDiscount} /></span>
                 </div>
               )}
               <div className="flex justify-between">
                 <span className="text-slate-600">Taxable Amount</span>
-                <span>{formatCurrency(totalTaxable)}</span>
+                <AmountDisplay amount={totalTaxable} />
               </div>
               {isIntraState() ? (
                 <>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600">CGST</span>
-                    <span>{formatCurrency(totalCgst)}</span>
+                    <AmountDisplay amount={totalCgst} />
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-600">SGST</span>
-                    <span>{formatCurrency(totalSgst)}</span>
+                    <AmountDisplay amount={totalSgst} />
                   </div>
                 </>
               ) : (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">IGST</span>
-                  <span>{formatCurrency(totalIgst)}</span>
+                  <AmountDisplay amount={totalIgst} />
                 </div>
               )}
               {totalCess > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">Cess</span>
-                  <span>{formatCurrency(totalCess)}</span>
+                  <AmountDisplay amount={totalCess} />
                 </div>
               )}
               <div className="flex justify-between items-center">
@@ -1034,7 +1165,7 @@ export function SalesInvoiceForm() {
               </div>
               <div className="border-t pt-3 flex justify-between font-bold text-lg">
                 <span>Grand Total</span>
-                <span>{formatCurrency(grandTotal)}</span>
+                <AmountDisplay amount={grandTotal} />
               </div>
             </CardContent>
           </Card>

@@ -1,9 +1,22 @@
+import {
+  Download,
+  Printer,
+  CreditCard,
+  TrendingUp,
+  TrendingDown,
+  AlertTriangle,
+  Building,
+  User,
+  FileText,
+  Search,
+} from 'lucide-react';
 import { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { useParams } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -12,22 +25,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  ArrowLeft,
-  Download,
-  Printer,
-  CreditCard,
-  TrendingUp,
-  TrendingDown,
-  AlertTriangle,
-  CheckCircle,
-  Building,
-  Calendar,
-  User,
-  FileText,
-  Clock,
-  Search,
-} from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Mock credit report data
 const reportData = {
@@ -53,10 +51,22 @@ const reportData = {
     rating: 'GOOD',
     factors: [
       { factor: 'Payment History', impact: 'POSITIVE', description: 'Consistent on-time payments' },
-      { factor: 'Credit Utilization', impact: 'POSITIVE', description: 'Low utilization ratio (28%)' },
-      { factor: 'Credit Age', impact: 'NEUTRAL', description: 'Average age of accounts: 4.2 years' },
+      {
+        factor: 'Credit Utilization',
+        impact: 'POSITIVE',
+        description: 'Low utilization ratio (28%)',
+      },
+      {
+        factor: 'Credit Age',
+        impact: 'NEUTRAL',
+        description: 'Average age of accounts: 4.2 years',
+      },
       { factor: 'Credit Mix', impact: 'POSITIVE', description: 'Good mix of credit types' },
-      { factor: 'Recent Enquiries', impact: 'NEGATIVE', description: '3 enquiries in last 6 months' },
+      {
+        factor: 'Recent Enquiries',
+        impact: 'NEGATIVE',
+        description: '3 enquiries in last 6 months',
+      },
     ],
   },
 
@@ -152,12 +162,28 @@ const reportData = {
   ],
 
   addresses: [
-    { type: 'Current', address: '123, MG Road, Bangalore - 560001', reportedBy: 'HDFC Bank', reportedOn: '2024-06-15' },
-    { type: 'Previous', address: '456, JP Nagar, Bangalore - 560078', reportedBy: 'SBI', reportedOn: '2023-06-20' },
+    {
+      type: 'Current',
+      address: '123, MG Road, Bangalore - 560001',
+      reportedBy: 'HDFC Bank',
+      reportedOn: '2024-06-15',
+    },
+    {
+      type: 'Previous',
+      address: '456, JP Nagar, Bangalore - 560078',
+      reportedBy: 'SBI',
+      reportedOn: '2023-06-20',
+    },
   ],
 
   employments: [
-    { employer: 'Tech Solutions Pvt Ltd', designation: 'Senior Engineer', income: 150000, reportedBy: 'HDFC Bank', reportedOn: '2024-03-15' },
+    {
+      employer: 'Tech Solutions Pvt Ltd',
+      designation: 'Senior Engineer',
+      income: 150000,
+      reportedBy: 'HDFC Bank',
+      reportedOn: '2024-03-15',
+    },
   ],
 };
 
@@ -203,7 +229,11 @@ export default function CreditBureauReport() {
   const getAccountStatusBadge = (status: string) => {
     switch (status) {
       case 'ACTIVE':
-        return <Badge variant="default" className="bg-green-100 text-green-800">Active</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            Active
+          </Badge>
+        );
       case 'CLOSED':
         return <Badge variant="secondary">Closed</Badge>;
       case 'WRITTEN_OFF':
@@ -225,50 +255,39 @@ export default function CreditBureauReport() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link to="/admin/kyc/credit-bureau">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Credit Report"
+        subtitle={`Report ID: ${reportData.reportId} | ${reportData.bureau} | Generated: ${reportData.pullDate}`}
+        breadcrumbs={[
+          { label: 'Credit Bureau', to: '/admin/kyc/credit-bureau' },
+          { label: reportData.reportId },
+        ]}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
             </Button>
-          </Link>
-          <div>
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <CreditCard className="h-6 w-6" />
-              Credit Report
-            </h1>
-            <p className="text-muted-foreground">
-              Report ID: {reportData.reportId} | {reportData.bureau} | Generated: {reportData.pullDate}
-            </p>
+            <Button variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Download PDF
+            </Button>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline">
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-          <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
-            Download PDF
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Score Header */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         <Card className={`lg:col-span-1 ${getScoreBg(reportData.score.value)}`}>
           <CardContent className="pt-6 text-center">
             <div className={`text-6xl font-bold ${getScoreColor(reportData.score.value)}`}>
               {reportData.score.value}
             </div>
-            <p className="text-sm text-muted-foreground mt-2">
+            <p className="mt-2 text-sm text-muted-foreground">
               Credit Score ({reportData.score.range.min}-{reportData.score.range.max})
             </p>
-            <div className="mt-2">
-              {getRatingBadge(reportData.score.rating)}
-            </div>
+            <div className="mt-2">{getRatingBadge(reportData.score.rating)}</div>
           </CardContent>
         </Card>
 
@@ -280,7 +299,7 @@ export default function CreditBureauReport() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
               <div>
                 <p className="text-muted-foreground">Name</p>
                 <p className="font-medium">{reportData.customer.name}</p>
@@ -312,44 +331,51 @@ export default function CreditBureauReport() {
         </TabsList>
 
         <TabsContent value="summary" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Building className="h-4 w-4" />
                   Total Accounts
                 </div>
-                <div className="text-2xl font-bold mt-1">{reportData.summary.totalAccounts}</div>
+                <div className="mt-1 text-2xl font-bold">{reportData.summary.totalAccounts}</div>
                 <p className="text-xs text-muted-foreground">
-                  {reportData.summary.activeAccounts} active, {reportData.summary.closedAccounts} closed
+                  {reportData.summary.activeAccounts} active, {reportData.summary.closedAccounts}{' '}
+                  closed
                 </p>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <CreditCard className="h-4 w-4" />
                   Total Credit Limit
                 </div>
-                <div className="text-2xl font-bold mt-1">{formatCurrency(reportData.summary.totalCreditLimit)}</div>
+                <div className="mt-1 text-2xl font-bold">
+                  {formatCurrency(reportData.summary.totalCreditLimit)}
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <FileText className="h-4 w-4" />
                   Current Outstanding
                 </div>
-                <div className="text-2xl font-bold mt-1">{formatCurrency(reportData.summary.totalOutstanding)}</div>
+                <div className="mt-1 text-2xl font-bold">
+                  {formatCurrency(reportData.summary.totalOutstanding)}
+                </div>
               </CardContent>
             </Card>
             <Card>
               <CardContent className="pt-6">
-                <div className="flex items-center gap-2 text-muted-foreground text-sm">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <TrendingUp className="h-4 w-4" />
                   Credit Utilization
                 </div>
-                <div className={`text-2xl font-bold mt-1 ${reportData.summary.utilizationPercent < 30 ? 'text-green-600' : reportData.summary.utilizationPercent < 50 ? 'text-yellow-600' : 'text-red-600'}`}>
+                <div
+                  className={`mt-1 text-2xl font-bold ${reportData.summary.utilizationPercent < 30 ? 'text-green-600' : reportData.summary.utilizationPercent < 50 ? 'text-yellow-600' : 'text-red-600'}`}
+                >
                   {reportData.summary.utilizationPercent}%
                 </div>
               </CardContent>
@@ -361,21 +387,29 @@ export default function CreditBureauReport() {
               <CardTitle>Account Summary</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="text-center p-4 bg-green-50 rounded-lg">
-                  <div className="text-3xl font-bold text-green-600">{reportData.summary.activeAccounts}</div>
+              <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
+                <div className="rounded-lg bg-green-50 p-4 text-center">
+                  <div className="text-3xl font-bold text-green-600">
+                    {reportData.summary.activeAccounts}
+                  </div>
                   <p className="text-sm text-muted-foreground">Active Accounts</p>
                 </div>
-                <div className="text-center p-4 bg-gray-50 rounded-lg">
-                  <div className="text-3xl font-bold text-gray-600">{reportData.summary.closedAccounts}</div>
+                <div className="rounded-lg bg-gray-50 p-4 text-center">
+                  <div className="text-3xl font-bold text-gray-600">
+                    {reportData.summary.closedAccounts}
+                  </div>
                   <p className="text-sm text-muted-foreground">Closed Accounts</p>
                 </div>
-                <div className="text-center p-4 bg-red-50 rounded-lg">
-                  <div className="text-3xl font-bold text-red-600">{reportData.summary.overdueAccounts}</div>
+                <div className="rounded-lg bg-red-50 p-4 text-center">
+                  <div className="text-3xl font-bold text-red-600">
+                    {reportData.summary.overdueAccounts}
+                  </div>
                   <p className="text-sm text-muted-foreground">Overdue Accounts</p>
                 </div>
-                <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <div className="text-3xl font-bold text-blue-600">{reportData.enquiries.length}</div>
+                <div className="rounded-lg bg-blue-50 p-4 text-center">
+                  <div className="text-3xl font-bold text-blue-600">
+                    {reportData.enquiries.length}
+                  </div>
                   <p className="text-sm text-muted-foreground">Recent Enquiries</p>
                 </div>
               </div>
@@ -409,8 +443,12 @@ export default function CreditBureauReport() {
                       <TableCell className="font-medium">{account.lender}</TableCell>
                       <TableCell>{account.accountType}</TableCell>
                       <TableCell className="font-mono">{account.accountNumber}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(account.sanctionedAmount)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(account.currentBalance)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(account.sanctionedAmount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {formatCurrency(account.currentBalance)}
+                      </TableCell>
                       <TableCell>{getAccountStatusBadge(account.status)}</TableCell>
                       <TableCell>{account.openDate}</TableCell>
                       <TableCell>
@@ -458,13 +496,14 @@ export default function CreditBureauReport() {
               </Table>
 
               {reportData.enquiries.length > 3 && (
-                <div className="mt-4 p-4 bg-yellow-50 rounded-lg">
+                <div className="mt-4 rounded-lg bg-yellow-50 p-4">
                   <div className="flex items-center gap-2 text-yellow-800">
                     <AlertTriangle className="h-5 w-5" />
                     <span className="font-medium">High Enquiry Activity</span>
                   </div>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    Multiple credit enquiries in a short period may negatively impact the credit score.
+                  <p className="mt-1 text-sm text-yellow-700">
+                    Multiple credit enquiries in a short period may negatively impact the credit
+                    score.
                   </p>
                 </div>
               )}
@@ -481,18 +520,24 @@ export default function CreditBureauReport() {
             <CardContent>
               <div className="space-y-4">
                 {reportData.score.factors.map((factor, index) => (
-                  <div key={index} className="flex items-start gap-4 p-4 border rounded-lg">
-                    <div className="mt-1">
-                      {getImpactIcon(factor.impact)}
-                    </div>
+                  <div key={index} className="flex items-start gap-4 rounded-lg border p-4">
+                    <div className="mt-1">{getImpactIcon(factor.impact)}</div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <h4 className="font-medium">{factor.factor}</h4>
-                        <Badge variant={factor.impact === 'POSITIVE' ? 'default' : factor.impact === 'NEGATIVE' ? 'destructive' : 'secondary'}>
+                        <Badge
+                          variant={
+                            factor.impact === 'POSITIVE'
+                              ? 'default'
+                              : factor.impact === 'NEGATIVE'
+                                ? 'destructive'
+                                : 'secondary'
+                          }
+                        >
                           {factor.impact}
                         </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground mt-1">{factor.description}</p>
+                      <p className="mt-1 text-sm text-muted-foreground">{factor.description}</p>
                     </div>
                   </div>
                 ))}
@@ -502,7 +547,7 @@ export default function CreditBureauReport() {
         </TabsContent>
 
         <TabsContent value="personal" className="mt-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle>Addresses</CardTitle>
@@ -510,13 +555,15 @@ export default function CreditBureauReport() {
               <CardContent>
                 <div className="space-y-4">
                   {reportData.addresses.map((addr, index) => (
-                    <div key={index} className="p-3 border rounded-lg">
-                      <div className="flex items-center justify-between mb-2">
+                    <div key={index} className="rounded-lg border p-3">
+                      <div className="mb-2 flex items-center justify-between">
                         <Badge variant="outline">{addr.type}</Badge>
-                        <span className="text-xs text-muted-foreground">Reported: {addr.reportedOn}</span>
+                        <span className="text-xs text-muted-foreground">
+                          Reported: {addr.reportedOn}
+                        </span>
                       </div>
                       <p className="text-sm">{addr.address}</p>
-                      <p className="text-xs text-muted-foreground mt-1">By: {addr.reportedBy}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">By: {addr.reportedBy}</p>
                     </div>
                   ))}
                 </div>
@@ -530,13 +577,14 @@ export default function CreditBureauReport() {
               <CardContent>
                 <div className="space-y-4">
                   {reportData.employments.map((emp, index) => (
-                    <div key={index} className="p-3 border rounded-lg">
+                    <div key={index} className="rounded-lg border p-3">
                       <h4 className="font-medium">{emp.employer}</h4>
                       <p className="text-sm text-muted-foreground">{emp.designation}</p>
-                      <p className="text-sm mt-2">
-                        Monthly Income: <span className="font-medium">{formatCurrency(emp.income)}</span>
+                      <p className="mt-2 text-sm">
+                        Monthly Income:{' '}
+                        <span className="font-medium">{formatCurrency(emp.income)}</span>
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         Reported by {emp.reportedBy} on {emp.reportedOn}
                       </p>
                     </div>

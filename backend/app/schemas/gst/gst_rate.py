@@ -2,27 +2,26 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import BaseSchema
+from app.schemas.base import CamelSchema
 
 
-class GSTRateBase(BaseSchema):
+class GSTRateBase(CamelSchema):
     """Base GST Rate schema."""
 
     code: str = Field(..., min_length=1, max_length=20)
     name: str = Field(..., min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
+    description: str | None = Field(None, max_length=500)
     rate: Decimal = Field(..., ge=0, le=100)
     cgst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     sgst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     igst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     cess_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     effective_from: date
-    effective_to: Optional[date] = None
+    effective_to: date | None = None
     is_composition: bool = False
     is_reverse_charge: bool = False
 
@@ -33,21 +32,21 @@ class GSTRateCreate(GSTRateBase):
     pass
 
 
-class GSTRateUpdate(BaseSchema):
+class GSTRateUpdate(CamelSchema):
     """Schema for updating a GST rate."""
 
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
-    rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    cgst_rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    sgst_rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    igst_rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    cess_rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    effective_from: Optional[date] = None
-    effective_to: Optional[date] = None
-    is_composition: Optional[bool] = None
-    is_reverse_charge: Optional[bool] = None
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=1, max_length=100)
+    description: str | None = Field(None, max_length=500)
+    rate: Decimal | None = Field(None, ge=0, le=100)
+    cgst_rate: Decimal | None = Field(None, ge=0, le=100)
+    sgst_rate: Decimal | None = Field(None, ge=0, le=100)
+    igst_rate: Decimal | None = Field(None, ge=0, le=100)
+    cess_rate: Decimal | None = Field(None, ge=0, le=100)
+    effective_from: date | None = None
+    effective_to: date | None = None
+    is_composition: bool | None = None
+    is_reverse_charge: bool | None = None
+    is_active: bool | None = None
 
 
 class GSTRateResponse(GSTRateBase):
@@ -55,5 +54,5 @@ class GSTRateResponse(GSTRateBase):
 
     id: UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool = True

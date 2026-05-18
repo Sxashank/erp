@@ -3,7 +3,6 @@
 from datetime import date, datetime
 from decimal import Decimal
 import hashlib
-import os
 from typing import List, Optional, Tuple
 from uuid import UUID
 
@@ -115,7 +114,7 @@ class TDSReturnService:
         # Calculate totals from challans/entries
         await self._calculate_return_totals(tds_return)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(tds_return)
         return tds_return
 
@@ -192,7 +191,7 @@ class TDSReturnService:
             tds_return.validation_errors = None
             tds_return.validation_warnings = None
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(tds_return)
         return tds_return
 
@@ -278,7 +277,7 @@ class TDSReturnService:
             tds_return.status = ReturnStatus.VALIDATED
         tds_return.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(tds_return)
 
         return ReturnValidationResult(
@@ -310,6 +309,10 @@ class TDSReturnService:
             pan[5:9].isdigit() and
             pan[9].isalpha()
         )
+
+    def _calculate_file_hash(self, file_content: str) -> str:
+        """Calculate deterministic SHA256 hash for generated file content."""
+        return hashlib.sha256(file_content.encode()).hexdigest()
 
     async def generate_file(
         self,
@@ -363,7 +366,7 @@ class TDSReturnService:
         )
 
         # Calculate hash
-        file_hash = hashlib.sha256(file_content.encode()).hexdigest()
+        file_hash = self._calculate_file_hash(file_content)
 
         # Save file (in real implementation, would save to storage)
         # For now, we'll just store the metadata
@@ -374,7 +377,7 @@ class TDSReturnService:
         tds_return.status = ReturnStatus.GENERATED
         tds_return.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(tds_return)
 
         return file_name, file_content
@@ -462,7 +465,7 @@ class TDSReturnService:
                 tds_return.quarter.value,
             )
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(tds_return)
         return tds_return
 
@@ -535,7 +538,7 @@ class TDSReturnService:
         # Mark original as revised
         original.status = ReturnStatus.REVISED
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(revision)
         return revision
 
@@ -585,4 +588,4 @@ class TDSReturnService:
             raise ValidationException("Cannot delete filed/accepted returns")
 
         tds_return.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

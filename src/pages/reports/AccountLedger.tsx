@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { BookOpen, ExternalLink, FileSpreadsheet, FileText, Filter, Printer, Search } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BookOpen, Download, ExternalLink, FileSpreadsheet, FileText, Filter, Printer, Search } from 'lucide-react';
-import { exportAccountLedgerToExcel, exportAccountLedgerToPDF } from '@/utils/exportUtils';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -25,7 +25,9 @@ import {
 } from '@/components/ui/table';
 import { reportsApi, organizationsApi, accountsApi, financialYearsApi } from '@/services/api';
 import type { Account, Organization, FinancialYear } from '@/types';
+import { exportAccountLedgerToExcel, exportAccountLedgerToPDF } from '@/utils/exportUtils';
 
+import { logger } from "@/lib/logger";
 interface LedgerEntry {
   voucher_id: string;
   voucher_number: string;
@@ -79,17 +81,6 @@ export function AccountLedger() {
   const [accountsLoading, setAccountsLoading] = useState(false);
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchFinancialYears();
-      fetchAccounts();
-    }
-  }, [selectedOrgId]);
-
-  useEffect(() => {
     if (selectedFYId) {
       const fy = financialYears.find(f => f.id === selectedFYId);
       if (fy) {
@@ -112,18 +103,11 @@ export function AccountLedger() {
     }
   }, [accountIdFromUrl, accounts, fromDateFromUrl, toDateFromUrl]);
 
-  // Auto-generate report when coming from drill-down with all parameters
-  useEffect(() => {
-    if (accountIdFromUrl && selectedAccountId && fromDate && toDate && !reportData) {
-      generateReport();
-    }
-  }, [selectedAccountId, fromDate, toDate]);
-
   const handleVoucherDrillDown = (voucherId: string) => {
     navigate(`/admin/finance/vouchers/${voucherId}`);
   };
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -136,11 +120,11 @@ export function AccountLedger() {
         }
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, [orgIdFromUrl]);
 
-  const fetchFinancialYears = async () => {
+  const fetchFinancialYears = useCallback(async () => {
     try {
       const response = await financialYearsApi.list({ organization_id: selectedOrgId, page_size: 100 });
       setFinancialYears(response.data.items);
@@ -151,44 +135,27 @@ export function AccountLedger() {
         setSelectedFYId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch financial years:', error);
+      logger.error('Failed to fetch financial years:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     try {
       setAccountsLoading(true);
       const response = await accountsApi.list({
         organization_id: selectedOrgId,
-        page_size: 500,
+        page_size: 100,
         include_inactive: false,
       });
       setAccounts(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch accounts:', error);
+      logger.error('Failed to fetch accounts:', error);
     } finally {
       setAccountsLoading(false);
     }
-  };
+  }, [selectedOrgId]);
 
-  const searchAccounts = async (query: string) => {
-    if (!query || query.length < 2) return;
-    try {
-      setAccountsLoading(true);
-      const response = await accountsApi.search({
-        organization_id: selectedOrgId,
-        query,
-        limit: 50,
-      });
-      setAccounts(response.data);
-    } catch (error) {
-      console.error('Failed to search accounts:', error);
-    } finally {
-      setAccountsLoading(false);
-    }
-  };
-
-  const generateReport = async () => {
+  const generateReport = useCallback(async () => {
     if (!selectedAccountId || !fromDate || !toDate) return;
     try {
       setLoading(true);
@@ -198,11 +165,29 @@ export function AccountLedger() {
       });
       setReportData(response.data);
     } catch (error) {
-      console.error('Failed to generate report:', error);
+      logger.error('Failed to generate report:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [fromDate, selectedAccountId, toDate]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchFinancialYears();
+      fetchAccounts();
+    }
+  }, [fetchAccounts, fetchFinancialYears, selectedOrgId]);
+
+  // Auto-generate report when coming from drill-down with all parameters
+  useEffect(() => {
+    if (accountIdFromUrl && selectedAccountId && fromDate && toDate && !reportData) {
+      generateReport();
+    }
+  }, [accountIdFromUrl, fromDate, generateReport, reportData, selectedAccountId, toDate]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat('en-IN', {
@@ -210,13 +195,6 @@ export function AccountLedger() {
       currency: 'INR',
       minimumFractionDigits: 2,
     }).format(Math.abs(amount));
-
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
 
   const handlePrint = () => {
     window.print();
@@ -364,7 +342,7 @@ export function AccountLedger() {
                 {reportData.account_code} | {reportData.account_group_name}
               </p>
               <p className="text-sm text-slate-500">
-                Ledger for the period {formatDate(reportData.from_date)} to {formatDate(reportData.to_date)}
+                Ledger for the period <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>
@@ -412,7 +390,7 @@ export function AccountLedger() {
                 <TableBody>
                   {/* Opening Balance Row */}
                   <TableRow className="bg-slate-50 font-medium">
-                    <TableCell>{formatDate(reportData.from_date)}</TableCell>
+                    <TableCell><DateDisplay date={reportData.from_date} /></TableCell>
                     <TableCell>-</TableCell>
                     <TableCell>-</TableCell>
                     <TableCell>Opening Balance</TableCell>
@@ -428,7 +406,7 @@ export function AccountLedger() {
                   {reportData.entries.map((entry, index) => (
                     <TableRow key={entry.voucher_id + '-' + index} className="hover:bg-slate-50">
                       <TableCell className="font-mono text-sm">
-                        {formatDate(entry.voucher_date)}
+                        <DateDisplay date={entry.voucher_date} />
                       </TableCell>
                       <TableCell
                         className="font-medium text-blue-600 cursor-pointer hover:underline"

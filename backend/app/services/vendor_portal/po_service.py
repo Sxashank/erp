@@ -134,7 +134,7 @@ class VendorPOService:
         po.acknowledgement_status = "ACKNOWLEDGED"
         po.acknowledged_at = datetime.utcnow()
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send notification to procurement
 
@@ -188,7 +188,7 @@ class VendorPOService:
         # Update PO status
         po.acknowledgement_status = "REJECTED"
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send notification to procurement
 
@@ -249,7 +249,7 @@ class VendorPOService:
         # Update PO status
         po.acknowledgement_status = "CHANGE_REQUESTED"
 
-        await self.session.commit()
+        await self.session.flush()
 
         # TODO: Send notification to procurement
 
@@ -311,7 +311,7 @@ class VendorPOService:
         request.cancelled_at = datetime.utcnow()
         request.cancellation_reason = reason
 
-        await self.session.commit()
+        await self.session.flush()
 
         return request
 

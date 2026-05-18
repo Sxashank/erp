@@ -6,26 +6,24 @@ court fees, and expense recovery tracking.
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.legal.expense import (
-    ExpenseCategory,
-    LegalExpense,
-    ExpenseRecovery,
-    AdvocateFee,
-)
+from app.models.legal.court import CourtFeeSlab
 from app.models.legal.enums import (
     ExpenseCategoryType,
     ExpenseStatus,
     RecoveryType,
-    FeeStructureType,
 )
-from app.models.legal.court import CourtFeeSlab
+from app.models.legal.expense import (
+    ExpenseCategory,
+    ExpenseRecovery,
+    LegalExpense,
+)
 from app.models.lending.enums import LegalForumType
 
 
@@ -35,7 +33,7 @@ class LegalExpenseService:
     # Standard TDS rates for legal services
     TDS_RATES = {
         "194J": Decimal("10.00"),  # Professional services
-        "194C": Decimal("2.00"),   # Contractors
+        "194C": Decimal("2.00"),  # Contractors
     }
 
     def __init__(self, db: AsyncSession):
@@ -51,16 +49,16 @@ class LegalExpenseService:
         category_code: str,
         category_name: str,
         category_type: ExpenseCategoryType,
-        gl_account_id: Optional[UUID] = None,
+        gl_account_id: UUID | None = None,
         tds_applicable: bool = False,
-        tds_section: Optional[str] = None,
-        tds_rate: Optional[Decimal] = None,
+        tds_section: str | None = None,
+        tds_rate: Decimal | None = None,
         gst_applicable: bool = False,
-        gst_rate: Optional[Decimal] = None,
-        hsn_sac_code: Optional[str] = None,
+        gst_rate: Decimal | None = None,
+        hsn_sac_code: str | None = None,
         recoverable_from_borrower: bool = True,
         recovery_priority: int = 0,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> ExpenseCategory:
         """Create a new expense category."""
         category = ExpenseCategory(
@@ -83,9 +81,7 @@ class LegalExpenseService:
         await self.db.flush()
         return category
 
-    async def list_categories(
-        self, organization_id: UUID
-    ) -> List[ExpenseCategory]:
+    async def list_categories(self, organization_id: UUID) -> list[ExpenseCategory]:
         """List all expense categories."""
         result = await self.db.execute(
             select(ExpenseCategory)
@@ -112,15 +108,15 @@ class LegalExpenseService:
         description: str,
         base_amount: Decimal,
         payee_name: str,
-        advocate_id: Optional[UUID] = None,
-        payee_pan: Optional[str] = None,
-        payee_gstin: Optional[str] = None,
-        invoice_number: Optional[str] = None,
-        invoice_date: Optional[date] = None,
-        invoice_document_path: Optional[str] = None,
-        gst_state: Optional[str] = None,  # For CGST/SGST vs IGST
+        advocate_id: UUID | None = None,
+        payee_pan: str | None = None,
+        payee_gstin: str | None = None,
+        invoice_number: str | None = None,
+        invoice_date: date | None = None,
+        invoice_document_path: str | None = None,
+        gst_state: str | None = None,  # For CGST/SGST vs IGST
         is_recoverable: bool = True,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> LegalExpense:
         """Record a new legal expense."""
         # Get category for tax treatment
@@ -169,11 +165,17 @@ class LegalExpenseService:
             status=ExpenseStatus.PENDING,
             base_amount=base_amount,
             gst_applicable=category.gst_applicable,
-            cgst_rate=category.gst_rate / 2 if category.gst_applicable and gst_state == "INTRA" else None,
+            cgst_rate=(
+                category.gst_rate / 2 if category.gst_applicable and gst_state == "INTRA" else None
+            ),
             cgst_amount=cgst_amount if gst_state == "INTRA" else None,
-            sgst_rate=category.gst_rate / 2 if category.gst_applicable and gst_state == "INTRA" else None,
+            sgst_rate=(
+                category.gst_rate / 2 if category.gst_applicable and gst_state == "INTRA" else None
+            ),
             sgst_amount=sgst_amount if gst_state == "INTRA" else None,
-            igst_rate=category.gst_rate if category.gst_applicable and gst_state != "INTRA" else None,
+            igst_rate=(
+                category.gst_rate if category.gst_applicable and gst_state != "INTRA" else None
+            ),
             igst_amount=igst_amount if gst_state != "INTRA" else None,
             total_gst=total_gst,
             tds_applicable=category.tds_applicable,
@@ -202,9 +204,7 @@ class LegalExpenseService:
         approved_by_name: str,
     ) -> LegalExpense:
         """Approve an expense."""
-        result = await self.db.execute(
-            select(LegalExpense).where(LegalExpense.id == expense_id)
-        )
+        result = await self.db.execute(select(LegalExpense).where(LegalExpense.id == expense_id))
         expense = result.scalar_one_or_none()
         if not expense:
             raise ValueError(f"Expense {expense_id} not found")
@@ -224,12 +224,10 @@ class LegalExpenseService:
         self,
         expense_id: UUID,
         rejection_reason: str,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> LegalExpense:
         """Reject an expense."""
-        result = await self.db.execute(
-            select(LegalExpense).where(LegalExpense.id == expense_id)
-        )
+        result = await self.db.execute(select(LegalExpense).where(LegalExpense.id == expense_id))
         expense = result.scalar_one_or_none()
         if not expense:
             raise ValueError(f"Expense {expense_id} not found")
@@ -247,13 +245,11 @@ class LegalExpenseService:
         payment_date: date,
         payment_mode: str,
         payment_reference: str,
-        voucher_id: Optional[UUID] = None,
-        updated_by: Optional[UUID] = None,
+        voucher_id: UUID | None = None,
+        updated_by: UUID | None = None,
     ) -> LegalExpense:
         """Record payment for an expense."""
-        result = await self.db.execute(
-            select(LegalExpense).where(LegalExpense.id == expense_id)
-        )
+        result = await self.db.execute(select(LegalExpense).where(LegalExpense.id == expense_id))
         expense = result.scalar_one_or_none()
         if not expense:
             raise ValueError(f"Expense {expense_id} not found")
@@ -281,17 +277,15 @@ class LegalExpenseService:
         recovery_type: RecoveryType,
         recovery_date: date,
         amount_recovered: Decimal,
-        source_reference: Optional[str] = None,
-        source_transaction_id: Optional[UUID] = None,
-        auction_id: Optional[UUID] = None,
-        ots_id: Optional[UUID] = None,
-        remarks: Optional[str] = None,
-        created_by: Optional[UUID] = None,
+        source_reference: str | None = None,
+        source_transaction_id: UUID | None = None,
+        auction_id: UUID | None = None,
+        ots_id: UUID | None = None,
+        remarks: str | None = None,
+        created_by: UUID | None = None,
     ) -> ExpenseRecovery:
         """Record recovery of expense amount."""
-        result = await self.db.execute(
-            select(LegalExpense).where(LegalExpense.id == expense_id)
-        )
+        result = await self.db.execute(select(LegalExpense).where(LegalExpense.id == expense_id))
         expense = result.scalar_one_or_none()
         if not expense:
             raise ValueError(f"Expense {expense_id} not found")
@@ -329,8 +323,8 @@ class LegalExpenseService:
     async def calculate_court_fee(
         self,
         claim_amount: Decimal,
-        court_id: Optional[UUID] = None,
-        court_type: Optional[LegalForumType] = None,
+        court_id: UUID | None = None,
+        court_type: LegalForumType | None = None,
         fee_type: str = "FILING",
     ) -> Decimal:
         """Calculate court fee based on claim amount."""
@@ -368,7 +362,7 @@ class LegalExpenseService:
     def _default_court_fee(
         self,
         claim_amount: Decimal,
-        court_type: Optional[LegalForumType],
+        court_type: LegalForumType | None,
         fee_type: str,
     ) -> Decimal:
         """Calculate default court fee when no slab is defined."""
@@ -391,7 +385,7 @@ class LegalExpenseService:
     # Queries
     # =========================================================================
 
-    async def get_expense(self, expense_id: UUID) -> Optional[LegalExpense]:
+    async def get_expense(self, expense_id: UUID) -> LegalExpense | None:
         """Get expense by ID with related data."""
         result = await self.db.execute(
             select(LegalExpense)
@@ -406,14 +400,18 @@ class LegalExpenseService:
     async def list_expenses(
         self,
         organization_id: UUID,
-        legal_case_id: Optional[UUID] = None,
-        category_id: Optional[UUID] = None,
-        status: Optional[ExpenseStatus] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        legal_case_id: UUID | None = None,
+        category_id: UUID | None = None,
+        expense_category: Any | None = None,
+        status: ExpenseStatus | None = None,
+        expense_status: ExpenseStatus | None = None,
+        is_paid: bool | None = None,
+        is_recovered: bool | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> Tuple[List[LegalExpense], int]:
+    ) -> tuple[list[LegalExpense], int]:
         """List expenses with filtering and pagination."""
         query = select(LegalExpense).where(
             and_(
@@ -426,8 +424,21 @@ class LegalExpenseService:
             query = query.where(LegalExpense.legal_case_id == legal_case_id)
         if category_id:
             query = query.where(LegalExpense.category_id == category_id)
-        if status:
-            query = query.where(LegalExpense.status == status)
+        effective_status = status or expense_status
+        if effective_status:
+            query = query.where(LegalExpense.status == effective_status)
+        if is_paid is not None:
+            query = query.where(
+                LegalExpense.payment_date.is_not(None)
+                if is_paid
+                else LegalExpense.payment_date.is_(None)
+            )
+        if is_recovered is not None:
+            query = query.where(
+                LegalExpense.amount_recovered > 0
+                if is_recovered
+                else LegalExpense.amount_recovered <= 0
+            )
         if from_date:
             query = query.where(LegalExpense.expense_date >= from_date)
         if to_date:
@@ -446,9 +457,7 @@ class LegalExpenseService:
 
         return items, total
 
-    async def get_case_expense_summary(
-        self, legal_case_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_case_expense_summary(self, legal_case_id: UUID) -> dict[str, Any]:
         """Get expense summary for a case."""
         result = await self.db.execute(
             select(LegalExpense).where(
@@ -516,4 +525,5 @@ class LegalExpenseService:
 # Helper for SQL OR condition
 def or_(*conditions):
     from sqlalchemy import or_ as sql_or
+
     return sql_or(*conditions)

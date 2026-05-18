@@ -1,47 +1,43 @@
 """DMS Documents API endpoints."""
 
 import logging
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query, status
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
-from app.models.dms import DocumentStatus, DocumentAccessLevel
-from app.services.dms import DocumentService, SearchService
+from app.models.dms import DocumentAccessLevel, DocumentStatus
 from app.schemas.dms.document import (
-    DocumentCreate,
-    DocumentUpdate,
-    DocumentResponse,
     DocumentListResponse,
-    DocumentVersionResponse,
-    DocumentHistoryResponse,
-    DocumentDownloadResponse,
+    DocumentResponse,
     DocumentStatsResponse,
-    NewVersionCreate,
+    DocumentUpdate,
+    DocumentVersionResponse,
 )
+from app.services.dms import DocumentService, SearchService
+from app.core.exceptions import InternalServerException, NotFoundException
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["DMS Documents"])
 
 
-@router.post("", response_model=DocumentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DocumentResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     file: UploadFile = File(...),
-    folder_id: Optional[UUID] = Form(None),
-    name: Optional[str] = Form(None),
-    description: Optional[str] = Form(None),
-    document_type: Optional[str] = Form(None),
-    document_subtype: Optional[str] = Form(None),
-    entity_type: Optional[str] = Form(None),
-    entity_id: Optional[UUID] = Form(None),
+    folder_id: UUID | None = Form(None),
+    name: str | None = Form(None),
+    description: str | None = Form(None),
+    document_type: str | None = Form(None),
+    document_subtype: str | None = Form(None),
+    entity_type: str | None = Form(None),
+    entity_id: UUID | None = Form(None),
     access_level: str = Form("organization"),
-    keywords: Optional[str] = Form(None),  # Comma-separated
-    db: AsyncSession = Depends(get_db),
+    keywords: str | None = Form(None),  # Comma-separated
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Upload a new document."""
@@ -80,23 +76,23 @@ async def upload_document(
         return document
     except Exception as e:
         logger.error(f"Error uploading document: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        raise InternalServerException(
             detail="Failed to upload document",
+            error_code="FAILED_TO_UPLOAD_DOCUMENT",
         )
 
 
-@router.get("", response_model=DocumentListResponse)
+@router.get("", response_model=DocumentListResponse, response_model_by_alias=True)
 async def list_documents(
-    folder_id: Optional[UUID] = Query(None),
-    document_type: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    entity_type: Optional[str] = Query(None),
-    entity_id: Optional[UUID] = Query(None),
-    search: Optional[str] = Query(None),
+    folder_id: UUID | None = Query(None),
+    document_type: str | None = Query(None),
+    status: str | None = Query(None),
+    entity_type: str | None = Query(None),
+    entity_id: UUID | None = Query(None),
+    search: str | None = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List documents with filters."""
@@ -130,22 +126,22 @@ async def list_documents(
     )
 
 
-@router.get("/search", response_model=DocumentListResponse)
+@router.get("/search", response_model=DocumentListResponse, response_model_by_alias=True)
 async def search_documents(
-    query: Optional[str] = Query(None),
-    folder_id: Optional[UUID] = Query(None),
-    document_type: Optional[str] = Query(None),
-    document_subtype: Optional[str] = Query(None),
-    mime_type: Optional[str] = Query(None),
-    tags: Optional[str] = Query(None),  # Comma-separated
-    entity_type: Optional[str] = Query(None),
-    entity_id: Optional[UUID] = Query(None),
-    date_from: Optional[str] = Query(None),
-    date_to: Optional[str] = Query(None),
+    query: str | None = Query(None),
+    folder_id: UUID | None = Query(None),
+    document_type: str | None = Query(None),
+    document_subtype: str | None = Query(None),
+    mime_type: str | None = Query(None),
+    tags: str | None = Query(None),  # Comma-separated
+    entity_type: str | None = Query(None),
+    entity_id: UUID | None = Query(None),
+    date_from: str | None = Query(None),
+    date_to: str | None = Query(None),
     include_archived: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Search documents with various filters."""
@@ -181,10 +177,10 @@ async def search_documents(
     )
 
 
-@router.get("/recent")
+@router.get("/recent", response_model=list[DocumentResponse], response_model_by_alias=True)
 async def get_recent_documents(
     limit: int = Query(10, ge=1, le=50),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get recently accessed documents."""
@@ -194,12 +190,12 @@ async def get_recent_documents(
         user_id=current_user.id,
         limit=limit,
     )
-    return documents
+    return [DocumentResponse.model_validate(document) for document in documents]
 
 
-@router.get("/stats", response_model=DocumentStatsResponse)
+@router.get("/stats", response_model=DocumentStatsResponse, response_model_by_alias=True)
 async def get_document_stats(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get document statistics."""
@@ -210,10 +206,10 @@ async def get_document_stats(
     return stats
 
 
-@router.get("/{document_id}", response_model=DocumentResponse)
+@router.get("/{document_id}", response_model=DocumentResponse, response_model_by_alias=True)
 async def get_document(
     document_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get a specific document."""
@@ -223,18 +219,15 @@ async def get_document(
         user_id=current_user.id,
     )
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
     return document
 
 
-@router.patch("/{document_id}", response_model=DocumentResponse)
+@router.patch("/{document_id}", response_model=DocumentResponse, response_model_by_alias=True)
 async def update_document(
     document_id: UUID,
     data: DocumentUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update document metadata."""
@@ -261,10 +254,7 @@ async def update_document(
         updated_by=current_user.id,
     )
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
     return document
 
 
@@ -272,7 +262,7 @@ async def update_document(
 async def delete_document(
     document_id: UUID,
     hard_delete: bool = Query(False),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a document."""
@@ -283,17 +273,14 @@ async def delete_document(
         hard_delete=hard_delete,
     )
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
 
 
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: UUID,
-    version: Optional[int] = Query(None),
-    db: AsyncSession = Depends(get_db),
+    version: int | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Download a document file."""
@@ -304,21 +291,19 @@ async def download_document(
         version=version,
     )
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
 
     storage_path, file_name, mime_type = result
 
     # Get full file path
     import os
+
     full_path = os.path.join(service.upload_path, storage_path)
 
     if not os.path.exists(full_path):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="File not found on storage",
+            error_code="FILE_NOT_FOUND_ON_STORAGE",
         )
 
     return FileResponse(
@@ -328,12 +313,12 @@ async def download_document(
     )
 
 
-@router.post("/{document_id}/versions", response_model=DocumentVersionResponse)
+@router.post("/{document_id}/versions", response_model=DocumentVersionResponse, response_model_by_alias=True)
 async def upload_new_version(
     document_id: UUID,
     file: UploadFile = File(...),
-    change_notes: Optional[str] = Form(None),
-    db: AsyncSession = Depends(get_db),
+    change_notes: str | None = Form(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Upload a new version of a document."""
@@ -348,21 +333,19 @@ async def upload_new_version(
         uploaded_by=current_user.id,
     )
     if not version:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
     return version
 
 
 @router.get("/{document_id}/versions")
 async def get_document_versions(
     document_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get all versions of a document."""
     from sqlalchemy import select
+
     from app.models.dms import DMSDocumentVersion
 
     result = await db.execute(
@@ -379,11 +362,12 @@ async def get_document_history(
     document_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get document activity history."""
     from sqlalchemy import select
+
     from app.models.dms import DMSDocumentHistory
 
     result = await db.execute(
@@ -401,7 +385,7 @@ async def get_document_history(
 async def add_tag_to_document(
     document_id: UUID,
     tag_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add a tag to a document."""
@@ -418,7 +402,7 @@ async def add_tag_to_document(
 async def remove_tag_from_document(
     document_id: UUID,
     tag_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Remove a tag from a document."""

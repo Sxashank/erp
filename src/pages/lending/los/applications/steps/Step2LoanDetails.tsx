@@ -1,7 +1,9 @@
 import { useEffect } from 'react';
+
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { useWizard } from '@/components/lending/wizard/WizardContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -9,17 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { useWizard } from '@/components/lending/wizard/WizardContext';
-import { AmountInput } from '@/components/lending/common/AmountInput';
+import { Textarea } from '@/components/ui/textarea';
 
 interface StepData {
-  requested_amount?: number;
-  requested_tenure_months?: number;
+  requestedAmount?: number;
+  requestedTenureMonths?: number;
   purpose?: string;
-  interest_type?: string;
-  proposed_rate?: number;
-  moratorium_months?: number;
-  repayment_frequency?: string;
+  preferredInterestType?: string;
+  proposedRate?: number;
+  requestedMoratoriumMonths?: number;
+  preferredRepaymentFrequency?: string;
 }
 
 export default function Step2LoanDetails() {
@@ -28,11 +29,11 @@ export default function Step2LoanDetails() {
 
   useEffect(() => {
     const isValid = Boolean(
-      stepData.requested_amount &&
-      stepData.requested_tenure_months &&
+      stepData.requestedAmount &&
+      stepData.requestedTenureMonths &&
       stepData.purpose &&
-      stepData.interest_type &&
-      stepData.repayment_frequency
+      stepData.preferredInterestType &&
+      stepData.preferredRepaymentFrequency,
     );
     setValidation('loan-details', isValid);
   }, [stepData, setValidation]);
@@ -53,24 +54,24 @@ export default function Step2LoanDetails() {
       <div className="grid gap-6 md:grid-cols-2">
         {/* Requested Amount */}
         <div className="space-y-2">
-          <Label htmlFor="requested_amount">Requested Amount *</Label>
+          <Label htmlFor="requestedAmount">Requested Amount *</Label>
           <AmountInput
-            value={stepData.requested_amount || 0}
-            onChange={(value) => handleChange('requested_amount', value ?? 0)}
+            value={stepData.requestedAmount || 0}
+            onChange={(value) => handleChange('requestedAmount', value ?? 0)}
             placeholder="Enter loan amount"
           />
         </div>
 
         {/* Tenure */}
         <div className="space-y-2">
-          <Label htmlFor="requested_tenure_months">Tenure (Months) *</Label>
+          <Label htmlFor="requestedTenureMonths">Tenure (Months) *</Label>
           <Input
-            id="requested_tenure_months"
+            id="requestedTenureMonths"
             type="number"
             min={1}
             max={360}
-            value={stepData.requested_tenure_months || ''}
-            onChange={(e) => handleChange('requested_tenure_months', parseInt(e.target.value))}
+            value={stepData.requestedTenureMonths || ''}
+            onChange={(e) => handleChange('requestedTenureMonths', parseInt(e.target.value))}
             placeholder="Enter tenure in months"
           />
         </div>
@@ -79,8 +80,8 @@ export default function Step2LoanDetails() {
         <div className="space-y-2">
           <Label>Interest Type *</Label>
           <Select
-            value={stepData.interest_type || ''}
-            onValueChange={(value) => handleChange('interest_type', value)}
+            value={stepData.preferredInterestType || ''}
+            onValueChange={(value) => handleChange('preferredInterestType', value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select interest type" />
@@ -94,15 +95,15 @@ export default function Step2LoanDetails() {
 
         {/* Proposed Rate */}
         <div className="space-y-2">
-          <Label htmlFor="proposed_rate">Proposed Interest Rate (% p.a.)</Label>
+          <Label htmlFor="proposedRate">Proposed Interest Rate (% p.a.)</Label>
           <Input
-            id="proposed_rate"
+            id="proposedRate"
             type="number"
             step="0.01"
             min={0}
             max={50}
-            value={stepData.proposed_rate || ''}
-            onChange={(e) => handleChange('proposed_rate', parseFloat(e.target.value))}
+            value={stepData.proposedRate || ''}
+            onChange={(e) => handleChange('proposedRate', parseFloat(e.target.value))}
             placeholder="e.g., 12.50"
           />
         </div>
@@ -111,8 +112,8 @@ export default function Step2LoanDetails() {
         <div className="space-y-2">
           <Label>Repayment Frequency *</Label>
           <Select
-            value={stepData.repayment_frequency || ''}
-            onValueChange={(value) => handleChange('repayment_frequency', value)}
+            value={stepData.preferredRepaymentFrequency || ''}
+            onValueChange={(value) => handleChange('preferredRepaymentFrequency', value)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select frequency" />
@@ -129,14 +130,14 @@ export default function Step2LoanDetails() {
 
         {/* Moratorium Period */}
         <div className="space-y-2">
-          <Label htmlFor="moratorium_months">Moratorium Period (Months)</Label>
+          <Label htmlFor="requestedMoratoriumMonths">Moratorium Period (Months)</Label>
           <Input
-            id="moratorium_months"
+            id="requestedMoratoriumMonths"
             type="number"
             min={0}
             max={36}
-            value={stepData.moratorium_months || ''}
-            onChange={(e) => handleChange('moratorium_months', parseInt(e.target.value))}
+            value={stepData.requestedMoratoriumMonths || ''}
+            onChange={(e) => handleChange('requestedMoratoriumMonths', parseInt(e.target.value))}
             placeholder="Enter moratorium period"
           />
         </div>

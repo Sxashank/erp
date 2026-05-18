@@ -2,16 +2,14 @@
  * Vendor PO Acknowledge Page
  */
 
+import { CheckCircle, Loader2, Calendar } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  CheckCircle,
-  Loader2,
-  Calendar,
-} from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorPOAcknowledge() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -39,7 +38,7 @@ export default function VendorPOAcknowledge() {
       const response = await vendorPOApi.get(id!);
       setPO(response.data.purchase_order);
     } catch (error) {
-      console.error('Failed to fetch PO:', error);
+      logger.error('Failed to fetch PO:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -69,7 +68,7 @@ export default function VendorPOAcknowledge() {
       toast({ title: 'Purchase order acknowledged successfully' });
       navigate(`/vendor/purchase-orders/${id}`);
     } catch (error) {
-      console.error('Failed to acknowledge PO:', error);
+      logger.error('Failed to acknowledge PO:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -82,7 +81,7 @@ export default function VendorPOAcknowledge() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
       </div>
     );
@@ -94,19 +93,17 @@ export default function VendorPOAcknowledge() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center space-x-4">
-        <Button variant="ghost" onClick={() => navigate(`/vendor/purchase-orders/${id}`)}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to PO
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Acknowledge Purchase Order</h1>
-          <p className="text-gray-600">PO: {po.po_number}</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Acknowledge Purchase Order"
+        subtitle={`PO: ${po.po_number}`}
+        breadcrumbs={[
+          { label: 'Purchase Orders', to: '/vendor/purchase-orders' },
+          { label: po.po_number, to: `/vendor/purchase-orders/${id}` },
+          { label: 'Acknowledge' },
+        ]}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* PO Summary */}
         <Card>
           <CardHeader>
@@ -121,13 +118,11 @@ export default function VendorPOAcknowledge() {
               </div>
               <div>
                 <Label className="text-gray-500">Order Date</Label>
-                <p className="font-medium">{new Date(po.po_date).toLocaleDateString()}</p>
+                <DateDisplay date={po.po_date} className="font-medium" />
               </div>
               <div>
                 <Label className="text-gray-500">Expected Delivery</Label>
-                <p className="font-medium">
-                  {po.delivery_date ? new Date(po.delivery_date).toLocaleDateString() : '-'}
-                </p>
+                <DateDisplay date={po.delivery_date} className="font-medium" />
               </div>
               <div>
                 <Label className="text-gray-500">Total Amount</Label>
@@ -145,18 +140,16 @@ export default function VendorPOAcknowledge() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center">
-              <CheckCircle className="h-5 w-5 mr-2 text-green-600" />
+              <CheckCircle className="mr-2 h-5 w-5 text-green-600" />
               Acknowledgement Details
             </CardTitle>
-            <CardDescription>
-              Confirm that you can fulfill this order
-            </CardDescription>
+            <CardDescription>Confirm that you can fulfill this order</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="space-y-2">
                 <Label htmlFor="committedDate">
-                  <Calendar className="h-4 w-4 inline mr-1" />
+                  <Calendar className="mr-1 inline h-4 w-4" />
                   Committed Delivery Date
                 </Label>
                 <Input
@@ -196,7 +189,7 @@ export default function VendorPOAcknowledge() {
                   className="bg-green-600 hover:bg-green-700"
                 >
                   {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <CheckCircle className="mr-2 h-4 w-4" />
                   Acknowledge Order
                 </Button>
               </div>

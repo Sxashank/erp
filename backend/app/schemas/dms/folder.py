@@ -4,10 +4,11 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
-class FolderCreate(BaseModel):
+class FolderCreate(CamelSchema):
     """Schema for creating a folder."""
 
     name: str = Field(..., min_length=1, max_length=255)
@@ -21,7 +22,7 @@ class FolderCreate(BaseModel):
     icon: Optional[str] = Field(None, max_length=50)
 
 
-class FolderUpdate(BaseModel):
+class FolderUpdate(CamelSchema):
     """Schema for updating a folder."""
 
     name: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -31,7 +32,7 @@ class FolderUpdate(BaseModel):
     access_level: Optional[str] = Field(None, max_length=20)
 
 
-class FolderResponse(BaseModel):
+class FolderResponse(CamelSchema):
     """Schema for folder response."""
 
     id: UUID
@@ -53,11 +54,8 @@ class FolderResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class FolderTreeResponse(BaseModel):
+class FolderTreeResponse(CamelSchema):
     """Schema for folder tree node response."""
 
     id: str
@@ -75,13 +73,13 @@ class FolderTreeResponse(BaseModel):
 FolderTreeResponse.model_rebuild()
 
 
-class FolderMoveRequest(BaseModel):
+class FolderMoveRequest(CamelSchema):
     """Schema for moving a folder."""
 
     new_parent_id: Optional[UUID] = None
 
 
-class FolderAccessCreate(BaseModel):
+class FolderAccessCreate(CamelSchema):
     """Schema for creating folder access."""
 
     user_id: Optional[UUID] = None
@@ -95,7 +93,7 @@ class FolderAccessCreate(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-class FolderAccessResponse(BaseModel):
+class FolderAccessResponse(CamelSchema):
     """Schema for folder access response."""
 
     id: UUID
@@ -112,11 +110,8 @@ class FolderAccessResponse(BaseModel):
     created_by: Optional[UUID] = None
     created_at: datetime
 
-    class Config:
-        from_attributes = True
 
-
-class FolderListResponse(BaseModel):
+class FolderListResponse(CamelSchema):
     """Schema for folder list response."""
 
     items: List[FolderResponse]

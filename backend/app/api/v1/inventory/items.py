@@ -3,10 +3,10 @@
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -17,6 +17,7 @@ from app.schemas.inventory.item_master import (
 )
 from app.schemas.base import MessageResponse
 from app.services.inventory.item_service import ItemMasterService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -58,7 +59,7 @@ def _to_response(item) -> ItemMasterResponse:
     )
 
 
-@router.get("", response_model=dict)
+@router.get("", response_model=dict, response_model_by_alias=True)
 async def list_items(
     request: Request,
     organization_id: UUID,
@@ -66,7 +67,7 @@ async def list_items(
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_ITEM_VIEW])),
 ):
@@ -85,13 +86,13 @@ async def list_items(
     }
 
 
-@router.get("/low-stock", response_model=List[dict])
+@router.get("/low-stock", response_model=List[dict], response_model_by_alias=True)
 async def get_low_stock_items(
     request: Request,
     organization_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_ITEM_VIEW])),
 ):
@@ -109,11 +110,11 @@ async def get_low_stock_items(
     ]
 
 
-@router.get("/{id}", response_model=ItemMasterResponse)
+@router.get("/{id}", response_model=ItemMasterResponse, response_model_by_alias=True)
 async def get_item(
     request: Request,
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_ITEM_VIEW])),
 ):
@@ -121,18 +122,15 @@ async def get_item(
     service = ItemMasterService(db)
     item = await service.get(id)
     if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found",
-        )
+        raise NotFoundException(detail="Item not found", error_code="ITEM_NOT_FOUND")
     return _to_response(item)
 
 
-@router.get("/{id}/stock-summary", response_model=dict)
+@router.get("/{id}/stock-summary", response_model=dict, response_model_by_alias=True)
 async def get_item_stock_summary(
     request: Request,
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_STOCK_VIEW])),
 ):
@@ -140,10 +138,7 @@ async def get_item_stock_summary(
     service = ItemMasterService(db)
     item = await service.get(id)
     if not item:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Item not found",
-        )
+        raise NotFoundException(detail="Item not found", error_code="ITEM_NOT_FOUND")
     summary = await service.get_stock_summary(id)
     return {
         "total_on_hand": float(summary["total_on_hand"]),
@@ -153,11 +148,11 @@ async def get_item_stock_summary(
     }
 
 
-@router.post("", response_model=ItemMasterResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ItemMasterResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_item(
     request: Request,
     data: ItemMasterCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_ITEM_CREATE])),
 ):
@@ -167,18 +162,15 @@ async def create_item(
         item = await service.create(data, created_by=current_user.id)
         return _to_response(item)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/{id}", response_model=ItemMasterResponse)
+@router.put("/{id}", response_model=ItemMasterResponse, response_model_by_alias=True)
 async def update_item(
     request: Request,
     id: UUID,
     data: ItemMasterUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_ITEM_UPDATE])),
 ):
@@ -187,23 +179,17 @@ async def update_item(
     try:
         item = await service.update(id, data, updated_by=current_user.id)
         if not item:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Item not found",
-            )
+            raise NotFoundException(detail="Item not found", error_code="ITEM_NOT_FOUND")
         return _to_response(item)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.delete("/{id}", response_model=MessageResponse)
+@router.delete("/{id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_item(
     request: Request,
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.INV_ITEM_DELETE])),
 ):
@@ -212,13 +198,7 @@ async def delete_item(
     try:
         success = await service.delete(id, deleted_by=current_user.id)
         if not success:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Item not found",
-            )
+            raise NotFoundException(detail="Item not found", error_code="ITEM_NOT_FOUND")
         return MessageResponse(message="Item deleted successfully")
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")

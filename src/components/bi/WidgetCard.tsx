@@ -2,17 +2,20 @@
  * Widget Card - wrapper card for dashboard widgets
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { MoreVertical, Edit, Trash2, RefreshCw, Maximize2 } from 'lucide-react';
+
+import { WidgetRenderer } from './widgets/WidgetRenderer';
+
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Edit, Trash2, RefreshCw, Maximize2 } from 'lucide-react';
-import { DashboardWidget } from '@/types/bi';
-import { WidgetRenderer } from './widgets/WidgetRenderer';
+import type { DashboardWidget } from '@/types/bi';
+
 
 interface WidgetCardProps {
   widget: DashboardWidget;

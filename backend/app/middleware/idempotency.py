@@ -42,20 +42,37 @@ IDEMPOTENCY_TTL = timedelta(hours=24)
 # under `/api/v1/<resource>` where `<resource>` matches one of these is a
 # financial mutation per §6.3.
 MUTATING_RESOURCES: list[str] = [
+    # Finance / GL
     "vouchers",
+    "financial-years",
+    # AP/AR
     "payments",
     "purchase-bills",
     "sales-invoices",
+    "ap-ar",
+    # Lending — money mutations
     "receipts",
     "disbursements",
-    "payroll",
-    "tds/challans",
-    "fixed-assets",
-    "fixed-deposits",
     "lending/disbursements",
     "lending/receipts",
     "lending/loan-accounts",
-    "ap-ar",
+    "lending/collections",
+    "lending/npa",
+    "lending/schedules",
+    "lending/credit",
+    "lending/iif",
+    # NACH auto-debit batches — initiates debits against borrower accounts.
+    "lending/nach",
+    # Account Aggregator — consent revocation + paid bureau-style data fetches
+    # are externally billed per call; treat as financial mutations.
+    "lending/aa",
+    # HR / payroll
+    "payroll",
+    # Tax / regulatory
+    "tds/challans",
+    # Capex / treasury
+    "fixed-assets",
+    "fixed-deposits",
 ]
 
 MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}

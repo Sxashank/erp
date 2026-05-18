@@ -2,28 +2,11 @@
  * Chart Definition List Page
  */
 
+import { Plus, Edit, Trash2, Loader2, BarChart3, Search } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Loader2, BarChart3, Search } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,11 +18,30 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { biChartApi } from '@/services/biApi';
-import { ChartDefinitionListItem, BIModule, ChartType } from '@/types/bi';
 import { hasPermission, Permissions } from '@/lib/permissions';
+import { biChartApi } from '@/services/biApi';
+import type { ChartDefinitionListItem, BIModule, ChartType } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
 const MODULES: BIModule[] = [
   'FINANCE', 'LENDING', 'HR', 'TREASURY', 'PROCUREMENT',
   'INVENTORY', 'TAX', 'COLLECTIONS', 'LEGAL', 'PORTAL'
@@ -76,7 +78,7 @@ export function ChartDefinitionList() {
       setCharts(response.data);
       setFilteredCharts(response.data);
     } catch (error) {
-      console.error('Error fetching charts:', error);
+      logger.error('Error fetching charts:', error);
       toast({
         title: 'Error',
         description: 'Failed to load chart definitions',
@@ -127,7 +129,7 @@ export function ChartDefinitionList() {
       });
       fetchCharts();
     } catch (error) {
-      console.error('Error deleting chart:', error);
+      logger.error('Error deleting chart:', error);
       toast({
         title: 'Error',
         description: 'Failed to delete chart definition',

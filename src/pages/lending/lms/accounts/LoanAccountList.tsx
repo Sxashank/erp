@@ -1,9 +1,40 @@
+import {
+  Search,
+  Filter,
+  MoreHorizontal,
+  Eye,
+  FileText,
+  Receipt,
+  AlertTriangle,
+  Loader2,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Filter, MoreHorizontal, Eye, FileText, Receipt, AlertTriangle } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { DPDBadge } from '@/components/lending/common/DPDBadge';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
+import { StatusBadge } from '@/components/lending/common/StatusBadge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -12,136 +43,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from '@/components/ui/dropdown-menu';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { StatusBadge } from '@/components/lending/common/StatusBadge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-import { DPDBadge } from '@/components/lending/common/DPDBadge';
-
-interface LoanAccount {
-  id: string;
-  loanAccountNumber: string;
-  entityName: string;
-  entityCode: string;
-  productName: string;
-  productCategory: string;
-  sanctionedAmount: number;
-  disbursedAmount: number;
-  principalOutstanding: number;
-  interestOutstanding: number;
-  totalOutstanding: number;
-  effectiveRate: number;
-  nextDueDate: string;
-  nextDueAmount: number;
-  dpd: number;
-  assetClassification: string;
-  status: 'ACTIVE' | 'CLOSED' | 'NPA' | 'WRITTEN_OFF';
-  disbursementDate: string;
-  maturityDate: string;
-}
-
-// Mock data
-const mockLoanAccounts: LoanAccount[] = [
-  {
-    id: '1',
-    loanAccountNumber: 'SMFC/TL/DEL/2025/L00001',
-    entityName: 'ABC Industries Private Limited',
-    entityCode: 'ENT/2025/00001',
-    productName: 'Corporate Term Loan',
-    productCategory: 'TERM_LOAN',
-    sanctionedAmount: 250000000,
-    disbursedAmount: 50000000,
-    principalOutstanding: 48500000,
-    interestOutstanding: 520000,
-    totalOutstanding: 49020000,
-    effectiveRate: 12.5,
-    nextDueDate: '2025-02-15',
-    nextDueAmount: 1250000,
-    dpd: 0,
-    assetClassification: 'STANDARD',
-    status: 'ACTIVE',
-    disbursementDate: '2025-01-20',
-    maturityDate: '2030-01-20',
-  },
-  {
-    id: '2',
-    loanAccountNumber: 'SMFC/WC/MUM/2024/L00089',
-    entityName: 'XYZ Traders LLP',
-    entityCode: 'ENT/2024/00056',
-    productName: 'SME Working Capital',
-    productCategory: 'WORKING_CAPITAL',
-    sanctionedAmount: 50000000,
-    disbursedAmount: 50000000,
-    principalOutstanding: 42000000,
-    interestOutstanding: 0,
-    totalOutstanding: 42000000,
-    effectiveRate: 13.5,
-    nextDueDate: '2025-02-01',
-    nextDueAmount: 2250000,
-    dpd: 15,
-    assetClassification: 'SMA_0',
-    status: 'ACTIVE',
-    disbursementDate: '2024-06-15',
-    maturityDate: '2026-06-15',
-  },
-  {
-    id: '3',
-    loanAccountNumber: 'SMFC/LAP/BLR/2024/L00045',
-    entityName: 'Tech Solutions India Pvt Ltd',
-    entityCode: 'ENT/2024/00025',
-    productName: 'Loan Against Property',
-    productCategory: 'LAP',
-    sanctionedAmount: 75000000,
-    disbursedAmount: 75000000,
-    principalOutstanding: 68500000,
-    interestOutstanding: 850000,
-    totalOutstanding: 69350000,
-    effectiveRate: 14.0,
-    nextDueDate: '2025-01-25',
-    nextDueAmount: 980000,
-    dpd: 45,
-    assetClassification: 'SMA_1',
-    status: 'ACTIVE',
-    disbursementDate: '2024-03-10',
-    maturityDate: '2034-03-10',
-  },
-  {
-    id: '4',
-    loanAccountNumber: 'SMFC/TL/CHN/2023/L00034',
-    entityName: 'Southern Motors Corp',
-    entityCode: 'ENT/2023/00089',
-    productName: 'Corporate Term Loan',
-    productCategory: 'TERM_LOAN',
-    sanctionedAmount: 150000000,
-    disbursedAmount: 150000000,
-    principalOutstanding: 125000000,
-    interestOutstanding: 5250000,
-    totalOutstanding: 130250000,
-    effectiveRate: 12.75,
-    nextDueDate: '2024-11-15',
-    nextDueAmount: 2850000,
-    dpd: 95,
-    assetClassification: 'SUB_STANDARD',
-    status: 'NPA',
-    disbursementDate: '2023-05-20',
-    maturityDate: '2030-05-20',
-  },
-];
+import { useLoanAccounts } from '@/hooks/lending/useLoanAccounts';
+import type { LoanAccountListItem } from '@/services/lending/loanAccountApi';
+import type { LoanAccountFilters } from '@/types/lending';
 
 export default function LoanAccountList() {
   const navigate = useNavigate();
@@ -149,21 +53,41 @@ export default function LoanAccountList() {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [classificationFilter, setClassificationFilter] = useState<string>('ALL');
 
-  const filteredAccounts = mockLoanAccounts.filter((account) => {
-    const matchesSearch =
-      account.loanAccountNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      account.entityName.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'ALL' || account.status === statusFilter;
-    const matchesClassification =
-      classificationFilter === 'ALL' || account.assetClassification === classificationFilter;
-    return matchesSearch && matchesStatus && matchesClassification;
-  });
+  // Fetch from /api/v1/lending/accounts. Filters are sent as query params
+  // so the backend does the WHERE — pagination and KPI math stay accurate.
+  const filters: LoanAccountFilters = {
+    pageSize: 100,
+    ...(searchQuery && { search: searchQuery }),
+    ...(statusFilter !== 'ALL' && {
+      status: statusFilter as LoanAccountFilters['status'],
+    }),
+    ...(classificationFilter !== 'ALL' && {
+      assetClassification: classificationFilter as LoanAccountFilters['assetClassification'],
+    }),
+  };
+  const { data, isLoading, isError, error, refetch } = useLoanAccounts(filters);
 
-  const totalAUM = mockLoanAccounts.reduce((sum, a) => sum + a.totalOutstanding, 0);
-  const totalDisbursed = mockLoanAccounts.reduce((sum, a) => sum + a.disbursedAmount, 0);
-  const npaAccounts = mockLoanAccounts.filter((a) => a.status === 'NPA').length;
-  const smaAccounts = mockLoanAccounts.filter((a) =>
-    ['SMA_0', 'SMA_1', 'SMA_2'].includes(a.assetClassification)
+  // Wire format is camelCase numbers/strings (Pydantic CamelSchema on the BE).
+  // No mapping needed — consume the API DTO directly.
+  const accounts: LoanAccountListItem[] = data?.items ?? [];
+
+  // Wire amounts are strings (Decimal precision); coerce once for display-only sums.
+  const totalAUM = accounts.reduce((sum, a) => sum + Number(a.totalOutstanding), 0);
+  const totalDisbursed = accounts.reduce((sum, a) => sum + Number(a.totalDisbursedAmount), 0);
+  const npaAccounts = accounts.filter((a) =>
+    [
+      'NPA',
+      'SUBSTANDARD',
+      'SUB_STANDARD',
+      'DOUBTFUL',
+      'DOUBTFUL_1',
+      'DOUBTFUL_2',
+      'DOUBTFUL_3',
+      'LOSS',
+    ].includes(a.assetClassification),
+  ).length;
+  const smaAccounts = accounts.filter((a) =>
+    ['SMA_0', 'SMA_1', 'SMA_2'].includes(a.assetClassification),
   ).length;
 
   return (
@@ -181,9 +105,7 @@ export default function LoanAccountList() {
           </CardHeader>
           <CardContent>
             <AmountDisplay amount={totalAUM} abbreviated className="text-2xl font-bold" />
-            <p className="text-xs text-muted-foreground">
-              {mockLoanAccounts.length} active accounts
-            </p>
+            <p className="text-xs text-muted-foreground">{accounts.length} active accounts</p>
           </CardContent>
         </Card>
         <Card>
@@ -238,9 +160,12 @@ export default function LoanAccountList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Status</SelectItem>
+                  <SelectItem value="CREATED">Created</SelectItem>
                   <SelectItem value="ACTIVE">Active</SelectItem>
-                  <SelectItem value="NPA">NPA</SelectItem>
+                  <SelectItem value="DORMANT">Dormant</SelectItem>
+                  <SelectItem value="FROZEN">Frozen</SelectItem>
                   <SelectItem value="CLOSED">Closed</SelectItem>
+                  <SelectItem value="RECALLED">Recalled</SelectItem>
                   <SelectItem value="WRITTEN_OFF">Written Off</SelectItem>
                 </SelectContent>
               </Select>
@@ -275,21 +200,37 @@ export default function LoanAccountList() {
                 <TableHead>Product</TableHead>
                 <TableHead className="text-right">Outstanding</TableHead>
                 <TableHead className="text-right">Rate</TableHead>
-                <TableHead>Next Due</TableHead>
                 <TableHead>DPD</TableHead>
                 <TableHead>Classification</TableHead>
                 <TableHead className="w-[50px]"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredAccounts.length === 0 ? (
+              {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
-                    No loan accounts found matching your criteria
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                    Loading loan accounts...
+                  </TableCell>
+                </TableRow>
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8">
+                    <ErrorState
+                      title="Could not load loan accounts"
+                      error={error}
+                      onRetry={() => refetch()}
+                    />
+                  </TableCell>
+                </TableRow>
+              ) : accounts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    No loan accounts yet
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredAccounts.map((account) => (
+                accounts.map((account) => (
                   <TableRow
                     key={account.id}
                     className="cursor-pointer hover:bg-muted/50"
@@ -297,16 +238,17 @@ export default function LoanAccountList() {
                   >
                     <TableCell>
                       <div className="font-mono text-sm">{account.loanAccountNumber}</div>
-                      <div className="text-xs text-muted-foreground">
-                        Maturity: <DateDisplay date={account.maturityDate} />
-                      </div>
+                      {account.maturityDate && (
+                        <div className="text-xs text-muted-foreground">
+                          Maturity: <DateDisplay date={account.maturityDate} />
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium">{account.entityName}</div>
-                      <div className="text-xs text-muted-foreground">{account.entityCode}</div>
+                      <div className="font-medium">{account.entityName ?? '—'}</div>
                     </TableCell>
                     <TableCell>
-                      <div>{account.productName}</div>
+                      <div>{account.productName ?? '—'}</div>
                     </TableCell>
                     <TableCell className="text-right">
                       <AmountDisplay amount={account.totalOutstanding} abbreviated />
@@ -315,16 +257,10 @@ export default function LoanAccountList() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <PercentageDisplay value={account.effectiveRate} /> p.a.
+                      <PercentageDisplay value={account.currentInterestRate} /> p.a.
                     </TableCell>
                     <TableCell>
-                      <DateDisplay date={account.nextDueDate} />
-                      <div className="text-xs text-muted-foreground">
-                        <AmountDisplay amount={account.nextDueAmount} abbreviated />
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <DPDBadge dpd={account.dpd} />
+                      <DPDBadge dpd={account.daysPastDue} />
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={account.assetClassification} type="classification" />

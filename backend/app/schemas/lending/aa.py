@@ -2,132 +2,215 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, List, Any, Dict
+from typing import Any
 from uuid import UUID
 
-from pydantic import Field, validator, EmailStr
+from pydantic import Field, model_validator
 
-from app.schemas.base import BaseSchema
 from app.models.lending.enums import (
-    AAProvider, AAConsentStatus, AAConsentPurpose, AAConsentMode,
-    AAFetchFrequency, AAFIType, AAFetchSessionStatus, AADataStatus
+    AAConsentMode,
+    AAConsentPurpose,
+    AAConsentStatus,
+    AADataStatus,
+    AAFetchFrequency,
+    AAFetchSessionStatus,
+    AAFIType,
+    AAProvider,
 )
-
+from app.schemas.base import CamelSchema
 
 # =============================================================================
 # AA Consent Schemas
 # =============================================================================
 
 
-class AAConsentBase(BaseSchema):
+class AAConsentBase(CamelSchema):
     """Base schema for AA consent."""
+
     customer_id: str = Field(..., description="VUA (Virtual User Address) or mobile number")
-    customer_name: Optional[str] = None
-    customer_mobile: Optional[str] = None
-    customer_email: Optional[str] = None
+    customer_name: str | None = None
+    customer_mobile: str | None = None
+    customer_email: str | None = None
     provider: AAProvider
     purpose: AAConsentPurpose = AAConsentPurpose.UNDERWRITING
-    purpose_description: Optional[str] = None
+    purpose_description: str | None = None
     consent_mode: AAConsentMode = AAConsentMode.VIEW
-    fi_types: List[str] = Field(default_factory=list, description="List of FI types to fetch")
-    fi_data_from: Optional[date] = None
-    fi_data_to: Optional[date] = None
+    fi_types: list[str] = Field(default_factory=list, description="List of FI types to fetch")
+    fi_data_from: date | None = None
+    fi_data_to: date | None = None
     fetch_frequency: AAFetchFrequency = AAFetchFrequency.ONETIME
-    fetch_frequency_value: Optional[int] = None
-    consent_expiry: Optional[datetime] = None
-    data_life_unit: Optional[str] = None  # MONTH, YEAR, INF
-    data_life_value: Optional[int] = None
-    redirect_url: Optional[str] = None
+    fetch_frequency_value: int | None = None
+    consent_expiry: datetime | None = None
+    data_life_unit: str | None = None  # MONTH, YEAR, INF
+    data_life_value: int | None = None
+    redirect_url: str | None = None
 
 
 class AAConsentCreate(AAConsentBase):
     """Schema for creating a consent request."""
+
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
-    loan_account_id: Optional[UUID] = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
+    loan_account_id: UUID | None = None
 
 
-class AAConsentUpdate(BaseSchema):
+class AAConsentUpdate(CamelSchema):
     """Schema for updating consent status."""
-    status: Optional[AAConsentStatus] = None
-    consent_handle: Optional[str] = None
-    consent_id: Optional[str] = None
-    consent_url: Optional[str] = None
-    approved_at: Optional[datetime] = None
-    rejected_at: Optional[datetime] = None
-    revoked_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+
+    status: AAConsentStatus | None = None
+    consent_handle: str | None = None
+    consent_id: str | None = None
+    consent_url: str | None = None
+    approved_at: datetime | None = None
+    rejected_at: datetime | None = None
+    revoked_at: datetime | None = None
+    rejection_reason: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 class AAConsentResponse(AAConsentBase):
     """Response schema for AA consent."""
+
     id: UUID
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
-    loan_account_id: Optional[UUID] = None
-    consent_handle: Optional[str] = None
-    consent_id: Optional[str] = None
-    consent_url: Optional[str] = None
-    consent_start: Optional[datetime] = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
+    loan_account_id: UUID | None = None
+    consent_handle: str | None = None
+    consent_id: str | None = None
+    consent_url: str | None = None
+    consent_start: datetime | None = None
     status: AAConsentStatus
-    status_updated_at: Optional[datetime] = None
-    request_timestamp: Optional[datetime] = None
-    approved_at: Optional[datetime] = None
-    rejected_at: Optional[datetime] = None
-    revoked_at: Optional[datetime] = None
-    rejection_reason: Optional[str] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    status_updated_at: datetime | None = None
+    request_timestamp: datetime | None = None
+    approved_at: datetime | None = None
+    rejected_at: datetime | None = None
+    revoked_at: datetime | None = None
+    rejection_reason: str | None = None
+    error_code: str | None = None
+    error_message: str | None = None
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     class Config:
         from_attributes = True
 
 
+class AAConsentListItemResponse(CamelSchema):
+    """Slim list-item for AA consents page (camelCase wire format)."""
+
+    id: UUID
+    consent_handle: str | None = None
+    consent_id: str | None = None
+    customer_id: str
+    customer_name: str | None = None
+    customer_mobile: str | None = None
+    provider: AAProvider
+    purpose: AAConsentPurpose
+    fi_types: list[str] = []
+    fi_data_from: date | None = None
+    fi_data_to: date | None = None
+    status: AAConsentStatus
+    consent_expiry: datetime | None = None
+    entity_name: str | None = None
+    loan_application_number: str | None = None
+    fetch_session_count: int = 0
+    last_fetch_at: datetime | None = None
+    created_at: datetime
+    approved_at: datetime | None = None
+    rejected_at: datetime | None = None
+    revoked_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _flatten(cls, obj):
+        if isinstance(obj, dict):
+            return obj
+        sessions = getattr(obj, "fetch_sessions", None) or []
+        # Derive fetch_session_count + last_fetch_at from the relation if loaded.
+        try:
+            session_count = len(sessions)
+            last_fetch = (
+                max(
+                    (s.created_at for s in sessions if getattr(s, "created_at", None)),
+                    default=None,
+                )
+                if sessions
+                else None
+            )
+        except Exception:
+            session_count = 0
+            last_fetch = None
+        return {
+            "id": obj.id,
+            "consent_handle": obj.consent_handle,
+            "consent_id": obj.consent_id,
+            "customer_id": obj.customer_id,
+            "customer_name": obj.customer_name,
+            "customer_mobile": obj.customer_mobile,
+            "provider": obj.provider,
+            "purpose": obj.purpose,
+            "fi_types": obj.fi_types or [],
+            "fi_data_from": obj.fi_data_from,
+            "fi_data_to": obj.fi_data_to,
+            "status": obj.status,
+            "consent_expiry": obj.consent_expiry,
+            "entity_name": None,  # joined name is loaded only via detail endpoint
+            "loan_application_number": None,
+            "fetch_session_count": session_count,
+            "last_fetch_at": last_fetch,
+            "created_at": obj.created_at,
+            "approved_at": obj.approved_at,
+            "rejected_at": obj.rejected_at,
+            "revoked_at": obj.revoked_at,
+        }
+
+
 class AAConsentDetailResponse(AAConsentResponse):
     """Detailed consent response with fetch sessions."""
-    fetch_sessions: List["AAFetchSessionResponse"] = []
-    entity_name: Optional[str] = None
-    loan_application_number: Optional[str] = None
-    loan_account_number: Optional[str] = None
+
+    fetch_sessions: list["AAFetchSessionResponse"] = []
+    entity_name: str | None = None
+    loan_application_number: str | None = None
+    loan_account_number: str | None = None
 
 
-class AAConsentListResponse(BaseSchema):
+class AAConsentListResponse(CamelSchema):
     """Paginated list of consents."""
-    items: List[AAConsentResponse]
+
+    items: list[AAConsentResponse]
     total: int
     page: int
     page_size: int
     total_pages: int
 
 
-class AAConsentRequestInitiate(BaseSchema):
+class AAConsentRequestInitiate(CamelSchema):
     """Request to initiate a new consent."""
+
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
-    loan_account_id: Optional[UUID] = None
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
+    loan_account_id: UUID | None = None
     customer_id: str  # VUA or mobile
-    customer_name: Optional[str] = None
-    customer_mobile: Optional[str] = None
-    customer_email: Optional[str] = None
+    customer_name: str | None = None
+    customer_mobile: str | None = None
+    customer_email: str | None = None
     provider: AAProvider
     purpose: AAConsentPurpose = AAConsentPurpose.UNDERWRITING
-    fi_types: List[AAFIType] = [AAFIType.DEPOSIT]
+    fi_types: list[AAFIType] = [AAFIType.DEPOSIT]
     fi_data_from: date
     fi_data_to: date
     fetch_frequency: AAFetchFrequency = AAFetchFrequency.ONETIME
     consent_validity_months: int = 6
-    redirect_url: Optional[str] = None
+    redirect_url: str | None = None
 
 
-class AAConsentInitiateResponse(BaseSchema):
+class AAConsentInitiateResponse(CamelSchema):
     """Response from consent initiation."""
+
     consent_id: UUID
     consent_handle: str
     consent_url: str
@@ -135,9 +218,10 @@ class AAConsentInitiateResponse(BaseSchema):
     message: str
 
 
-class AAConsentRevokeRequest(BaseSchema):
+class AAConsentRevokeRequest(CamelSchema):
     """Request to revoke a consent."""
-    reason: Optional[str] = None
+
+    reason: str | None = None
 
 
 # =============================================================================
@@ -145,50 +229,54 @@ class AAConsentRevokeRequest(BaseSchema):
 # =============================================================================
 
 
-class AAFetchSessionBase(BaseSchema):
+class AAFetchSessionBase(CamelSchema):
     """Base schema for fetch session."""
-    fi_types_requested: List[str] = Field(default_factory=list)
-    data_from: Optional[date] = None
-    data_to: Optional[date] = None
+
+    fi_types_requested: list[str] = Field(default_factory=list)
+    data_from: date | None = None
+    data_to: date | None = None
 
 
 class AAFetchSessionCreate(AAFetchSessionBase):
     """Schema for creating a fetch session."""
+
     consent_id: UUID
     organization_id: UUID
 
 
-class AAFetchSessionUpdate(BaseSchema):
+class AAFetchSessionUpdate(CamelSchema):
     """Schema for updating fetch session."""
-    session_id: Optional[str] = None
-    data_session_id: Optional[str] = None
-    status: Optional[AAFetchSessionStatus] = None
-    accounts_received: Optional[int] = None
-    accounts_failed: Optional[int] = None
-    data_requested_at: Optional[datetime] = None
-    data_received_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+
+    session_id: str | None = None
+    data_session_id: str | None = None
+    status: AAFetchSessionStatus | None = None
+    accounts_received: int | None = None
+    accounts_failed: int | None = None
+    data_requested_at: datetime | None = None
+    data_received_at: datetime | None = None
+    completed_at: datetime | None = None
+    error_code: str | None = None
+    error_message: str | None = None
 
 
 class AAFetchSessionResponse(AAFetchSessionBase):
     """Response schema for fetch session."""
+
     id: UUID
     consent_id: UUID
     organization_id: UUID
-    session_id: Optional[str] = None
-    data_session_id: Optional[str] = None
+    session_id: str | None = None
+    data_session_id: str | None = None
     status: AAFetchSessionStatus
     total_accounts_requested: int
     accounts_received: int
     accounts_failed: int
     initiated_at: datetime
-    data_requested_at: Optional[datetime] = None
-    data_received_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
+    data_requested_at: datetime | None = None
+    data_received_at: datetime | None = None
+    completed_at: datetime | None = None
+    error_code: str | None = None
+    error_message: str | None = None
     created_at: datetime
 
     class Config:
@@ -197,28 +285,32 @@ class AAFetchSessionResponse(AAFetchSessionBase):
 
 class AAFetchSessionDetailResponse(AAFetchSessionResponse):
     """Detailed fetch session with accounts."""
-    bank_accounts: List["AABankAccountResponse"] = []
+
+    bank_accounts: list["AABankAccountResponse"] = []
 
 
-class AAFetchSessionListResponse(BaseSchema):
+class AAFetchSessionListResponse(CamelSchema):
     """Paginated list of fetch sessions."""
-    items: List[AAFetchSessionResponse]
+
+    items: list[AAFetchSessionResponse]
     total: int
     page: int
     page_size: int
     total_pages: int
 
 
-class AAFetchDataRequest(BaseSchema):
+class AAFetchDataRequest(CamelSchema):
     """Request to fetch data for an approved consent."""
+
     consent_id: UUID
-    fi_types: Optional[List[AAFIType]] = None  # None = all approved types
-    data_from: Optional[date] = None  # Override consent dates
-    data_to: Optional[date] = None
+    fi_types: list[AAFIType] | None = None  # None = all approved types
+    data_from: date | None = None  # Override consent dates
+    data_to: date | None = None
 
 
-class AAFetchDataResponse(BaseSchema):
+class AAFetchDataResponse(CamelSchema):
     """Response from data fetch initiation."""
+
     fetch_session_id: UUID
     session_id: str
     status: AAFetchSessionStatus
@@ -230,65 +322,68 @@ class AAFetchDataResponse(BaseSchema):
 # =============================================================================
 
 
-class AABankAccountBase(BaseSchema):
+class AABankAccountBase(CamelSchema):
     """Base schema for bank account from AA."""
+
     fi_type: AAFIType = AAFIType.DEPOSIT
-    fip_id: Optional[str] = None
-    fip_name: Optional[str] = None
-    account_type: Optional[str] = None
-    account_number_masked: Optional[str] = None
-    account_ref_number: Optional[str] = None
-    ifsc_code: Optional[str] = None
-    branch: Optional[str] = None
-    holder_name: Optional[str] = None
-    holder_pan: Optional[str] = None
-    holder_mobile: Optional[str] = None
-    holder_email: Optional[str] = None
-    holder_dob: Optional[date] = None
-    holder_type: Optional[str] = None
+    fip_id: str | None = None
+    fip_name: str | None = None
+    account_type: str | None = None
+    account_number_masked: str | None = None
+    account_ref_number: str | None = None
+    ifsc_code: str | None = None
+    branch: str | None = None
+    holder_name: str | None = None
+    holder_pan: str | None = None
+    holder_mobile: str | None = None
+    holder_email: str | None = None
+    holder_dob: date | None = None
+    holder_type: str | None = None
     currency: str = "INR"
 
 
 class AABankAccountCreate(AABankAccountBase):
     """Schema for creating bank account record."""
+
     fetch_session_id: UUID
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    current_balance: Optional[Decimal] = None
-    available_balance: Optional[Decimal] = None
-    balance_as_on: Optional[datetime] = None
-    opening_date: Optional[date] = None
-    maturity_date: Optional[date] = None
-    maturity_amount: Optional[Decimal] = None
-    interest_rate: Optional[Decimal] = None
-    principal_amount: Optional[Decimal] = None
-    raw_data: Optional[Dict[str, Any]] = None
-    profile_data: Optional[Dict[str, Any]] = None
-    summary_data: Optional[Dict[str, Any]] = None
-    data_fetched_at: Optional[datetime] = None
-    data_from: Optional[date] = None
-    data_to: Optional[date] = None
+    entity_id: UUID | None = None
+    current_balance: Decimal | None = None
+    available_balance: Decimal | None = None
+    balance_as_on: datetime | None = None
+    opening_date: date | None = None
+    maturity_date: date | None = None
+    maturity_amount: Decimal | None = None
+    interest_rate: Decimal | None = None
+    principal_amount: Decimal | None = None
+    raw_data: dict[str, Any] | None = None
+    profile_data: dict[str, Any] | None = None
+    summary_data: dict[str, Any] | None = None
+    data_fetched_at: datetime | None = None
+    data_from: date | None = None
+    data_to: date | None = None
 
 
 class AABankAccountResponse(AABankAccountBase):
     """Response schema for bank account."""
+
     id: UUID
     fetch_session_id: UUID
     organization_id: UUID
-    entity_id: Optional[UUID] = None
-    current_balance: Optional[Decimal] = None
-    available_balance: Optional[Decimal] = None
-    balance_as_on: Optional[datetime] = None
-    opening_date: Optional[date] = None
-    maturity_date: Optional[date] = None
-    maturity_amount: Optional[Decimal] = None
-    interest_rate: Optional[Decimal] = None
-    principal_amount: Optional[Decimal] = None
+    entity_id: UUID | None = None
+    current_balance: Decimal | None = None
+    available_balance: Decimal | None = None
+    balance_as_on: datetime | None = None
+    opening_date: date | None = None
+    maturity_date: date | None = None
+    maturity_amount: Decimal | None = None
+    interest_rate: Decimal | None = None
+    principal_amount: Decimal | None = None
     status: AADataStatus
-    data_fetched_at: Optional[datetime] = None
-    data_from: Optional[date] = None
-    data_to: Optional[date] = None
-    transaction_count: Optional[int] = None
+    data_fetched_at: datetime | None = None
+    data_from: date | None = None
+    data_to: date | None = None
+    transaction_count: int | None = None
     created_at: datetime
 
     class Config:
@@ -297,14 +392,16 @@ class AABankAccountResponse(AABankAccountBase):
 
 class AABankAccountDetailResponse(AABankAccountResponse):
     """Detailed bank account with transactions."""
-    transactions: List["AABankTransactionResponse"] = []
-    credit_summary: Optional[Dict[str, Any]] = None
-    debit_summary: Optional[Dict[str, Any]] = None
+
+    transactions: list["AABankTransactionResponse"] = []
+    credit_summary: dict[str, Any] | None = None
+    debit_summary: dict[str, Any] | None = None
 
 
-class AABankAccountListResponse(BaseSchema):
+class AABankAccountListResponse(CamelSchema):
     """Paginated list of bank accounts."""
-    items: List[AABankAccountResponse]
+
+    items: list[AABankAccountResponse]
     total: int
     page: int
     page_size: int
@@ -316,35 +413,38 @@ class AABankAccountListResponse(BaseSchema):
 # =============================================================================
 
 
-class AABankTransactionBase(BaseSchema):
+class AABankTransactionBase(CamelSchema):
     """Base schema for bank transaction from AA."""
-    txn_id: Optional[str] = None
+
+    txn_id: str | None = None
     txn_type: str  # DEBIT, CREDIT
-    mode: Optional[str] = None  # UPI, NEFT, IMPS, etc.
+    mode: str | None = None  # UPI, NEFT, IMPS, etc.
     amount: Decimal
     currency: str = "INR"
-    balance_after: Optional[Decimal] = None
+    balance_after: Decimal | None = None
     transaction_date: date
-    transaction_timestamp: Optional[datetime] = None
-    value_date: Optional[date] = None
-    narration: Optional[str] = None
-    reference: Optional[str] = None
-    counterparty_name: Optional[str] = None
-    counterparty_account: Optional[str] = None
-    counterparty_ifsc: Optional[str] = None
-    category: Optional[str] = None
-    sub_category: Optional[str] = None
+    transaction_timestamp: datetime | None = None
+    value_date: date | None = None
+    narration: str | None = None
+    reference: str | None = None
+    counterparty_name: str | None = None
+    counterparty_account: str | None = None
+    counterparty_ifsc: str | None = None
+    category: str | None = None
+    sub_category: str | None = None
 
 
 class AABankTransactionCreate(AABankTransactionBase):
     """Schema for creating transaction record."""
+
     bank_account_id: UUID
     organization_id: UUID
-    raw_data: Optional[Dict[str, Any]] = None
+    raw_data: dict[str, Any] | None = None
 
 
 class AABankTransactionResponse(AABankTransactionBase):
     """Response schema for bank transaction."""
+
     id: UUID
     bank_account_id: UUID
     organization_id: UUID
@@ -354,9 +454,10 @@ class AABankTransactionResponse(AABankTransactionBase):
         from_attributes = True
 
 
-class AABankTransactionListResponse(BaseSchema):
+class AABankTransactionListResponse(CamelSchema):
     """Paginated list of transactions."""
-    items: List[AABankTransactionResponse]
+
+    items: list[AABankTransactionResponse]
     total: int
     page: int
     page_size: int
@@ -368,37 +469,41 @@ class AABankTransactionListResponse(BaseSchema):
 # =============================================================================
 
 
-class AAConsentLogBase(BaseSchema):
+class AAConsentLogBase(CamelSchema):
     """Base schema for consent log."""
+
     event_type: str
-    old_status: Optional[AAConsentStatus] = None
-    new_status: Optional[AAConsentStatus] = None
-    source: Optional[str] = None
-    message: Optional[str] = None
+    old_status: AAConsentStatus | None = None
+    new_status: AAConsentStatus | None = None
+    source: str | None = None
+    message: str | None = None
 
 
 class AAConsentLogCreate(AAConsentLogBase):
     """Schema for creating consent log entry."""
+
     consent_id: UUID
-    aa_response: Optional[Dict[str, Any]] = None
-    created_by_id: Optional[UUID] = None
+    aa_response: dict[str, Any] | None = None
+    created_by_id: UUID | None = None
 
 
 class AAConsentLogResponse(AAConsentLogBase):
     """Response schema for consent log."""
+
     id: UUID
     consent_id: UUID
-    aa_response: Optional[Dict[str, Any]] = None
+    aa_response: dict[str, Any] | None = None
     created_at: datetime
-    created_by_id: Optional[UUID] = None
+    created_by_id: UUID | None = None
 
     class Config:
         from_attributes = True
 
 
-class AAConsentLogListResponse(BaseSchema):
+class AAConsentLogListResponse(CamelSchema):
     """List of consent logs."""
-    items: List[AAConsentLogResponse]
+
+    items: list[AAConsentLogResponse]
     total: int
 
 
@@ -407,20 +512,22 @@ class AAConsentLogListResponse(BaseSchema):
 # =============================================================================
 
 
-class AAConsentStatistics(BaseSchema):
+class AAConsentStatistics(CamelSchema):
     """Statistics for AA consents."""
+
     total_consents: int
     active_consents: int
     pending_consents: int
     expired_consents: int
     revoked_consents: int
     approval_rate: float
-    provider_breakdown: Dict[str, int]  # {provider: count}
-    purpose_breakdown: Dict[str, int]  # {purpose: count}
+    provider_breakdown: dict[str, int]  # {provider: count}
+    purpose_breakdown: dict[str, int]  # {purpose: count}
 
 
-class AAFetchStatistics(BaseSchema):
+class AAFetchStatistics(CamelSchema):
     """Statistics for data fetches."""
+
     total_fetch_sessions: int
     successful_fetches: int
     failed_fetches: int
@@ -428,13 +535,14 @@ class AAFetchStatistics(BaseSchema):
     total_transactions_fetched: int
     success_rate: float
     avg_accounts_per_fetch: float
-    fi_type_breakdown: Dict[str, int]  # {fi_type: count}
+    fi_type_breakdown: dict[str, int]  # {fi_type: count}
 
 
-class AABankStatementAnalysis(BaseSchema):
+class AABankStatementAnalysis(CamelSchema):
     """Analysis of fetched bank statements."""
-    entity_id: Optional[UUID] = None
-    loan_application_id: Optional[UUID] = None
+
+    entity_id: UUID | None = None
+    loan_application_id: UUID | None = None
     account_count: int
     analysis_period_from: date
     analysis_period_to: date
@@ -445,26 +553,28 @@ class AABankStatementAnalysis(BaseSchema):
     max_balance: Decimal
     credit_count: int
     debit_count: int
-    salary_credits: Optional[Decimal] = None
-    emi_debits: Optional[Decimal] = None
+    salary_credits: Decimal | None = None
+    emi_debits: Decimal | None = None
     cheque_bounces: int
-    high_value_transactions: List[Dict[str, Any]]
-    category_breakdown: Dict[str, Dict[str, Any]]  # {category: {count, amount}}
+    high_value_transactions: list[dict[str, Any]]
+    category_breakdown: dict[str, dict[str, Any]]  # {category: {count, amount}}
 
 
-class AADataImportRequest(BaseSchema):
+class AADataImportRequest(CamelSchema):
     """Request to import AA data into bank reconciliation."""
+
     fetch_session_id: UUID
-    bank_account_ids: Optional[List[UUID]] = None  # None = all accounts
+    bank_account_ids: list[UUID] | None = None  # None = all accounts
     target_bank_account_id: UUID  # Organization's bank account to reconcile
 
 
-class AADataImportResponse(BaseSchema):
+class AADataImportResponse(CamelSchema):
     """Response from data import."""
+
     imported_transactions: int
     matched_transactions: int
     unmatched_transactions: int
-    import_errors: List[str]
+    import_errors: list[str]
 
 
 # =============================================================================
@@ -472,26 +582,28 @@ class AADataImportResponse(BaseSchema):
 # =============================================================================
 
 
-class AAProviderConfig(BaseSchema):
+class AAProviderConfig(CamelSchema):
     """Configuration for AA provider."""
+
     provider: AAProvider
     client_id: str
     client_secret: str
     entity_id: str  # FIU entity ID
-    token_url: Optional[str] = None
-    api_base_url: Optional[str] = None
+    token_url: str | None = None
+    api_base_url: str | None = None
     callback_url: str
-    webhook_secret: Optional[str] = None
+    webhook_secret: str | None = None
     sandbox_mode: bool = True
 
 
-class AAProviderHealthCheck(BaseSchema):
+class AAProviderHealthCheck(CamelSchema):
     """Health check response for AA provider."""
+
     provider: AAProvider
     is_healthy: bool
-    response_time_ms: Optional[int] = None
+    response_time_ms: int | None = None
     last_check_at: datetime
-    error_message: Optional[str] = None
+    error_message: str | None = None
 
 
 # =============================================================================
@@ -499,32 +611,35 @@ class AAProviderHealthCheck(BaseSchema):
 # =============================================================================
 
 
-class AAWebhookNotification(BaseSchema):
+class AAWebhookNotification(CamelSchema):
     """Webhook notification from AA provider."""
+
     notification_type: str  # CONSENT_STATUS, FI_NOTIFICATION, etc.
-    consent_handle: Optional[str] = None
-    consent_id: Optional[str] = None
-    session_id: Optional[str] = None
-    status: Optional[str] = None
+    consent_handle: str | None = None
+    consent_id: str | None = None
+    session_id: str | None = None
+    status: str | None = None
     timestamp: datetime
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
 
 
-class AAConsentStatusWebhook(BaseSchema):
+class AAConsentStatusWebhook(CamelSchema):
     """Consent status update webhook."""
+
     consent_handle: str
-    consent_id: Optional[str] = None
+    consent_id: str | None = None
     status: str  # ACTIVE, REJECTED, REVOKED, PAUSED, EXPIRED
-    reason: Optional[str] = None
+    reason: str | None = None
     timestamp: datetime
 
 
-class AAFINotificationWebhook(BaseSchema):
+class AAFINotificationWebhook(CamelSchema):
     """FI data notification webhook."""
+
     consent_id: str
     session_id: str
     status: str  # READY, DENIED, TIMEOUT
-    fi_status_response: Optional[List[Dict[str, Any]]] = None
+    fi_status_response: list[dict[str, Any]] | None = None
     timestamp: datetime
 
 

@@ -1,7 +1,7 @@
-import { useState } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { Building2, Loader2, LockKeyhole, CheckCircle } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { Link, useSearchParams, useNavigate } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -15,6 +15,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { authApi } from '@/services/api';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface ResetPasswordForm {
   new_password: string;
@@ -54,8 +55,8 @@ export function ResetPassword() {
         confirm_password: data.confirm_password,
       });
       setSuccess(true);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to reset password. The link may have expired.');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to reset password. The link may have expired.'));
     } finally {
       setLoading(false);
     }

@@ -3,7 +3,7 @@
 from typing import Annotated, List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, status
+from fastapi import APIRouter, Depends, BackgroundTasks, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,6 +12,8 @@ from app.models.common.background_job import JobStatus, JobType
 from app.services.common.job_service import JobService
 from app.workers.fa_worker import dispatch_job
 
+from app.api.deps import get_db_with_tenant
+from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter(prefix="/jobs", tags=["Background Jobs"])
 
 
@@ -54,7 +56,7 @@ class JobListResponse(BaseModel):
 
 # Dependencies
 def get_job_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> JobService:
     return JobService(session)
 
@@ -62,7 +64,7 @@ def get_job_service(
 # Endpoints
 @router.post(
     "",
-    response_model=JobStatusResponse,
+    response_model=JobStatusResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create and start a background job",
 )
@@ -71,7 +73,7 @@ async def create_job(
     organization_id: UUID,
     user_id: UUID,
     background_tasks: BackgroundTasks,
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
     job_service: Annotated[JobService, Depends(get_job_service)],
 ):
     """Create a new background job and start processing."""
@@ -96,7 +98,7 @@ async def create_job(
 
 @router.get(
     "/{job_id}",
-    response_model=JobStatusResponse,
+    response_model=JobStatusResponse, response_model_by_alias=True,
     summary="Get job status",
 )
 async def get_job_status(
@@ -106,16 +108,13 @@ async def get_job_status(
     """Get current status of a background job."""
     status_data = await job_service.get_job_status(job_id)
     if not status_data:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Job {job_id} not found",
-        )
+        raise NotFoundException(detail=f"Job {job_id} not found", error_code="JOB_NOT_FOUND")
     return JobStatusResponse(**status_data)
 
 
 @router.get(
     "",
-    response_model=JobListResponse,
+    response_model=JobListResponse, response_model_by_alias=True,
     summary="List background jobs",
 )
 async def list_jobs(
@@ -146,7 +145,7 @@ async def list_jobs(
 
 @router.post(
     "/{job_id}/cancel",
-    response_model=JobStatusResponse,
+    response_model=JobStatusResponse, response_model_by_alias=True,
     summary="Cancel a running job",
 )
 async def cancel_job(
@@ -159,10 +158,7 @@ async def cancel_job(
         status_data = await job_service.get_job_status(job.id)
         return JobStatusResponse(**status_data)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.delete(

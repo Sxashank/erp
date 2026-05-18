@@ -3,20 +3,25 @@
  * OTP-based authentication for employees
  */
 
+import { Loader2, Smartphone, Shield, Building2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
+
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Loader2, Smartphone, Shield, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { essAuthApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 type LoginStep = 'mobile' | 'otp';
 
 export default function ESSLogin() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
+  const setSession = useEssAuthStore((state) => state.setSession);
   const [step, setStep] = useState<LoginStep>('mobile');
   const [mobile, setMobile] = useState('');
   const [otp, setOtp] = useState('');
@@ -34,11 +39,10 @@ export default function ESSLogin() {
 
   // Check if already logged in
   useEffect(() => {
-    const token = localStorage.getItem('ess_access_token');
-    if (token) {
+    if (accessToken) {
       navigate('/ess/dashboard');
     }
-  }, [navigate]);
+  }, [accessToken, navigate]);
 
   const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,8 +60,8 @@ export default function ESSLogin() {
       await essAuthApi.sendOtp({ mobile: cleanMobile, purpose: 'LOGIN' });
       setStep('otp');
       setCountdown(60); // 60 seconds cooldown
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to send OTP. Please try again.');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to send OTP. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -83,15 +87,12 @@ export default function ESSLogin() {
         },
       });
 
-      // Store tokens
-      localStorage.setItem('ess_access_token', response.data.access_token);
-      localStorage.setItem('ess_refresh_token', response.data.refresh_token);
-      localStorage.setItem('ess_user', JSON.stringify(response.data.user));
+      setSession(response.data.access_token, response.data.refresh_token, response.data.user);
 
       // Navigate to dashboard
       navigate('/ess/dashboard');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid OTP. Please try again.');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Invalid OTP. Please try again.'));
     } finally {
       setLoading(false);
     }
@@ -106,8 +107,8 @@ export default function ESSLogin() {
       await essAuthApi.sendOtp({ mobile: mobile.replace(/\D/g, ''), purpose: 'LOGIN' });
       setCountdown(60);
       setOtp('');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to resend OTP');
+    } catch (err: unknown) {
+      setError(getErrorMessage(err, 'Failed to resend OTP'));
     } finally {
       setLoading(false);
     }
@@ -239,9 +240,9 @@ export default function ESSLogin() {
         <div className="text-center mt-6 text-sm text-gray-500">
           <p>
             Having trouble logging in?{' '}
-            <a href="#" className="text-blue-600 hover:underline">
+            <button type="button" className="text-blue-600 hover:underline">
               Contact HR
-            </a>
+            </button>
           </p>
         </div>
       </div>

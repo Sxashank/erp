@@ -2,16 +2,16 @@
  * Fixed Deposit Form Page
  */
 
+import { ArrowLeft, Save, Calculator } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, Calculator } from 'lucide-react';
 
+import { CustomerPicker } from '@/components/common/CustomerPicker';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -19,16 +19,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, {
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type {
   FDProduct,
   FDCustomerCategory,
-  FDInterestPayoutFrequency,
+  FDInterestPayoutFrequency} from '@/services/fixedDepositService';
+import fixedDepositService, {
   FDCompoundingFrequency,
 } from '@/services/fixedDepositService';
-import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
-import { CustomerPicker } from '@/components/common/CustomerPicker';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const CUSTOMER_CATEGORIES: { value: FDCustomerCategory; label: string }[] = [
   { value: 'GENERAL', label: 'General' },
@@ -79,16 +81,23 @@ export default function FDForm() {
     auto_renew: false,
     renewal_tenure_days: null as number | null,
     remarks: '',
-    nominees: [] as Array<{
+    nominees: [] as {
       nominee_name: string;
       relationship: string;
       share_percentage: number;
-    }>,
+    }[],
   });
 
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [organizationId]);
+
+  useEffect(() => {
+    setFormData((current) => ({
+      ...current,
+      organization_id: organizationId,
+    }));
+  }, [organizationId]);
 
   const loadProducts = async () => {
     try {
@@ -146,11 +155,11 @@ export default function FDForm() {
       const years = formData.tenure_days / 365;
       const maturity = principal * Math.pow(1 + rate / 4, 4 * years); // Quarterly compounding
       setCalculatedMaturity(Math.round(maturity * 100) / 100);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
         description:
-          error.response?.data?.detail || 'No applicable rate found for given parameters',
+          getErrorMessage(error, 'No applicable rate found for given parameters'),
         variant: 'destructive',
       });
     }
@@ -193,16 +202,16 @@ export default function FDForm() {
 
     try {
       setSaving(true);
-      const fd = await fixedDepositService.createDeposit(submitData as any);
+      const fd = await fixedDepositService.createDeposit(submitData as Parameters<typeof fixedDepositService.createDeposit>[0]);
       toast({
         title: 'Success',
         description: `Fixed deposit ${fd.fd_number} created successfully`,
       });
       navigate(`/admin/fixed-deposits/${fd.id}`);
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create fixed deposit',
+        description: getErrorMessage(error, 'Failed to create fixed deposit'),
         variant: 'destructive',
       });
     } finally {

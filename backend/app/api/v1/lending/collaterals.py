@@ -2,51 +2,55 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
+from app.schemas.base import CamelSchema
 from app.services.lending import CollateralService
 
 router = APIRouter()
 
 
 # Request/Response Schemas
-class PropertyDetails(BaseModel):
+class PropertyDetails(CamelSchema):
     """Property details for collateral."""
-    address: Optional[str] = None
-    area_sqft: Optional[Decimal] = None
-    survey_number: Optional[str] = None
-    type: Optional[str] = None
-    detailed_description: Optional[str] = None
+
+    address: str | None = None
+    area_sqft: Decimal | None = None
+    survey_number: str | None = None
+    type: str | None = None
+    detailed_description: str | None = None
 
 
-class OwnerDetails(BaseModel):
+class OwnerDetails(CamelSchema):
     """Owner details for collateral."""
-    name: Optional[str] = None
-    relationship: Optional[str] = None
+
+    name: str | None = None
+    relationship: str | None = None
     is_third_party: bool = False
-    entity_id: Optional[UUID] = None
+    entity_id: UUID | None = None
 
 
-class ValuationDetails(BaseModel):
+class ValuationDetails(CamelSchema):
     """Valuation details for collateral."""
-    declared_value: Optional[Decimal] = None
-    market_value: Optional[Decimal] = None
-    forced_sale_value: Optional[Decimal] = None
-    valuation_date: Optional[date] = None
-    valuer_name: Optional[str] = None
-    valuer_firm: Optional[str] = None
-    report_path: Optional[str] = None
+
+    declared_value: Decimal | None = None
+    market_value: Decimal | None = None
+    forced_sale_value: Decimal | None = None
+    valuation_date: date | None = None
+    valuer_name: str | None = None
+    valuer_firm: str | None = None
+    report_path: str | None = None
 
 
-class CollateralCreateRequest(BaseModel):
+class CollateralCreateRequest(CamelSchema):
     """Request to create a collateral."""
+
     sanction_id: UUID
     security_category: str = Field(..., description="PRIMARY, COLLATERAL, GUARANTEE")
     security_type: str = Field(..., description="IMMOVABLE_PROPERTY, MOVABLE_ASSET, etc.")
@@ -54,13 +58,14 @@ class CollateralCreateRequest(BaseModel):
     acceptable_value: Decimal = Field(..., gt=0)
     margin_percentage: Decimal = Field(default=Decimal("25"), ge=0, le=100)
     charge_type: str = Field(default="FIRST")
-    property_details: Optional[PropertyDetails] = None
-    owner_details: Optional[OwnerDetails] = None
-    valuation_details: Optional[ValuationDetails] = None
+    property_details: PropertyDetails | None = None
+    owner_details: OwnerDetails | None = None
+    valuation_details: ValuationDetails | None = None
 
 
-class CollateralResponse(BaseModel):
+class CollateralResponse(CamelSchema):
     """Collateral response."""
+
     id: UUID
     sanction_id: UUID
     security_number: int
@@ -73,36 +78,40 @@ class CollateralResponse(BaseModel):
     status: str
 
 
-class ValuationUpdateRequest(BaseModel):
+class ValuationUpdateRequest(CamelSchema):
     """Request to update collateral valuation."""
+
     security_id: UUID
     market_value: Decimal = Field(..., gt=0)
-    forced_sale_value: Optional[Decimal] = None
-    acceptable_value: Optional[Decimal] = None
-    valuation_date: Optional[date] = None
-    valuer_name: Optional[str] = None
-    valuer_firm: Optional[str] = None
-    report_path: Optional[str] = None
-    next_valuation_date: Optional[date] = None
+    forced_sale_value: Decimal | None = None
+    acceptable_value: Decimal | None = None
+    valuation_date: date | None = None
+    valuer_name: str | None = None
+    valuer_firm: str | None = None
+    report_path: str | None = None
+    next_valuation_date: date | None = None
 
 
-class ReleaseRequest(BaseModel):
+class ReleaseRequest(CamelSchema):
     """Request to release collateral."""
+
     security_id: UUID
     release_reason: str
-    release_date: Optional[date] = None
-    release_to: Optional[str] = None
+    release_date: date | None = None
+    release_to: str | None = None
 
 
-class SubstitutionRequest(BaseModel):
+class SubstitutionRequest(CamelSchema):
     """Request to substitute collateral."""
+
     old_security_id: UUID
     new_security: CollateralCreateRequest
     substitution_reason: str
 
 
-class CoverageResponse(BaseModel):
+class CoverageResponse(CamelSchema):
     """Security coverage response."""
+
     sanction_id: UUID
     loan_amount: Decimal
     total_acceptable_value: Decimal
@@ -111,32 +120,34 @@ class CoverageResponse(BaseModel):
     is_fully_secured: bool
 
 
-class EncumbranceRequest(BaseModel):
+class EncumbranceRequest(CamelSchema):
     """Request to add encumbrance."""
+
     security_id: UUID
     charge_holder: str
     charge_amount: Decimal
-    charge_date: Optional[date] = None
-    charge_reference: Optional[str] = None
+    charge_date: date | None = None
+    charge_reference: str | None = None
 
 
-class ChargeCreationRequest(BaseModel):
+class ChargeCreationRequest(CamelSchema):
     """Request to record charge creation."""
+
     security_id: UUID
     charge_creation_date: date
-    charge_id: Optional[str] = None
-    roc_filing_date: Optional[date] = None
-    roc_filing_srn: Optional[str] = None
-    cersai_registration_date: Optional[date] = None
-    cersai_transaction_id: Optional[str] = None
+    charge_id: str | None = None
+    roc_filing_date: date | None = None
+    roc_filing_srn: str | None = None
+    cersai_registration_date: date | None = None
+    cersai_transaction_id: str | None = None
 
 
 # Endpoints
-@router.post("/", response_model=CollateralResponse)
+@router.post("/", response_model=CollateralResponse, response_model_by_alias=True)
 async def create_collateral(
     request: CollateralCreateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Create a new collateral/security."""
     service = CollateralService(db)
@@ -165,15 +176,17 @@ async def create_collateral(
         acceptable_value=security.acceptable_value,
         margin_percentage=security.margin_percentage,
         net_value=security.net_value,
-        status=security.status.name if hasattr(security, 'status') and security.status else "ACTIVE",
+        status=(
+            security.status.name if hasattr(security, "status") and security.status else "ACTIVE"
+        ),
     )
 
 
 @router.put("/valuation")
 async def update_valuation(
     request: ValuationUpdateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Update collateral valuation."""
     service = CollateralService(db)
@@ -205,8 +218,8 @@ async def update_valuation(
 @router.post("/release")
 async def release_collateral(
     request: ReleaseRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Release a collateral."""
     service = CollateralService(db)
@@ -230,8 +243,8 @@ async def release_collateral(
 @router.post("/substitute")
 async def substitute_collateral(
     request: SubstitutionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Substitute one collateral with another."""
     service = CollateralService(db)
@@ -243,9 +256,21 @@ async def substitute_collateral(
         "acceptable_value": request.new_security.acceptable_value,
         "margin_percentage": request.new_security.margin_percentage,
         "charge_type": request.new_security.charge_type,
-        "property_details": request.new_security.property_details.dict() if request.new_security.property_details else None,
-        "owner_details": request.new_security.owner_details.dict() if request.new_security.owner_details else None,
-        "valuation_details": request.new_security.valuation_details.dict() if request.new_security.valuation_details else None,
+        "property_details": (
+            request.new_security.property_details.dict()
+            if request.new_security.property_details
+            else None
+        ),
+        "owner_details": (
+            request.new_security.owner_details.dict()
+            if request.new_security.owner_details
+            else None
+        ),
+        "valuation_details": (
+            request.new_security.valuation_details.dict()
+            if request.new_security.valuation_details
+            else None
+        ),
     }
 
     result = await service.substitute_security(
@@ -262,12 +287,16 @@ async def substitute_collateral(
     }
 
 
-@router.get("/coverage/{sanction_id}", response_model=CoverageResponse)
+@router.get(
+    "/coverage/{sanction_id}",
+    response_model=CoverageResponse,
+    response_model_by_alias=True,
+)
 async def get_coverage(
     sanction_id: UUID,
     include_released: bool = Query(default=False),
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Get security coverage for a sanction."""
     service = CollateralService(db)
@@ -290,8 +319,8 @@ async def get_coverage(
 @router.get("/loan/{loan_account_id}")
 async def get_collaterals_by_loan(
     loan_account_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Get collaterals for a loan account."""
     service = CollateralService(db)
@@ -323,7 +352,7 @@ async def get_collaterals_by_loan(
 @router.get("/due-valuation")
 async def get_collaterals_due_valuation(
     days_ahead: int = Query(default=30, description="Days to look ahead"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get collaterals due for revaluation."""
@@ -344,8 +373,8 @@ async def get_collaterals_due_valuation(
 @router.post("/encumbrance")
 async def add_encumbrance(
     request: EncumbranceRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Add existing encumbrance to collateral."""
     service = CollateralService(db)
@@ -371,8 +400,8 @@ async def add_encumbrance(
 @router.post("/charge")
 async def record_charge_creation(
     request: ChargeCreationRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
 ):
     """Record charge creation/registration."""
     service = CollateralService(db)
@@ -399,7 +428,7 @@ async def record_charge_creation(
 
 @router.get("/summary")
 async def get_collateral_summary(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get collateral summary for organization."""

@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -10,10 +8,31 @@ import {
   ChevronRight,
   MapPin,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -29,27 +48,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { customersApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   code: string;
@@ -70,6 +73,8 @@ interface Customer {
   current_balance_type: string | null;
   is_active: boolean;
 }
+
+type CustomerListParams = Parameters<typeof customersApi.list>[0];
 
 const customerTypeLabels: Record<string, string> = {
   INDIVIDUAL: 'Individual',
@@ -102,17 +107,7 @@ export function CustomerList() {
   const [customerToDelete, setCustomerToDelete] = useState<Customer | null>(null);
   const pageSize = 20;
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      loadCustomers();
-    }
-  }, [selectedOrgId, page, includeInactive, searchQuery, customerTypeFilter]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page: 1, page_size: 100 });
       const orgs = response.data.items || [];
@@ -121,20 +116,20 @@ export function CustomerList() {
         setSelectedOrgId(orgs[0].id);
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
       toast({
         title: 'Error',
         description: 'Failed to load organizations',
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
 
-  const loadCustomers = async () => {
+  const loadCustomers = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
     try {
-      const params: any = {
+      const params: CustomerListParams = {
         organization_id: selectedOrgId,
         page,
         page_size: pageSize,
@@ -151,7 +146,7 @@ export function CustomerList() {
       setTotal(response.data.total || 0);
       setTotalPages(response.data.pages || 1);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      logger.error('Failed to load customers:', error);
       toast({
         title: 'Error',
         description: 'Failed to load customers',
@@ -160,7 +155,17 @@ export function CustomerList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [customerTypeFilter, includeInactive, page, searchQuery, selectedOrgId, toast]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      loadCustomers();
+    }
+  }, [loadCustomers, selectedOrgId]);
 
   const handleDelete = async () => {
     if (!customerToDelete) return;
@@ -171,26 +176,12 @@ export function CustomerList() {
         description: 'Customer deleted successfully',
       });
       loadCustomers();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete customer',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setDeleteDialogOpen(false);
       setCustomerToDelete(null);
     }
-  };
-
-  const formatCurrency = (amount: number, type: string | null) => {
-    const formatted = new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
-    if (amount === 0) return formatted;
-    return `${formatted} ${type || ''}`;
   };
 
   return (
@@ -333,7 +324,10 @@ export function CustomerList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(customer.current_balance, customer.current_balance_type)}
+                    <AmountDisplay amount={Math.abs(customer.current_balance)} />
+                    {customer.current_balance !== 0 && customer.current_balance_type ? (
+                      <span className="ml-1">{customer.current_balance_type}</span>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <Badge variant={customer.is_active ? 'default' : 'secondary'}>
@@ -411,7 +405,7 @@ export function CustomerList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Customer</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete customer "{customerToDelete?.name}"? This action
+              Are you sure you want to delete customer &quot;{customerToDelete?.name}&quot;? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

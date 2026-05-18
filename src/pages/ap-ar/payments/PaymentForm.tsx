@@ -1,13 +1,15 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
-import { ArrowLeft, Plus, Trash2, Save, Send } from 'lucide-react';
+import { Save, Send } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
 import {
   Table,
   TableBody,
@@ -23,10 +26,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import { logger } from "@/lib/logger";
 import {
   paymentsApi,
   organizationsApi,
@@ -37,27 +40,104 @@ import {
 } from '@/services/api';
 
 interface OutstandingDocument {
-  document_type: string;
-  document_id: string;
-  document_number: string;
-  document_date: string;
-  due_date: string | null;
-  total_amount: number;
-  paid_amount: number;
-  outstanding_amount: number;
-  days_overdue: number;
+  documentType: string;
+  documentId: string;
+  documentNumber: string;
+  documentDate: string;
+  dueDate: string | null;
+  totalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  daysOverdue: number;
   selected?: boolean;
-  allocated_amount?: number;
+  allocatedAmount?: number;
 }
 
 interface Allocation {
-  document_type: string;
-  document_id: string;
-  document_number: string;
-  document_date: string;
-  document_amount: number;
-  outstanding_before: number;
-  allocated_amount: number;
+  documentType: string;
+  documentId: string;
+  documentNumber: string;
+  documentDate: string;
+  documentAmount: number;
+  outstandingBefore: number;
+  allocatedAmount: number;
+}
+
+interface OrganizationOption {
+  id: string;
+  name: string;
+}
+
+interface PartyOption {
+  id: string;
+  name: string;
+  tdsApplicable?: boolean;
+  tdsSectionId?: string | null;
+}
+
+interface AccountOption {
+  id: string;
+  name: string;
+}
+
+interface TdsSectionOption {
+  id: string;
+  sectionCode: string;
+  description: string;
+  rateCompany?: number | string | null;
+}
+
+interface PaymentDetail {
+  id: string;
+  organizationId: string;
+  paymentType: string;
+  paymentDate: string;
+  partyType: string;
+  vendorId?: string | null;
+  customerId?: string | null;
+  unitId?: string | null;
+  paymentMode: string;
+  bankAccountId?: string | null;
+  cashAccountId?: string | null;
+  amount: number | string;
+  tdsAmount?: number | string | null;
+  tdsSectionId?: string | null;
+  tdsRate?: number | string | null;
+  discountAmount?: number | string | null;
+  writeOffAmount?: number | string | null;
+  chequeNumber?: string | null;
+  chequeDate?: string | null;
+  chequeBankName?: string | null;
+  chequeBranch?: string | null;
+  referenceNumber?: string | null;
+  narration?: string | null;
+  allocations?: Allocation[];
+}
+
+interface PaymentFormState {
+  organizationId: string;
+  paymentType: string;
+  paymentDate: string;
+  partyType: string;
+  vendorId: string;
+  customerId: string;
+  unitId: string;
+  paymentMode: string;
+  bankAccountId: string;
+  cashAccountId: string;
+  amount: string;
+  tdsApplicable: boolean;
+  tdsSectionId: string;
+  tdsRate: string;
+  tdsAmount: string;
+  discountAmount: string;
+  writeOffAmount: string;
+  chequeNumber: string;
+  chequeDate: string;
+  chequeBankName: string;
+  chequeBranch: string;
+  referenceNumber: string;
+  narration: string;
 }
 
 const PAYMENT_TYPES = [
@@ -93,213 +173,218 @@ export function PaymentForm() {
   const [saving, setSaving] = useState(false);
 
   // Lookups
-  const [organizations, setOrganizations] = useState<any[]>([]);
-  const [vendors, setVendors] = useState<any[]>([]);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
-  const [cashAccounts, setCashAccounts] = useState<any[]>([]);
-  const [tdsSections, setTdsSections] = useState<any[]>([]);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [vendors, setVendors] = useState<PartyOption[]>([]);
+  const [customers, setCustomers] = useState<PartyOption[]>([]);
+  const [bankAccounts, setBankAccounts] = useState<AccountOption[]>([]);
+  const [cashAccounts, setCashAccounts] = useState<AccountOption[]>([]);
+  const [tdsSections, setTdsSections] = useState<TdsSectionOption[]>([]);
   const [outstandingDocs, setOutstandingDocs] = useState<OutstandingDocument[]>([]);
 
   // Form state
-  const [formData, setFormData] = useState({
-    organization_id: '',
-    payment_type: defaultType,
-    payment_date: format(new Date(), 'yyyy-MM-dd'),
-    party_type: PAYMENT_TYPES.find(t => t.value === defaultType)?.party || 'VENDOR',
-    vendor_id: '',
-    customer_id: '',
-    unit_id: '',
-    payment_mode: 'NEFT',
-    bank_account_id: '',
-    cash_account_id: '',
+  const [formData, setFormData] = useState<PaymentFormState>({
+    organizationId: '',
+    paymentType: defaultType,
+    paymentDate: format(new Date(), 'yyyy-MM-dd'),
+    partyType: PAYMENT_TYPES.find(t => t.value === defaultType)?.party || 'VENDOR',
+    vendorId: '',
+    customerId: '',
+    unitId: '',
+    paymentMode: 'NEFT',
+    bankAccountId: '',
+    cashAccountId: '',
     amount: '',
-    tds_applicable: false,
-    tds_section_id: '',
-    tds_rate: '',
-    tds_amount: '',
-    discount_amount: '0',
-    write_off_amount: '0',
-    cheque_number: '',
-    cheque_date: '',
-    cheque_bank_name: '',
-    cheque_branch: '',
-    reference_number: '',
+    tdsApplicable: false,
+    tdsSectionId: '',
+    tdsRate: '',
+    tdsAmount: '',
+    discountAmount: '0',
+    writeOffAmount: '0',
+    chequeNumber: '',
+    chequeDate: '',
+    chequeBankName: '',
+    chequeBranch: '',
+    referenceNumber: '',
     narration: '',
   });
 
   const [allocations, setAllocations] = useState<Allocation[]>([]);
 
-  useEffect(() => {
-    loadOrganizations();
-    loadTdsSections();
-  }, []);
-
-  useEffect(() => {
-    if (formData.organization_id) {
-      loadAccounts();
-      loadVendors();
-      loadCustomers();
-    }
-  }, [formData.organization_id]);
-
-  useEffect(() => {
-    if (id && formData.organization_id) {
-      loadPayment();
-    }
-  }, [id, formData.organization_id]);
-
-  useEffect(() => {
-    // Load outstanding documents when party is selected
-    const partyId = formData.party_type === 'VENDOR' ? formData.vendor_id : formData.customer_id;
-    if (formData.organization_id && partyId && !isEdit) {
-      loadOutstandingDocuments();
-    }
-  }, [formData.organization_id, formData.vendor_id, formData.customer_id, formData.party_type]);
-
-  useEffect(() => {
-    // Update party type when payment type changes
-    const paymentTypeConfig = PAYMENT_TYPES.find(t => t.value === formData.payment_type);
-    if (paymentTypeConfig && paymentTypeConfig.party !== formData.party_type) {
-      setFormData(prev => ({
-        ...prev,
-        party_type: paymentTypeConfig.party,
-        vendor_id: '',
-        customer_id: '',
-      }));
-      setOutstandingDocs([]);
-      setAllocations([]);
-    }
-  }, [formData.payment_type]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ include_inactive: false });
       setOrganizations(response.data.items || []);
-      if (response.data.items?.length > 0 && !formData.organization_id) {
-        setFormData(prev => ({ ...prev, organization_id: response.data.items[0].id }));
+      if (response.data.items?.length > 0 && !formData.organizationId) {
+        setFormData(prev => ({ ...prev, organizationId: response.data.items[0].id }));
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
     }
-  };
+  }, [formData.organizationId]);
 
-  const loadAccounts = async () => {
-    if (!formData.organization_id) return;
+  const loadAccounts = useCallback(async () => {
+    if (!formData.organizationId) return;
     try {
       // Load bank accounts
       const bankResponse = await accountsApi.list({
-        organization_id: formData.organization_id,
+        organization_id: formData.organizationId,
         account_type: 'BANK',
       });
       setBankAccounts(bankResponse.data.items || []);
 
       // Load cash accounts
       const cashResponse = await accountsApi.list({
-        organization_id: formData.organization_id,
+        organization_id: formData.organizationId,
         account_type: 'CASH',
       });
       setCashAccounts(cashResponse.data.items || []);
     } catch (error) {
-      console.error('Failed to load accounts:', error);
+      logger.error('Failed to load accounts:', error);
     }
-  };
+  }, [formData.organizationId]);
 
-  const loadVendors = async () => {
-    if (!formData.organization_id) return;
+  const loadVendors = useCallback(async () => {
+    if (!formData.organizationId) return;
     try {
-      const response = await vendorsApi.getActive({ organization_id: formData.organization_id });
+      const response = await vendorsApi.getActive({ organization_id: formData.organizationId });
       setVendors(response.data || []);
     } catch (error) {
-      console.error('Failed to load vendors:', error);
+      logger.error('Failed to load vendors:', error);
     }
-  };
+  }, [formData.organizationId]);
 
-  const loadCustomers = async () => {
-    if (!formData.organization_id) return;
+  const loadCustomers = useCallback(async () => {
+    if (!formData.organizationId) return;
     try {
-      const response = await customersApi.getActive({ organization_id: formData.organization_id });
+      const response = await customersApi.getActive({ organization_id: formData.organizationId });
       setCustomers(response.data || []);
     } catch (error) {
-      console.error('Failed to load customers:', error);
+      logger.error('Failed to load customers:', error);
     }
-  };
+  }, [formData.organizationId]);
 
-  const loadTdsSections = async () => {
+  const loadTdsSections = useCallback(async () => {
     try {
       const response = await tdsSectionsApi.getActive({ is_tcs: false });
       setTdsSections(response.data || []);
     } catch (error) {
-      console.error('Failed to load TDS sections:', error);
+      logger.error('Failed to load TDS sections:', error);
     }
-  };
+  }, []);
 
-  const loadOutstandingDocuments = async () => {
-    const partyId = formData.party_type === 'VENDOR' ? formData.vendor_id : formData.customer_id;
+  const loadOutstandingDocuments = useCallback(async () => {
+    const partyId = formData.partyType === 'VENDOR' ? formData.vendorId : formData.customerId;
     if (!partyId) return;
 
     try {
       const response = await paymentsApi.getOutstandingDocuments(
-        formData.party_type,
+        formData.partyType,
         partyId,
-        { organization_id: formData.organization_id }
+        { organization_id: formData.organizationId }
       );
       setOutstandingDocs((response.data || []).map((doc: OutstandingDocument) => ({
         ...doc,
         selected: false,
-        allocated_amount: 0,
+        allocatedAmount: 0,
       })));
     } catch (error) {
-      console.error('Failed to load outstanding documents:', error);
+      logger.error('Failed to load outstanding documents:', error);
     }
-  };
+  }, [formData.customerId, formData.organizationId, formData.partyType, formData.vendorId]);
 
-  const loadPayment = async () => {
+  const loadPayment = useCallback(async () => {
+    if (!id) return;
     setLoading(true);
     try {
-      const response = await paymentsApi.get(id!);
-      const payment = response.data;
+      const response = await paymentsApi.get(id);
+      const payment = response.data as PaymentDetail;
 
       setFormData({
-        organization_id: payment.organization_id,
-        payment_type: payment.payment_type,
-        payment_date: payment.payment_date,
-        party_type: payment.party_type,
-        vendor_id: payment.vendor_id || '',
-        customer_id: payment.customer_id || '',
-        unit_id: payment.unit_id || '',
-        payment_mode: payment.payment_mode,
-        bank_account_id: payment.bank_account_id || '',
-        cash_account_id: payment.cash_account_id || '',
+        organizationId: payment.organizationId,
+        paymentType: payment.paymentType,
+        paymentDate: payment.paymentDate,
+        partyType: payment.partyType,
+        vendorId: payment.vendorId || '',
+        customerId: payment.customerId || '',
+        unitId: payment.unitId || '',
+        paymentMode: payment.paymentMode,
+        bankAccountId: payment.bankAccountId || '',
+        cashAccountId: payment.cashAccountId || '',
         amount: payment.amount.toString(),
-        tds_applicable: payment.tds_amount > 0,
-        tds_section_id: payment.tds_section_id || '',
-        tds_rate: payment.tds_rate?.toString() || '',
-        tds_amount: payment.tds_amount?.toString() || '0',
-        discount_amount: payment.discount_amount?.toString() || '0',
-        write_off_amount: payment.write_off_amount?.toString() || '0',
-        cheque_number: payment.cheque_number || '',
-        cheque_date: payment.cheque_date || '',
-        cheque_bank_name: payment.cheque_bank_name || '',
-        cheque_branch: payment.cheque_branch || '',
-        reference_number: payment.reference_number || '',
+        tdsApplicable: Number(payment.tdsAmount ?? 0) > 0,
+        tdsSectionId: payment.tdsSectionId || '',
+        tdsRate: payment.tdsRate?.toString() || '',
+        tdsAmount: payment.tdsAmount?.toString() || '0',
+        discountAmount: payment.discountAmount?.toString() || '0',
+        writeOffAmount: payment.writeOffAmount?.toString() || '0',
+        chequeNumber: payment.chequeNumber || '',
+        chequeDate: payment.chequeDate || '',
+        chequeBankName: payment.chequeBankName || '',
+        chequeBranch: payment.chequeBranch || '',
+        referenceNumber: payment.referenceNumber || '',
         narration: payment.narration || '',
       });
 
       setAllocations(payment.allocations || []);
     } catch (error) {
-      console.error('Failed to load payment:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load payment details',
-        variant: 'destructive',
-      });
+      logger.error('Failed to load payment:', error);
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
 
-  const handleInputChange = (field: string, value: any) => {
+  useEffect(() => {
+    loadOrganizations();
+    loadTdsSections();
+  }, [loadOrganizations, loadTdsSections]);
+
+  useEffect(() => {
+    if (formData.organizationId) {
+      loadAccounts();
+      loadVendors();
+      loadCustomers();
+    }
+  }, [formData.organizationId, loadAccounts, loadCustomers, loadVendors]);
+
+  useEffect(() => {
+    if (id && formData.organizationId) {
+      loadPayment();
+    }
+  }, [formData.organizationId, id, loadPayment]);
+
+  useEffect(() => {
+    const partyId = formData.partyType === 'VENDOR' ? formData.vendorId : formData.customerId;
+    if (formData.organizationId && partyId && !isEdit) {
+      loadOutstandingDocuments();
+    }
+  }, [
+    formData.customerId,
+    formData.organizationId,
+    formData.partyType,
+    formData.vendorId,
+    isEdit,
+    loadOutstandingDocuments,
+  ]);
+
+  useEffect(() => {
+    const paymentTypeConfig = PAYMENT_TYPES.find(t => t.value === formData.paymentType);
+    if (paymentTypeConfig && paymentTypeConfig.party !== formData.partyType) {
+      setFormData(prev => ({
+        ...prev,
+        partyType: paymentTypeConfig.party,
+        vendorId: '',
+        customerId: '',
+      }));
+      setOutstandingDocs([]);
+      setAllocations([]);
+    }
+  }, [formData.partyType, formData.paymentType]);
+
+  const handleInputChange = <K extends keyof PaymentFormState>(
+    field: K,
+    value: PaymentFormState[K]
+  ) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
@@ -307,17 +392,17 @@ export function PaymentForm() {
     const vendor = vendors.find(v => v.id === vendorId);
     setFormData(prev => ({
       ...prev,
-      vendor_id: vendorId,
-      tds_applicable: vendor?.tds_applicable || false,
-      tds_section_id: vendor?.tds_section_id || '',
+      vendorId: vendorId,
+      tdsApplicable: vendor?.tdsApplicable || false,
+      tdsSectionId: vendor?.tdsSectionId || '',
     }));
 
-    if (vendor?.tds_section_id) {
-      const section = tdsSections.find(s => s.id === vendor.tds_section_id);
+    if (vendor?.tdsSectionId) {
+      const section = tdsSections.find(s => s.id === vendor.tdsSectionId);
       if (section) {
         setFormData(prev => ({
           ...prev,
-          tds_rate: section.rate_company?.toString() || '',
+          tdsRate: section.rateCompany?.toString() || '',
         }));
       }
     }
@@ -327,8 +412,8 @@ export function PaymentForm() {
     const section = tdsSections.find(s => s.id === sectionId);
     setFormData(prev => ({
       ...prev,
-      tds_section_id: sectionId,
-      tds_rate: section?.rate_company?.toString() || '',
+      tdsSectionId: sectionId,
+      tdsRate: section?.rateCompany?.toString() || '',
     }));
   };
 
@@ -336,7 +421,7 @@ export function PaymentForm() {
     const updatedDocs = [...outstandingDocs];
     updatedDocs[index].selected = selected;
     if (!selected) {
-      updatedDocs[index].allocated_amount = 0;
+      updatedDocs[index].allocatedAmount = 0;
     }
     setOutstandingDocs(updatedDocs);
     updateAllocations(updatedDocs);
@@ -344,43 +429,43 @@ export function PaymentForm() {
 
   const handleAllocationChange = (index: number, amount: number) => {
     const updatedDocs = [...outstandingDocs];
-    updatedDocs[index].allocated_amount = Math.min(amount, updatedDocs[index].outstanding_amount);
+    updatedDocs[index].allocatedAmount = Math.min(amount, updatedDocs[index].outstandingAmount);
     setOutstandingDocs(updatedDocs);
     updateAllocations(updatedDocs);
   };
 
   const updateAllocations = (docs: OutstandingDocument[]) => {
     const newAllocations = docs
-      .filter(doc => doc.selected && (doc.allocated_amount || 0) > 0)
+      .filter(doc => doc.selected && (doc.allocatedAmount || 0) > 0)
       .map(doc => ({
-        document_type: doc.document_type,
-        document_id: doc.document_id,
-        document_number: doc.document_number,
-        document_date: doc.document_date,
-        document_amount: doc.total_amount,
-        outstanding_before: doc.outstanding_amount,
-        allocated_amount: doc.allocated_amount || 0,
+        documentType: doc.documentType,
+        documentId: doc.documentId,
+        documentNumber: doc.documentNumber,
+        documentDate: doc.documentDate,
+        documentAmount: doc.totalAmount,
+        outstandingBefore: doc.outstandingAmount,
+        allocatedAmount: doc.allocatedAmount || 0,
       }));
     setAllocations(newAllocations);
   };
 
   const calculateTdsAmount = () => {
-    if (!formData.tds_applicable || !formData.tds_rate || !formData.amount) {
+    if (!formData.tdsApplicable || !formData.tdsRate || !formData.amount) {
       return 0;
     }
-    return (parseFloat(formData.amount) * parseFloat(formData.tds_rate)) / 100;
+    return (parseFloat(formData.amount) * parseFloat(formData.tdsRate)) / 100;
   };
 
   const calculateNetAmount = () => {
     const amount = parseFloat(formData.amount) || 0;
-    const tds = formData.tds_applicable ? calculateTdsAmount() : 0;
-    const discount = parseFloat(formData.discount_amount) || 0;
-    const writeOff = parseFloat(formData.write_off_amount) || 0;
+    const tds = formData.tdsApplicable ? calculateTdsAmount() : 0;
+    const discount = parseFloat(formData.discountAmount) || 0;
+    const writeOff = parseFloat(formData.writeOffAmount) || 0;
     return amount - tds - discount - writeOff;
   };
 
   const handleSave = async (submit = false) => {
-    if (!formData.organization_id || !formData.payment_type || !formData.amount) {
+    if (!formData.organizationId || !formData.paymentType || !formData.amount) {
       toast({
         title: 'Validation Error',
         description: 'Please fill all required fields',
@@ -389,7 +474,7 @@ export function PaymentForm() {
       return;
     }
 
-    if (formData.party_type === 'VENDOR' && !formData.vendor_id) {
+    if (formData.partyType === 'VENDOR' && !formData.vendorId) {
       toast({
         title: 'Validation Error',
         description: 'Please select a vendor',
@@ -398,7 +483,7 @@ export function PaymentForm() {
       return;
     }
 
-    if (formData.party_type === 'CUSTOMER' && !formData.customer_id) {
+    if (formData.partyType === 'CUSTOMER' && !formData.customerId) {
       toast({
         title: 'Validation Error',
         description: 'Please select a customer',
@@ -410,32 +495,32 @@ export function PaymentForm() {
     setSaving(true);
     try {
       const payload = {
-        organization_id: formData.organization_id,
-        payment_type: formData.payment_type,
-        payment_date: formData.payment_date,
-        party_type: formData.party_type,
-        vendor_id: formData.party_type === 'VENDOR' ? formData.vendor_id : null,
-        customer_id: formData.party_type === 'CUSTOMER' ? formData.customer_id : null,
-        unit_id: formData.unit_id || null,
-        payment_mode: formData.payment_mode,
-        bank_account_id: formData.payment_mode !== 'CASH' ? formData.bank_account_id : null,
-        cash_account_id: formData.payment_mode === 'CASH' ? formData.cash_account_id : null,
+        organizationId: formData.organizationId,
+        paymentType: formData.paymentType,
+        paymentDate: formData.paymentDate,
+        partyType: formData.partyType,
+        vendorId: formData.partyType === 'VENDOR' ? formData.vendorId : null,
+        customerId: formData.partyType === 'CUSTOMER' ? formData.customerId : null,
+        unitId: formData.unitId || null,
+        paymentMode: formData.paymentMode,
+        bankAccountId: formData.paymentMode !== 'CASH' ? formData.bankAccountId : null,
+        cashAccountId: formData.paymentMode === 'CASH' ? formData.cashAccountId : null,
         amount: parseFloat(formData.amount),
-        tds_section_id: formData.tds_applicable ? formData.tds_section_id : null,
-        tds_rate: formData.tds_applicable ? parseFloat(formData.tds_rate) || 0 : 0,
-        tds_amount: formData.tds_applicable ? calculateTdsAmount() : 0,
-        discount_amount: parseFloat(formData.discount_amount) || 0,
-        write_off_amount: parseFloat(formData.write_off_amount) || 0,
-        cheque_number: formData.payment_mode === 'CHEQUE' ? formData.cheque_number : null,
-        cheque_date: formData.payment_mode === 'CHEQUE' ? formData.cheque_date : null,
-        cheque_bank_name: formData.payment_mode === 'CHEQUE' ? formData.cheque_bank_name : null,
-        cheque_branch: formData.payment_mode === 'CHEQUE' ? formData.cheque_branch : null,
-        reference_number: formData.reference_number || null,
+        tdsSectionId: formData.tdsApplicable ? formData.tdsSectionId : null,
+        tdsRate: formData.tdsApplicable ? parseFloat(formData.tdsRate) || 0 : 0,
+        tdsAmount: formData.tdsApplicable ? calculateTdsAmount() : 0,
+        discountAmount: parseFloat(formData.discountAmount) || 0,
+        writeOffAmount: parseFloat(formData.writeOffAmount) || 0,
+        chequeNumber: formData.paymentMode === 'CHEQUE' ? formData.chequeNumber : null,
+        chequeDate: formData.paymentMode === 'CHEQUE' ? formData.chequeDate : null,
+        chequeBankName: formData.paymentMode === 'CHEQUE' ? formData.chequeBankName : null,
+        chequeBranch: formData.paymentMode === 'CHEQUE' ? formData.chequeBranch : null,
+        referenceNumber: formData.referenceNumber || null,
         narration: formData.narration || null,
         allocations: allocations.map(a => ({
-          document_type: a.document_type,
-          document_id: a.document_id,
-          allocated_amount: a.allocated_amount,
+          documentType: a.documentType,
+          documentId: a.documentId,
+          allocatedAmount: a.allocatedAmount,
         })),
       };
 
@@ -454,23 +539,11 @@ export function PaymentForm() {
       }
 
       navigate('/admin/ap-ar/payments');
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to save payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setSaving(false);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
   };
 
   if (loading) {
@@ -482,7 +555,7 @@ export function PaymentForm() {
       <PageHeader
         title={isEdit ? 'Edit Payment' : 'New Payment/Receipt'}
         subtitle={
-          formData.party_type === 'VENDOR'
+          formData.partyType === 'VENDOR'
             ? 'Make payment to vendor'
             : 'Record receipt from customer'
         }
@@ -505,8 +578,8 @@ export function PaymentForm() {
                 <div className="space-y-2">
                   <Label>Organization *</Label>
                   <Select
-                    value={formData.organization_id}
-                    onValueChange={(value) => handleInputChange('organization_id', value)}
+                    value={formData.organizationId}
+                    onValueChange={(value) => handleInputChange('organizationId', value)}
                     disabled={isEdit}
                   >
                     <SelectTrigger>
@@ -525,8 +598,8 @@ export function PaymentForm() {
                 <div className="space-y-2">
                   <Label>Payment Type *</Label>
                   <Select
-                    value={formData.payment_type}
-                    onValueChange={(value) => handleInputChange('payment_type', value)}
+                    value={formData.paymentType}
+                    onValueChange={(value) => handleInputChange('paymentType', value)}
                     disabled={isEdit}
                   >
                     <SelectTrigger>
@@ -546,16 +619,16 @@ export function PaymentForm() {
                   <Label>Payment Date *</Label>
                   <Input
                     type="date"
-                    value={formData.payment_date}
-                    onChange={(e) => handleInputChange('payment_date', e.target.value)}
+                    value={formData.paymentDate}
+                    onChange={(e) => handleInputChange('paymentDate', e.target.value)}
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>{formData.party_type === 'VENDOR' ? 'Vendor' : 'Customer'} *</Label>
-                  {formData.party_type === 'VENDOR' ? (
+                  <Label>{formData.partyType === 'VENDOR' ? 'Vendor' : 'Customer'} *</Label>
+                  {formData.partyType === 'VENDOR' ? (
                     <Select
-                      value={formData.vendor_id}
+                      value={formData.vendorId}
                       onValueChange={handleVendorChange}
                       disabled={isEdit}
                     >
@@ -572,8 +645,8 @@ export function PaymentForm() {
                     </Select>
                   ) : (
                     <Select
-                      value={formData.customer_id}
-                      onValueChange={(value) => handleInputChange('customer_id', value)}
+                      value={formData.customerId}
+                      onValueChange={(value) => handleInputChange('customerId', value)}
                       disabled={isEdit}
                     >
                       <SelectTrigger>
@@ -597,8 +670,8 @@ export function PaymentForm() {
                 <div className="space-y-2">
                   <Label>Payment Mode *</Label>
                   <Select
-                    value={formData.payment_mode}
-                    onValueChange={(value) => handleInputChange('payment_mode', value)}
+                    value={formData.paymentMode}
+                    onValueChange={(value) => handleInputChange('paymentMode', value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select Mode" />
@@ -613,12 +686,12 @@ export function PaymentForm() {
                   </Select>
                 </div>
 
-                {formData.payment_mode === 'CASH' ? (
+                {formData.paymentMode === 'CASH' ? (
                   <div className="space-y-2">
                     <Label>Cash Account *</Label>
                     <Select
-                      value={formData.cash_account_id}
-                      onValueChange={(value) => handleInputChange('cash_account_id', value)}
+                      value={formData.cashAccountId}
+                      onValueChange={(value) => handleInputChange('cashAccountId', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select Cash Account" />
@@ -636,8 +709,8 @@ export function PaymentForm() {
                   <div className="space-y-2">
                     <Label>Bank Account *</Label>
                     <Select
-                      value={formData.bank_account_id}
-                      onValueChange={(value) => handleInputChange('bank_account_id', value)}
+                      value={formData.bankAccountId}
+                      onValueChange={(value) => handleInputChange('bankAccountId', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select Bank Account" />
@@ -667,23 +740,23 @@ export function PaymentForm() {
                 <div className="space-y-2">
                   <Label>Reference Number</Label>
                   <Input
-                    value={formData.reference_number}
-                    onChange={(e) => handleInputChange('reference_number', e.target.value)}
+                    value={formData.referenceNumber}
+                    onChange={(e) => handleInputChange('referenceNumber', e.target.value)}
                     placeholder="UTR/Transaction ID"
                   />
                 </div>
               </div>
 
               {/* Cheque Details */}
-              {formData.payment_mode === 'CHEQUE' && (
+              {formData.paymentMode === 'CHEQUE' && (
                 <>
                   <Separator />
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Cheque Number *</Label>
                       <Input
-                        value={formData.cheque_number}
-                        onChange={(e) => handleInputChange('cheque_number', e.target.value)}
+                        value={formData.chequeNumber}
+                        onChange={(e) => handleInputChange('chequeNumber', e.target.value)}
                         placeholder="Enter cheque number"
                       />
                     </div>
@@ -691,23 +764,23 @@ export function PaymentForm() {
                       <Label>Cheque Date *</Label>
                       <Input
                         type="date"
-                        value={formData.cheque_date}
-                        onChange={(e) => handleInputChange('cheque_date', e.target.value)}
+                        value={formData.chequeDate}
+                        onChange={(e) => handleInputChange('chequeDate', e.target.value)}
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Bank Name</Label>
                       <Input
-                        value={formData.cheque_bank_name}
-                        onChange={(e) => handleInputChange('cheque_bank_name', e.target.value)}
+                        value={formData.chequeBankName}
+                        onChange={(e) => handleInputChange('chequeBankName', e.target.value)}
                         placeholder="Enter bank name"
                       />
                     </div>
                     <div className="space-y-2">
                       <Label>Branch</Label>
                       <Input
-                        value={formData.cheque_branch}
-                        onChange={(e) => handleInputChange('cheque_branch', e.target.value)}
+                        value={formData.chequeBranch}
+                        onChange={(e) => handleInputChange('chequeBranch', e.target.value)}
                         placeholder="Enter branch"
                       />
                     </div>
@@ -716,24 +789,24 @@ export function PaymentForm() {
               )}
 
               {/* TDS Section (for vendor payments) */}
-              {formData.party_type === 'VENDOR' && (
+              {formData.partyType === 'VENDOR' && (
                 <>
                   <Separator />
                   <div className="flex items-center space-x-2">
                     <Checkbox
-                      id="tds_applicable"
-                      checked={formData.tds_applicable}
-                      onCheckedChange={(checked) => handleInputChange('tds_applicable', checked)}
+                      id="tdsApplicable"
+                      checked={formData.tdsApplicable}
+                      onCheckedChange={(checked) => handleInputChange('tdsApplicable', checked === true)}
                     />
-                    <Label htmlFor="tds_applicable">TDS Applicable</Label>
+                    <Label htmlFor="tdsApplicable">TDS Applicable</Label>
                   </div>
 
-                  {formData.tds_applicable && (
+                  {formData.tdsApplicable && (
                     <div className="grid gap-4 md:grid-cols-3">
                       <div className="space-y-2">
                         <Label>TDS Section</Label>
                         <Select
-                          value={formData.tds_section_id}
+                          value={formData.tdsSectionId}
                           onValueChange={handleTdsSectionChange}
                         >
                           <SelectTrigger>
@@ -742,7 +815,7 @@ export function PaymentForm() {
                           <SelectContent>
                             {tdsSections.map((section) => (
                               <SelectItem key={section.id} value={section.id}>
-                                {section.section_code} - {section.description}
+                                {section.sectionCode} - {section.description}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -753,8 +826,8 @@ export function PaymentForm() {
                         <Input
                           type="number"
                           step="0.01"
-                          value={formData.tds_rate}
-                          onChange={(e) => handleInputChange('tds_rate', e.target.value)}
+                          value={formData.tdsRate}
+                          onChange={(e) => handleInputChange('tdsRate', e.target.value)}
                         />
                       </div>
                       <div className="space-y-2">
@@ -786,7 +859,7 @@ export function PaymentForm() {
           {!isEdit && outstandingDocs.length > 0 && (
             <Card>
               <CardHeader>
-                <CardTitle>Outstanding {formData.party_type === 'VENDOR' ? 'Bills' : 'Invoices'}</CardTitle>
+                <CardTitle>Outstanding {formData.partyType === 'VENDOR' ? 'Bills' : 'Invoices'}</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="rounded-md border">
@@ -803,35 +876,35 @@ export function PaymentForm() {
                     </TableHeader>
                     <TableBody>
                       {outstandingDocs.map((doc, index) => (
-                        <TableRow key={doc.document_id}>
+                        <TableRow key={doc.documentId}>
                           <TableCell>
                             <Checkbox
                               checked={doc.selected}
                               onCheckedChange={(checked) => handleDocumentSelect(index, checked as boolean)}
                             />
                           </TableCell>
-                          <TableCell className="font-medium">{doc.document_number}</TableCell>
-                          <TableCell>{format(new Date(doc.document_date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell className="font-medium">{doc.documentNumber}</TableCell>
+                          <TableCell>{format(new Date(doc.documentDate), 'dd MMM yyyy')}</TableCell>
                           <TableCell>
-                            {doc.due_date ? format(new Date(doc.due_date), 'dd MMM yyyy') : '-'}
-                            {doc.days_overdue > 0 && (
+                            {doc.dueDate ? format(new Date(doc.dueDate), 'dd MMM yyyy') : '-'}
+                            {doc.daysOverdue > 0 && (
                               <span className="ml-2 text-xs text-red-600">
-                                ({doc.days_overdue}d overdue)
+                                ({doc.daysOverdue}d overdue)
                               </span>
                             )}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(doc.outstanding_amount)}
+                            <AmountDisplay amount={doc.outstandingAmount} />
                           </TableCell>
                           <TableCell className="text-right">
                             <Input
                               type="number"
                               step="0.01"
                               className="w-[120px] text-right"
-                              value={doc.allocated_amount || ''}
+                              value={doc.allocatedAmount || ''}
                               onChange={(e) => handleAllocationChange(index, parseFloat(e.target.value) || 0)}
                               disabled={!doc.selected}
-                              max={doc.outstanding_amount}
+                              max={doc.outstandingAmount}
                             />
                           </TableCell>
                         </TableRow>
@@ -863,13 +936,13 @@ export function PaymentForm() {
                     <TableBody>
                       {allocations.map((alloc, index) => (
                         <TableRow key={index}>
-                          <TableCell className="font-medium">{alloc.document_number}</TableCell>
-                          <TableCell>{format(new Date(alloc.document_date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell className="font-medium">{alloc.documentNumber}</TableCell>
+                          <TableCell>{format(new Date(alloc.documentDate), 'dd MMM yyyy')}</TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(alloc.document_amount)}
+                            <AmountDisplay amount={alloc.documentAmount} />
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(alloc.allocated_amount)}
+                            <AmountDisplay amount={alloc.allocatedAmount} />
                           </TableCell>
                         </TableRow>
                       ))}
@@ -890,28 +963,28 @@ export function PaymentForm() {
             <CardContent className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Gross Amount</span>
-                <span className="font-medium">{formatCurrency(parseFloat(formData.amount) || 0)}</span>
+                <AmountDisplay amount={parseFloat(formData.amount) || 0} className="font-medium" />
               </div>
-              {formData.tds_applicable && (
+              {formData.tdsApplicable && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">TDS Deduction</span>
                   <span className="font-medium text-red-600">
-                    -{formatCurrency(calculateTdsAmount())}
+                    -<AmountDisplay amount={calculateTdsAmount()} />
                   </span>
                 </div>
               )}
-              {parseFloat(formData.discount_amount) > 0 && (
+              {parseFloat(formData.discountAmount) > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Discount</span>
                   <span className="font-medium text-red-600">
-                    -{formatCurrency(parseFloat(formData.discount_amount))}
+                    -<AmountDisplay amount={parseFloat(formData.discountAmount)} />
                   </span>
                 </div>
               )}
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
-                <span>Net {formData.party_type === 'VENDOR' ? 'Payment' : 'Receipt'}</span>
-                <span>{formatCurrency(calculateNetAmount())}</span>
+                <span>Net {formData.partyType === 'VENDOR' ? 'Payment' : 'Receipt'}</span>
+                <AmountDisplay amount={calculateNetAmount()} />
               </div>
 
               {allocations.length > 0 && (
@@ -920,15 +993,18 @@ export function PaymentForm() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Allocated Amount</span>
                     <span className="font-medium">
-                      {formatCurrency(allocations.reduce((sum, a) => sum + a.allocated_amount, 0))}
+                      <AmountDisplay amount={allocations.reduce((sum, a) => sum + a.allocatedAmount, 0)} />
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Unallocated</span>
                     <span className="font-medium">
-                      {formatCurrency(
-                        calculateNetAmount() - allocations.reduce((sum, a) => sum + a.allocated_amount, 0)
-                      )}
+                      <AmountDisplay
+                        amount={
+                          calculateNetAmount() -
+                          allocations.reduce((sum, a) => sum + a.allocatedAmount, 0)
+                        }
+                      />
                     </span>
                   </div>
                 </>

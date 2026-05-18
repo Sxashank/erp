@@ -3,20 +3,34 @@
  * Generate a new NACH batch from due EMIs
  */
 
+import { Calendar, Search, AlertCircle, Loader2, FileText } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  Calendar,
-  Search,
-  CheckCircle,
-  AlertCircle,
-  Loader2,
-  FileText,
-} from 'lucide-react';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardFooter,
+} from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -25,19 +39,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { useCreateNachBatch, extractNachErrorMessage } from '@/hooks/lending/useNachBatches';
+import { useToast } from '@/hooks/use-toast';
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
 
 interface DueEMI {
   id: string;
@@ -55,134 +59,13 @@ interface DueEMI {
   selected: boolean;
 }
 
-// Mock data for due EMIs
-const mockDueEMIs: DueEMI[] = [
-  {
-    id: '1',
-    loanAccountId: 'la1',
-    loanAccountNumber: 'SMFC/TL/DEL/2024/L00001',
-    borrowerName: 'ABC Industries Private Limited',
-    umrn: 'RATN50000000001234',
-    mandateStatus: 'ACTIVE',
-    bankName: 'HDFC Bank',
-    accountNumberMasked: 'XXXX1234',
-    emiAmount: 125000,
-    dueDate: '2025-01-15',
-    emiNumber: 5,
-    dpd: 0,
-    selected: true,
-  },
-  {
-    id: '2',
-    loanAccountId: 'la2',
-    loanAccountNumber: 'SMFC/WC/MUM/2024/L00089',
-    borrowerName: 'XYZ Traders LLP',
-    umrn: 'RATN50000000001235',
-    mandateStatus: 'ACTIVE',
-    bankName: 'ICICI Bank',
-    accountNumberMasked: 'XXXX5678',
-    emiAmount: 225000,
-    dueDate: '2025-01-15',
-    emiNumber: 8,
-    dpd: 0,
-    selected: true,
-  },
-  {
-    id: '3',
-    loanAccountId: 'la3',
-    loanAccountNumber: 'SMFC/LAP/BLR/2024/L00045',
-    borrowerName: 'Tech Solutions India Pvt Ltd',
-    umrn: 'RATN50000000001236',
-    mandateStatus: 'ACTIVE',
-    bankName: 'Axis Bank',
-    accountNumberMasked: 'XXXX9012',
-    emiAmount: 150000,
-    dueDate: '2025-01-15',
-    emiNumber: 12,
-    dpd: 0,
-    selected: true,
-  },
-  {
-    id: '4',
-    loanAccountId: 'la4',
-    loanAccountNumber: 'SMFC/TL/CHN/2023/L00034',
-    borrowerName: 'Southern Motors Corp',
-    umrn: '',
-    mandateStatus: 'PENDING',
-    bankName: 'SBI',
-    accountNumberMasked: 'XXXX3456',
-    emiAmount: 100000,
-    dueDate: '2025-01-15',
-    emiNumber: 15,
-    dpd: 5,
-    selected: false,
-  },
-  {
-    id: '5',
-    loanAccountId: 'la5',
-    loanAccountNumber: 'SMFC/WC/KOL/2024/L00067',
-    borrowerName: 'Eastern Exports Ltd',
-    umrn: 'RATN50000000001238',
-    mandateStatus: 'ACTIVE',
-    bankName: 'Punjab National Bank',
-    accountNumberMasked: 'XXXX7890',
-    emiAmount: 175000,
-    dueDate: '2025-01-15',
-    emiNumber: 3,
-    dpd: 0,
-    selected: true,
-  },
-  {
-    id: '6',
-    loanAccountId: 'la6',
-    loanAccountNumber: 'SMFC/TL/HYD/2024/L00078',
-    borrowerName: 'Deccan Enterprises',
-    umrn: 'RATN50000000001239',
-    mandateStatus: 'ACTIVE',
-    bankName: 'Kotak Mahindra Bank',
-    accountNumberMasked: 'XXXX2345',
-    emiAmount: 95000,
-    dueDate: '2025-01-15',
-    emiNumber: 6,
-    dpd: 0,
-    selected: true,
-  },
-  {
-    id: '7',
-    loanAccountId: 'la7',
-    loanAccountNumber: 'SMFC/LAP/PUN/2024/L00090',
-    borrowerName: 'Western Infra Projects',
-    umrn: 'RATN50000000001240',
-    mandateStatus: 'EXPIRED',
-    bankName: 'Bank of Baroda',
-    accountNumberMasked: 'XXXX6789',
-    emiAmount: 125000,
-    dueDate: '2025-01-15',
-    emiNumber: 4,
-    dpd: 10,
-    selected: false,
-  },
-  {
-    id: '8',
-    loanAccountId: 'la8',
-    loanAccountNumber: 'SMFC/WC/AHM/2024/L00056',
-    borrowerName: 'Gujarat Textiles Pvt Ltd',
-    umrn: 'RATN50000000001241',
-    mandateStatus: 'ACTIVE',
-    bankName: 'Yes Bank',
-    accountNumberMasked: 'XXXX0123',
-    emiAmount: 80000,
-    dueDate: '2025-01-15',
-    emiNumber: 9,
-    dpd: 0,
-    selected: true,
-  },
-];
+// Due EMIs load from /lending/nach/due-emis (TBD) once the BE endpoint
+// is wired — it should return EMIs falling due in the next N days with
+// the borrower's NACH mandate joined in. Until then, the list starts
+// empty so the wizard doesn't surface fabricated due dates.
+const mockDueEMIs: DueEMI[] = [];
 
-const mandateStatusConfig: Record<
-  string,
-  { label: string; color: string }
-> = {
+const mandateStatusConfig: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: 'Active', color: 'bg-green-100 text-green-700' },
   PENDING: { label: 'Pending', color: 'bg-amber-100 text-amber-700' },
   EXPIRED: { label: 'Expired', color: 'bg-red-100 text-red-700' },
@@ -190,8 +73,9 @@ const mandateStatusConfig: Record<
 
 export default function CreateNachBatch() {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { toast } = useToast();
+  const organizationId = useRequiredActiveOrganizationId();
+  const createBatch = useCreateNachBatch();
   const [searchQuery, setSearchQuery] = useState('');
   const [provider, setProvider] = useState('RAZORPAY');
   const [debitDate, setDebitDate] = useState('');
@@ -216,63 +100,74 @@ export default function CreateNachBatch() {
       dueEMIs.map((emi) => ({
         ...emi,
         selected: emi.mandateStatus === 'ACTIVE' ? checked : false,
-      }))
+      })),
     );
   };
 
   const handleSelectEMI = (id: string, checked: boolean) => {
-    setDueEMIs(
-      dueEMIs.map((emi) =>
-        emi.id === id ? { ...emi, selected: checked } : emi
-      )
-    );
+    setDueEMIs(dueEMIs.map((emi) => (emi.id === id ? { ...emi, selected: checked } : emi)));
   };
 
-  const handleGenerateBatch = async () => {
-    if (selectedEMIs.length === 0) {
+  const handleGenerateBatch = () => {
+    if (!debitDate) {
+      toast({
+        title: 'Debit date required',
+        description: 'Pick a debit date before generating the batch.',
+        variant: 'destructive',
+      });
       return;
     }
 
-    setIsSubmitting(true);
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsSubmitting(false);
+    // Pass the selected loan accounts when the operator narrowed the set;
+    // otherwise let the backend scan all due EMIs for the org. The form
+    // does not currently expose a product / DPD filter — the BE defaults
+    // (includeOverdue=true, maxDpd=90) apply.
+    const loanAccountIds = selectedEMIs.map((emi) => emi.loanAccountId);
 
-    // Navigate to batch list
-    navigate('/admin/lending/nach/batches');
+    createBatch.mutate(
+      {
+        organizationId,
+        debitDate,
+        ...(loanAccountIds.length > 0 ? { loanAccountIds } : {}),
+      },
+      {
+        onSuccess: (batch) => {
+          toast({
+            title: 'NACH batch generated',
+            description: `Batch ${batch.batchReference} created with ${batch.totalTransactions} transactions.`,
+          });
+          navigate('/admin/lending/nach/batches');
+        },
+        onError: (err) => {
+          toast({
+            title: 'Failed to generate batch',
+            description: extractNachErrorMessage(err, 'Could not generate NACH batch.'),
+            variant: 'destructive',
+          });
+        },
+      },
+    );
   };
 
-  const allSelected =
-    eligibleEMIs.length > 0 && eligibleEMIs.every((emi) => emi.selected);
-  const someSelected =
-    eligibleEMIs.some((emi) => emi.selected) && !allSelected;
+  const allSelected = eligibleEMIs.length > 0 && eligibleEMIs.every((emi) => emi.selected);
+  const someSelected = eligibleEMIs.some((emi) => emi.selected) && !allSelected;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/admin/lending/nach/batches')}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold">Generate NACH Batch</h1>
-          <p className="text-muted-foreground">
-            Create a new batch from due EMIs with active mandates
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Generate NACH Batch"
+        subtitle="Create a new batch from due EMIs with active mandates"
+        breadcrumbs={[
+          { label: 'NACH Batches', to: '/admin/lending/nach/batches' },
+          { label: 'New Batch' },
+        ]}
+      />
 
       {/* Configuration */}
       <Card>
         <CardHeader>
           <CardTitle>Batch Configuration</CardTitle>
-          <CardDescription>
-            Set the provider and debit date for this batch
-          </CardDescription>
+          <CardDescription>Set the provider and debit date for this batch</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="grid gap-6 md:grid-cols-3">
@@ -309,9 +204,7 @@ export default function CreateNachBatch() {
             <div className="space-y-2">
               <Label>Due EMIs</Label>
               <div className="text-3xl font-bold">{eligibleEMIs.length}</div>
-              <p className="text-xs text-muted-foreground">
-                EMIs with active mandates
-              </p>
+              <p className="text-xs text-muted-foreground">EMIs with active mandates</p>
             </div>
           </div>
         </CardContent>
@@ -323,9 +216,8 @@ export default function CreateNachBatch() {
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Ineligible EMIs</AlertTitle>
           <AlertDescription>
-            {ineligibleEMIs.length} EMI(s) cannot be included in this batch due to
-            inactive or missing mandates. Please register mandates for these
-            accounts.
+            {ineligibleEMIs.length} EMI(s) cannot be included in this batch due to inactive or
+            missing mandates. Please register mandates for these accounts.
           </AlertDescription>
         </Alert>
       )}
@@ -344,7 +236,7 @@ export default function CreateNachBatch() {
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by account or borrower..."
-                className="pl-8 w-[300px]"
+                className="w-[300px] pl-8"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
               />
@@ -358,9 +250,7 @@ export default function CreateNachBatch() {
                 <TableHead className="w-[50px]">
                   <Checkbox
                     checked={allSelected}
-                    onCheckedChange={(checked) =>
-                      handleSelectAll(checked as boolean)
-                    }
+                    onCheckedChange={(checked) => handleSelectAll(checked as boolean)}
                     aria-label="Select all"
                     className={someSelected ? 'data-[state=checked]:bg-muted' : ''}
                   />
@@ -377,10 +267,7 @@ export default function CreateNachBatch() {
             <TableBody>
               {filteredEMIs.length === 0 ? (
                 <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="text-center py-8 text-muted-foreground"
-                  >
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
                     No eligible EMIs found
                   </TableCell>
                 </TableRow>
@@ -392,29 +279,20 @@ export default function CreateNachBatch() {
                       <TableCell>
                         <Checkbox
                           checked={emi.selected}
-                          onCheckedChange={(checked) =>
-                            handleSelectEMI(emi.id, checked as boolean)
-                          }
+                          onCheckedChange={(checked) => handleSelectEMI(emi.id, checked as boolean)}
                           disabled={emi.mandateStatus !== 'ACTIVE'}
                           aria-label={`Select ${emi.loanAccountNumber}`}
                         />
                       </TableCell>
-                      <TableCell className="font-mono text-sm">
-                        {emi.loanAccountNumber}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {emi.borrowerName}
-                      </TableCell>
+                      <TableCell className="font-mono text-sm">{emi.loanAccountNumber}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">{emi.borrowerName}</TableCell>
                       <TableCell>
                         <div className="space-y-1">
-                          <Badge
-                            variant="outline"
-                            className={mandateStatus.color}
-                          >
+                          <Badge variant="outline" className={mandateStatus.color}>
                             {mandateStatus.label}
                           </Badge>
                           {emi.umrn && (
-                            <div className="text-xs text-muted-foreground font-mono">
+                            <div className="font-mono text-xs text-muted-foreground">
                               {emi.umrn}
                             </div>
                           )}
@@ -435,11 +313,7 @@ export default function CreateNachBatch() {
                       <TableCell className="text-center">
                         <Badge
                           variant={emi.dpd > 0 ? 'destructive' : 'secondary'}
-                          className={
-                            emi.dpd === 0
-                              ? 'bg-green-100 text-green-700'
-                              : ''
-                          }
+                          className={emi.dpd === 0 ? 'bg-green-100 text-green-700' : ''}
                         >
                           {emi.dpd}
                         </Badge>
@@ -464,17 +338,11 @@ export default function CreateNachBatch() {
             </div>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => navigate('/admin/lending/nach/batches')}
-            >
+            <Button variant="outline" onClick={() => navigate('/admin/lending/nach/batches')}>
               Cancel
             </Button>
-            <Button
-              onClick={handleGenerateBatch}
-              disabled={selectedEMIs.length === 0 || !debitDate || isSubmitting}
-            >
-              {isSubmitting ? (
+            <Button onClick={handleGenerateBatch} disabled={!debitDate || createBatch.isPending}>
+              {createBatch.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Generating...
@@ -482,7 +350,7 @@ export default function CreateNachBatch() {
               ) : (
                 <>
                   <FileText className="mr-2 h-4 w-4" />
-                  Generate Batch ({selectedEMIs.length})
+                  Generate Batch{selectedEMIs.length > 0 ? ` (${selectedEMIs.length})` : ''}
                 </>
               )}
             </Button>
@@ -499,8 +367,7 @@ export default function CreateNachBatch() {
               EMIs Without Active Mandates ({ineligibleEMIs.length})
             </CardTitle>
             <CardDescription>
-              These EMIs cannot be included. Register mandates to enable NACH
-              collection.
+              These EMIs cannot be included. Register mandates to enable NACH collection.
             </CardDescription>
           </CardHeader>
           <CardContent className="p-0">
@@ -520,12 +387,8 @@ export default function CreateNachBatch() {
                   const mandateStatus = mandateStatusConfig[emi.mandateStatus];
                   return (
                     <TableRow key={emi.id} className="bg-muted/30">
-                      <TableCell className="font-mono text-sm">
-                        {emi.loanAccountNumber}
-                      </TableCell>
-                      <TableCell className="max-w-[200px] truncate">
-                        {emi.borrowerName}
-                      </TableCell>
+                      <TableCell className="font-mono text-sm">{emi.loanAccountNumber}</TableCell>
+                      <TableCell className="max-w-[200px] truncate">{emi.borrowerName}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={mandateStatus.color}>
                           {mandateStatus.label}
@@ -541,12 +404,8 @@ export default function CreateNachBatch() {
                         <Button
                           variant="link"
                           size="sm"
-                          className="p-0 h-auto"
-                          onClick={() =>
-                            navigate(
-                              `/admin/lending/accounts/${emi.loanAccountId}`
-                            )
-                          }
+                          className="h-auto p-0"
+                          onClick={() => navigate(`/admin/lending/accounts/${emi.loanAccountId}`)}
                         >
                           Register Mandate
                         </Button>

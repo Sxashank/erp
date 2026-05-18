@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.tds.tds_section_service import TDSSectionService
 from app.schemas.tds.tds_section import TDSSectionCreate, TDSSectionUpdate, TDSSectionResponse
@@ -43,14 +43,14 @@ def _to_response(section) -> TDSSectionResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[TDSSectionResponse])
+@router.get("", response_model=PaginatedResponse[TDSSectionResponse], response_model_by_alias=True)
 async def list_tds_sections(
     return_form: Optional[str] = Query(None, description="Filter by return form (24Q, 26Q, etc.)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of TDS sections."""
     service = TDSSectionService(db)
@@ -60,14 +60,14 @@ async def list_tds_sections(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/active", response_model=PaginatedResponse[TDSSectionResponse])
+@router.get("/active", response_model=PaginatedResponse[TDSSectionResponse], response_model_by_alias=True)
 async def list_active_tds_sections(
     as_of_date: Optional[date] = Query(None),
     is_tcs: bool = Query(False, description="Get TCS sections instead of TDS"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active TDS/TCS sections as of a specific date."""
     service = TDSSectionService(db)
@@ -77,11 +77,11 @@ async def list_active_tds_sections(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=TDSSectionResponse)
+@router.post("", response_model=TDSSectionResponse, response_model_by_alias=True)
 async def create_tds_section(
     data: TDSSectionCreate,
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new TDS section."""
     service = TDSSectionService(db)
@@ -89,11 +89,11 @@ async def create_tds_section(
     return _to_response(section)
 
 
-@router.get("/{section_id}", response_model=TDSSectionResponse)
+@router.get("/{section_id}", response_model=TDSSectionResponse, response_model_by_alias=True)
 async def get_tds_section(
     section_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS section by ID."""
     service = TDSSectionService(db)
@@ -101,12 +101,12 @@ async def get_tds_section(
     return _to_response(section)
 
 
-@router.put("/{section_id}", response_model=TDSSectionResponse)
+@router.put("/{section_id}", response_model=TDSSectionResponse, response_model_by_alias=True)
 async def update_tds_section(
     section_id: UUID,
     data: TDSSectionUpdate,
     current_user: User = Depends(RequirePermissions("FIN_COA_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a TDS section."""
     service = TDSSectionService(db)
@@ -118,7 +118,7 @@ async def update_tds_section(
 async def delete_tds_section(
     section_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a TDS section."""
     service = TDSSectionService(db)

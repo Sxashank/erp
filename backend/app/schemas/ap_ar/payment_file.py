@@ -2,14 +2,15 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from enum import Enum
-from typing import List, Optional
+from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.schemas.base import CamelSchema
 
 
-class PaymentFileFormat(str, Enum):
+class PaymentFileFormat(StrEnum):
     """Payment file formats."""
     NEFT = "NEFT"
     RTGS = "RTGS"
@@ -17,7 +18,7 @@ class PaymentFileFormat(str, Enum):
     UPI = "UPI"
 
 
-class PaymentFileStatus(str, Enum):
+class PaymentFileStatus(StrEnum):
     """Payment file status."""
     DRAFT = "DRAFT"
     GENERATED = "GENERATED"
@@ -29,7 +30,7 @@ class PaymentFileStatus(str, Enum):
     PARTIALLY_COMPLETED = "PARTIALLY_COMPLETED"
 
 
-class PaymentTransactionStatus(str, Enum):
+class PaymentTransactionStatus(StrEnum):
     """Payment transaction status within a file."""
     PENDING = "PENDING"
     SUCCESS = "SUCCESS"
@@ -37,30 +38,30 @@ class PaymentTransactionStatus(str, Enum):
     REJECTED = "REJECTED"
 
 
-class PaymentFileCreate(BaseModel):
+class PaymentFileCreate(CamelSchema):
     """Schema for creating a payment file."""
     organization_id: UUID
     organization_bank_account_id: UUID
     file_format: PaymentFileFormat
     payment_date: date
-    payment_ids: List[UUID] = Field(..., min_length=1)
-    description: Optional[str] = None
+    payment_ids: list[UUID] = Field(..., min_length=1)
+    description: str | None = None
 
 
-class PaymentFileTransactionCreate(BaseModel):
+class PaymentFileTransactionCreate(CamelSchema):
     """Schema for payment file transaction."""
     payment_id: UUID
     beneficiary_name: str = Field(..., max_length=100)
     beneficiary_account_number: str = Field(..., max_length=34)
     beneficiary_ifsc: str = Field(..., max_length=11)
-    beneficiary_bank_name: Optional[str] = Field(None, max_length=100)
+    beneficiary_bank_name: str | None = Field(None, max_length=100)
     amount: Decimal = Field(..., gt=0)
-    narration: Optional[str] = Field(None, max_length=100)
-    email: Optional[str] = None
-    mobile: Optional[str] = None
+    narration: str | None = Field(None, max_length=100)
+    email: str | None = None
+    mobile: str | None = None
 
 
-class PaymentFileTransactionResponse(BaseModel):
+class PaymentFileTransactionResponse(CamelSchema):
     """Response schema for payment file transaction."""
     id: UUID
     payment_file_id: UUID
@@ -69,19 +70,16 @@ class PaymentFileTransactionResponse(BaseModel):
     beneficiary_name: str
     beneficiary_account_number: str
     beneficiary_ifsc: str
-    beneficiary_bank_name: Optional[str]
+    beneficiary_bank_name: str | None
     amount: Decimal
-    narration: Optional[str]
+    narration: str | None
     status: PaymentTransactionStatus
-    bank_reference: Optional[str]
-    failure_reason: Optional[str]
-    processed_at: Optional[datetime]
-
-    class Config:
-        from_attributes = True
+    bank_reference: str | None
+    failure_reason: str | None
+    processed_at: datetime | None
 
 
-class PaymentFileResponse(BaseModel):
+class PaymentFileResponse(CamelSchema):
     """Response schema for payment file."""
     id: UUID
     organization_id: UUID
@@ -94,43 +92,40 @@ class PaymentFileResponse(BaseModel):
     total_amount: Decimal
     successful_count: int
     failed_count: int
-    file_generated_at: Optional[datetime]
-    file_downloaded_at: Optional[datetime]
-    file_uploaded_at: Optional[datetime]
-    processing_started_at: Optional[datetime]
-    processing_completed_at: Optional[datetime]
-    description: Optional[str]
+    file_generated_at: datetime | None
+    file_downloaded_at: datetime | None
+    file_uploaded_at: datetime | None
+    processing_started_at: datetime | None
+    processing_completed_at: datetime | None
+    description: str | None
     created_at: datetime
-    created_by: Optional[UUID]
-
-    class Config:
-        from_attributes = True
+    created_by: UUID | None
 
 
 class PaymentFileDetailResponse(PaymentFileResponse):
     """Detailed response with transactions."""
-    transactions: List[PaymentFileTransactionResponse] = []
+    transactions: list[PaymentFileTransactionResponse] = []
 
 
-class PaymentFileListResponse(BaseModel):
+class PaymentFileListResponse(CamelSchema):
     """List response for payment files."""
-    items: List[PaymentFileResponse]
+    items: list[PaymentFileResponse]
     total: int
     skip: int
     limit: int
 
 
-class PaymentFileGenerateRequest(BaseModel):
+class PaymentFileGenerateRequest(CamelSchema):
     """Request for generating a payment file."""
     organization_id: UUID
     organization_bank_account_id: UUID
     file_format: PaymentFileFormat
     payment_date: date
-    payment_ids: List[UUID] = Field(..., min_length=1)
-    description: Optional[str] = None
+    payment_ids: list[UUID] = Field(..., min_length=1)
+    description: str | None = None
 
 
-class PaymentFileUploadResponse(BaseModel):
+class PaymentFileUploadResponse(CamelSchema):
     """Response after marking file as uploaded."""
     id: UUID
     file_reference: str
@@ -138,27 +133,27 @@ class PaymentFileUploadResponse(BaseModel):
     uploaded_at: datetime
 
 
-class PaymentFileProcessingUpdate(BaseModel):
+class PaymentFileProcessingUpdate(CamelSchema):
     """Update schema for processing results."""
-    transactions: List[dict]  # List of {payment_id, status, bank_reference, failure_reason}
+    transactions: list[dict]  # List of {payment_id, status, bank_reference, failure_reason}
 
 
-class BankFormatConfig(BaseModel):
+class BankFormatConfig(CamelSchema):
     """Bank-specific file format configuration."""
     bank_code: str = Field(..., max_length=10)
     bank_name: str = Field(..., max_length=100)
-    neft_format: Optional[str] = "NPCI_STANDARD"
-    rtgs_format: Optional[str] = "NPCI_STANDARD"
-    imps_format: Optional[str] = None
-    header_format: Optional[dict] = None
-    trailer_format: Optional[dict] = None
+    neft_format: str | None = "NPCI_STANDARD"
+    rtgs_format: str | None = "NPCI_STANDARD"
+    imps_format: str | None = None
+    header_format: dict | None = None
+    trailer_format: dict | None = None
     delimiter: str = "|"
     date_format: str = "%d/%m/%Y"
     amount_format: str = "decimal"  # decimal or paise
     encoding: str = "utf-8"
 
 
-class NEFTFileRecord(BaseModel):
+class NEFTFileRecord(CamelSchema):
     """NEFT file record structure."""
     serial_number: int
     destination_ifsc: str
@@ -168,12 +163,12 @@ class NEFTFileRecord(BaseModel):
     remitter_account_number: str
     remitter_name: str
     payment_type: str = "IFT"  # Inter Fund Transfer
-    narration: Optional[str] = None
-    email: Optional[str] = None
-    mobile: Optional[str] = None
+    narration: str | None = None
+    email: str | None = None
+    mobile: str | None = None
 
 
-class RTGSFileRecord(BaseModel):
+class RTGSFileRecord(CamelSchema):
     """RTGS file record structure."""
     serial_number: int
     destination_ifsc: str
@@ -183,11 +178,11 @@ class RTGSFileRecord(BaseModel):
     remitter_account_number: str
     remitter_name: str
     payment_type: str = "RTG"
-    narration: Optional[str] = None
-    sender_to_receiver_info: Optional[str] = None
+    narration: str | None = None
+    sender_to_receiver_info: str | None = None
 
 
-class PaymentFileSummary(BaseModel):
+class PaymentFileSummary(CamelSchema):
     """Summary of payments for file generation."""
     total_payments: int
     total_amount: Decimal

@@ -27,7 +27,7 @@ function emit(level: Level, args: unknown[]): void {
   const [first, ...rest] = args;
   const label = `%c[${level.toUpperCase()}]`;
 
-  // eslint-disable-next-line no-console
+
   const sink: (...a: unknown[]) => void =
     level === "error"
       ? console.error

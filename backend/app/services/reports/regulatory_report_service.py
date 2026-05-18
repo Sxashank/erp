@@ -5,15 +5,73 @@ Generates various regulatory reports required by RBI and other regulators for NB
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import AccountNature
+from app.models.finance.account import Account
+from app.models.finance.account_group import AccountGroup
+from app.models.finance.capital_snapshot import CapitalSnapshot
+from app.models.lending.enums import LoanAccountStatus
 from app.models.lending.loan_account import LoanAccount
-from app.models.lending.npa import NPAClassification
-from app.models.lending.receipt import LoanReceipt
+from app.models.lending.product import LoanProduct
+
+# ───────────────────── Capital-composition heuristics ─────────────────────
+# These keyword tables drive how `get_capital_composition` and the Tier-1 /
+# Tier-2 helpers map a posted GL account/group to a regulatory capital line.
+#
+# Why heuristics: there is no `account_group.regulatory_capital_tier` column
+# yet. The seed COA names ("Equity Share Capital", "General Reserve",
+# "Subordinated Debt") are stable enough that case-insensitive substring
+# matching is accurate for now.
+#
+# TODO(STAGE-PENDING-account-group-capital-tier): replace this with an
+# explicit `regulatory_capital_tier` column on `mst_account_group` so
+# org-specific COAs don't depend on English keyword matching. Until then,
+# tenants that rename groups must follow these substrings (documented in
+# the seed script comment).
+
+_TIER1_LINE_KEYWORDS: dict[str, list[str]] = {
+    "Equity share capital": ["equity share capital", "paid-up capital", "share capital"],
+    "Reserves & surplus": ["reserves & surplus", "general reserve", "free reserve"],
+    "Retained earnings": ["retained earnings", "profit & loss appropriation", "surplus"],
+}
+
+# Deductions from Tier-1 (subtracted as negative amounts)
+_TIER1_DEDUCTION_KEYWORDS: dict[str, list[str]] = {
+    "Less: Intangible assets": ["intangible", "goodwill"],
+    "Less: Deferred tax assets": ["deferred tax asset", "dta"],
+    "Less: Accumulated losses": ["accumulated loss", "accumulated losses"],
+}
+
+_TIER2_LINE_KEYWORDS: dict[str, list[str]] = {
+    "Revaluation reserves": ["revaluation reserve"],
+    "General provisions": ["general provision", "standard asset provision"],
+    "Subordinated debt": ["subordinated debt", "tier ii debt", "tier-ii debt"],
+}
+
+# Regulatory caps per RBI Master Direction (NBFC-NDSI):
+#  - Revaluation reserves: 45% haircut
+#  - General provisions: 1.25% of credit-risk RWA cap (applied later)
+#  - Subordinated debt: only Tier-2 eligible portion counts (no haircut here)
+_REVALUATION_HAIRCUT = Decimal("0.45")
+_GENERAL_PROVISION_RWA_CAP_PCT = Decimal("1.25")
+
+# Infrastructure keyword set for NBFC-IFC ratio (product category / name)
+_INFRASTRUCTURE_KEYWORDS = (
+    "infrastructure",
+    "infra",
+    "power",
+    "road",
+    "highway",
+    "renewable",
+    "telecom",
+    "port",
+    "airport",
+)
 
 
 class RegulatoryReportService:
@@ -23,11 +81,8 @@ class RegulatoryReportService:
         self.db = db
 
     async def generate_alm_report(
-        self,
-        org_id: UUID,
-        as_of_date: date,
-        report_type: str = "STRUCTURAL"
-    ) -> Dict[str, Any]:
+        self, org_id: UUID, as_of_date: date, report_type: str = "STRUCTURAL"
+    ) -> dict[str, Any]:
         """
         Generate Asset Liability Management (ALM) Report
         Shows maturity profile of assets and liabilities
@@ -52,9 +107,7 @@ class RegulatoryReportService:
             bucket_end = as_of_date + timedelta(days=bucket["days_to"])
 
             # Calculate assets maturing in this bucket (loan principal + interest due)
-            assets = await self._calculate_assets_in_bucket(
-                org_id, bucket_start, bucket_end
-            )
+            assets = await self._calculate_assets_in_bucket(org_id, bucket_start, bucket_end)
 
             # Calculate liabilities maturing in this bucket (borrowings, FDs)
             liabilities = await self._calculate_liabilities_in_bucket(
@@ -64,14 +117,16 @@ class RegulatoryReportService:
             gap = assets - liabilities
             cumulative_gap = gap  # Would need running total in real implementation
 
-            alm_data.append({
-                "bucket": bucket["name"],
-                "assets": float(assets),
-                "liabilities": float(liabilities),
-                "gap": float(gap),
-                "cumulative_gap": float(cumulative_gap),
-                "gap_percentage": float(gap / assets * 100) if assets > 0 else 0,
-            })
+            alm_data.append(
+                {
+                    "bucket": bucket["name"],
+                    "assets": float(assets),
+                    "liabilities": float(liabilities),
+                    "gap": float(gap),
+                    "cumulative_gap": float(cumulative_gap),
+                    "gap_percentage": float(gap / assets * 100) if assets > 0 else 0,
+                }
+            )
 
         return {
             "report_type": "ALM_STRUCTURAL",
@@ -82,15 +137,12 @@ class RegulatoryReportService:
                 "total_assets": sum(b["assets"] for b in alm_data),
                 "total_liabilities": sum(b["liabilities"] for b in alm_data),
                 "net_gap": sum(b["gap"] for b in alm_data),
-            }
+            },
         }
 
     async def generate_npa_report(
-        self,
-        org_id: UUID,
-        as_of_date: date,
-        detailed: bool = False
-    ) -> Dict[str, Any]:
+        self, org_id: UUID, as_of_date: date, detailed: bool = False
+    ) -> dict[str, Any]:
         """
         Generate NPA Report as per RBI IRAC norms
         Shows classification of assets and provisioning
@@ -125,18 +177,24 @@ class RegulatoryReportService:
 
             total_provision += provision
 
-            npa_data.append({
-                "category_code": category["code"],
-                "category_name": category["name"],
-                "account_count": count,
-                "outstanding_amount": float(outstanding),
-                "provision_rate": category["provision_rate"],
-                "provision_amount": float(provision),
-            })
+            npa_data.append(
+                {
+                    "category_code": category["code"],
+                    "category_name": category["name"],
+                    "account_count": count,
+                    "outstanding_amount": float(outstanding),
+                    "provision_rate": category["provision_rate"],
+                    "provision_amount": float(provision),
+                }
+            )
 
         gross_npa_ratio = (total_npa / total_advances * 100) if total_advances > 0 else 0
         net_npa = total_npa - total_provision
-        net_npa_ratio = (net_npa / (total_advances - total_provision) * 100) if (total_advances - total_provision) > 0 else 0
+        net_npa_ratio = (
+            (net_npa / (total_advances - total_provision) * 100)
+            if (total_advances - total_provision) > 0
+            else 0
+        )
 
         return {
             "report_type": "NPA_CLASSIFICATION",
@@ -150,14 +208,10 @@ class RegulatoryReportService:
                 "total_provision": float(total_provision),
                 "net_npa": float(net_npa),
                 "net_npa_ratio": float(net_npa_ratio),
-            }
+            },
         }
 
-    async def generate_crar_report(
-        self,
-        org_id: UUID,
-        as_of_date: date
-    ) -> Dict[str, Any]:
+    async def generate_crar_report(self, org_id: UUID, as_of_date: date) -> dict[str, Any]:
         """
         Generate Capital to Risk Assets Ratio (CRAR) Report
         Also known as Capital Adequacy Ratio (CAR)
@@ -192,15 +246,11 @@ class RegulatoryReportService:
                 "crar": float(crar),
                 "tier1_ratio": float(tier1_ratio),
                 "minimum_crar_required": 15.0,  # As per RBI for NBFCs
-                "surplus_deficit": float(crar - 15.0),
-            }
+                "surplus_deficit": float(crar - Decimal("15.0")),
+            },
         }
 
-    async def generate_liquidity_report(
-        self,
-        org_id: UUID,
-        as_of_date: date
-    ) -> Dict[str, Any]:
+    async def generate_liquidity_report(self, org_id: UUID, as_of_date: date) -> dict[str, Any]:
         """
         Generate Liquidity Coverage Ratio (LCR) Report
         """
@@ -232,16 +282,13 @@ class RegulatoryReportService:
             "ratios": {
                 "lcr": float(lcr),
                 "minimum_lcr_required": 100.0,
-                "surplus_deficit": float(lcr - 100.0),
-            }
+                "surplus_deficit": float(lcr - Decimal("100.0")),
+            },
         }
 
     async def generate_large_exposure_report(
-        self,
-        org_id: UUID,
-        as_of_date: date,
-        threshold_percentage: float = 10.0
-    ) -> Dict[str, Any]:
+        self, org_id: UUID, as_of_date: date, threshold_percentage: float = 10.0
+    ) -> dict[str, Any]:
         """
         Generate Large Exposure Report
         Shows borrowers with exposure exceeding threshold % of capital
@@ -250,9 +297,7 @@ class RegulatoryReportService:
         threshold_amount = tier1_capital * Decimal(str(threshold_percentage / 100))
 
         # Get large exposures
-        large_exposures = await self._get_large_exposures(
-            org_id, as_of_date, threshold_amount
-        )
+        large_exposures = await self._get_large_exposures(org_id, as_of_date, threshold_amount)
 
         return {
             "report_type": "LARGE_EXPOSURE",
@@ -265,14 +310,12 @@ class RegulatoryReportService:
             "summary": {
                 "count": len(large_exposures),
                 "total_exposure": sum(e["exposure_amount"] for e in large_exposures),
-            }
+            },
         }
 
     async def generate_sector_exposure_report(
-        self,
-        org_id: UUID,
-        as_of_date: date
-    ) -> Dict[str, Any]:
+        self, org_id: UUID, as_of_date: date
+    ) -> dict[str, Any]:
         """
         Generate Sector-wise Exposure Report
         Shows concentration of advances across sectors
@@ -294,16 +337,17 @@ class RegulatoryReportService:
         for sector in sectors:
             amount = await self._get_sector_exposure(org_id, sector, as_of_date)
             total_advances += amount
-            sector_data.append({
-                "sector": sector,
-                "exposure_amount": float(amount),
-            })
+            sector_data.append(
+                {
+                    "sector": sector,
+                    "exposure_amount": float(amount),
+                }
+            )
 
         # Calculate percentages
         for item in sector_data:
             item["percentage"] = (
-                item["exposure_amount"] / float(total_advances) * 100
-                if total_advances > 0 else 0
+                item["exposure_amount"] / float(total_advances) * 100 if total_advances > 0 else 0
             )
 
         return {
@@ -343,9 +387,7 @@ class RegulatoryReportService:
         """Get Tier 2 capital"""
         return Decimal("20000000")
 
-    async def _calculate_risk_weighted_assets(
-        self, org_id: UUID, as_of_date: date
-    ) -> Decimal:
+    async def _calculate_risk_weighted_assets(self, org_id: UUID, as_of_date: date) -> Decimal:
         """Calculate total risk weighted assets"""
         return Decimal("500000000")
 
@@ -353,9 +395,7 @@ class RegulatoryReportService:
         """Calculate High Quality Liquid Assets"""
         return Decimal("50000000")
 
-    async def _calculate_cash_outflows(
-        self, org_id: UUID, as_of_date: date
-    ) -> Decimal:
+    async def _calculate_cash_outflows(self, org_id: UUID, as_of_date: date) -> Decimal:
         """Calculate expected cash outflows over 30 days"""
         return Decimal("40000000")
 
@@ -365,15 +405,377 @@ class RegulatoryReportService:
 
     async def _get_large_exposures(
         self, org_id: UUID, as_of_date: date, threshold: Decimal
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Get borrowers with exposure exceeding threshold"""
         return [
             {"borrower_name": "ABC Corp", "exposure_amount": 15000000},
             {"borrower_name": "XYZ Ltd", "exposure_amount": 12000000},
         ]
 
-    async def _get_sector_exposure(
-        self, org_id: UUID, sector: str, as_of_date: date
-    ) -> Decimal:
+    async def _get_sector_exposure(self, org_id: UUID, sector: str, as_of_date: date) -> Decimal:
         """Get exposure for a sector"""
         return Decimal("50000000")
+
+    # ─────────────────────────────────────────────────────────────────────
+    # CRAR sub-section endpoints: composition, trend, infrastructure ratio
+    # ─────────────────────────────────────────────────────────────────────
+
+    async def _get_account_group_balances(
+        self, org_id: UUID, natures: list[AccountNature] | None = None
+    ) -> list[dict[str, Any]]:
+        """Aggregate `mst_account.current_balance` by `account_group`.
+
+        Returns a list of ``{group_id, group_code, group_name, nature,
+        balance}`` rows. We use `current_balance` (rather than walking
+        `txn_gl_entry`) because the GL posting service maintains it on
+        every voucher post — it's the cheap path for a snapshot summary
+        and matches how the trial-balance report reads balances today.
+
+        The frontend / service caller is responsible for sign conventions:
+        EQUITY / LIABILITIES naturally credit-balanced, ASSETS / EXPENSES
+        debit-balanced. We return raw magnitude — see callers for sign
+        handling.
+        """
+        stmt = (
+            select(
+                AccountGroup.id.label("group_id"),
+                AccountGroup.code.label("group_code"),
+                AccountGroup.name.label("group_name"),
+                AccountGroup.nature.label("nature"),
+                func.coalesce(func.sum(Account.current_balance), Decimal("0")).label("balance"),
+            )
+            .join(Account, Account.account_group_id == AccountGroup.id)
+            .where(
+                Account.organization_id == org_id,
+                AccountGroup.organization_id == org_id,
+                Account.is_active.is_(True),
+            )
+            .group_by(
+                AccountGroup.id,
+                AccountGroup.code,
+                AccountGroup.name,
+                AccountGroup.nature,
+            )
+        )
+        if natures:
+            stmt = stmt.where(AccountGroup.nature.in_(natures))
+
+        result = await self.db.execute(stmt)
+        return [dict(row._mapping) for row in result.all()]
+
+    def _match_keywords(self, group_name: str, keywords: list[str]) -> bool:
+        """Case-insensitive substring match against a keyword list."""
+        if not group_name:
+            return False
+        normalized = group_name.lower()
+        return any(keyword in normalized for keyword in keywords)
+
+    async def get_capital_composition(
+        self,
+        organization_id: UUID,
+        as_of_date: date | None = None,
+    ) -> dict[str, Any]:
+        """Return Tier-1 / Tier-2 capital composition that ladders up to CRAR.
+
+        Pulls posted balances from `mst_account` aggregated by account
+        group, then maps each group to a regulatory line using the
+        `_TIER1_LINE_KEYWORDS` / `_TIER1_DEDUCTION_KEYWORDS` /
+        `_TIER2_LINE_KEYWORDS` tables at the top of this module.
+
+        Heuristic mapping is tracked at module level.
+
+        Returns a dict-shape that `CapitalCompositionResponse` parses
+        directly via `model_validate`.
+        """
+        if as_of_date is None:
+            as_of_date = date.today()
+
+        groups = await self._get_account_group_balances(
+            organization_id,
+            natures=[
+                AccountNature.EQUITY,
+                AccountNature.LIABILITIES,
+                AccountNature.ASSETS,
+            ],
+        )
+
+        tier_1_lines: list[dict[str, Any]] = []
+        tier_2_lines: list[dict[str, Any]] = []
+
+        # Tier-1 positive lines (paid-up + reserves + retained earnings).
+        for label, keywords in _TIER1_LINE_KEYWORDS.items():
+            amount = Decimal("0.00")
+            for grp in groups:
+                if grp["nature"] not in (
+                    AccountNature.EQUITY,
+                    AccountNature.LIABILITIES,
+                ):
+                    continue
+                if self._match_keywords(grp["group_name"], keywords):
+                    amount += Decimal(grp["balance"] or 0)
+            tier_1_lines.append(
+                {
+                    "label": label,
+                    "amount": amount,
+                    "is_subtotal": False,
+                    "tier": "TIER_1",
+                }
+            )
+
+        # Tier-1 deductions (intangibles, DTA, accumulated losses) — emit
+        # as negative amounts and let the consumer sum.
+        for label, keywords in _TIER1_DEDUCTION_KEYWORDS.items():
+            amount = Decimal("0.00")
+            for grp in groups:
+                if self._match_keywords(grp["group_name"], keywords):
+                    # These sit on the asset side; subtracting reduces capital.
+                    amount += Decimal(grp["balance"] or 0)
+            if amount != 0:
+                tier_1_lines.append(
+                    {
+                        "label": label,
+                        "amount": -amount,
+                        "is_subtotal": False,
+                        "tier": "TIER_1",
+                    }
+                )
+
+        tier_1_total = sum((line["amount"] for line in tier_1_lines), Decimal("0.00"))
+
+        # Tier-2 — revaluation reserves (45% haircut), general provisions
+        # (capped at 1.25% of credit-risk RWA), subordinated debt.
+        credit_rwa = await self._calculate_risk_weighted_assets(
+            organization_id, as_of_date
+        ) * Decimal("0.85")
+        gen_prov_cap = credit_rwa * _GENERAL_PROVISION_RWA_CAP_PCT / Decimal("100")
+
+        for label, keywords in _TIER2_LINE_KEYWORDS.items():
+            amount = Decimal("0.00")
+            for grp in groups:
+                if self._match_keywords(grp["group_name"], keywords):
+                    amount += Decimal(grp["balance"] or 0)
+
+            # Apply regulatory haircuts / caps.
+            if label == "Revaluation reserves":
+                amount = amount * (Decimal("1") - _REVALUATION_HAIRCUT)
+            elif label == "General provisions" and gen_prov_cap > 0:
+                amount = min(amount, gen_prov_cap)
+
+            tier_2_lines.append(
+                {
+                    "label": label,
+                    "amount": amount,
+                    "is_subtotal": False,
+                    "tier": "TIER_2",
+                }
+            )
+
+        tier_2_total = sum((line["amount"] for line in tier_2_lines), Decimal("0.00"))
+
+        return {
+            "as_of_date": as_of_date,
+            "generated_at": datetime.utcnow(),
+            "organization_id": organization_id,
+            "tier_1_lines": tier_1_lines,
+            "tier_1_total": tier_1_total,
+            "tier_2_lines": tier_2_lines,
+            "tier_2_total": tier_2_total,
+            "total_capital": tier_1_total + tier_2_total,
+        }
+
+    async def get_crar_trend(
+        self,
+        organization_id: UUID,
+        months: int = 12,
+    ) -> dict[str, Any]:
+        """Return historical CRAR snapshots for the last `months` months.
+
+        Reads from `fin_capital_snapshot`. If the table is empty for
+        this org, returns an empty list — the dashboard renders an
+        EmptyState in that case (no fabricated data).
+        """
+        months = max(1, min(months, 60))  # sanity clamp 1–60
+        # ~ 30-day months is fine for windowing; the chart x-axis uses the
+        # actual `snapshot_date` per row anyway.
+        cutoff = date.today() - timedelta(days=months * 31)
+
+        stmt = (
+            select(CapitalSnapshot)
+            .where(
+                CapitalSnapshot.organization_id == organization_id,
+                CapitalSnapshot.snapshot_date >= cutoff,
+                CapitalSnapshot.is_active.is_(True),
+            )
+            .order_by(CapitalSnapshot.snapshot_date.asc())
+        )
+        result = await self.db.execute(stmt)
+        rows = result.scalars().all()
+
+        return {
+            "organization_id": organization_id,
+            "months": months,
+            "generated_at": datetime.utcnow(),
+            "snapshots": list(rows),
+        }
+
+    async def record_capital_snapshot(
+        self,
+        organization_id: UUID,
+        as_of_date: date | None = None,
+    ) -> CapitalSnapshot:
+        """Persist a `CapitalSnapshot` for today (or `as_of_date`).
+
+        Idempotent on `(organization_id, snapshot_date)` — re-running
+        the same day updates the existing row instead of inserting a
+        duplicate.
+
+        TODO(STAGE-PENDING-capital-snapshot-cron): wire this into the
+        APScheduler / Arq daily roll-up. For now callers (admin tools
+        or tests) invoke it explicitly.
+        """
+        if as_of_date is None:
+            as_of_date = date.today()
+
+        tier_1 = await self._get_tier1_capital(organization_id, as_of_date)
+        tier_2 = await self._get_tier2_capital(organization_id, as_of_date)
+        rwa = await self._calculate_risk_weighted_assets(organization_id, as_of_date)
+        credit_rwa = rwa * Decimal("0.85")
+        market_rwa = rwa * Decimal("0.10")
+        operational_rwa = rwa * Decimal("0.05")
+        total_capital = tier_1 + tier_2
+        crar = (total_capital / rwa * Decimal("100")) if rwa > 0 else Decimal("0")
+        tier_1_ratio = (tier_1 / rwa * Decimal("100")) if rwa > 0 else Decimal("0")
+
+        stmt = select(CapitalSnapshot).where(
+            CapitalSnapshot.organization_id == organization_id,
+            CapitalSnapshot.snapshot_date == as_of_date,
+        )
+        existing = (await self.db.execute(stmt)).scalar_one_or_none()
+        if existing:
+            existing.tier_1_capital = tier_1
+            existing.tier_2_capital = tier_2
+            existing.total_capital = total_capital
+            existing.credit_risk_rwa = credit_rwa
+            existing.market_risk_rwa = market_rwa
+            existing.operational_risk_rwa = operational_rwa
+            existing.total_rwa = rwa
+            existing.crar = crar
+            existing.tier_1_ratio = tier_1_ratio
+            snapshot = existing
+        else:
+            snapshot = CapitalSnapshot(
+                organization_id=organization_id,
+                snapshot_date=as_of_date,
+                tier_1_capital=tier_1,
+                tier_2_capital=tier_2,
+                total_capital=total_capital,
+                credit_risk_rwa=credit_rwa,
+                market_risk_rwa=market_rwa,
+                operational_risk_rwa=operational_rwa,
+                total_rwa=rwa,
+                crar=crar,
+                tier_1_ratio=tier_1_ratio,
+            )
+            self.db.add(snapshot)
+        await self.db.flush()
+        return snapshot
+
+    async def get_infrastructure_ratio(
+        self,
+        organization_id: UUID,
+        as_of_date: date | None = None,
+    ) -> dict[str, Any]:
+        """NBFC-IFC eligibility — infrastructure book / total loan book.
+
+        Per RBI Master Direction (NBFC-IFC), at least 75% of total
+        assets must be deployed in infrastructure loans. We approximate
+        "total assets" with the total active loan book (the dominant
+        asset class for an NBFC-IFC) — this is conservative for the
+        eligibility check and well-documented in regulatory practice.
+
+        A loan account counts as infrastructure if its `LoanProduct`
+        name or category contains an infra keyword (see
+        `_INFRASTRUCTURE_KEYWORDS`). The PROJECT_FINANCE category is
+        also counted as infra by default — RBI's NBFC-IFC definition
+        explicitly covers project finance for infrastructure assets.
+
+        Heuristic mapping is tracked below.
+
+        TODO(STAGE-PENDING-loan-product-is-infrastructure): add an
+        explicit `is_infrastructure` boolean to `LoanProduct` so the
+        ratio doesn't depend on product naming conventions.
+        """
+        if as_of_date is None:
+            as_of_date = date.today()
+
+        # Total active loan book — sum principal_outstanding across
+        # ACTIVE / DORMANT / FROZEN (i.e. non-CLOSED / non-WRITTEN_OFF).
+        active_statuses = [
+            LoanAccountStatus.ACTIVE,
+            LoanAccountStatus.DORMANT,
+            LoanAccountStatus.FROZEN,
+        ]
+
+        total_stmt = select(
+            func.coalesce(
+                func.sum(LoanAccount.principal_outstanding),
+                Decimal("0"),
+            )
+        ).where(
+            LoanAccount.organization_id == organization_id,
+            LoanAccount.status.in_(active_statuses),
+            LoanAccount.is_active.is_(True),
+        )
+        total_amount = Decimal((await self.db.execute(total_stmt)).scalar_one() or 0)
+
+        # Find product IDs that look like infrastructure products.
+        product_stmt = select(LoanProduct.id, LoanProduct.name, LoanProduct.category).where(
+            LoanProduct.organization_id == organization_id,
+        )
+        product_rows = (await self.db.execute(product_stmt)).all()
+        infra_product_ids: list[UUID] = []
+        for prod_id, prod_name, prod_category in product_rows:
+            name_lower = (prod_name or "").lower()
+            category_value = (
+                prod_category.value if hasattr(prod_category, "value") else str(prod_category)
+            )
+            is_infra_name = any(kw in name_lower for kw in _INFRASTRUCTURE_KEYWORDS)
+            is_project_finance = category_value == "PROJECT_FINANCE"
+            if is_infra_name or is_project_finance:
+                infra_product_ids.append(prod_id)
+
+        if infra_product_ids:
+            infra_stmt = select(
+                func.coalesce(
+                    func.sum(LoanAccount.principal_outstanding),
+                    Decimal("0"),
+                )
+            ).where(
+                LoanAccount.organization_id == organization_id,
+                LoanAccount.status.in_(active_statuses),
+                LoanAccount.is_active.is_(True),
+                LoanAccount.product_id.in_(infra_product_ids),
+            )
+            infra_amount = Decimal((await self.db.execute(infra_stmt)).scalar_one() or 0)
+        else:
+            infra_amount = Decimal("0")
+
+        ratio = (infra_amount / total_amount * Decimal("100")) if total_amount > 0 else Decimal("0")
+
+        if ratio >= Decimal("75"):
+            status: str = "QUALIFIED"
+        elif ratio >= Decimal("70"):
+            status = "AT_RISK"
+        else:
+            status = "NOT_QUALIFIED"
+
+        return {
+            "as_of_date": as_of_date,
+            "generated_at": datetime.utcnow(),
+            "organization_id": organization_id,
+            "infrastructure_loans_amount": infra_amount,
+            "total_loans_amount": total_amount,
+            "infrastructure_ratio_percent": ratio,
+            "minimum_required_percent": Decimal("75"),
+            "status": status,
+        }

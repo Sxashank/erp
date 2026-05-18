@@ -108,7 +108,7 @@ class BankStatementService:
                 error_count += 1
 
         if success_count > 0:
-            await self.session.commit()
+            await self.session.flush()
 
         return success_count, error_count, errors
 
@@ -205,7 +205,7 @@ class BankStatementService:
         # Soft delete
         statement.deleted_at = datetime.utcnow()
         statement.deleted_by_id = user_id
-        await self.session.commit()
+        await self.session.flush()
 
 
 class BankReconciliationService:
@@ -334,7 +334,7 @@ class BankReconciliationService:
         else:
             statement.reconciliation_status = ReconciliationStatus.PARTIALLY_MATCHED
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(match)
         return match
 
@@ -362,7 +362,7 @@ class BankReconciliationService:
 
         # Delete match
         await self.session.delete(match)
-        await self.session.commit()
+        await self.session.flush()
 
     async def auto_match_statements(
         self,
@@ -557,7 +557,7 @@ class BankReconciliationService:
         recon.difference = recon.calculate_difference()
 
         self.session.add(recon)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(recon)
         return recon
 
@@ -584,7 +584,7 @@ class BankReconciliationService:
         recon.difference = recon.calculate_difference()
         recon.updated_by_id = user_id
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(recon)
         return recon
 
@@ -612,7 +612,7 @@ class BankReconciliationService:
         recon.completed_at = datetime.utcnow()
         recon.completed_by_id = user_id
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(recon)
         return recon
 

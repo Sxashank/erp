@@ -1,114 +1,194 @@
-version: '3.8'
+name: smfc-erp
+
+x-backend-env: &backend-env
+  APP_NAME: ${APP_NAME:-SMFC ERP}
+  APP_ENV: ${APP_ENV:-production}
+  DEBUG: ${DEBUG:-false}
+  API_V1_PREFIX: ${API_V1_PREFIX:-/api/v1}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-smfc}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-smfc_erp}
+  DB_POOL_SIZE: ${DB_POOL_SIZE:-10}
+  DB_MAX_OVERFLOW: ${DB_MAX_OVERFLOW:-20}
+  REDIS_URL: redis://redis:6379/0
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+  PASSWORD_MIN_LENGTH: ${PASSWORD_MIN_LENGTH:-8}
+  MAX_LOGIN_ATTEMPTS: ${MAX_LOGIN_ATTEMPTS:-5}
+  ACCOUNT_LOCKOUT_MINUTES: ${ACCOUNT_LOCKOUT_MINUTES:-30}
+  PASSWORD_EXPIRY_DAYS: ${PASSWORD_EXPIRY_DAYS:-90}
+  PORTAL_DEFAULT_ORGANIZATION_ID: ${PORTAL_DEFAULT_ORGANIZATION_ID:-}
+  CORS_ORIGINS: ${CORS_ORIGINS}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  SMTP_ENABLED: ${SMTP_ENABLED:-false}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-}
+  SMTP_FROM_NAME: ${SMTP_FROM_NAME:-SMFC ERP}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
 
 services:
   db:
     image: postgres:15-alpine
-    container_name: smfc_db
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: smfc
-      POSTGRES_PASSWORD: smfc_secret
-      POSTGRES_DB: smfc_erp
+      POSTGRES_USER: ${POSTGRES_USER:-smfc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-smfc_erp}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smfc -d smfc_erp"]
-      interval: 5s
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 20s
     networks:
-      - smfc_network
+      - smfc_internal
 
   redis:
     image: redis:7-alpine
-    container_name: smfc_redis
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
+      interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
+      start_period: 10s
     networks:
-      - smfc_network
+      - smfc_internal
 
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: smfc_backend
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: smfc-erp-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@db:5432/smfc_erp
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 15
-      REFRESH_TOKEN_EXPIRE_DAYS: 7
-      APP_ENV: development
-      DEBUG: "true"
-    ports:
-      - "8000:8000"
+      <<: *backend-env
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      RUN_SEED_DATA: ${RUN_SEED_DATA:-false}
+      BACKEND_WORKERS: ${BACKEND_WORKERS:-3}
+      SEED_ADMIN_USERNAME: ${SEED_ADMIN_USERNAME:-krishna}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-krishna@supersight.com}
+      SEED_ADMIN_FULL_NAME: ${SEED_ADMIN_FULL_NAME:-Krishna Administrator}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-ChangeMe123!}
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
     networks:
-      - smfc_network
+      - smfc_internal
 
   worker:
-    # Arq background-job worker. Runs the same app code as `backend` but
-    # as an arq consumer instead of a uvicorn HTTP server. See
-    # `backend/Dockerfile.worker` and `STAGE-6-PENDING-arq-worker-pool`
-    # in .stubs-approved.md for rationale. Horizontal scale via
-    # `docker compose up --scale worker=N`.
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.worker
+    image: smfc-erp-backend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    command: ["arq", "app.workers.arq_worker.WorkerSettings"]
     environment:
-      DATABASE_URL: postgresql+asyncpg://smfc:smfc_secret@db:5432/smfc_erp
-      REDIS_URL: redis://redis:6379/0
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-secret-key-change-in-production}
-      JWT_ALGORITHM: HS256
-      APP_ENV: development
+      <<: *backend-env
+      RUN_MIGRATIONS: "false"
+      RUN_SEED_DATA: "false"
+    volumes:
+      - uploads_data:/app/uploads
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
+      backend:
+        condition: service_healthy
     networks:
-      - smfc_network
-    restart: unless-stopped
+      - smfc_internal
 
   frontend:
     build:
-      context: ./src
-      dockerfile: Dockerfile
-    container_name: smfc_frontend
-    environment:
-      VITE_API_URL: http://localhost:8000
-    ports:
-      - "3000:3000"
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
+    image: smfc-erp-frontend:${IMAGE_TAG:-latest}
+    restart: unless-stopped
     depends_on:
-      - backend
-    volumes:
-      - ./src:/app
-      - /app/node_modules
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
     networks:
-      - smfc_network
+      - smfc_internal
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./deploy/runtime/nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./deploy/runtime/certbot/www:/var/www/certbot:ro
+      - ./deploy/runtime/certbot/conf:/etc/letsencrypt:ro
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+    networks:
+      - smfc_public
+      - smfc_internal
+
+  certbot:
+    image: certbot/certbot:v2.11.0
+    profiles: ["ssl"]
+    volumes:
+      - ./deploy/runtime/certbot/www:/var/www/certbot
+      - ./deploy/runtime/certbot/conf:/etc/letsencrypt
+
+  clamav:
+    image: clamav/clamav:stable
+    profiles: ["clamav"]
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    networks:
+      - smfc_internal
 
 volumes:
   postgres_data:
   redis_data:
+  uploads_data:
+  clamav_data:
 
 networks:
-  smfc_network:
+  smfc_public:
+    driver: bridge
+  smfc_internal:
     driver: bridge

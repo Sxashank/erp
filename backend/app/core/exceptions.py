@@ -162,6 +162,66 @@ class PasswordExpiredException(AppException):
         )
 
 
+class TooManyRequestsException(AppException):
+    """Too many requests / rate-limited exception (HTTP 429)."""
+
+    def __init__(
+        self,
+        detail: str = "Too many requests",
+        error_code: str = "TOO_MANY_REQUESTS",
+    ) -> None:
+        super().__init__(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=detail,
+            error_code=error_code,
+        )
+
+
+class BadGatewayException(AppException):
+    """Bad gateway exception — upstream returned an invalid response (HTTP 502)."""
+
+    def __init__(
+        self,
+        detail: str = "Bad gateway",
+        error_code: str = "BAD_GATEWAY",
+    ) -> None:
+        super().__init__(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=detail,
+            error_code=error_code,
+        )
+
+
+class ServiceUnavailableException(AppException):
+    """Service unavailable exception (HTTP 503)."""
+
+    def __init__(
+        self,
+        detail: str = "Service unavailable",
+        error_code: str = "SERVICE_UNAVAILABLE",
+    ) -> None:
+        super().__init__(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+            error_code=error_code,
+        )
+
+
+class InternalServerException(AppException):
+    """Internal server error exception (HTTP 500)."""
+
+    def __init__(
+        self,
+        detail: str = "Internal server error",
+        error_code: str = "INTERNAL_ERROR",
+    ) -> None:
+        super().__init__(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+            error_code=error_code,
+        )
+
+
 # ============================================
 # Fixed Assets Module Exceptions
 # ============================================

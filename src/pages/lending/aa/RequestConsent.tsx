@@ -5,13 +5,9 @@
  * Supports multiple AA providers and FI types.
  */
 
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format, addMonths, addYears } from 'date-fns';
 import {
-  ArrowLeft,
   Shield,
-  Building2,
   Calendar,
   Database,
   User,
@@ -21,11 +17,18 @@ import {
   CheckCircle,
   Info,
 } from 'lucide-react';
+import React, { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import {
   Select,
   SelectContent,
@@ -33,26 +36,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useCreateAAConsent } from '@/hooks/lending/useAAConsent';
+import { useAAProviders } from '@/hooks/lending/useAAProviders';
+import { useEntities } from '@/hooks/lending/useEntities';
 import { useToast } from '@/hooks/use-toast';
-
-// Types
-interface Entity {
-  entity_id: string;
-  name: string;
-  pan_number: string;
-}
-
-interface ProviderConfig {
-  name: string;
-  code: string;
-  sandbox_available: boolean;
-  fi_types_supported: string[];
-}
+import { showErrorToast } from '@/lib/errorToast';
 
 // Available FI Types
 const FI_TYPES = [
@@ -72,7 +61,11 @@ const FI_TYPES = [
 
 // Consent Purposes
 const CONSENT_PURPOSES = [
-  { code: 'BANK_STATEMENT', label: 'Bank Statement Verification', description: 'For loan underwriting' },
+  {
+    code: 'BANK_STATEMENT',
+    label: 'Bank Statement Verification',
+    description: 'For loan underwriting',
+  },
   { code: 'UNDERWRITING', label: 'Loan Underwriting', description: 'Credit assessment' },
   { code: 'WEALTH_MANAGEMENT', label: 'Wealth Management', description: 'Financial advisory' },
   { code: 'ACCOUNT_AGGREGATION', label: 'Account Aggregation', description: 'Consolidated view' },
@@ -93,83 +86,50 @@ export default function RequestConsentPage() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  // Form state
-  const [loading, setLoading] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+  const entitiesQuery = useEntities({ pageSize: 100 });
+  const providersQuery = useAAProviders();
+  const createConsent = useCreateAAConsent();
+
   const [consentCreated, setConsentCreated] = useState<{
-    consent_handle: string;
-    redirect_url: string;
+    consentHandle: string;
+    redirectUrl: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Entities for selection
-  const [entities, setEntities] = useState<Entity[]>([]);
-  const [providers, setProviders] = useState<ProviderConfig[]>([]);
+  const entities = entitiesQuery.data?.items ?? [];
 
   // Form fields
   const [formData, setFormData] = useState({
-    organization_id: searchParams.get('organization_id') || '',
-    entity_id: searchParams.get('entity_id') || '',
-    customer_id: '', // VUA (Virtual User Address)
+    organizationId: searchParams.get('organization_id') || '',
+    entityId: searchParams.get('entity_id') || '',
+    customerId: '', // VUA (Virtual User Address)
     provider: 'FINVU',
     purpose: 'BANK_STATEMENT',
-    fi_types: ['DEPOSIT'] as string[],
-    consent_mode: 'VIEW',
-    fetch_type: 'ONETIME',
-    frequency_type: 'ONETIME',
-    frequency_value: 1,
-    date_range_from: format(addMonths(new Date(), -12), 'yyyy-MM-dd'),
-    date_range_to: format(new Date(), 'yyyy-MM-dd'),
-    consent_expiry: format(addYears(new Date(), 1), 'yyyy-MM-dd'),
+    fiTypes: ['DEPOSIT'] as string[],
+    consentMode: 'VIEW',
+    fetchType: 'ONETIME',
+    frequencyType: 'ONETIME',
+    frequencyValue: 1,
+    dateRangeFrom: format(addMonths(new Date(), -12), 'yyyy-MM-dd'),
+    dateRangeTo: format(new Date(), 'yyyy-MM-dd'),
+    consentExpiry: format(addYears(new Date(), 1), 'yyyy-MM-dd'),
   });
-
-  // Fetch entities and providers
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        // Fetch entities
-        const entitiesResponse = await fetch('/api/v1/lending/entities?page_size=100');
-        if (entitiesResponse.ok) {
-          const data = await entitiesResponse.json();
-          setEntities(data.items || []);
-        }
-
-        // Fetch supported providers
-        const providersResponse = await fetch('/api/v1/lending/aa/providers');
-        if (providersResponse.ok) {
-          const data = await providersResponse.json();
-          setProviders(data.providers || [
-            { name: 'Finvu', code: 'FINVU', sandbox_available: true, fi_types_supported: FI_TYPES.map(f => f.code) },
-            { name: 'OneMoney', code: 'ONEMONEY', sandbox_available: true, fi_types_supported: FI_TYPES.map(f => f.code) },
-            { name: 'Setu', code: 'SETU', sandbox_available: true, fi_types_supported: FI_TYPES.map(f => f.code) },
-          ]);
-        }
-      } catch (error) {
-        console.error('Failed to fetch data:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchData();
-  }, []);
 
   // Handle FI type toggle
   const handleFiTypeToggle = (fiType: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      fi_types: prev.fi_types.includes(fiType)
-        ? prev.fi_types.filter(t => t !== fiType)
-        : [...prev.fi_types, fiType],
+      fiTypes: prev.fiTypes.includes(fiType)
+        ? prev.fiTypes.filter((t) => t !== fiType)
+        : [...prev.fiTypes, fiType],
     }));
   };
 
   // Handle form submission
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.customer_id) {
+    if (!formData.customerId) {
       toast({
         title: 'Customer ID required',
         description: 'Please enter the customer VUA (Virtual User Address).',
@@ -178,7 +138,7 @@ export default function RequestConsentPage() {
       return;
     }
 
-    if (formData.fi_types.length === 0) {
+    if (formData.fiTypes.length === 0) {
       toast({
         title: 'FI Types required',
         description: 'Please select at least one financial information type.',
@@ -187,48 +147,38 @@ export default function RequestConsentPage() {
       return;
     }
 
-    setSubmitting(true);
-    try {
-      const response = await fetch('/api/v1/lending/aa/consents', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          entity_id: formData.entity_id || null,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to create consent request');
-      }
-
-      const data = await response.json();
-
-      setConsentCreated({
-        consent_handle: data.consent_handle,
-        redirect_url: data.redirect_url,
-      });
-
-      toast({
-        title: 'Consent request created',
-        description: 'Share the consent URL with the customer for approval.',
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to create consent request.',
-        variant: 'destructive',
-      });
-    } finally {
-      setSubmitting(false);
-    }
+    createConsent.mutate(
+      {
+        ...formData,
+        entityId: formData.entityId || null,
+      },
+      {
+        onSuccess: (data) => {
+          setConsentCreated({
+            consentHandle: data.consentHandle,
+            redirectUrl: data.redirectUrl,
+          });
+          toast({
+            title: 'Consent request created',
+            description: 'Share the consent URL with the customer for approval.',
+          });
+        },
+        onError: (err) => showErrorToast(err, toast),
+      },
+    );
   };
+
+  const submitting = createConsent.isPending;
+  // `providersQuery` is consulted to mirror the original behaviour of loading
+  // provider metadata at mount; the static <Select> below offers the supported
+  // codes. We keep the query subscription so future copies of this page can
+  // narrow the dropdown to the live list.
+  void providersQuery.data;
 
   // Copy URL to clipboard
   const handleCopyUrl = async () => {
-    if (consentCreated?.redirect_url) {
-      await navigator.clipboard.writeText(consentCreated.redirect_url);
+    if (consentCreated?.redirectUrl) {
+      await navigator.clipboard.writeText(consentCreated.redirectUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       toast({
@@ -241,10 +191,10 @@ export default function RequestConsentPage() {
   // Success view after consent creation
   if (consentCreated) {
     return (
-      <div className="container mx-auto py-6 max-w-2xl">
+      <div className="container mx-auto max-w-2xl py-6">
         <Card>
           <CardHeader className="text-center">
-            <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <CardTitle>Consent Request Created</CardTitle>
@@ -255,38 +205,22 @@ export default function RequestConsentPage() {
           <CardContent className="space-y-6">
             <div>
               <Label className="text-sm text-muted-foreground">Consent Handle</Label>
-              <p className="font-mono text-sm mt-1">{consentCreated.consent_handle}</p>
+              <p className="mt-1 font-mono text-sm">{consentCreated.consentHandle}</p>
             </div>
 
             <div>
               <Label className="text-sm text-muted-foreground">Consent URL</Label>
-              <div className="flex items-center gap-2 mt-2">
-                <Input
-                  value={consentCreated.redirect_url}
-                  readOnly
-                  className="font-mono text-xs"
-                />
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={handleCopyUrl}
-                >
+              <div className="mt-2 flex items-center gap-2">
+                <Input value={consentCreated.redirectUrl} readOnly className="font-mono text-xs" />
+                <Button variant="outline" size="icon" onClick={handleCopyUrl}>
                   {copied ? (
                     <CheckCircle className="h-4 w-4 text-green-600" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
                 </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  asChild
-                >
-                  <a
-                    href={consentCreated.redirect_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                <Button variant="outline" size="icon" asChild>
+                  <a href={consentCreated.redirectUrl} target="_blank" rel="noopener noreferrer">
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
@@ -297,7 +231,7 @@ export default function RequestConsentPage() {
               <Info className="h-4 w-4" />
               <AlertTitle>Next Steps</AlertTitle>
               <AlertDescription>
-                <ol className="list-decimal list-inside mt-2 space-y-1 text-sm">
+                <ol className="mt-2 list-inside list-decimal space-y-1 text-sm">
                   <li>Share the consent URL with the customer</li>
                   <li>Customer approves consent via their AA app</li>
                   <li>Consent status updates automatically via webhook</li>
@@ -307,17 +241,10 @@ export default function RequestConsentPage() {
             </Alert>
 
             <div className="flex gap-4">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setConsentCreated(null)}
-              >
+              <Button variant="outline" className="flex-1" onClick={() => setConsentCreated(null)}>
                 Create Another
               </Button>
-              <Button
-                className="flex-1"
-                onClick={() => navigate('/lending/aa/consents')}
-              >
+              <Button className="flex-1" onClick={() => navigate('/admin/lending/aa/consents')}>
                 View All Consents
               </Button>
             </div>
@@ -328,45 +255,39 @@ export default function RequestConsentPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate('/lending/aa/consents')}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Request Consent</h1>
-          <p className="text-sm text-muted-foreground">
-            Create a new Account Aggregator consent request
-          </p>
-        </div>
-      </div>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Request Consent"
+        subtitle="Create a new Account Aggregator consent request"
+        breadcrumbs={[
+          { label: 'AA Consents', to: '/admin/lending/aa/consents' },
+          { label: 'Request' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Main Form */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6 lg:col-span-2">
             {/* Customer Information */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <User className="h-5 w-5" />
                   Customer Information
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="customer_id">Customer VUA *</Label>
                     <Input
                       id="customer_id"
                       placeholder="customer@aa-provider"
-                      value={formData.customer_id}
-                      onChange={(e) => setFormData(prev => ({ ...prev, customer_id: e.target.value }))}
+                      value={formData.customerId}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, customerId: e.target.value }))
+                      }
                       required
                     />
                     <p className="text-xs text-muted-foreground">
@@ -377,17 +298,22 @@ export default function RequestConsentPage() {
                   <div className="space-y-2">
                     <Label htmlFor="entity_id">Link to Entity (Optional)</Label>
                     <Select
-                      value={formData.entity_id}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, entity_id: value }))}
+                      value={formData.entityId || '__none__'}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          entityId: value === '__none__' ? '' : value,
+                        }))
+                      }
                     >
                       <SelectTrigger id="entity_id">
                         <SelectValue placeholder="Select entity" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {entities.map((entity) => (
-                          <SelectItem key={entity.entity_id} value={entity.entity_id}>
-                            {entity.name} ({entity.pan_number})
+                          <SelectItem key={entity.id} value={entity.id}>
+                            {entity.legalName} ({entity.pan})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -400,18 +326,20 @@ export default function RequestConsentPage() {
             {/* Provider & Purpose */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Shield className="h-5 w-5" />
                   Provider & Purpose
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label htmlFor="provider">AA Provider *</Label>
                     <Select
                       value={formData.provider}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, provider: value }))}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({ ...prev, provider: value }))
+                      }
                     >
                       <SelectTrigger id="provider">
                         <SelectValue />
@@ -431,7 +359,9 @@ export default function RequestConsentPage() {
                     <Label htmlFor="purpose">Purpose *</Label>
                     <Select
                       value={formData.purpose}
-                      onValueChange={(value) => setFormData(prev => ({ ...prev, purpose: value }))}
+                      onValueChange={(value) =>
+                        setFormData((prev) => ({ ...prev, purpose: value }))
+                      }
                     >
                       <SelectTrigger id="purpose">
                         <SelectValue />
@@ -452,39 +382,32 @@ export default function RequestConsentPage() {
             {/* FI Types */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Database className="h-5 w-5" />
                   Financial Information Types
                 </CardTitle>
-                <CardDescription>
-                  Select the types of financial data to request
-                </CardDescription>
+                <CardDescription>Select the types of financial data to request</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
                   {FI_TYPES.map((fiType) => (
                     <div
                       key={fiType.code}
-                      className={`flex items-start space-x-3 p-3 border rounded-lg cursor-pointer hover:bg-muted/50 ${
-                        formData.fi_types.includes(fiType.code) ? 'border-primary bg-primary/5' : ''
+                      className={`flex cursor-pointer items-start space-x-3 rounded-lg border p-3 hover:bg-muted/50 ${
+                        formData.fiTypes.includes(fiType.code) ? 'border-primary bg-primary/5' : ''
                       }`}
                       onClick={() => handleFiTypeToggle(fiType.code)}
                     >
                       <Checkbox
                         id={fiType.code}
-                        checked={formData.fi_types.includes(fiType.code)}
+                        checked={formData.fiTypes.includes(fiType.code)}
                         onCheckedChange={() => handleFiTypeToggle(fiType.code)}
                       />
                       <div className="space-y-1">
-                        <Label
-                          htmlFor={fiType.code}
-                          className="text-sm font-medium cursor-pointer"
-                        >
+                        <Label htmlFor={fiType.code} className="cursor-pointer text-sm font-medium">
                           {fiType.label}
                         </Label>
-                        <p className="text-xs text-muted-foreground">
-                          {fiType.description}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{fiType.description}</p>
                       </div>
                     </div>
                   ))}
@@ -495,20 +418,22 @@ export default function RequestConsentPage() {
             {/* Date Range & Frequency */}
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
+                <CardTitle className="flex items-center gap-2 text-lg">
                   <Calendar className="h-5 w-5" />
                   Date Range & Frequency
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="date_range_from">Data From *</Label>
                     <Input
                       id="date_range_from"
                       type="date"
-                      value={formData.date_range_from}
-                      onChange={(e) => setFormData(prev => ({ ...prev, date_range_from: e.target.value }))}
+                      value={formData.dateRangeFrom}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, dateRangeFrom: e.target.value }))
+                      }
                       required
                     />
                   </div>
@@ -518,8 +443,10 @@ export default function RequestConsentPage() {
                     <Input
                       id="date_range_to"
                       type="date"
-                      value={formData.date_range_to}
-                      onChange={(e) => setFormData(prev => ({ ...prev, date_range_to: e.target.value }))}
+                      value={formData.dateRangeTo}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, dateRangeTo: e.target.value }))
+                      }
                       required
                     />
                   </div>
@@ -529,8 +456,10 @@ export default function RequestConsentPage() {
                     <Input
                       id="consent_expiry"
                       type="date"
-                      value={formData.consent_expiry}
-                      onChange={(e) => setFormData(prev => ({ ...prev, consent_expiry: e.target.value }))}
+                      value={formData.consentExpiry}
+                      onChange={(e) =>
+                        setFormData((prev) => ({ ...prev, consentExpiry: e.target.value }))
+                      }
                       required
                     />
                   </div>
@@ -541,13 +470,15 @@ export default function RequestConsentPage() {
                 <div className="space-y-4">
                   <Label>Fetch Frequency</Label>
                   <RadioGroup
-                    value={formData.frequency_type}
-                    onValueChange={(value) => setFormData(prev => ({
-                      ...prev,
-                      frequency_type: value,
-                      fetch_type: value === 'ONETIME' ? 'ONETIME' : 'PERIODIC',
-                    }))}
-                    className="grid grid-cols-2 md:grid-cols-3 gap-3"
+                    value={formData.frequencyType}
+                    onValueChange={(value) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        frequencyType: value,
+                        fetchType: value === 'ONETIME' ? 'ONETIME' : 'PERIODIC',
+                      }))
+                    }
+                    className="grid grid-cols-2 gap-3 md:grid-cols-3"
                   >
                     {FREQUENCY_TYPES.map((freq) => (
                       <div key={freq.code} className="flex items-center space-x-2">
@@ -560,7 +491,7 @@ export default function RequestConsentPage() {
                   </RadioGroup>
                 </div>
 
-                {formData.frequency_type !== 'ONETIME' && (
+                {formData.frequencyType !== 'ONETIME' && (
                   <div className="space-y-2">
                     <Label htmlFor="frequency_value">Number of Fetches</Label>
                     <Input
@@ -568,8 +499,13 @@ export default function RequestConsentPage() {
                       type="number"
                       min={1}
                       max={100}
-                      value={formData.frequency_value}
-                      onChange={(e) => setFormData(prev => ({ ...prev, frequency_value: parseInt(e.target.value) || 1 }))}
+                      value={formData.frequencyValue}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          frequencyValue: parseInt(e.target.value) || 1,
+                        }))
+                      }
                     />
                     <p className="text-xs text-muted-foreground">
                       Maximum number of data fetches allowed
@@ -595,19 +531,19 @@ export default function RequestConsentPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Purpose</p>
                   <p className="font-medium">
-                    {CONSENT_PURPOSES.find(p => p.code === formData.purpose)?.label}
+                    {CONSENT_PURPOSES.find((p) => p.code === formData.purpose)?.label}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-sm text-muted-foreground">FI Types Selected</p>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {formData.fi_types.length === 0 ? (
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    {formData.fiTypes.length === 0 ? (
                       <span className="text-sm text-muted-foreground">None selected</span>
                     ) : (
-                      formData.fi_types.map((type) => (
+                      formData.fiTypes.map((type) => (
                         <Badge key={type} variant="secondary" className="text-xs">
-                          {FI_TYPES.find(f => f.code === type)?.label || type}
+                          {FI_TYPES.find((f) => f.code === type)?.label || type}
                         </Badge>
                       ))
                     )}
@@ -617,23 +553,23 @@ export default function RequestConsentPage() {
                 <div>
                   <p className="text-sm text-muted-foreground">Date Range</p>
                   <p className="text-sm">
-                    {format(new Date(formData.date_range_from), 'dd MMM yyyy')} -{' '}
-                    {format(new Date(formData.date_range_to), 'dd MMM yyyy')}
+                    {format(new Date(formData.dateRangeFrom), 'dd MMM yyyy')} -{' '}
+                    {format(new Date(formData.dateRangeTo), 'dd MMM yyyy')}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-sm text-muted-foreground">Frequency</p>
                   <p className="text-sm">
-                    {formData.frequency_type}
-                    {formData.frequency_type !== 'ONETIME' && ` (${formData.frequency_value}x)`}
+                    {formData.frequencyType}
+                    {formData.frequencyType !== 'ONETIME' && ` (${formData.frequencyValue}x)`}
                   </p>
                 </div>
 
                 <div>
                   <p className="text-sm text-muted-foreground">Valid Until</p>
                   <p className="text-sm">
-                    {format(new Date(formData.consent_expiry), 'dd MMM yyyy')}
+                    {format(new Date(formData.consentExpiry), 'dd MMM yyyy')}
                   </p>
                 </div>
 
@@ -642,16 +578,16 @@ export default function RequestConsentPage() {
                 <Button
                   type="submit"
                   className="w-full"
-                  disabled={submitting || formData.fi_types.length === 0 || !formData.customer_id}
+                  disabled={submitting || formData.fiTypes.length === 0 || !formData.customerId}
                 >
                   {submitting ? (
                     <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Creating...
                     </>
                   ) : (
                     <>
-                      <Shield className="h-4 w-4 mr-2" />
+                      <Shield className="mr-2 h-4 w-4" />
                       Create Consent Request
                     </>
                   )}

@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, CalendarDays, Edit, Plus, Save, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { HrisConfirmDialog } from '@/components/hris/HrisConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +30,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { hrisApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface HolidayCalendarFormData {
   organization_id: string;
   calendar_name: string;
@@ -89,6 +92,8 @@ export function HolidayCalendarForm() {
   const [saving, setSaving] = useState(false);
   const [showHolidayForm, setShowHolidayForm] = useState(false);
   const [editingHoliday, setEditingHoliday] = useState<Holiday | null>(null);
+  const [deleteHolidayId, setDeleteHolidayId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
 
   const {
     register,
@@ -132,7 +137,7 @@ export function HolidayCalendarForm() {
           setValue('organization_id', orgs[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrganizations();
@@ -155,7 +160,7 @@ export function HolidayCalendarForm() {
           // Holidays are included in the calendar response
           setHolidays(calendar.holidays || []);
         } catch (error) {
-          console.error('Failed to fetch calendar:', error);
+          logger.error('Failed to fetch calendar:', error);
         } finally {
           setLoading(false);
         }
@@ -176,7 +181,7 @@ export function HolidayCalendarForm() {
       }
       navigate('/admin/hris/holidays');
     } catch (error) {
-      console.error('Failed to save calendar:', error);
+      logger.error('Failed to save calendar:', error);
     } finally {
       setSaving(false);
     }
@@ -197,25 +202,31 @@ export function HolidayCalendarForm() {
       setShowHolidayForm(false);
       setEditingHoliday(null);
     } catch (error) {
-      console.error('Failed to save holiday:', error);
+      logger.error('Failed to save holiday:', error);
     }
   };
 
   const handleEditHoliday = (holiday: Holiday) => {
     setEditingHoliday(holiday);
     Object.keys(holiday).forEach((key) => {
-      setHolidayValue(key as keyof Holiday, holiday[key as keyof Holiday] as any);
+      // Holiday[key] is a polymorphic field set; RHF setValue's value parameter
+      // varies per key. Cast through unknown to avoid the per-key narrowing dance.
+      setHolidayValue(key as keyof Holiday, holiday[key as keyof Holiday] as unknown as Holiday[keyof Holiday]);
     });
     setShowHolidayForm(true);
   };
 
-  const handleDeleteHoliday = async (holidayId: string) => {
-    if (!calendarId || !confirm('Are you sure you want to delete this holiday?')) return;
+  const executeDeleteHoliday = async () => {
+    if (!calendarId || !deleteHolidayId) return;
     try {
-      await hrisApi.deleteHoliday(calendarId, holidayId);
-      setHolidays(holidays.filter((h) => h.id !== holidayId));
+      setDeleteBusy(true);
+      await hrisApi.deleteHoliday(calendarId, deleteHolidayId);
+      setHolidays(holidays.filter((h) => h.id !== deleteHolidayId));
+      setDeleteHolidayId(null);
     } catch (error) {
-      console.error('Failed to delete holiday:', error);
+      logger.error('Failed to delete holiday:', error);
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -490,11 +501,7 @@ export function HolidayCalendarForm() {
                     .map((holiday) => (
                       <TableRow key={holiday.id}>
                         <TableCell>
-                          {new Date(holiday.holiday_date).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            month: 'short',
-                            day: 'numeric',
-                          })}
+                          <DateDisplay date={holiday.holiday_date} formatStr="EEE, MMM dd" />
                         </TableCell>
                         <TableCell className="font-medium">{holiday.holiday_name}</TableCell>
                         <TableCell>
@@ -524,7 +531,7 @@ export function HolidayCalendarForm() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => holiday.id && handleDeleteHoliday(holiday.id)}
+                              onClick={() => holiday.id && setDeleteHolidayId(holiday.id)}
                               className="text-red-600 hover:text-red-700"
                             >
                               <Trash2 className="h-4 w-4" />
@@ -539,6 +546,18 @@ export function HolidayCalendarForm() {
           </CardContent>
         </Card>
       )}
+      <HrisConfirmDialog
+        open={Boolean(deleteHolidayId)}
+        title="Delete holiday"
+        description="This removes the holiday from the calendar and may affect future attendance processing."
+        confirmLabel="Delete holiday"
+        destructive
+        busy={deleteBusy}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteHolidayId(null);
+        }}
+        onConfirm={executeDeleteHoliday}
+      />
     </div>
   );
 }

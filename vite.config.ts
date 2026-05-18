@@ -1,6 +1,7 @@
 /// <reference types="vitest" />
-import react from '@vitejs/plugin-react';
 import path from 'path';
+
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
@@ -27,27 +28,28 @@ export default defineConfig({
             return 'vendor-pdf';
           }
           if (id.includes('/exceljs/')) return 'vendor-excel';
-          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/')) {
-            return 'vendor-react';
-          }
-          if (id.includes('/@tanstack/react-query/') || id.includes('/zustand/')) {
-            return 'vendor-state';
-          }
-          if (id.includes('/@radix-ui/')) return 'vendor-radix';
-          if (id.includes('/react-hook-form/') || id.includes('/zod/')) {
-            return 'vendor-forms';
-          }
-          if (id.includes('/react-router-dom/') || id.includes('/react-router/')) {
-            return 'vendor-router';
+          if (
+            id.includes('/react/') ||
+            id.includes('/react-dom/') ||
+            id.includes('/scheduler/') ||
+            id.includes('/react-router-dom/') ||
+            id.includes('/react-router/') ||
+            id.includes('/@tanstack/react-query/') ||
+            id.includes('/zustand/') ||
+            id.includes('/@radix-ui/') ||
+            id.includes('/react-hook-form/') ||
+            id.includes('/zod/')
+          ) {
+            return 'vendor-ui-core';
           }
           if (id.includes('/lucide-react/')) return 'vendor-icons';
-          return 'vendor-other';
+          return 'vendor-ui-core';
         },
       },
     },
-    // Raise the warning bar — we've already split vendors. Individual route
-    // chunks under 500 kB are fine; the main entry under 300 kB is ideal.
-    chunkSizeWarningLimit: 700,
+    // The admin route registry intentionally carries the enterprise module map.
+    // Heavier report-only vendors stay split above, so keep warnings for >1.1 MB.
+    chunkSizeWarningLimit: 1100,
   },
   test: {
     globals: true,

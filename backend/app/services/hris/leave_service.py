@@ -1,33 +1,29 @@
 """Leave service for HRIS module."""
 
+import builtins
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.hris.leave import (
-    LeaveType,
-    LeaveBalance,
-    LeaveApplication,
-    LeaveEncashment,
-)
+from app.core.constants import LeaveApplicationStatus
 from app.models.hris.employee import Employee
-from app.models.hris.shift import Holiday
+from app.models.hris.leave import (
+    LeaveApplication,
+    LeaveBalance,
+    LeaveType,
+)
 from app.schemas.hris.leave import (
+    LeaveApplicationCreate,
+    LeaveApplicationFilters,
+    LeaveApplicationUpdate,
+    LeaveBalanceCreate,
     LeaveTypeCreate,
     LeaveTypeUpdate,
-    LeaveBalanceCreate,
-    LeaveBalanceUpdate,
-    LeaveApplicationCreate,
-    LeaveApplicationUpdate,
-    LeaveApplicationFilters,
-    LeaveEncashmentCreate,
 )
-from app.core.constants import LeaveApplicationStatus, EmploymentStatus
 from app.services.hris.shift_service import HolidayService
 
 
@@ -41,18 +37,16 @@ class LeaveTypeService:
         """Create a new leave type."""
         leave_type = LeaveType(**data.model_dump(), created_by=created_by)
         self.db.add(leave_type)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(leave_type)
         return leave_type
 
-    async def get(self, leave_type_id: UUID) -> Optional[LeaveType]:
+    async def get(self, leave_type_id: UUID) -> LeaveType | None:
         """Get leave type by ID."""
-        result = await self.db.execute(
-            select(LeaveType).where(LeaveType.id == leave_type_id)
-        )
+        result = await self.db.execute(select(LeaveType).where(LeaveType.id == leave_type_id))
         return result.scalar_one_or_none()
 
-    async def get_by_code(self, organization_id: UUID, leave_code: str) -> Optional[LeaveType]:
+    async def get_by_code(self, organization_id: UUID, leave_code: str) -> LeaveType | None:
         """Get leave type by code."""
         result = await self.db.execute(
             select(LeaveType).where(
@@ -66,7 +60,7 @@ class LeaveTypeService:
         self,
         organization_id: UUID,
         active_only: bool = True,
-    ) -> List[LeaveType]:
+    ) -> list[LeaveType]:
         """List leave types for organization."""
         query = select(LeaveType).where(LeaveType.organization_id == organization_id)
         if active_only:
@@ -77,7 +71,7 @@ class LeaveTypeService:
 
     async def update(
         self, leave_type_id: UUID, data: LeaveTypeUpdate, updated_by: UUID
-    ) -> Optional[LeaveType]:
+    ) -> LeaveType | None:
         """Update leave type."""
         leave_type = await self.get(leave_type_id)
         if not leave_type:
@@ -88,7 +82,7 @@ class LeaveTypeService:
             setattr(leave_type, field, value)
 
         leave_type.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(leave_type)
         return leave_type
 
@@ -99,7 +93,7 @@ class LeaveTypeService:
             return False
 
         leave_type.is_active = False
-        await self.db.commit()
+        await self.db.flush()
         return True
 
 
@@ -111,7 +105,7 @@ class LeaveBalanceService:
 
     async def get_balance(
         self, employee_id: UUID, leave_type_id: UUID, year: int
-    ) -> Optional[LeaveBalance]:
+    ) -> LeaveBalance | None:
         """Get leave balance for employee/type/year."""
         result = await self.db.execute(
             select(LeaveBalance).where(
@@ -122,9 +116,7 @@ class LeaveBalanceService:
         )
         return result.scalar_one_or_none()
 
-    async def get_all_balances(
-        self, employee_id: UUID, year: int
-    ) -> List[LeaveBalance]:
+    async def get_all_balances(self, employee_id: UUID, year: int) -> list[LeaveBalance]:
         """Get all leave balances for employee in a year."""
         result = await self.db.execute(
             select(LeaveBalance)
@@ -136,25 +128,21 @@ class LeaveBalanceService:
         )
         return list(result.scalars().all())
 
-    async def create_or_update(
-        self, data: LeaveBalanceCreate, user_id: UUID
-    ) -> LeaveBalance:
+    async def create_or_update(self, data: LeaveBalanceCreate, user_id: UUID) -> LeaveBalance:
         """Create or update leave balance."""
-        existing = await self.get_balance(
-            data.employee_id, data.leave_type_id, data.year
-        )
+        existing = await self.get_balance(data.employee_id, data.leave_type_id, data.year)
         if existing:
             update_data = data.model_dump(exclude={"employee_id", "leave_type_id", "year"})
             for field, value in update_data.items():
                 setattr(existing, field, value)
             existing.updated_by = user_id
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(existing)
             return existing
         else:
             balance = LeaveBalance(**data.model_dump(), created_by=user_id)
             self.db.add(balance)
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(balance)
             return balance
 
@@ -165,11 +153,11 @@ class LeaveBalanceService:
         balance = await self.get_balance(employee_id, leave_type_id, year)
         if balance:
             balance.used = balance.used + days
-            await self.db.commit()
+            await self.db.flush()
 
     async def initialize_balances(
         self, employee_id: UUID, organization_id: UUID, year: int, user_id: UUID
-    ) -> List[LeaveBalance]:
+    ) -> list[LeaveBalance]:
         """Initialize leave balances for a new year."""
         # Get all active leave types for organization
         result = await self.db.execute(
@@ -195,7 +183,7 @@ class LeaveBalanceService:
                 self.db.add(balance)
                 balances.append(balance)
 
-        await self.db.commit()
+        await self.db.flush()
         return balances
 
 
@@ -229,22 +217,18 @@ class LeaveApplicationService:
         from_date: date,
         to_date: date,
         leave_type: LeaveType,
-    ) -> Tuple[Decimal, Decimal]:
+    ) -> tuple[Decimal, Decimal]:
         """Calculate total days and working days for leave period."""
         total_days = (to_date - from_date).days + 1
 
         # Get employee for week off
-        result = await self.db.execute(
-            select(Employee).where(Employee.id == employee_id)
-        )
+        result = await self.db.execute(select(Employee).where(Employee.id == employee_id))
         employee = result.scalar_one_or_none()
         week_off_days = employee.week_off_days if employee else ["SUNDAY"]
 
         # Get holidays
         holiday_service = HolidayService(self.db)
-        holidays = await holiday_service.get_holidays_between(
-            organization_id, from_date, to_date
-        )
+        holidays = await holiday_service.get_holidays_between(organization_id, from_date, to_date)
         holiday_dates = {h.holiday_date for h in holidays}
 
         # Calculate working days
@@ -265,22 +249,16 @@ class LeaveApplicationService:
 
         return Decimal(str(total_days)), working_days
 
-    async def create(
-        self, data: LeaveApplicationCreate, created_by: UUID
-    ) -> LeaveApplication:
+    async def create(self, data: LeaveApplicationCreate, created_by: UUID) -> LeaveApplication:
         """Create leave application."""
         # Get employee's organization
-        result = await self.db.execute(
-            select(Employee).where(Employee.id == data.employee_id)
-        )
+        result = await self.db.execute(select(Employee).where(Employee.id == data.employee_id))
         employee = result.scalar_one_or_none()
         if not employee:
             raise ValueError("Employee not found")
 
         # Get leave type
-        result = await self.db.execute(
-            select(LeaveType).where(LeaveType.id == data.leave_type_id)
-        )
+        result = await self.db.execute(select(LeaveType).where(LeaveType.id == data.leave_type_id))
         leave_type = result.scalar_one_or_none()
         if not leave_type:
             raise ValueError("Leave type not found")
@@ -312,11 +290,11 @@ class LeaveApplicationService:
             created_by=created_by,
         )
         self.db.add(application)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(application)
         return application
 
-    async def get(self, application_id: UUID) -> Optional[LeaveApplication]:
+    async def get(self, application_id: UUID) -> LeaveApplication | None:
         """Get leave application by ID."""
         result = await self.db.execute(
             select(LeaveApplication)
@@ -333,7 +311,7 @@ class LeaveApplicationService:
         filters: LeaveApplicationFilters,
         skip: int = 0,
         limit: int = 20,
-    ) -> Tuple[List[LeaveApplication], int]:
+    ) -> tuple[list[LeaveApplication], int]:
         """List leave applications with filters."""
         query = select(LeaveApplication).options(
             selectinload(LeaveApplication.employee),
@@ -384,7 +362,7 @@ class LeaveApplicationService:
 
     async def update(
         self, application_id: UUID, data: LeaveApplicationUpdate, updated_by: UUID
-    ) -> Optional[LeaveApplication]:
+    ) -> LeaveApplication | None:
         """Update leave application (only if PENDING)."""
         application = await self.get(application_id)
         if not application:
@@ -414,20 +392,30 @@ class LeaveApplicationService:
             application.working_days = working_days
 
         application.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(application)
         return application
 
     async def approve(
-        self, application_id: UUID, remarks: Optional[str], approved_by: UUID
-    ) -> Optional[LeaveApplication]:
-        """Approve leave application."""
+        self, application_id: UUID, remarks: str | None, approved_by: UUID
+    ) -> LeaveApplication | None:
+        """Approve leave application.
+
+        §8.4 maker-checker: an employee cannot approve their own leave.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         application = await self.get(application_id)
         if not application:
             return None
 
         if application.status != LeaveApplicationStatus.PENDING:
             raise ValueError("Can only approve pending applications")
+
+        ensure_maker_is_not_checker(
+            maker_user_id=application.created_by,
+            checker_user_id=approved_by,
+        )
 
         # Update balance
         balance_service = LeaveBalanceService(self.db)
@@ -444,13 +432,13 @@ class LeaveApplicationService:
         application.approved_at = date.today()
         application.approver_remarks = remarks
         application.updated_by = approved_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(application)
         return application
 
     async def reject(
         self, application_id: UUID, reason: str, rejected_by: UUID
-    ) -> Optional[LeaveApplication]:
+    ) -> LeaveApplication | None:
         """Reject leave application."""
         application = await self.get(application_id)
         if not application:
@@ -464,19 +452,22 @@ class LeaveApplicationService:
         application.rejected_at = date.today()
         application.rejection_reason = reason
         application.updated_by = rejected_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(application)
         return application
 
     async def cancel(
         self, application_id: UUID, reason: str, cancelled_by: UUID
-    ) -> Optional[LeaveApplication]:
+    ) -> LeaveApplication | None:
         """Cancel leave application."""
         application = await self.get(application_id)
         if not application:
             return None
 
-        if application.status not in [LeaveApplicationStatus.PENDING, LeaveApplicationStatus.APPROVED]:
+        if application.status not in [
+            LeaveApplicationStatus.PENDING,
+            LeaveApplicationStatus.APPROVED,
+        ]:
             raise ValueError("Can only cancel pending or approved applications")
 
         # If approved, restore balance
@@ -494,13 +485,13 @@ class LeaveApplicationService:
         application.cancelled_at = date.today()
         application.cancellation_reason = reason
         application.updated_by = cancelled_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(application)
         return application
 
     async def get_pending_for_approval(
         self, manager_id: UUID, skip: int = 0, limit: int = 20
-    ) -> Tuple[List[LeaveApplication], int]:
+    ) -> tuple[builtins.list[LeaveApplication], int]:
         """Get pending leave applications for manager approval."""
         filters = LeaveApplicationFilters(
             reporting_manager_id=manager_id,

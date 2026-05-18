@@ -1,17 +1,34 @@
 /**
- * Customer Portal TypeScript Types
+ * Scheme Portal TypeScript Types
  */
 
 // ==================== User Types ====================
 
 export interface PortalUser {
   id: string;
-  customer_id: string;
+  customer_id?: string;
   mobile: string;
-  email?: string;
-  full_name: string;
-  is_verified: boolean;
-  preferred_language: string;
+  email?: string | null;
+  full_name?: string;
+  fullName?: string;
+  display_name?: string;
+  displayName?: string;
+  actor_role?: string;
+  actorRole?: string;
+  organization_id?: string;
+  organizationId?: string;
+  linked_entities?: { id: string; legal_name?: string }[];
+  linkedEntities?: { id: string; legalName: string }[];
+  is_verified?: boolean;
+  is_2fa_enabled?: boolean;
+  is2faEnabled?: boolean;
+  password_login_enabled?: boolean;
+  passwordLoginEnabled?: boolean;
+  invite_pending?: boolean;
+  invitePending?: boolean;
+  activated_at?: string | null;
+  activatedAt?: string | null;
+  preferred_language?: string;
   last_login?: string;
 }
 
@@ -52,7 +69,7 @@ export interface LoanDetail extends LoanSummary {
   borrower_name: string;
   co_borrowers?: string[];
   property_address?: string;
-  collateral_details?: any;
+  collateral_details?: Record<string, unknown>;
   emi_start_date: string;
   emi_end_date: string;
   total_paid: number;
@@ -211,7 +228,12 @@ export type ServiceRequestType =
   | 'GENERAL_QUERY'
   | 'COMPLAINT';
 
-export type ServiceRequestStatus = 'PENDING' | 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'CANCELLED';
+export type ServiceRequestStatus =
+  | 'PENDING'
+  | 'IN_PROGRESS'
+  | 'COMPLETED'
+  | 'REJECTED'
+  | 'CANCELLED';
 
 export interface ServiceRequest {
   id: string;

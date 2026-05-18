@@ -2,7 +2,7 @@
  * Text/Markdown Widget - displays static text or markdown content
  */
 
-import { TextMarkdownConfig } from '@/types/bi';
+import type { TextMarkdownConfig } from '@/types/bi';
 
 interface TextMarkdownWidgetProps {
   config: TextMarkdownConfig;

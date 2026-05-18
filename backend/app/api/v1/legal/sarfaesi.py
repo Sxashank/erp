@@ -2,22 +2,22 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, Query, status
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user, RequirePermissions
+from app.api.deps import RequirePermissions, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.legal.enums import (
-    SARFAESIStage,
-    PossessionType,
     AuctionStatus,
+    PossessionType,
     PropertyType,
+    SARFAESIStage,
 )
 from app.services.legal.sarfaesi_service import SARFAESIService
+from app.core.exceptions import NotFoundException
 
 router = APIRouter(prefix="/sarfaesi", tags=["SARFAESI"])
 
@@ -35,12 +35,12 @@ class SARFAESIInitiateRequest(BaseModel):
     total_outstanding: Decimal
     principal_outstanding: Decimal
     interest_outstanding: Decimal
-    other_charges: Optional[Decimal] = None
+    other_charges: Decimal | None = None
     npa_date: date
-    security_details: Optional[str] = None
-    property_description: Optional[str] = None
-    property_address: Optional[str] = None
-    property_value: Optional[Decimal] = None
+    security_details: str | None = None
+    property_description: str | None = None
+    property_address: str | None = None
+    property_value: Decimal | None = None
 
 
 class SARFAESICaseResponse(BaseModel):
@@ -53,10 +53,10 @@ class SARFAESICaseResponse(BaseModel):
     current_stage: str
     total_outstanding: float
     npa_date: date
-    demand_notice_date: Optional[date] = None
-    demand_notice_expiry: Optional[date] = None
-    possession_date: Optional[date] = None
-    possession_type: Optional[str] = None
+    demand_notice_date: date | None = None
+    demand_notice_expiry: date | None = None
+    possession_date: date | None = None
+    possession_type: str | None = None
     auction_scheduled: bool
     sale_completed: bool
     total_recovered: float
@@ -70,8 +70,8 @@ class ObjectionRequest(BaseModel):
 
     objection_date: date
     objection_content: str
-    objection_grounds: Optional[List[str]] = None
-    document_ids: Optional[List[UUID]] = None
+    objection_grounds: list[str] | None = None
+    document_ids: list[UUID] | None = None
 
 
 class ObjectionResponse(BaseModel):
@@ -81,8 +81,8 @@ class ObjectionResponse(BaseModel):
     legal_case_id: UUID
     objection_date: date
     objection_content: str
-    response_date: Optional[date] = None
-    response_content: Optional[str] = None
+    response_date: date | None = None
+    response_content: str | None = None
     is_resolved: bool
 
     class Config:
@@ -97,12 +97,12 @@ class PossessionRequest(BaseModel):
     property_type: PropertyType
     property_address: str
     property_description: str
-    property_area: Optional[str] = None
+    property_area: str | None = None
     property_value: Decimal
-    panchnama_document_id: Optional[UUID] = None
-    inventory_document_id: Optional[UUID] = None
-    cersai_registration_number: Optional[str] = None
-    remarks: Optional[str] = None
+    panchnama_document_id: UUID | None = None
+    inventory_document_id: UUID | None = None
+    cersai_registration_number: str | None = None
+    remarks: str | None = None
 
 
 class PossessionResponse(BaseModel):
@@ -116,7 +116,7 @@ class PossessionResponse(BaseModel):
     property_address: str
     property_value: float
     is_possession_notice_published: bool
-    cersai_registration_number: Optional[str] = None
+    cersai_registration_number: str | None = None
 
     class Config:
         from_attributes = True
@@ -129,12 +129,12 @@ class AuctionScheduleRequest(BaseModel):
     reserve_price: Decimal
     earnest_money_deposit: Decimal
     bid_increment: Decimal
-    auction_venue: Optional[str] = None
+    auction_venue: str | None = None
     auction_type: str = "E_AUCTION"  # E_AUCTION, PHYSICAL
-    e_auction_portal: Optional[str] = None
-    publication_date: Optional[date] = None
-    publication_newspaper: Optional[str] = None
-    terms_and_conditions: Optional[str] = None
+    e_auction_portal: str | None = None
+    publication_date: date | None = None
+    publication_newspaper: str | None = None
+    terms_and_conditions: str | None = None
 
 
 class AuctionResponse(BaseModel):
@@ -145,13 +145,13 @@ class AuctionResponse(BaseModel):
     auction_number: str
     auction_date: date
     reserve_price: float
-    highest_bid: Optional[float] = None
-    winning_bidder_name: Optional[str] = None
+    highest_bid: float | None = None
+    winning_bidder_name: str | None = None
     auction_status: str
     is_notice_published: bool
-    publication_date: Optional[date] = None
+    publication_date: date | None = None
     sale_confirmed: bool
-    sale_price: Optional[float] = None
+    sale_price: float | None = None
 
     class Config:
         from_attributes = True
@@ -161,14 +161,14 @@ class BidRecordRequest(BaseModel):
     """Record bid request."""
 
     bidder_name: str
-    bidder_pan: Optional[str] = None
-    bidder_address: Optional[str] = None
-    bidder_phone: Optional[str] = None
+    bidder_pan: str | None = None
+    bidder_address: str | None = None
+    bidder_phone: str | None = None
     bid_amount: Decimal
-    bid_time: Optional[str] = None
+    bid_time: str | None = None
     emd_received: bool = False
-    emd_amount: Optional[Decimal] = None
-    emd_reference: Optional[str] = None
+    emd_amount: Decimal | None = None
+    emd_reference: str | None = None
 
 
 class SaleConfirmRequest(BaseModel):
@@ -177,13 +177,13 @@ class SaleConfirmRequest(BaseModel):
     sale_price: Decimal
     sale_date: date
     buyer_name: str
-    buyer_pan: Optional[str] = None
-    buyer_address: Optional[str] = None
+    buyer_pan: str | None = None
+    buyer_address: str | None = None
     payment_received: Decimal
     payment_date: date
     payment_reference: str
-    sale_certificate_date: Optional[date] = None
-    remarks: Optional[str] = None
+    sale_certificate_date: date | None = None
+    remarks: str | None = None
 
 
 class TimelineResponse(BaseModel):
@@ -192,16 +192,16 @@ class TimelineResponse(BaseModel):
     stage: str
     stage_name: str
     target_date: date
-    actual_date: Optional[date] = None
+    actual_date: date | None = None
     status: str  # COMPLETED, CURRENT, PENDING, OVERDUE
-    days_remaining: Optional[int] = None
-    remarks: Optional[str] = None
+    days_remaining: int | None = None
+    remarks: str | None = None
 
 
 class PaginatedResponse(BaseModel):
     """Paginated list response."""
 
-    items: List
+    items: list
     total: int
     page: int
     page_size: int
@@ -215,15 +215,15 @@ class PaginatedResponse(BaseModel):
 
 @router.post(
     "/initiate",
-    response_model=SARFAESICaseResponse,
+    response_model=SARFAESICaseResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Initiate SARFAESI Proceedings",
 )
 async def initiate_sarfaesi(
-    organization_id: UUID,
     request: SARFAESIInitiateRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.create")),
+    organization_id: UUID | None = Query(None),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """
     Initiate SARFAESI proceedings for an NPA account.
@@ -235,7 +235,7 @@ async def initiate_sarfaesi(
     """
     service = SARFAESIService(db)
     result = await service.initiate_sarfaesi(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         created_by=current_user.id,
         **request.model_dump(),
     )
@@ -245,23 +245,23 @@ async def initiate_sarfaesi(
 
 @router.get(
     "",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="List SARFAESI Cases",
 )
 async def list_sarfaesi_cases(
-    organization_id: UUID,
-    stage: Optional[SARFAESIStage] = None,
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
+    organization_id: UUID | None = Query(None),
+    stage: SARFAESIStage | None = None,
+    from_date: date | None = None,
+    to_date: date | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """List SARFAESI cases with filtering."""
     service = SARFAESIService(db)
     items, total = await service.list_sarfaesi_cases(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         stage=stage,
         from_date=from_date,
         to_date=to_date,
@@ -279,22 +279,19 @@ async def list_sarfaesi_cases(
 
 @router.get(
     "/{case_id}",
-    response_model=SARFAESICaseResponse,
+    response_model=SARFAESICaseResponse, response_model_by_alias=True,
     summary="Get SARFAESI Case",
 )
 async def get_sarfaesi_case(
     case_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get SARFAESI case details."""
     service = SARFAESIService(db)
     case = await service.get_sarfaesi_case(case_id)
     if not case:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="SARFAESI case not found",
-        )
+        raise NotFoundException(detail="SARFAESI case not found", error_code="SARFAESI_CASE_NOT_FOUND")
     return case
 
 
@@ -305,15 +302,15 @@ async def get_sarfaesi_case(
 
 @router.post(
     "/{case_id}/objection",
-    response_model=ObjectionResponse,
+    response_model=ObjectionResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Record Borrower Objection",
 )
 async def record_objection(
     case_id: UUID,
     request: ObjectionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """
     Record borrower's objection under Section 13(3A).
@@ -332,15 +329,15 @@ async def record_objection(
 
 @router.post(
     "/{case_id}/objection-response",
-    response_model=ObjectionResponse,
+    response_model=ObjectionResponse, response_model_by_alias=True,
     summary="Respond to Objection",
 )
 async def respond_to_objection(
     case_id: UUID,
     response_content: str,
-    response_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    response_date: date | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Record bank's response to borrower objection."""
     service = SARFAESIService(db)
@@ -351,10 +348,7 @@ async def respond_to_objection(
         responded_by=current_user.id,
     )
     if not objection:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Objection not found",
-        )
+        raise NotFoundException(detail="Objection not found", error_code="OBJECTION_NOT_FOUND")
     await db.commit()
     return objection
 
@@ -366,15 +360,15 @@ async def respond_to_objection(
 
 @router.post(
     "/{case_id}/possession",
-    response_model=PossessionResponse,
+    response_model=PossessionResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Take Possession Under 13(4)",
 )
 async def take_possession(
     case_id: UUID,
     request: PossessionRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """
     Record possession taken under Section 13(4).
@@ -394,21 +388,21 @@ async def take_possession(
 
 @router.get(
     "/{case_id}/possession",
-    response_model=PossessionResponse,
+    response_model=PossessionResponse, response_model_by_alias=True,
     summary="Get Possession Details",
 )
 async def get_possession_details(
     case_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get possession details for a SARFAESI case."""
     service = SARFAESIService(db)
     possession = await service.get_possession_details(case_id)
     if not possession:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Possession record not found",
+            error_code="POSSESSION_RECORD_NOT_FOUND",
         )
     return possession
 
@@ -420,15 +414,15 @@ async def get_possession_details(
 
 @router.post(
     "/{case_id}/auction",
-    response_model=AuctionResponse,
+    response_model=AuctionResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Schedule Property Auction",
 )
 async def schedule_auction(
     case_id: UUID,
     request: AuctionScheduleRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """
     Schedule property auction under Rule 8 & 9.
@@ -447,13 +441,13 @@ async def schedule_auction(
 
 @router.get(
     "/{case_id}/auctions",
-    response_model=List[AuctionResponse],
+    response_model=list[AuctionResponse], response_model_by_alias=True,
     summary="Get Case Auctions",
 )
 async def get_case_auctions(
     case_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get all auctions for a SARFAESI case."""
     service = SARFAESIService(db)
@@ -468,8 +462,8 @@ async def get_case_auctions(
 async def record_bid(
     auction_id: UUID,
     request: BidRecordRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Record a bid in the auction."""
     service = SARFAESIService(db)
@@ -484,15 +478,15 @@ async def record_bid(
 
 @router.put(
     "/auctions/{auction_id}/status",
-    response_model=AuctionResponse,
+    response_model=AuctionResponse, response_model_by_alias=True,
     summary="Update Auction Status",
 )
 async def update_auction_status(
     auction_id: UUID,
     auction_status: AuctionStatus,
-    remarks: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    remarks: str | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """Update auction status (CANCELLED, POSTPONED, etc.)."""
     service = SARFAESIService(db)
@@ -503,10 +497,7 @@ async def update_auction_status(
         updated_by=current_user.id,
     )
     if not auction:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Auction not found",
-        )
+        raise NotFoundException(detail="Auction not found", error_code="AUCTION_NOT_FOUND")
     await db.commit()
     return auction
 
@@ -518,14 +509,14 @@ async def update_auction_status(
 
 @router.post(
     "/auctions/{auction_id}/sale",
-    response_model=AuctionResponse,
+    response_model=AuctionResponse, response_model_by_alias=True,
     summary="Confirm Sale",
 )
 async def confirm_sale(
     auction_id: UUID,
     request: SaleConfirmRequest,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.update")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_UPDATE")),
 ):
     """
     Confirm sale after successful auction.
@@ -549,13 +540,13 @@ async def confirm_sale(
 
 @router.get(
     "/{case_id}/timeline",
-    response_model=List[TimelineResponse],
+    response_model=list[TimelineResponse], response_model_by_alias=True,
     summary="Get SARFAESI Timeline",
 )
 async def get_sarfaesi_timeline(
     case_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """
     Get complete SARFAESI timeline with statutory deadlines.
@@ -569,20 +560,20 @@ async def get_sarfaesi_timeline(
 
 @router.get(
     "/pending-actions",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Pending SARFAESI Actions",
 )
 async def get_pending_actions(
-    organization_id: UUID,
+    organization_id: UUID | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get cases with pending statutory actions."""
     service = SARFAESIService(db)
     items, total = await service.get_pending_actions(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         page=page,
         page_size=page_size,
     )
@@ -597,19 +588,19 @@ async def get_pending_actions(
 
 @router.get(
     "/upcoming-auctions",
-    response_model=List[AuctionResponse],
+    response_model=list[AuctionResponse], response_model_by_alias=True,
     summary="Get Upcoming Auctions",
 )
 async def get_upcoming_auctions(
-    organization_id: UUID,
+    organization_id: UUID | None = Query(None),
     days: int = Query(30, ge=1, le=90),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(RequirePermissions("legal.sarfaesi.read")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions("LMS_COLLECTION_VIEW")),
 ):
     """Get auctions scheduled in the next N days."""
     service = SARFAESIService(db)
     auctions = await service.get_upcoming_auctions(
-        organization_id=organization_id,
+        organization_id=(organization_id or current_user.organization_id),
         days=days,
     )
     return [AuctionResponse.model_validate(a) for a in auctions]

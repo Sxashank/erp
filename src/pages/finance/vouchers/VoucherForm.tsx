@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, Plus, Save, Trash2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -23,6 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
+import { logger } from "@/lib/logger";
 import {
   vouchersApi,
   voucherTypesApi,
@@ -80,25 +82,6 @@ export function VoucherForm() {
   const [isBalanced, setIsBalanced] = useState(true);
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (isEdit && id) {
-      fetchVoucher(id);
-    }
-  }, [id, isEdit]);
-
-  useEffect(() => {
-    if (selectedOrg) {
-      fetchVoucherTypes();
-      fetchFinancialYears();
-      fetchAccounts();
-      fetchUnits();
-    }
-  }, [selectedOrg]);
-
-  useEffect(() => {
     const debit = lines.reduce((sum, line) => sum + (line.debit_amount || 0), 0);
     const credit = lines.reduce((sum, line) => sum + (line.credit_amount || 0), 0);
     setTotalDebit(debit);
@@ -106,7 +89,7 @@ export function VoucherForm() {
     setIsBalanced(Math.abs(debit - credit) < 0.01);
   }, [lines]);
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
@@ -115,36 +98,39 @@ export function VoucherForm() {
         setSelectedOrg(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, [isEdit]);
 
-  const fetchUnits = async () => {
+  const fetchUnits = useCallback(async () => {
     if (!selectedOrg) return;
     try {
       const response = await unitsApi.list({ organization_id: selectedOrg, page_size: 100 });
       const data: PaginatedResponse<Unit> = response.data;
       setUnits(data.items);
     } catch (error) {
-      console.error('Failed to fetch units:', error);
+      logger.error('Failed to fetch units:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const fetchVoucherTypes = async () => {
+  const fetchVoucherTypes = useCallback(async () => {
     if (!selectedOrg) return;
     try {
       const response = await voucherTypesApi.list({ organization_id: selectedOrg, page_size: 100 });
       const data: PaginatedResponse<VoucherType> = response.data;
       setVoucherTypes(data.items);
     } catch (error) {
-      console.error('Failed to fetch voucher types:', error);
+      logger.error('Failed to fetch voucher types:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const fetchFinancialYears = async () => {
+  const fetchFinancialYears = useCallback(async () => {
     if (!selectedOrg) return;
     try {
-      const response = await financialYearsApi.list({ organization_id: selectedOrg, page_size: 100 });
+      const response = await financialYearsApi.list({
+        organization_id: selectedOrg,
+        page_size: 100,
+      });
       const data: PaginatedResponse<FinancialYear> = response.data;
       setFinancialYears(data.items);
       // Set current financial year as default
@@ -153,11 +139,11 @@ export function VoucherForm() {
         setFinancialYearId(currentFY.id);
       }
     } catch (error) {
-      console.error('Failed to fetch financial years:', error);
+      logger.error('Failed to fetch financial years:', error);
     }
-  };
+  }, [isEdit, selectedOrg]);
 
-  const fetchAccounts = async () => {
+  const fetchAccounts = useCallback(async () => {
     if (!selectedOrg) return;
     try {
       // Fetch all accounts by paginating (backend limits to 100 per page)
@@ -179,11 +165,11 @@ export function VoucherForm() {
 
       setAccounts(allAccounts);
     } catch (error) {
-      console.error('Failed to fetch accounts:', error);
+      logger.error('Failed to fetch accounts:', error);
     }
-  };
+  }, [selectedOrg]);
 
-  const fetchVoucher = async (voucherId: string) => {
+  const fetchVoucher = useCallback(async (voucherId: string) => {
     try {
       setLoading(true);
       const response = await vouchersApi.get(voucherId);
@@ -215,15 +201,34 @@ export function VoucherForm() {
             reference_number: line.reference_number,
             cheque_number: line.cheque_number,
             cheque_date: line.cheque_date,
-          }))
+          })),
         );
       }
     } catch (error) {
-      console.error('Failed to fetch voucher:', error);
+      logger.error('Failed to fetch voucher:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (isEdit && id) {
+      fetchVoucher(id);
+    }
+  }, [fetchVoucher, id, isEdit]);
+
+  useEffect(() => {
+    if (selectedOrg) {
+      fetchVoucherTypes();
+      fetchFinancialYears();
+      fetchAccounts();
+      fetchUnits();
+    }
+  }, [fetchAccounts, fetchFinancialYears, fetchUnits, fetchVoucherTypes, selectedOrg]);
 
   const handleAddLine = () => {
     setLines([...lines, { account_id: '', debit_amount: 0, credit_amount: 0, narration: '' }]);
@@ -234,13 +239,9 @@ export function VoucherForm() {
     setLines(lines.filter((_, i) => i !== index));
   };
 
-  const handleLineChange = (
-    index: number,
-    field: keyof VoucherLineRow,
-    value: string | number
-  ) => {
+  const handleLineChange = (index: number, field: keyof VoucherLineRow, value: string | number) => {
     const newLines = [...lines];
-    (newLines[index] as any)[field] = value;
+    newLines[index] = { ...newLines[index], [field]: value };
 
     // Update account info when account is selected
     if (field === 'account_id') {
@@ -267,7 +268,9 @@ export function VoucherForm() {
       return;
     }
 
-    if (lines.filter((l) => l.account_id && (l.debit_amount > 0 || l.credit_amount > 0)).length < 2) {
+    if (
+      lines.filter((l) => l.account_id && (l.debit_amount > 0 || l.credit_amount > 0)).length < 2
+    ) {
       alert('Please enter at least two valid lines.');
       return;
     }
@@ -302,7 +305,7 @@ export function VoucherForm() {
 
       navigate('/admin/finance/vouchers');
     } catch (error) {
-      console.error('Failed to save voucher:', error);
+      logger.error('Failed to save voucher:', error);
     } finally {
       setSubmitting(false);
     }
@@ -326,19 +329,14 @@ export function VoucherForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/vouchers')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Voucher' : 'New Voucher'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {isEdit ? 'Update voucher details' : 'Create a new accounting voucher'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Voucher' : 'New Voucher'}
+        subtitle={isEdit ? 'Update voucher details' : 'Create a new accounting voucher'}
+        breadcrumbs={[
+          { label: 'Vouchers', to: '/admin/finance/vouchers' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <div className="space-y-6">
         <Card>
@@ -365,7 +363,11 @@ export function VoucherForm() {
               </div>
               <div className="space-y-2">
                 <Label>Voucher Type *</Label>
-                <Select value={voucherTypeId} onValueChange={setVoucherTypeId} disabled={!selectedOrg || isEdit}>
+                <Select
+                  value={voucherTypeId}
+                  onValueChange={setVoucherTypeId}
+                  disabled={!selectedOrg || isEdit}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select voucher type" />
                   </SelectTrigger>
@@ -380,7 +382,11 @@ export function VoucherForm() {
               </div>
               <div className="space-y-2">
                 <Label>Financial Year *</Label>
-                <Select value={financialYearId} onValueChange={setFinancialYearId} disabled={!selectedOrg}>
+                <Select
+                  value={financialYearId}
+                  onValueChange={setFinancialYearId}
+                  disabled={!selectedOrg}
+                >
                   <SelectTrigger>
                     <SelectValue placeholder="Select financial year" />
                   </SelectTrigger>
@@ -566,7 +572,11 @@ export function VoucherForm() {
         </Card>
 
         <div className="flex items-center justify-end gap-4">
-          <Button type="button" variant="outline" onClick={() => navigate('/admin/finance/vouchers')}>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => navigate('/admin/finance/vouchers')}
+          >
             Cancel
           </Button>
           <Button onClick={onSubmit} disabled={submitting || !isBalanced}>

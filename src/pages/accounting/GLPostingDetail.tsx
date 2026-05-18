@@ -1,11 +1,21 @@
-import { useState } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+import {
+  Edit,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Download,
+  Printer,
+  User,
+  FileText,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
 import {
   Table,
   TableBody,
@@ -14,21 +24,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  ArrowLeft,
-  BookOpen,
-  Edit,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Download,
-  Printer,
-  User,
-  Calendar,
-  FileText,
-  Send,
-} from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { vouchersApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
@@ -37,95 +36,119 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-// Mock posting detail
-const postingDetail = {
-  id: '1',
-  postingId: 'GLP2025010001',
-  description: 'Interest Accrual - January 2025',
-  postingDate: '2025-01-15',
-  period: 'Jan 2025',
-  reference: 'REF/INT/2025/001',
-  narration: 'Monthly interest accrual for all active loan accounts as per system calculation. This includes accrued interest on business loans, vehicle loans, and gold loans.',
-  status: 'POSTED',
-  createdBy: 'Finance Team',
-  createdAt: '2025-01-15 10:30:00',
-  approvedBy: 'CFO',
-  approvedAt: '2025-01-15 14:00:00',
-  postedAt: '2025-01-15 14:05:00',
+interface PostingDetail {
+  id: string;
+  postingId: string;
+  description: string;
+  postingDate: string;
+  period: string;
+  reference?: string | null;
+  narration?: string | null;
+  status: string;
+  createdBy: string;
+  createdAt: string;
+  approvedBy?: string | null;
+  approvedAt?: string | null;
+  postedAt?: string | null;
+  entries: {
+    id: string;
+    accountCode: string;
+    accountName: string;
+    description?: string | null;
+    costCenter?: string | null;
+    debit: number;
+    credit: number;
+  }[];
+  history: { action: string; by: string; at: string; remarks?: string | null }[];
+}
 
-  entries: [
-    {
-      id: '1',
-      accountCode: '1007',
-      accountName: 'Interest Receivable - Business Loans',
-      description: 'Interest accrual for business loans',
-      costCenter: 'Head Office',
-      debit: 580000,
-      credit: 0,
-    },
-    {
-      id: '2',
-      accountCode: '1008',
-      accountName: 'Interest Receivable - Vehicle Loans',
-      description: 'Interest accrual for vehicle loans',
-      costCenter: 'Head Office',
-      debit: 420000,
-      credit: 0,
-    },
-    {
-      id: '3',
-      accountCode: '1009',
-      accountName: 'Interest Receivable - Gold Loans',
-      description: 'Interest accrual for gold loans',
-      costCenter: 'Head Office',
-      debit: 250000,
-      credit: 0,
-    },
-    {
-      id: '4',
-      accountCode: '3001',
-      accountName: 'Interest Income - Business Loans',
-      description: 'Interest income recognition',
-      costCenter: 'Head Office',
-      debit: 0,
-      credit: 580000,
-    },
-    {
-      id: '5',
-      accountCode: '3002',
-      accountName: 'Interest Income - Vehicle Loans',
-      description: 'Interest income recognition',
-      costCenter: 'Head Office',
-      debit: 0,
-      credit: 420000,
-    },
-    {
-      id: '6',
-      accountCode: '3003',
-      accountName: 'Interest Income - Gold Loans',
-      description: 'Interest income recognition',
-      costCenter: 'Head Office',
-      debit: 0,
-      credit: 250000,
-    },
-  ],
+interface VoucherLineDto {
+  id: string;
+  account_code?: string | null;
+  account_name?: string | null;
+  narration?: string | null;
+  cost_center_id?: string | null;
+  debit_amount?: number | string | null;
+  credit_amount?: number | string | null;
+}
 
-  history: [
-    { action: 'POSTED', by: 'System', at: '2025-01-15 14:05:00', remarks: 'Auto-posted after approval' },
-    { action: 'APPROVED', by: 'CFO', at: '2025-01-15 14:00:00', remarks: 'Verified and approved' },
-    { action: 'SUBMITTED', by: 'Finance Team', at: '2025-01-15 10:35:00', remarks: 'Submitted for approval' },
-    { action: 'CREATED', by: 'Finance Team', at: '2025-01-15 10:30:00', remarks: 'Initial creation' },
-  ],
-};
+interface VoucherDetailDto {
+  id: string;
+  voucher_number?: string | null;
+  narration?: string | null;
+  voucher_type_name?: string | null;
+  voucher_date?: string | null;
+  financial_year_code?: string | null;
+  reference_number?: string | null;
+  status?: string | null;
+  created_by?: string | null;
+  created_at?: string | null;
+  updated_by?: string | null;
+  updated_at?: string | null;
+  approved_at?: string | null;
+  posted_at?: string | null;
+  lines?: VoucherLineDto[];
+}
 
 export default function GLPostingDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [showApprovalForm, setShowApprovalForm] = useState(false);
   const [approvalRemarks, setApprovalRemarks] = useState('');
+  const [postingDetail, setPostingDetail] = useState<PostingDetail | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const totalDebit = postingDetail.entries.reduce((sum, e) => sum + e.debit, 0);
-  const totalCredit = postingDetail.entries.reduce((sum, e) => sum + e.credit, 0);
+  const mapVoucher = (voucher: VoucherDetailDto): PostingDetail => ({
+    id: voucher.id,
+    postingId: voucher.voucher_number || '-',
+    description: voucher.narration || voucher.voucher_type_name || 'Voucher posting',
+    postingDate: voucher.voucher_date || '-',
+    period: voucher.financial_year_code || '-',
+    reference: voucher.reference_number || null,
+    narration: voucher.narration || null,
+    status: voucher.status || 'DRAFT',
+    createdBy: voucher.created_by || '-',
+    createdAt: voucher.created_at || '-',
+    approvedBy: voucher.approved_at ? 'Approver' : null,
+    approvedAt: voucher.approved_at || null,
+    postedAt: voucher.posted_at || null,
+    entries: (voucher.lines || []).map((line) => ({
+      id: line.id,
+      accountCode: line.account_code || '-',
+      accountName: line.account_name || '-',
+      description: line.narration || null,
+      costCenter: line.cost_center_id || '-',
+      debit: Number(line.debit_amount || 0),
+      credit: Number(line.credit_amount || 0),
+    })),
+    history: [
+      {
+        action: voucher.status || 'DRAFT',
+        by: voucher.updated_by || voucher.created_by || '-',
+        at: voucher.updated_at || voucher.created_at || '-',
+      },
+    ],
+  });
+
+  useEffect(() => {
+    const loadPosting = async () => {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const response = await vouchersApi.get(id);
+        setPostingDetail(mapVoucher(response.data as VoucherDetailDto));
+      } catch (error) {
+        logger.error('Failed to load GL posting detail:', error);
+        setPostingDetail(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadPosting();
+  }, [id]);
+
+  const totalDebit = postingDetail?.entries.reduce((sum, e) => sum + e.debit, 0) || 0;
+  const totalCredit = postingDetail?.entries.reduce((sum, e) => sum + e.credit, 0) || 0;
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -142,15 +165,26 @@ export default function GLPostingDetail() {
     }
   };
 
-  const handleApprove = () => {
-    // Handle approval
+  const handleApprove = async () => {
+    if (!postingDetail) return;
+    await vouchersApi.approve(postingDetail.id, approvalRemarks);
+    await vouchersApi.post(postingDetail.id);
     navigate('/admin/accounting/gl-postings');
   };
 
-  const handleReject = () => {
-    // Handle rejection
+  const handleReject = async () => {
+    if (!postingDetail) return;
+    await vouchersApi.reject(postingDetail.id, approvalRemarks || 'Rejected during approval review');
     navigate('/admin/accounting/gl-postings');
   };
+
+  if (loading) {
+    return <div className="container mx-auto py-6 text-muted-foreground">Loading GL posting...</div>;
+  }
+
+  if (!postingDetail) {
+    return <div className="container mx-auto py-6 text-muted-foreground">GL posting not found.</div>;
+  }
 
   return (
     <div className="container mx-auto py-6 space-y-6">

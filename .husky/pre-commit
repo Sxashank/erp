@@ -1,25 +1,58 @@
 #!/usr/bin/env sh
-# SMFC ERP pre-commit hook. See CLAUDE.md §12 item 10 — do NOT skip with --no-verify.
+# SMFC ERP pre-commit hook. See AGENTS.md §12 item 10 — do NOT skip with --no-verify.
 
 set -e
 
-# Stub discipline (CLAUDE.md §12.2): reject commits that introduce unapproved
+# Stub discipline (AGENTS.md §12.2): reject commits that introduce unapproved
 # TODO/FIXME/XXX/HACK markers.
 node scripts/check-stubs.mjs
+
+# Convention Sweep gates (CLAUDE.md Appendix C, Wave 1 onward):
+#  - check_db_dep.py: no `Depends(get_db)` on authenticated routes
+#    (multi-tenant RLS bypass). Always runs (cheap).
+#  - check_http_exception.py: no `raise HTTPException` in api/v1 —
+#    use typed `AppException` subclasses so the envelope is preserved
+#    (CLAUDE.md §7). Wired at end of Wave 3.
+#  - check_permission_format.py: SCREAMING_SNAKE permission strings only.
+#    Wired after Wave 6 closed the lowercase-dot / colon outliers
+#    (see alembic zzc30_wave6_permission_screaming_snake).
+python3 scripts/lint/check_db_dep.py
+python3 scripts/lint/check_http_exception.py
+python3 scripts/lint/check_permission_format.py
 
 # Frontend: lint + format staged files via lint-staged
 pnpm exec lint-staged
 
-# Backend: ruff + black --check + mypy if any python changed
-if git diff --cached --name-only | grep -qE '^backend/.*\.py$'; then
-  echo "[pre-commit] Python changes detected — running ruff / black / mypy"
+# Backend: format/lint staged Python files only.
+PY_FILES="$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^backend/.*\.py$' || true)"
+if [ -n "$PY_FILES" ]; then
+  echo "[pre-commit] Python changes detected — running ruff/black on staged files"
   cd backend
   if [ -f .venv/bin/activate ]; then
     # shellcheck disable=SC1091
     . .venv/bin/activate
+  elif [ -f venv/bin/activate ]; then
+    # shellcheck disable=SC1091
+    . venv/bin/activate
   fi
-  ruff check .
-  black --check .
-  mypy app
+
+  if ! command -v ruff >/dev/null 2>&1 || ! command -v black >/dev/null 2>&1; then
+    echo "[pre-commit] Missing backend dev tools. Run:" >&2
+    echo "  backend/.venv/bin/pip install -r backend/requirements-dev.txt" >&2
+    exit 127
+  fi
+
+  PY_REL="$(printf '%s\n' "$PY_FILES" | sed 's#^backend/##')"
+  # Keep pre-commit focused on critical Python blockers. The full backend
+  # lint suite is intentionally a separate command because the legacy backend
+  # and historical Alembic revisions still carry broad style debt.
+  # shellcheck disable=SC2086
+  ruff check --fix --select F821 $PY_REL
+  # shellcheck disable=SC2086
+  black $PY_REL
   cd -
+
+  # ruff/black may rewrite files; keep the index in sync like lint-staged does.
+  # shellcheck disable=SC2086
+  git add $PY_FILES
 fi

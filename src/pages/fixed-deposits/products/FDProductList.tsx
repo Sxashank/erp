@@ -2,13 +2,15 @@
  * FD Product List Page
  */
 
+import { Plus, Edit, Trash2, Search, Percent } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Search, Percent } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -17,11 +19,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import fixedDepositService, { FDProduct } from '@/services/fixedDepositService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { FDProduct } from '@/services/fixedDepositService';
+import fixedDepositService from '@/services/fixedDepositService';
 
 export default function FDProductList() {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ export default function FDProductList() {
 
   useEffect(() => {
     loadProducts();
-  }, []);
+  }, [organizationId]);
 
   const loadProducts = async () => {
     try {

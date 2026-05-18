@@ -23,8 +23,8 @@
  * `.stubs-approved.md` so it can't accumulate silently.
  */
 
-import { expect, type Page } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { expect, type Page } from '@playwright/test';
 
 export interface AxeRunOptions {
   /** Run only against a specific DOM tree. Defaults to whole page. */
@@ -40,7 +40,7 @@ export interface AxeRunOptions {
    * Default is ['critical', 'serious']; tests that need to be stricter can
    * pass ['critical', 'serious', 'moderate'].
    */
-  failOnImpact?: Array<'critical' | 'serious' | 'moderate' | 'minor'>;
+  failOnImpact?: ('critical' | 'serious' | 'moderate' | 'minor')[];
 }
 
 const DEFAULT_FAIL_IMPACT: NonNullable<AxeRunOptions['failOnImpact']> = [

@@ -86,7 +86,7 @@ class FolderService:
         )
 
         self.db.add(folder)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(folder)
 
         return folder
@@ -239,7 +239,7 @@ class FolderService:
 
         folder.updated_by = updated_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(folder)
 
         return folder
@@ -289,7 +289,7 @@ class FolderService:
         # Update paths
         await self._update_folder_path(folder)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(folder)
 
         return folder
@@ -321,7 +321,7 @@ class FolderService:
 
         # Soft delete folder
         folder.soft_delete(deleted_by)
-        await self.db.commit()
+        await self.db.flush()
 
         return True
 
@@ -349,7 +349,7 @@ class FolderService:
         folder = await self.get_folder(folder_id)
         if folder:
             folder.document_count = max(0, folder.document_count + delta)
-            await self.db.commit()
+            await self.db.flush()
 
     async def grant_access(
         self,
@@ -380,7 +380,7 @@ class FolderService:
             created_by=granted_by,
         )
         self.db.add(access)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(access)
         return access
 
@@ -404,6 +404,6 @@ class FolderService:
 
         if access:
             await self.db.delete(access)
-            await self.db.commit()
+            await self.db.flush()
             return True
         return False

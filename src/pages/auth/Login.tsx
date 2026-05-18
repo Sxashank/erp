@@ -1,12 +1,7 @@
+import { Building2, KeyRound, Loader2, LockKeyhole } from 'lucide-react';
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import {
-  Building2,
-  KeyRound,
-  Loader2,
-  LockKeyhole,
-} from 'lucide-react';
+import { useNavigate, Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -95,22 +90,18 @@ export function Login() {
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-sm font-semibold">User Administration</p>
-                <p className="text-sm text-slate-500">
-                  User accounts, Roles, Permissions
-                </p>
+                <p className="text-sm text-slate-500">User accounts, Roles, Permissions</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <p className="text-sm font-semibold">Security Features</p>
-                <p className="text-sm text-slate-500">
-                  MFA, Role-based access, Audit logging
-                </p>
+                <p className="text-sm text-slate-500">MFA, Role-based access, Audit logging</p>
               </div>
             </div>
 
             <div className="mt-10 rounded-xl border border-slate-200 bg-slate-50 p-5">
               <div className="flex items-center justify-between text-sm">
                 <span className="text-slate-500">System Status</span>
-                <span className="font-medium text-emerald-600">All services operational</span>
+                <span className="font-medium text-emerald-700">All services operational</span>
               </div>
             </div>
           </div>
@@ -124,16 +115,12 @@ export function Login() {
                 <Building2 className="h-6 w-6" />
               </div>
               <CardTitle className="text-2xl">Sign in</CardTitle>
-              <CardDescription>
-                Access the admin console with your credentials
-              </CardDescription>
+              <CardDescription>Access the admin console with your credentials</CardDescription>
             </CardHeader>
             <form onSubmit={handleSubmit(onSubmit)}>
               <CardContent className="space-y-4">
                 {error && (
-                  <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">
-                    {error}
-                  </div>
+                  <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
                 )}
 
                 <div className="space-y-2">

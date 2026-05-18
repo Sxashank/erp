@@ -2,15 +2,18 @@
  * Widget Create Page - Add a new widget to a dashboard
  */
 
+import { Loader2, Save, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save, Eye } from 'lucide-react';
+import { useParams, useNavigate } from 'react-router-dom';
+
+import { WidgetRenderer } from '@/components/bi';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -19,17 +22,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biWidgetApi, biChartApi, biDataSourceApi, biDashboardApi } from '@/services/biApi';
-import {
+import { logger } from "@/lib/logger";
+import type {
   Dashboard,
   ChartDefinitionListItem,
   DataSourceListItem,
   WidgetType,
-  DashboardWidgetCreate
+  DashboardWidgetCreate,
 } from '@/types/bi';
-import { WidgetRenderer } from '@/components/bi';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 interface FormData {
   title: string;
@@ -42,7 +46,11 @@ interface FormData {
 }
 
 const WIDGET_TYPES: { value: WidgetType; label: string; description: string }[] = [
-  { value: 'KPI_CARD', label: 'KPI Card', description: 'Display a single metric with optional change indicator' },
+  {
+    value: 'KPI_CARD',
+    label: 'KPI Card',
+    description: 'Display a single metric with optional change indicator',
+  },
   { value: 'LINE_CHART', label: 'Line Chart', description: 'Show trends over time' },
   { value: 'BAR_CHART', label: 'Bar Chart', description: 'Compare values across categories' },
   { value: 'PIE_CHART', label: 'Pie Chart', description: 'Show proportions of a whole' },
@@ -103,7 +111,7 @@ export function WidgetCreate() {
       setCharts(chartsRes.data);
       setDataSources(dataSourcesRes.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      logger.error('Error fetching data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load data',
@@ -130,7 +138,7 @@ export function WidgetCreate() {
         const response = await biDataSourceApi.preview(dataSourceId);
         setPreviewData(Array.isArray(response.data.data) ? response.data.data : []);
       } catch (error) {
-        console.error('Error fetching preview:', error);
+        logger.error('Error fetching preview:', error);
         setPreviewData([]);
       }
     };
@@ -194,11 +202,11 @@ export function WidgetCreate() {
       });
 
       navigate(`/admin/bi/dashboards/${dashboardId}/edit`);
-    } catch (error: any) {
-      console.error('Error creating widget:', error);
+    } catch (error: unknown) {
+      logger.error('Error creating widget:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create widget',
+        description: getErrorMessage(error, 'Failed to create widget'),
         variant: 'destructive',
       });
     } finally {
@@ -206,7 +214,7 @@ export function WidgetCreate() {
     }
   };
 
-  const updateConfig = (key: string, value: any) => {
+  const updateConfig = (key: string, value: unknown) => {
     setValue('config', { ...config, [key]: value });
   };
 
@@ -281,7 +289,10 @@ export function WidgetCreate() {
                 onChange={(e) =>
                   updateConfig(
                     'series',
-                    e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                    e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
                   )
                 }
               />
@@ -325,7 +336,10 @@ export function WidgetCreate() {
                 onChange={(e) =>
                   updateConfig(
                     'series',
-                    e.target.value.split(',').map((s) => s.trim()).filter(Boolean)
+                    e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
                   )
                 }
               />
@@ -460,7 +474,7 @@ export function WidgetCreate() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );
@@ -468,21 +482,15 @@ export function WidgetCreate() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(`/admin/bi/dashboards/${dashboardId}/edit`)}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold">Add Widget</h1>
-          <p className="text-muted-foreground">
-            Add a new widget to "{dashboard?.name}"
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Add Widget"
+        subtitle={`Add a new widget to "${dashboard?.name}"`}
+        breadcrumbs={[
+          { label: 'Dashboards', to: '/admin/bi/dashboards' },
+          { label: 'Edit Dashboard', to: `/admin/bi/dashboards/${dashboardId}/edit` },
+          { label: 'Add Widget' },
+        ]}
+      />
 
       {step === 'type' ? (
         <div className="space-y-6">
@@ -505,9 +513,7 @@ export function WidgetCreate() {
                   >
                     <CardContent className="pt-6">
                       <h3 className="font-medium">{type.label}</h3>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {type.description}
-                      </p>
+                      <p className="mt-1 text-sm text-muted-foreground">{type.description}</p>
                     </CardContent>
                   </Card>
                 ))}
@@ -524,11 +530,11 @@ export function WidgetCreate() {
             </CardHeader>
             <CardContent>
               {charts.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
+                <p className="py-4 text-center text-muted-foreground">
                   No charts available. Create chart definitions first.
                 </p>
               ) : (
-                <div className="grid grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+                <div className="grid max-h-96 grid-cols-2 gap-4 overflow-y-auto">
                   {charts.map((chart) => (
                     <Card
                       key={chart.id}
@@ -542,9 +548,7 @@ export function WidgetCreate() {
                           <h3 className="font-medium">{chart.name}</h3>
                           <Badge variant="outline">{chart.chart_type}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          {chart.module}
-                        </p>
+                        <p className="mt-1 text-sm text-muted-foreground">{chart.module}</p>
                       </CardContent>
                     </Card>
                   ))}
@@ -554,9 +558,7 @@ export function WidgetCreate() {
           </Card>
 
           <div className="flex justify-end">
-            <Button onClick={() => setStep('config')}>
-              Continue to Configuration
-            </Button>
+            <Button onClick={() => setStep('config')}>Continue to Configuration</Button>
           </div>
         </div>
       ) : (
@@ -576,9 +578,7 @@ export function WidgetCreate() {
                       placeholder="Widget title"
                       {...register('title', { required: 'Title is required' })}
                     />
-                    {errors.title && (
-                      <p className="text-sm text-red-500">{errors.title.message}</p>
-                    )}
+                    {errors.title && <p className="text-sm text-red-500">{errors.title.message}</p>}
                   </div>
 
                   <div className="space-y-2">
@@ -646,8 +646,8 @@ export function WidgetCreate() {
                     Cancel
                   </Button>
                   <Button type="submit" disabled={saving}>
-                    {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    <Save className="h-4 w-4 mr-2" />
+                    {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    <Save className="mr-2 h-4 w-4" />
                     Add Widget
                   </Button>
                 </div>
@@ -664,7 +664,7 @@ export function WidgetCreate() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="border rounded-lg p-4 bg-muted/50">
+                  <div className="rounded-lg border bg-muted/50 p-4">
                     <WidgetRenderer
                       widget={{
                         id: 'preview',

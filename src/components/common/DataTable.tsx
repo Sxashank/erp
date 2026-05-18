@@ -47,7 +47,7 @@ export interface Column<T> {
 
 export interface DataTableProps<T> {
   data: readonly T[];
-  columns: Array<Column<T>>;
+  columns: Column<T>[];
   getRowId: (row: T, index: number) => string;
   isLoading?: boolean;
   error?: unknown;

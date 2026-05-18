@@ -1,31 +1,33 @@
 """Sales Invoice service."""
 
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.constants import GLEntrySourceType, PartyType
 from app.models.ap_ar.sales_invoice import (
-    SalesInvoice,
-    SalesInvoiceLine,
+    EInvoiceStatus,
     InvoiceStatus,
     ReceiptStatus,
-    EInvoiceStatus,
+    SalesInvoice,
 )
-from app.models.common.audit_log import EntityType, AuditAction
+from app.models.common.audit_log import AuditAction, EntityType
 from app.models.workflow import WorkflowEntityType, WorkflowInstanceStatus
-from app.repositories.ap_ar.sales_invoice_repo import SalesInvoiceRepository
 from app.repositories.ap_ar.customer_repo import CustomerRepository
-from app.repositories.finance.financial_year_repo import FinancialYearRepository, FinancialPeriodRepository
+from app.repositories.ap_ar.sales_invoice_repo import SalesInvoiceRepository
 from app.repositories.finance.account_repo import AccountRepository
+from app.repositories.finance.financial_year_repo import (
+    FinancialPeriodRepository,
+    FinancialYearRepository,
+)
 from app.schemas.ap_ar.sales_invoice import SalesInvoiceCreate, SalesInvoiceUpdate
 from app.services.common.audit_service import AuditService, model_to_dict
-from app.services.workflow import WorkflowEngine
 from app.services.finance.gl_posting_service import GLPostingService
-from app.core.constants import GLEntrySourceType, PartyType
+from app.services.workflow import WorkflowEngine
 
 
 class SalesInvoiceService:
@@ -42,23 +44,55 @@ class SalesInvoiceService:
         self.period_repo = FinancialPeriodRepository(db)
         self.account_repo = AccountRepository(db)
 
+    @staticmethod
+    def _resolve_e_invoice_status(
+        requested_status: str | None,
+        *,
+        e_invoice_required: bool,
+        irn: str | None,
+    ) -> EInvoiceStatus:
+        """Resolve manual e-invoice status from explicit status/reference fields."""
+        if irn and requested_status != EInvoiceStatus.CANCELLED.value:
+            return EInvoiceStatus.GENERATED
+        if requested_status:
+            try:
+                return EInvoiceStatus(requested_status)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid e-invoice status",
+                ) from exc
+        if irn:
+            return EInvoiceStatus.GENERATED
+        if e_invoice_required:
+            return EInvoiceStatus.PENDING
+        return EInvoiceStatus.NOT_APPLICABLE
+
     async def get_all(
         self,
         organization_id: UUID,
         skip: int = 0,
         limit: int = 50,
         include_inactive: bool = False,
-        status: Optional[str] = None,
-        receipt_status: Optional[str] = None,
-        customer_id: Optional[UUID] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-        search: Optional[str] = None,
-    ) -> Tuple[List[SalesInvoice], int]:
+        status: str | None = None,
+        receipt_status: str | None = None,
+        customer_id: UUID | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        search: str | None = None,
+    ) -> tuple[list[SalesInvoice], int]:
         """Get all sales invoices with filters."""
         return await self.repo.get_all(
-            organization_id, skip, limit, include_inactive,
-            status, receipt_status, customer_id, from_date, to_date, search
+            organization_id,
+            skip,
+            limit,
+            include_inactive,
+            status,
+            receipt_status,
+            customer_id,
+            from_date,
+            to_date,
+            search,
         )
 
     async def get(self, invoice_id: UUID) -> SalesInvoice:
@@ -73,7 +107,7 @@ class SalesInvoiceService:
 
     async def get_unreceived_for_customer(
         self, organization_id: UUID, customer_id: UUID
-    ) -> List[SalesInvoice]:
+    ) -> list[SalesInvoice]:
         """Get unreceived invoices for a customer."""
         return await self.repo.get_unreceived_for_customer(organization_id, customer_id)
 
@@ -113,8 +147,13 @@ class SalesInvoiceService:
             cess_amount += line.cess_amount
 
         total_amount = (
-            taxable_amount + cgst_amount + sgst_amount + igst_amount +
-            cess_amount + data.tcs_amount + data.round_off
+            taxable_amount
+            + cgst_amount
+            + sgst_amount
+            + igst_amount
+            + cess_amount
+            + data.tcs_amount
+            + data.round_off
         )
 
         # Create invoice
@@ -147,9 +186,20 @@ class SalesInvoiceService:
             "shipping_address": data.shipping_address,
             "transporter_name": data.transporter_name,
             "vehicle_number": data.vehicle_number,
+            "e_invoice_required": data.e_invoice_required,
+            "irn": data.irn,
+            "irn_date": data.irn_date,
+            "ack_number": data.ack_number,
+            "ack_date": data.ack_date,
+            "eway_bill_number": data.eway_bill_number,
+            "eway_bill_date": data.eway_bill_date,
             "status": InvoiceStatus.DRAFT,
             "receipt_status": ReceiptStatus.UNRECEIVED,
-            "e_invoice_status": EInvoiceStatus.NOT_APPLICABLE,
+            "e_invoice_status": self._resolve_e_invoice_status(
+                data.e_invoice_status,
+                e_invoice_required=data.e_invoice_required,
+                irn=data.irn,
+            ),
             "created_by": user_id,
         }
 
@@ -161,7 +211,7 @@ class SalesInvoiceService:
             line_dict["invoice_id"] = invoice.id
             await self.repo.create_line(line_dict)
 
-        await self.db.commit()
+        await self.db.flush()
         loaded_invoice = await self.get(invoice.id)
 
         # Audit log: CREATE
@@ -194,8 +244,24 @@ class SalesInvoiceService:
 
         # Update invoice fields
         update_data = data.model_dump(exclude_unset=True, exclude={"lines"})
+        if "e_invoice_status" in update_data:
+            update_data["e_invoice_status"] = self._resolve_e_invoice_status(
+                update_data["e_invoice_status"],
+                e_invoice_required=update_data.get(
+                    "e_invoice_required", invoice.e_invoice_required
+                ),
+                irn=update_data.get("irn", invoice.irn),
+            )
+        elif "irn" in update_data or "e_invoice_required" in update_data:
+            update_data["e_invoice_status"] = self._resolve_e_invoice_status(
+                None,
+                e_invoice_required=update_data.get(
+                    "e_invoice_required", invoice.e_invoice_required
+                ),
+                irn=update_data.get("irn", invoice.irn),
+            )
         update_data["updated_by"] = user_id
-        update_data["updated_at"] = datetime.now(timezone.utc)
+        update_data["updated_at"] = datetime.now(UTC)
 
         # If lines are provided, recalculate totals
         if data.lines:
@@ -223,8 +289,13 @@ class SalesInvoiceService:
             tcs_amount = data.tcs_amount if data.tcs_amount is not None else invoice.tcs_amount
             round_off = data.round_off if data.round_off is not None else invoice.round_off
             total_amount = (
-                taxable_amount + cgst_amount + sgst_amount + igst_amount +
-                cess_amount + tcs_amount + round_off
+                taxable_amount
+                + cgst_amount
+                + sgst_amount
+                + igst_amount
+                + cess_amount
+                + tcs_amount
+                + round_off
             )
 
             update_data["subtotal"] = subtotal
@@ -244,7 +315,7 @@ class SalesInvoiceService:
                 await self.repo.create_line(line_dict)
 
         invoice = await self.repo.update(invoice, update_data)
-        await self.db.commit()
+        await self.db.flush()
         updated_invoice = await self.get(invoice_id)
 
         # Audit log: UPDATE
@@ -260,7 +331,11 @@ class SalesInvoiceService:
 
         # Log line item changes if lines were updated
         if data.lines:
-            new_lines = [model_to_dict(line) for line in updated_invoice.lines] if updated_invoice.lines else []
+            new_lines = (
+                [model_to_dict(line) for line in updated_invoice.lines]
+                if updated_invoice.lines
+                else []
+            )
             await self.audit_service.log_line_changes(
                 parent_audit_id=audit_entry.id,
                 entity_type="INVOICE_LINE",
@@ -313,18 +388,18 @@ class SalesInvoiceService:
                 "status": InvoiceStatus.SUBMITTED,
                 "workflow_instance_id": workflow_instance.id,
                 "updated_by": user_id,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             }
         except Exception:
             # If no workflow definition exists, just mark as submitted
             update_data = {
                 "status": InvoiceStatus.SUBMITTED,
                 "updated_by": user_id,
-                "updated_at": datetime.now(timezone.utc),
+                "updated_at": datetime.now(UTC),
             }
 
         invoice = await self.repo.update(invoice, update_data)
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: SUBMIT
         await self.audit_service.log_action(
@@ -341,7 +416,13 @@ class SalesInvoiceService:
         return invoice
 
     async def approve(self, invoice_id: UUID, user_id: UUID) -> SalesInvoice:
-        """Approve an invoice (legacy method for non-workflow approvals)."""
+        """Approve an invoice (legacy method for non-workflow approvals).
+
+        Enforces §8.4 maker-checker: the submitting user cannot approve their
+        own invoice.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         invoice = await self.get(invoice_id)
 
         if invoice.status != InvoiceStatus.SUBMITTED:
@@ -354,8 +435,16 @@ class SalesInvoiceService:
         if invoice.workflow_instance_id:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="This invoice uses workflow-based approval. Please use the workflow task endpoints.",
+                detail=(
+                    "This invoice uses workflow-based approval. "
+                    "Please use the workflow task endpoints."
+                ),
             )
+
+        ensure_maker_is_not_checker(
+            maker_user_id=invoice.created_by,
+            checker_user_id=user_id,
+        )
 
         # Capture old state
         old_values = model_to_dict(invoice)
@@ -363,14 +452,14 @@ class SalesInvoiceService:
         update_data = {
             "status": InvoiceStatus.APPROVED,
             "updated_by": user_id,
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         invoice = await self.repo.update(invoice, update_data)
 
         # Auto-post to GL on approval
         await self._post_to_gl(invoice, user_id)
 
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: APPROVE
         await self.audit_service.log_action(
@@ -390,7 +479,7 @@ class SalesInvoiceService:
         self,
         invoice_id: UUID,
         workflow_status: WorkflowInstanceStatus,
-        completed_by: Optional[UUID] = None,
+        completed_by: UUID | None = None,
     ) -> SalesInvoice:
         """Handle workflow completion callback to update invoice status."""
         invoice = await self.get(invoice_id)
@@ -408,9 +497,9 @@ class SalesInvoiceService:
             invoice.workflow_instance_id = None
 
         invoice.updated_by = completed_by
-        invoice.updated_at = datetime.now(timezone.utc)
+        invoice.updated_at = datetime.now(UTC)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(invoice)
 
         # Audit log
@@ -427,9 +516,7 @@ class SalesInvoiceService:
 
         return invoice
 
-    async def cancel(
-        self, invoice_id: UUID, user_id: UUID, reason: str
-    ) -> SalesInvoice:
+    async def cancel(self, invoice_id: UUID, user_id: UUID, reason: str) -> SalesInvoice:
         """Cancel an invoice."""
         invoice = await self.get(invoice_id)
 
@@ -452,10 +539,10 @@ class SalesInvoiceService:
             "status": InvoiceStatus.CANCELLED,
             "narration": f"{invoice.narration or ''}\nCancelled: {reason}".strip(),
             "updated_by": user_id,
-            "updated_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(UTC),
         }
         invoice = await self.repo.update(invoice, update_data)
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: CANCEL
         await self.audit_service.log_action(
@@ -488,7 +575,7 @@ class SalesInvoiceService:
         invoice_number = invoice.invoice_number
 
         await self.repo.soft_delete(invoice, user_id)
-        await self.db.commit()
+        await self.db.flush()
 
         # Audit log: DELETE
         await self.audit_service.log_delete(
@@ -500,7 +587,7 @@ class SalesInvoiceService:
             user_id=user_id,
         )
 
-    async def _post_to_gl(self, invoice: SalesInvoice, posted_by: Optional[UUID]) -> None:
+    async def _post_to_gl(self, invoice: SalesInvoice, posted_by: UUID | None) -> None:
         """
         Auto-post sales invoice to GL on approval.
 
@@ -541,17 +628,19 @@ class SalesInvoiceService:
             )
 
         # Build GL entry lines
-        gl_lines: List[Dict[str, Any]] = []
+        gl_lines: list[dict[str, Any]] = []
 
         # AR Control (Debit - customer receivable)
-        gl_lines.append({
-            "account_id": customer.control_account_id,
-            "debit_amount": invoice.total_amount,
-            "credit_amount": Decimal("0"),
-            "party_type": PartyType.CUSTOMER,
-            "party_id": invoice.customer_id,
-            "narration": f"Receivable from {customer.name}",
-        })
+        gl_lines.append(
+            {
+                "account_id": customer.control_account_id,
+                "debit_amount": invoice.total_amount,
+                "credit_amount": Decimal("0"),
+                "party_type": PartyType.CUSTOMER,
+                "party_id": invoice.customer_id,
+                "narration": f"Receivable from {customer.name}",
+            }
+        )
 
         # Revenue entries from invoice lines
         for line in invoice.lines:
@@ -563,58 +652,70 @@ class SalesInvoiceService:
                         detail=f"Line {line.line_number} does not have a revenue account",
                     )
 
-                gl_lines.append({
-                    "account_id": revenue_account_id,
-                    "debit_amount": Decimal("0"),
-                    "credit_amount": line.taxable_amount,
-                    "narration": f"Sales: {line.description}",
-                })
+                gl_lines.append(
+                    {
+                        "account_id": revenue_account_id,
+                        "debit_amount": Decimal("0"),
+                        "credit_amount": line.taxable_amount,
+                        "narration": f"Sales: {line.description}",
+                    }
+                )
 
         # GST Output entries (aggregated at invoice level)
         gst_accounts = await self._get_gst_output_accounts(invoice.organization_id)
 
         if invoice.cgst_amount > 0 and gst_accounts.get("cgst_output"):
-            gl_lines.append({
-                "account_id": gst_accounts["cgst_output"],
-                "debit_amount": Decimal("0"),
-                "credit_amount": invoice.cgst_amount,
-                "narration": "CGST Output",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["cgst_output"],
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": invoice.cgst_amount,
+                    "narration": "CGST Output",
+                }
+            )
 
         if invoice.sgst_amount > 0 and gst_accounts.get("sgst_output"):
-            gl_lines.append({
-                "account_id": gst_accounts["sgst_output"],
-                "debit_amount": Decimal("0"),
-                "credit_amount": invoice.sgst_amount,
-                "narration": "SGST Output",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["sgst_output"],
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": invoice.sgst_amount,
+                    "narration": "SGST Output",
+                }
+            )
 
         if invoice.igst_amount > 0 and gst_accounts.get("igst_output"):
-            gl_lines.append({
-                "account_id": gst_accounts["igst_output"],
-                "debit_amount": Decimal("0"),
-                "credit_amount": invoice.igst_amount,
-                "narration": "IGST Output",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["igst_output"],
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": invoice.igst_amount,
+                    "narration": "IGST Output",
+                }
+            )
 
         if invoice.cess_amount > 0 and gst_accounts.get("cess_output"):
-            gl_lines.append({
-                "account_id": gst_accounts["cess_output"],
-                "debit_amount": Decimal("0"),
-                "credit_amount": invoice.cess_amount,
-                "narration": "Cess Output",
-            })
+            gl_lines.append(
+                {
+                    "account_id": gst_accounts["cess_output"],
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": invoice.cess_amount,
+                    "narration": "Cess Output",
+                }
+            )
 
         # TCS Payable (if applicable)
         if invoice.tcs_amount and invoice.tcs_amount > 0:
             tcs_account = await self._get_tcs_payable_account(invoice.organization_id)
             if tcs_account:
-                gl_lines.append({
-                    "account_id": tcs_account,
-                    "debit_amount": Decimal("0"),
-                    "credit_amount": invoice.tcs_amount,
-                    "narration": "TCS Payable",
-                })
+                gl_lines.append(
+                    {
+                        "account_id": tcs_account,
+                        "debit_amount": Decimal("0"),
+                        "credit_amount": invoice.tcs_amount,
+                        "narration": "TCS Payable",
+                    }
+                )
 
         # Post GL entries
         if gl_lines:
@@ -634,7 +735,7 @@ class SalesInvoiceService:
         # Update invoice as posted
         invoice.is_posted = True
 
-    async def _get_gst_output_accounts(self, organization_id: UUID) -> Dict[str, Optional[UUID]]:
+    async def _get_gst_output_accounts(self, organization_id: UUID) -> dict[str, UUID | None]:
         """Get GST output accounts for the organization."""
         accounts = {}
 
@@ -657,7 +758,7 @@ class SalesInvoiceService:
 
         return accounts
 
-    async def _get_tcs_payable_account(self, organization_id: UUID) -> Optional[UUID]:
+    async def _get_tcs_payable_account(self, organization_id: UUID) -> UUID | None:
         """Get TCS payable account for the organization."""
         for code in ["TCS-PAY", "TCS_PAYABLE", "TCS Payable"]:
             account = await self.account_repo.get_by_code(organization_id, code)

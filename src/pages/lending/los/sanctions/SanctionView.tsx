@@ -1,695 +1,243 @@
+import { Edit, FileText, Plus } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Edit, FileText, Printer, Plus, CheckCircle } from 'lucide-react';
+
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
+import { StatusBadge } from '@/components/lending/common/StatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { StatusBadge } from '@/components/lending/common/StatusBadge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-import { AuditTimeline } from '@/components/lending/common/AuditTimeline';
-
-// Mock sanction data
-const mockSanction = {
-  id: '1',
-  sanctionNumber: 'SMFC/SAN/2025/00001',
-  applicationNumber: 'SMFC/TL/DEL/2025/A00001',
-  status: 'ACCEPTED',
-  entity: {
-    id: '1',
-    entityCode: 'ENT/2025/00001',
-    legalName: 'ABC Industries Private Limited',
-    pan: 'AABCA1234A',
-    entityType: 'CORPORATE',
-  },
-  product: {
-    id: '1',
-    productCode: 'TL-CORP-001',
-    productName: 'Corporate Term Loan',
-    category: 'TERM_LOAN',
-  },
-  sanctionedAmount: 250000000,
-  disbursedAmount: 50000000,
-  interestType: 'FLOATING',
-  baseRate: 'SMFC_BR',
-  currentBaseRate: 10.5,
-  spreadBps: 200,
-  effectiveRate: 12.5,
-  tenureMonths: 60,
-  moratoriumMonths: 6,
-  repaymentFrequency: 'MONTHLY',
-  repaymentMode: 'EMI',
-  processingFee: 2500000,
-  processingFeePaid: true,
-  sanctionDate: '2025-01-10',
-  validUntil: '2025-04-10',
-  acceptedOn: '2025-01-12',
-  approvedBy: 'Credit Committee',
-  conditions: {
-    preDisbursement: [
-      { condition: 'Creation of mortgage on primary security', status: 'COMPLETED', completedOn: '2025-01-15' },
-      { condition: 'Submission of insurance policy for assets', status: 'COMPLETED', completedOn: '2025-01-16' },
-      { condition: 'Equity infusion of 20% before first disbursement', status: 'PENDING', completedOn: null },
-      { condition: 'Board resolution for availing the loan', status: 'COMPLETED', completedOn: '2025-01-12' },
-    ],
-    postDisbursement: [
-      { condition: 'Submission of utilization certificate within 30 days', status: 'PENDING', completedOn: null },
-      { condition: 'Quarterly progress reports on project', status: 'PENDING', completedOn: null },
-      { condition: 'Annual audited financials', status: 'PENDING', completedOn: null },
-    ],
-  },
-  securities: [
-    {
-      securityType: 'PRIMARY',
-      nature: 'PROPERTY',
-      description: 'Industrial land and building at Plot 45, Industrial Area, Phase II, Gurgaon',
-      value: 400000000,
-      margin: 25,
-      chargeCreated: true,
-      chargeId: 'CHG001234',
-    },
-    {
-      securityType: 'COLLATERAL',
-      nature: 'FIXED_DEPOSIT',
-      description: 'FD with SBI, Gurgaon branch',
-      value: 50000000,
-      margin: 10,
-      chargeCreated: true,
-      chargeId: 'LIEN00567',
-    },
-  ],
-  covenants: [
-    {
-      covenantType: 'FINANCIAL',
-      description: 'Minimum DSCR to be maintained',
-      frequency: 'YEARLY',
-      threshold: '1.5x',
-    },
-    {
-      covenantType: 'FINANCIAL',
-      description: 'Maximum Debt-Equity ratio',
-      frequency: 'YEARLY',
-      threshold: '2:1',
-    },
-    {
-      covenantType: 'REPORTING',
-      description: 'Submission of stock statements',
-      frequency: 'MONTHLY',
-      threshold: null,
-    },
-    {
-      covenantType: 'NEGATIVE',
-      description: 'No dividend distribution without prior approval',
-      frequency: 'ONE_TIME',
-      threshold: null,
-    },
-  ],
-  disbursements: [
-    {
-      id: 'D001',
-      tranche: 1,
-      amount: 50000000,
-      date: '2025-01-20',
-      status: 'COMPLETED',
-      milestone: 'Land acquisition',
-    },
-  ],
-  auditTrail: [
-    { id: 's1', action: 'Sanction Created', user_name: 'Sanction Team', timestamp: '2025-01-10T14:30:00', description: 'Sanction created after CC approval' },
-    { id: 's2', action: 'Sanction Letter Generated', user_name: 'System', timestamp: '2025-01-10T14:35:00', description: 'Sanction letter generated' },
-    { id: 's3', action: 'Sanction Accepted', user_name: 'ABC Industries', timestamp: '2025-01-12T11:00:00', description: 'Borrower accepted sanction terms' },
-    { id: 's4', action: 'Processing Fee Received', user_name: 'Operations', timestamp: '2025-01-12T15:30:00', description: 'Processing fee of ₹25L received' },
-    { id: 's5', action: 'Security Created', user_name: 'Legal Team', timestamp: '2025-01-15T10:00:00', description: 'Mortgage created on property' },
-    { id: 's6', action: 'Disbursement Completed', user_name: 'Treasury', timestamp: '2025-01-20T12:00:00', description: 'First tranche of ₹5 Cr disbursed' },
-  ],
-};
+import { useSanction } from '@/hooks/lending/useSanction';
+import { SanctionApprovedUtilization } from '@/pages/lending/checklist/SanctionApprovedUtilization';
 
 export default function SanctionView() {
-  const navigate = useNavigate();
   const { id } = useParams();
-  const sanction = mockSanction;
+  const navigate = useNavigate();
+  const { data: sanction, isLoading, isError, error, refetch } = useSanction(id);
 
-  const completedPreConditions = sanction.conditions.preDisbursement.filter(
-    (c) => c.status === 'COMPLETED'
-  ).length;
-  const totalPreConditions = sanction.conditions.preDisbursement.length;
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Sanction" subtitle="Loading..." />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (isError || !sanction) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Sanction" />
+        <ErrorState title="Could not load sanction" error={error} onRetry={() => refetch()} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/lending/sanctions')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold">Loan Sanction</h1>
-            <StatusBadge status={sanction.status} type="sanction" />
-          </div>
-          <p className="text-muted-foreground font-mono">{sanction.sanctionNumber}</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => navigate(`/admin/lending/sanctions/${id}/letter`)}>
-            <FileText className="mr-2 h-4 w-4" />
-            Sanction Letter
-          </Button>
-          {sanction.status === 'ACCEPTED' && (
+      <PageHeader
+        title={sanction.sanctionNumber}
+        subtitle={`Sanction date ${sanction.sanctionDate} · ${sanction.status}`}
+        breadcrumbs={[
+          { label: 'Lending', to: '/admin/lending' },
+          { label: 'Sanctions', to: '/admin/lending/sanctions' },
+          { label: sanction.sanctionNumber },
+        ]}
+        actions={
+          <div className="flex gap-2">
             <Button
-              onClick={() => navigate(`/admin/lending/disbursements/new?sanctionId=${id}`)}
+              variant="outline"
+              onClick={() => navigate(`/admin/lending/sanctions/${id}/letter`)}
             >
-              <Plus className="mr-2 h-4 w-4" />
-              Create Disbursement
+              <FileText className="mr-2 h-4 w-4" />
+              Sanction Letter
             </Button>
-          )}
-        </div>
-      </div>
+            {sanction.status === 'ACCEPTED' && (
+              <Button onClick={() => navigate(`/admin/lending/disbursements/new?sanctionId=${id}`)}>
+                <Plus className="mr-2 h-4 w-4" />
+                Disburse
+              </Button>
+            )}
+            {(sanction.status === 'DRAFT' || sanction.status === 'PENDING_APPROVAL') && (
+              <Button
+                variant="outline"
+                onClick={() => navigate(`/admin/lending/sanctions/${id}/edit`)}
+              >
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </Button>
+            )}
+          </div>
+        }
+      />
 
-      {/* Summary Cards */}
-      <div className="grid gap-4 md:grid-cols-5">
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Status</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <StatusBadge status={sanction.status} type="sanction" />
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Sanctioned</CardTitle>
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={sanction.sanctionedAmount} abbreviated className="text-2xl font-bold" />
+            <AmountDisplay
+              amount={sanction.sanctionedAmount}
+              abbreviated
+              className="text-2xl font-bold"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">{sanction.tenureMonths} months</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Disbursed</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <AmountDisplay amount={sanction.disbursedAmount} abbreviated className="text-2xl font-bold" />
-            <p className="text-xs text-muted-foreground">
-              <PercentageDisplay
-                value={(sanction.disbursedAmount / sanction.sanctionedAmount) * 100}
-              />{' '}
-              utilized
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Interest Rate</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Rate</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              <PercentageDisplay value={sanction.effectiveRate} />
+              <PercentageDisplay value={sanction.effectiveRate} /> p.a.
             </div>
-            <p className="text-xs text-muted-foreground">
-              {sanction.baseRate} + {sanction.spreadBps} bps
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Effective</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Tenure</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Validity</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{sanction.tenureMonths} Months</div>
-            <p className="text-xs text-muted-foreground">
-              {sanction.moratoriumMonths} months moratorium
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Conditions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {completedPreConditions}/{totalPreConditions}
+            <div className="text-sm font-medium">
+              <DateDisplay date={sanction.validityDate} />
             </div>
-            <p className="text-xs text-muted-foreground">Pre-disbursement completed</p>
+            {sanction.approvedAt && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Approved <DateDisplay date={sanction.approvedAt} format="relative" />
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="details">
+      <Tabs defaultValue="terms">
         <TabsList>
-          <TabsTrigger value="details">Sanction Details</TabsTrigger>
+          <TabsTrigger value="terms">Terms</TabsTrigger>
           <TabsTrigger value="conditions">Conditions</TabsTrigger>
-          <TabsTrigger value="security">Security</TabsTrigger>
-          <TabsTrigger value="covenants">Covenants</TabsTrigger>
-          <TabsTrigger value="disbursements">Disbursements</TabsTrigger>
-          <TabsTrigger value="history">History</TabsTrigger>
+          <TabsTrigger value="securities">Securities</TabsTrigger>
+          {(sanction.status === 'PENDING_APPROVAL' || sanction.status === 'APPROVED') && (
+            <TabsTrigger value="utilization">Approved Utilization</TabsTrigger>
+          )}
         </TabsList>
 
-        {/* Details Tab */}
-        <TabsContent value="details" className="space-y-6 mt-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Entity Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="space-y-4">
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Entity Name</dt>
-                    <dd className="font-medium">{sanction.entity.legalName}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Entity Code</dt>
-                    <dd className="font-mono">{sanction.entity.entityCode}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">PAN</dt>
-                    <dd className="font-mono">{sanction.entity.pan}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Entity Type</dt>
-                    <dd>{sanction.entity.entityType}</dd>
-                  </div>
-                </dl>
-                <Button
-                  variant="link"
-                  className="p-0 mt-4"
-                  onClick={() => navigate(`/admin/lending/entities/${sanction.entity.id}`)}
-                >
-                  View Full Profile →
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Sanction Information</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="space-y-4">
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Sanction Number</dt>
-                    <dd className="font-mono">{sanction.sanctionNumber}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Application Number</dt>
-                    <dd className="font-mono">{sanction.applicationNumber}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Product</dt>
-                    <dd>{sanction.product.productName}</dd>
-                  </div>
-                  <div>
-                    <dt className="text-sm font-medium text-muted-foreground">Approved By</dt>
-                    <dd>{sanction.approvedBy}</dd>
-                  </div>
-                </dl>
-              </CardContent>
-            </Card>
-          </div>
-
+        <TabsContent value="terms" className="space-y-4 pt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Loan Terms</CardTitle>
+              <CardTitle>Sanction Terms</CardTitle>
             </CardHeader>
             <CardContent>
-              <dl className="grid gap-4 md:grid-cols-3">
+              <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-3">
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Sanctioned Amount</dt>
-                  <dd>
-                    <AmountDisplay amount={sanction.sanctionedAmount} showFull />
+                  <dt className="text-muted-foreground">Sanctioned Amount</dt>
+                  <dd className="font-medium">
+                    <AmountDisplay amount={sanction.sanctionedAmount} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Interest Type</dt>
-                  <dd>
-                    <Badge variant="outline">{sanction.interestType}</Badge>
-                  </dd>
+                  <dt className="text-muted-foreground">Tenure</dt>
+                  <dd className="font-medium">{sanction.tenureMonths} months</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Effective Rate</dt>
-                  <dd>
+                  <dt className="text-muted-foreground">Moratorium</dt>
+                  <dd className="font-medium">{sanction.moratoriumMonths} months</dd>
+                </div>
+                <div>
+                  <dt className="text-muted-foreground">Effective Rate</dt>
+                  <dd className="font-medium">
                     <PercentageDisplay value={sanction.effectiveRate} /> p.a.
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Tenure</dt>
-                  <dd>{sanction.tenureMonths} Months</dd>
+                  <dt className="text-muted-foreground">Repayment Mode</dt>
+                  <dd className="font-medium">{sanction.repaymentMode}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Moratorium</dt>
-                  <dd>{sanction.moratoriumMonths} Months</dd>
+                  <dt className="text-muted-foreground">Repayment Frequency</dt>
+                  <dd className="font-medium">{sanction.repaymentFrequency}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Repayment Mode</dt>
-                  <dd>{sanction.repaymentMode}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Repayment Frequency</dt>
-                  <dd>{sanction.repaymentFrequency}</dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Processing Fee</dt>
-                  <dd>
-                    <AmountDisplay amount={sanction.processingFee} />
-                    {sanction.processingFeePaid && (
-                      <Badge variant="default" className="ml-2 bg-green-100 text-green-700">
-                        Paid
-                      </Badge>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Important Dates</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <dl className="grid gap-4 md:grid-cols-4">
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Sanction Date</dt>
-                  <dd>
+                  <dt className="text-muted-foreground">Sanction Date</dt>
+                  <dd className="font-medium">
                     <DateDisplay date={sanction.sanctionDate} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Valid Until</dt>
-                  <dd>
-                    <DateDisplay date={sanction.validUntil} />
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-sm font-medium text-muted-foreground">Accepted On</dt>
-                  <dd>
-                    <DateDisplay date={sanction.acceptedOn} />
+                  <dt className="text-muted-foreground">Validity</dt>
+                  <dd className="font-medium">
+                    <DateDisplay date={sanction.validityDate} />
                   </dd>
                 </div>
               </dl>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Conditions Tab */}
-        <TabsContent value="conditions" className="space-y-6 mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pre-Disbursement Conditions</CardTitle>
-              <CardDescription>
-                {completedPreConditions} of {totalPreConditions} conditions completed
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">#</TableHead>
-                    <TableHead>Condition</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Completed On</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sanction.conditions.preDisbursement.map((cond, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{cond.condition}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={cond.status === 'COMPLETED' ? 'default' : 'secondary'}
-                          className={
-                            cond.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : ''
-                          }
-                        >
-                          {cond.status === 'COMPLETED' && <CheckCircle className="h-3 w-3 mr-1" />}
-                          {cond.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {cond.completedOn ? <DateDisplay date={cond.completedOn} /> : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Post-Disbursement Conditions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[50px]">#</TableHead>
-                    <TableHead>Condition</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Completed On</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sanction.conditions.postDisbursement.map((cond, index) => (
-                    <TableRow key={index}>
-                      <TableCell>{index + 1}</TableCell>
-                      <TableCell>{cond.condition}</TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={cond.status === 'COMPLETED' ? 'default' : 'secondary'}
-                          className={
-                            cond.status === 'COMPLETED' ? 'bg-green-100 text-green-700' : ''
-                          }
-                        >
-                          {cond.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {cond.completedOn ? <DateDisplay date={cond.completedOn} /> : '-'}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Security Tab */}
-        <TabsContent value="security" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Security/Collateral Details</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Nature</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead className="text-right">Value</TableHead>
-                    <TableHead className="text-right">Margin</TableHead>
-                    <TableHead className="text-right">Net Value</TableHead>
-                    <TableHead>Charge Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sanction.securities.map((security, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Badge
-                          variant={security.securityType === 'PRIMARY' ? 'default' : 'secondary'}
-                        >
-                          {security.securityType}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{security.nature}</TableCell>
-                      <TableCell className="max-w-[300px]">{security.description}</TableCell>
-                      <TableCell className="text-right">
-                        <AmountDisplay amount={security.value} abbreviated />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <PercentageDisplay value={security.margin} />
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <AmountDisplay
-                          amount={security.value * (1 - security.margin / 100)}
-                          abbreviated
-                        />
-                      </TableCell>
-                      <TableCell>
-                        {security.chargeCreated ? (
-                          <Badge variant="default" className="bg-green-100 text-green-700">
-                            <CheckCircle className="h-3 w-3 mr-1" />
-                            Created
-                          </Badge>
-                        ) : (
-                          <Badge variant="secondary">Pending</Badge>
-                        )}
-                        {security.chargeId && (
-                          <div className="text-xs text-muted-foreground mt-1">
-                            {security.chargeId}
-                          </div>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  <TableRow className="font-medium bg-muted/50">
-                    <TableCell colSpan={3}>Total Security Coverage</TableCell>
-                    <TableCell className="text-right">
-                      <AmountDisplay
-                        amount={sanction.securities.reduce((sum, s) => sum + s.value, 0)}
-                        abbreviated
-                      />
-                    </TableCell>
-                    <TableCell></TableCell>
-                    <TableCell className="text-right">
-                      <AmountDisplay
-                        amount={sanction.securities.reduce(
-                          (sum, s) => sum + s.value * (1 - s.margin / 100),
-                          0
-                        )}
-                        abbreviated
-                      />
-                    </TableCell>
-                    <TableCell></TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Covenants Tab */}
-        <TabsContent value="covenants" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Financial & Other Covenants</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Monitoring Frequency</TableHead>
-                    <TableHead>Threshold</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sanction.covenants.map((covenant, index) => (
-                    <TableRow key={index}>
-                      <TableCell>
-                        <Badge variant="outline">{covenant.covenantType}</Badge>
-                      </TableCell>
-                      <TableCell>{covenant.description}</TableCell>
-                      <TableCell>{covenant.frequency}</TableCell>
-                      <TableCell>{covenant.threshold || '-'}</TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Disbursements Tab */}
-        <TabsContent value="disbursements" className="mt-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Disbursement History</CardTitle>
-              <CardDescription>
-                <AmountDisplay amount={sanction.disbursedAmount} abbreviated /> of{' '}
-                <AmountDisplay amount={sanction.sanctionedAmount} abbreviated /> disbursed (
-                <PercentageDisplay
-                  value={(sanction.disbursedAmount / sanction.sanctionedAmount) * 100}
-                />
-                )
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              {sanction.disbursements.length === 0 ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  No disbursements yet
+              {sanction.specialTerms && (
+                <div className="mt-4 border-t pt-4">
+                  <p className="text-sm text-muted-foreground">Special Terms</p>
+                  <p className="mt-1 whitespace-pre-line text-sm">{sanction.specialTerms}</p>
                 </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tranche</TableHead>
-                      <TableHead>Disbursement ID</TableHead>
-                      <TableHead className="text-right">Amount</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Milestone</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {sanction.disbursements.map((disb, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{disb.tranche}</TableCell>
-                        <TableCell className="font-mono">{disb.id}</TableCell>
-                        <TableCell className="text-right">
-                          <AmountDisplay amount={disb.amount} abbreviated />
-                        </TableCell>
-                        <TableCell>
-                          <DateDisplay date={disb.date} />
-                        </TableCell>
-                        <TableCell>{disb.milestone}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="default"
-                            className="bg-green-100 text-green-700"
-                          >
-                            {disb.status}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    <TableRow className="font-medium bg-muted/50">
-                      <TableCell colSpan={2}>Remaining to Disburse</TableCell>
-                      <TableCell className="text-right">
-                        <AmountDisplay
-                          amount={sanction.sanctionedAmount - sanction.disbursedAmount}
-                          abbreviated
-                        />
-                      </TableCell>
-                      <TableCell colSpan={3}></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
               )}
-
-              {sanction.status === 'ACCEPTED' &&
-                sanction.disbursedAmount < sanction.sanctionedAmount && (
-                  <Button
-                    className="mt-4"
-                    onClick={() =>
-                      navigate(`/admin/lending/disbursements/new?sanctionId=${sanction.id}`)
-                    }
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Request Disbursement
-                  </Button>
-                )}
+              {sanction.remarks && (
+                <div className="mt-4">
+                  <p className="text-sm text-muted-foreground">Remarks</p>
+                  <p className="mt-1 text-sm">{sanction.remarks}</p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* History Tab */}
-        <TabsContent value="history" className="mt-6">
+        <TabsContent value="conditions" className="pt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Activity Timeline</CardTitle>
+              <CardTitle>Sanction Conditions</CardTitle>
+              <CardDescription>Pre-disbursement and post-disbursement</CardDescription>
             </CardHeader>
             <CardContent>
-              <AuditTimeline entries={sanction.auditTrail} />
+              <EmptyState
+                title="Conditions list not embedded yet"
+                subtitle="Use /lending/sanctions/{id}/conditions for the full list."
+              />
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="securities" className="pt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Securities & Collateral</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EmptyState
+                title="Securities list not embedded yet"
+                subtitle="Use /lending/sanctions/{id}/securities for the full list."
+              />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {(sanction.status === 'PENDING_APPROVAL' || sanction.status === 'APPROVED') && (
+          <TabsContent value="utilization" className="pt-4">
+            <SanctionApprovedUtilization
+              applicationId={sanction.applicationId}
+              sanctionedAmount={sanction.sanctionedAmount}
+              editable={sanction.status === 'PENDING_APPROVAL'}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

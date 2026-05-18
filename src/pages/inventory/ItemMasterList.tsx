@@ -1,10 +1,19 @@
+import { Plus, Search, Filter, Edit, Trash2, Eye, Package } from 'lucide-react';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Link, useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -13,14 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Plus, Search, Filter, Edit, Trash2, Eye, Package } from 'lucide-react';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -114,13 +115,13 @@ const items = [
 export default function ItemMasterList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const navigate = useNavigate();
 
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       item.code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory =
-      selectedCategory === 'all' || item.category === selectedCategory;
+    const matchesCategory = selectedCategory === 'all' || item.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
@@ -131,23 +132,21 @@ export default function ItemMasterList() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Item Master"
         subtitle="Manage inventory items"
         actions={
           <div className="flex gap-2">
             <Button variant="outline" asChild>
-              <Link to="/inventory/categories">
-                <Filter className="h-4 w-4 mr-2" />
+              <Link to="/admin/inventory/categories">
+                <Filter className="mr-2 h-4 w-4" />
                 Categories
               </Link>
             </Button>
-            <Button asChild>
-              <Link to="/inventory/items/new">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Item
-              </Link>
+            <Button onClick={() => navigate('/admin/inventory/items/new')}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Item
             </Button>
           </div>
         }
@@ -156,9 +155,9 @@ export default function ItemMasterList() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-col gap-4 md:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search by code or name..."
                 value={searchTerm}
@@ -231,21 +230,19 @@ export default function ItemMasterList() {
                       <Badge variant={stockStatus.variant}>{stockStatus.label}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={item.status === 'ACTIVE' ? 'default' : 'secondary'}
-                      >
+                      <Badge variant={item.status === 'ACTIVE' ? 'default' : 'secondary'}>
                         {item.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button variant="ghost" size="icon" asChild>
-                          <Link to={`/inventory/items/${item.id}`}>
+                          <Link to={`/admin/inventory/items/${item.id}`}>
                             <Eye className="h-4 w-4" />
                           </Link>
                         </Button>
                         <Button variant="ghost" size="icon" asChild>
-                          <Link to={`/inventory/items/${item.id}/edit`}>
+                          <Link to={`/admin/inventory/items/${item.id}/edit`}>
                             <Edit className="h-4 w-4" />
                           </Link>
                         </Button>

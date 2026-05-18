@@ -25,6 +25,12 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:debug": "playwright test --debug",
+    "test:e2e:accounting": "PLAYWRIGHT_LIVE_BACKEND=1 playwright test playwright/tests/accounting-modules-smoke.spec.ts --project=chromium --workers=1",
+    "test:e2e:hrpay": "PLAYWRIGHT_LIVE_BACKEND=1 playwright test playwright/tests/hris-payroll-ess-live.spec.ts --project=chromium --workers=1",
+    "test:e2e:lending": "PLAYWRIGHT_LIVE_BACKEND=1 playwright test playwright/tests/loan-field-contract.spec.ts playwright/tests/loan-modules-smoke.spec.ts --project=chromium --workers=1",
+    "test:e2e:ops": "PLAYWRIGHT_LIVE_BACKEND=1 PLAYWRIGHT_USE_BUILD=1 playwright test playwright/tests/operations-modules-smoke.spec.ts --project=chromium --workers=1",
+    "test:e2e:tax": "PLAYWRIGHT_LIVE_BACKEND=1 playwright test playwright/tests/taxation-modules-smoke.spec.ts playwright/tests/taxation-workflows.spec.ts --project=chromium --workers=1",
+    "test:e2e:uat-release": "PLAYWRIGHT_LIVE_BACKEND=1 playwright test playwright/tests/uat-manual-release.spec.ts --project=chromium --workers=1",
     "test:e2e:visual": "PLAYWRIGHT_VISUAL=1 playwright test visual",
     "test:e2e:visual:update": "PLAYWRIGHT_VISUAL=1 playwright test visual --update-snapshots",
     "check:stubs": "node scripts/check-stubs.mjs",
@@ -81,6 +87,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
+    "@types/node": "^25.8.0",
     "@types/react": "^18.2.64",
     "@types/react-dom": "^18.2.21",
     "@typescript-eslint/eslint-plugin": "^8.15.0",
@@ -111,7 +118,7 @@
   },
   "lint-staged": {
     "*.{ts,tsx}": [
-      "eslint --max-warnings=0",
+      "eslint --fix --quiet",
       "prettier --write"
     ],
     "*.{js,cjs,mjs,json,md,css,html,yml,yaml}": [

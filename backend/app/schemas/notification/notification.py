@@ -4,8 +4,9 @@ from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
+from app.schemas.base import CamelSchema
 from app.models.notification import (
     NotificationChannel,
     NotificationPriority,
@@ -14,7 +15,7 @@ from app.models.notification import (
 )
 
 
-class NotificationCreate(BaseModel):
+class NotificationCreate(CamelSchema):
     """Schema for creating a notification."""
 
     title: str = Field(..., min_length=1, max_length=255)
@@ -43,7 +44,7 @@ class NotificationCreate(BaseModel):
     expires_at: Optional[datetime] = None
 
 
-class NotificationUpdate(BaseModel):
+class NotificationUpdate(CamelSchema):
     """Schema for updating a notification."""
 
     title: Optional[str] = Field(None, min_length=1, max_length=255)
@@ -52,8 +53,9 @@ class NotificationUpdate(BaseModel):
     metadata: Optional[dict] = None
 
 
-class NotificationResponse(BaseModel):
+class NotificationResponse(CamelSchema):
     """Schema for notification response."""
+
 
     id: UUID
     organization_id: UUID
@@ -83,7 +85,7 @@ class NotificationResponse(BaseModel):
     action_url: Optional[str] = None
     action_label: Optional[str] = None
 
-    metadata: Optional[dict] = None
+    metadata: Optional[dict] = Field(default=None, validation_alias="extra_data")
     scheduled_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
 
@@ -93,11 +95,8 @@ class NotificationResponse(BaseModel):
     created_at: datetime
     created_by: Optional[UUID] = None
 
-    class Config:
-        from_attributes = True
 
-
-class NotificationListResponse(BaseModel):
+class NotificationListResponse(CamelSchema):
     """Schema for paginated notification list response."""
 
     items: List[NotificationResponse]
@@ -107,7 +106,7 @@ class NotificationListResponse(BaseModel):
     unread_count: int = 0
 
 
-class NotificationPreferenceCreate(BaseModel):
+class NotificationPreferenceCreate(CamelSchema):
     """Schema for creating notification preference."""
 
     category: NotificationCategory
@@ -125,7 +124,7 @@ class NotificationPreferenceCreate(BaseModel):
     quiet_hours_end: Optional[str] = None
 
 
-class NotificationPreferenceUpdate(BaseModel):
+class NotificationPreferenceUpdate(CamelSchema):
     """Schema for updating notification preference."""
 
     email_enabled: Optional[bool] = None
@@ -140,8 +139,9 @@ class NotificationPreferenceUpdate(BaseModel):
     quiet_hours_end: Optional[str] = None
 
 
-class NotificationPreferenceResponse(BaseModel):
+class NotificationPreferenceResponse(CamelSchema):
     """Schema for notification preference response."""
+
 
     id: UUID
     user_id: UUID
@@ -162,12 +162,10 @@ class NotificationPreferenceResponse(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class NotificationLogResponse(BaseModel):
+class NotificationLogResponse(CamelSchema):
     """Schema for notification log response."""
+
 
     id: UUID
     notification_id: UUID
@@ -182,11 +180,35 @@ class NotificationLogResponse(BaseModel):
     cost: Optional[float] = None
     currency: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+
+class NotificationLogWithTitleResponse(CamelSchema):
+    """Frontend-facing notification log response."""
+
+    id: UUID
+    notification_id: UUID
+    notification_title: Optional[str] = None
+    channel: NotificationChannel
+    status: NotificationStatus
+    attempt_number: int
+    attempted_at: datetime
+    response_code: Optional[str] = None
+    response_message: Optional[str] = None
+    provider: Optional[str] = None
+    provider_message_id: Optional[str] = None
+    cost: Optional[float] = None
+    currency: Optional[str] = None
 
 
-class NotificationStatsResponse(BaseModel):
+class NotificationLogListResponse(CamelSchema):
+    """Paginated notification log list for admin log screens."""
+
+    items: List[NotificationLogWithTitleResponse]
+    total: int
+    page: int
+    page_size: int
+
+
+class NotificationStatsResponse(CamelSchema):
     """Schema for notification statistics."""
 
     total_notifications: int
@@ -201,14 +223,14 @@ class NotificationStatsResponse(BaseModel):
     by_priority: dict
 
 
-class MarkReadRequest(BaseModel):
+class MarkReadRequest(CamelSchema):
     """Schema for marking notifications as read."""
 
     notification_ids: Optional[List[UUID]] = None
     mark_all: bool = False
 
 
-class SendNotificationRequest(BaseModel):
+class SendNotificationRequest(CamelSchema):
     """Schema for sending a notification from template."""
 
     template_code: str
@@ -223,7 +245,7 @@ class SendNotificationRequest(BaseModel):
     entity_reference: Optional[str] = None
 
 
-class BulkNotificationRequest(BaseModel):
+class BulkNotificationRequest(CamelSchema):
     """Schema for sending bulk notifications."""
 
     title: str

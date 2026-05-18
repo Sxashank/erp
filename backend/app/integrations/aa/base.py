@@ -3,7 +3,7 @@
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 import httpx
 
@@ -12,9 +12,8 @@ from app.integrations.aa.schemas import (
     AAConsentResponse,
     AAFetchRequest,
     AAFetchResponse,
-    AAFIData,
-    AANotification,
     AAHealthCheckResponse,
+    AANotification,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +28,7 @@ class AAClientBase(ABC):
 
     def __init__(
         self,
-        config: Dict[str, Any],
+        config: dict[str, Any],
         sandbox_mode: bool = True,
     ):
         """Initialize the AA client.
@@ -50,8 +49,8 @@ class AAClientBase(ABC):
         self.client_secret = config.get("client_secret", "")
         self.entity_id = config.get("entity_id", "")
         self.callback_url = config.get("callback_url", "")
-        self._access_token: Optional[str] = None
-        self._token_expires_at: Optional[datetime] = None
+        self._access_token: str | None = None
+        self._token_expires_at: datetime | None = None
 
         # Set API URLs based on mode
         if sandbox_mode:
@@ -104,7 +103,7 @@ class AAClientBase(ABC):
     async def fetch_consent_artifact(
         self,
         consent_id: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Fetch the signed consent artifact after approval.
 
         Args:
@@ -150,9 +149,9 @@ class AAClientBase(ABC):
     @abstractmethod
     async def decrypt_fi_data(
         self,
-        encrypted_data: Dict[str, Any],
-        key_material: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        encrypted_data: dict[str, Any],
+        key_material: dict[str, Any],
+    ) -> dict[str, Any]:
         """Decrypt the received FI data.
 
         Args:
@@ -167,7 +166,7 @@ class AAClientBase(ABC):
     async def revoke_consent(
         self,
         consent_id: str,
-        reason: Optional[str] = None,
+        reason: str | None = None,
     ) -> AAConsentResponse:
         """Revoke an active consent.
 
@@ -179,10 +178,10 @@ class AAClientBase(ABC):
             Updated consent status
         """
         # Default implementation - override if provider has specific API
-        logger.warning(f"Consent revocation not implemented for this provider")
+        logger.warning("Consent revocation is not supported by this provider")
         return AAConsentResponse(
             success=False,
-            error_message="Consent revocation not implemented",
+            error_message="Consent revocation is not supported by this provider",
         )
 
     async def health_check(self) -> AAHealthCheckResponse:
@@ -244,20 +243,18 @@ class AAClientBase(ABC):
             return True
 
         # Implement HMAC verification
-        import hmac
         import hashlib
+        import hmac
 
         expected_signature = hmac.new(
-            webhook_secret.encode(),
-            f"{timestamp}.{payload.decode()}".encode(),
-            hashlib.sha256
+            webhook_secret.encode(), f"{timestamp}.{payload.decode()}".encode(), hashlib.sha256
         ).hexdigest()
 
         return hmac.compare_digest(signature, expected_signature)
 
     def parse_notification(
         self,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> AANotification:
         """Parse webhook notification payload.
 

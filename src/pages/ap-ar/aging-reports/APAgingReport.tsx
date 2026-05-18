@@ -1,20 +1,19 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  ArrowLeft,
-  Calendar,
   ChevronRight,
-  Download,
   FileSpreadsheet,
   Printer,
   RefreshCw,
 } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import {
   Select,
   SelectContent,
@@ -30,10 +29,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { agingReportsApi, vendorsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+import { logger } from "@/lib/logger";
 interface AgingVendor {
   vendor_id: string;
   vendor_code: string;
@@ -70,13 +71,13 @@ export function APAgingReport() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const organizationId = localStorage.getItem('organization_id') || '';
+  const organizationId = useActiveOrganizationId() || '';
 
   // State
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [selectedVendor, setSelectedVendor] = useState(searchParams.get('vendor_id') || 'all');
   const [asOfDate, setAsOfDate] = useState(
-    searchParams.get('as_of_date') || format(new Date(), 'yyyy-MM-dd')
+    searchParams.get('as_of_date') || format(new Date(), 'yyyy-MM-dd'),
   );
   const [loading, setLoading] = useState(false);
   const [reportData, setReportData] = useState<AgingSummary | null>(null);
@@ -84,21 +85,23 @@ export function APAgingReport() {
   // Fetch vendors
   useEffect(() => {
     const fetchVendors = async () => {
+      if (!organizationId) return;
       try {
         const response = await vendorsApi.getActive({ organization_id: organizationId });
         setVendors(response.data || []);
       } catch (error) {
-        console.error('Failed to fetch vendors:', error);
+        logger.error('Failed to fetch vendors:', error);
       }
     };
     fetchVendors();
   }, [organizationId]);
 
   // Fetch report
-  const fetchReport = async () => {
+  const fetchReport = useCallback(async () => {
+    if (!organizationId) return;
     setLoading(true);
     try {
-      const params: any = {
+      const params: Parameters<typeof agingReportsApi.getAPAgingSummary>[0] = {
         organization_id: organizationId,
         as_of_date: asOfDate,
       };
@@ -108,20 +111,16 @@ export function APAgingReport() {
 
       const response = await agingReportsApi.getAPAgingSummary(params);
       setReportData(response.data);
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to fetch report',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setLoading(false);
     }
-  };
+  }, [asOfDate, organizationId, selectedVendor, toast]);
 
   useEffect(() => {
     fetchReport();
-  }, []);
+  }, [fetchReport]);
 
   const formatAmount = (amount: number) => {
     return new Intl.NumberFormat('en-IN', {
@@ -146,23 +145,20 @@ export function APAgingReport() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4 print:hidden">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">AP Aging Report</h1>
-          <p className="text-sm text-slate-500">
-            Accounts Payable aging analysis by vendor
-          </p>
-        </div>
-        {reportData && (
-          <Button variant="outline" onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        )}
+      <div className="print:hidden">
+        <PageHeader
+          title="AP Aging Report"
+          subtitle="Accounts Payable aging analysis by vendor"
+          breadcrumbs={[{ label: 'AP / AR', to: '/admin/ap-ar' }, { label: 'AP Aging' }]}
+          actions={
+            reportData ? (
+              <Button variant="outline" onClick={handlePrint}>
+                <Printer className="mr-2 h-4 w-4" />
+                Print
+              </Button>
+            ) : undefined
+          }
+        />
       </div>
 
       {/* Filters */}
@@ -171,11 +167,7 @@ export function APAgingReport() {
           <div className="grid gap-4 md:grid-cols-4">
             <div>
               <Label>As of Date</Label>
-              <Input
-                type="date"
-                value={asOfDate}
-                onChange={(e) => setAsOfDate(e.target.value)}
-              />
+              <Input type="date" value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
             </div>
             <div>
               <Label>Vendor</Label>

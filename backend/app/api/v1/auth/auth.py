@@ -24,7 +24,7 @@ from app.schemas.base import MessageResponse
 router = APIRouter()
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login", response_model=Token, response_model_by_alias=True)
 @auth_login_limit()
 async def login(
     request: Request,
@@ -51,7 +51,7 @@ async def login(
     return token
 
 
-@router.post("/refresh", response_model=Token)
+@router.post("/refresh", response_model=Token, response_model_by_alias=True)
 @auth_refresh_limit()
 async def refresh_token(
     request: Request,
@@ -69,7 +69,7 @@ async def refresh_token(
     return await auth_service.refresh_token(data.refresh_token, ip_address)
 
 
-@router.post("/logout", response_model=MessageResponse)
+@router.post("/logout", response_model=MessageResponse, response_model_by_alias=True)
 async def logout(
     data: RefreshTokenRequest,
     db: AsyncSession = Depends(get_db),
@@ -82,7 +82,7 @@ async def logout(
     return MessageResponse(message="Successfully logged out")
 
 
-@router.post("/logout-all", response_model=MessageResponse)
+@router.post("/logout-all", response_model=MessageResponse, response_model_by_alias=True)
 async def logout_all(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -95,7 +95,7 @@ async def logout_all(
     return MessageResponse(message=f"Logged out from {count} sessions")
 
 
-@router.post("/change-password", response_model=MessageResponse)
+@router.post("/change-password", response_model=MessageResponse, response_model_by_alias=True)
 async def change_password(
     data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
@@ -113,7 +113,7 @@ async def change_password(
     return MessageResponse(message="Password changed successfully")
 
 
-@router.get("/me", response_model=UserResponse)
+@router.get("/me", response_model=UserResponse, response_model_by_alias=True)
 async def get_current_user_info(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -160,7 +160,7 @@ async def get_current_user_info(
     )
 
 
-@router.post("/forgot-password", response_model=MessageResponse)
+@router.post("/forgot-password", response_model=MessageResponse, response_model_by_alias=True)
 async def forgot_password(
     data: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db),
@@ -185,7 +185,7 @@ async def forgot_password(
     return MessageResponse(message="If the email exists, password reset instructions have been sent")
 
 
-@router.post("/reset-password", response_model=MessageResponse)
+@router.post("/reset-password", response_model=MessageResponse, response_model_by_alias=True)
 async def reset_password(
     data: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db),

@@ -1,14 +1,14 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   Select,
   SelectContent,
@@ -21,6 +21,7 @@ import { unitsApi, organizationsApi } from '@/services/api';
 import { INDIAN_STATES, STATUS_OPTIONS, UNIT_TYPES } from '@/types';
 import type { UnitCreate, UnitUpdate, Unit, Organization } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function UnitForm() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ export function UnitForm() {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
@@ -74,7 +75,7 @@ export function UnitForm() {
       const response = await unitsApi.list({ organization_id: orgId, page_size: 100 });
       setParentUnits(response.data.items.filter((u: Unit) => u.id !== id));
     } catch (error) {
-      console.error('Failed to fetch parent units:', error);
+      logger.error('Failed to fetch parent units:', error);
     }
   };
 
@@ -108,7 +109,7 @@ export function UnitForm() {
         status: unit.status,
       });
     } catch (error) {
-      console.error('Failed to fetch unit:', error);
+      logger.error('Failed to fetch unit:', error);
     } finally {
       setLoading(false);
     }
@@ -129,7 +130,7 @@ export function UnitForm() {
       }
       navigate('/admin/units');
     } catch (error) {
-      console.error('Failed to save unit:', error);
+      logger.error('Failed to save unit:', error);
     } finally {
       setSubmitting(false);
     }

@@ -1,13 +1,13 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Loader2 } from 'lucide-react';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { Save, Loader2 } from 'lucide-react';
+import { useEffect } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
+
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Form,
   FormControl,
@@ -17,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -24,9 +25,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { treasuryApi, CreateLenderRequest } from '@/services/lending/treasuryApi';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { useCreateLender, useLender, useUpdateLender } from '@/hooks/lending/useLenders';
+import {
+  defaultLenderFormValues,
+  lenderDetailToFormValues,
+  lenderFormSchema,
+  lenderFormToRequest,
+  type LenderFormData,
+} from '@/schemas/lending/treasuryLenderSchema';
 
 const LENDER_TYPES = [
   { value: 'BANK', label: 'Bank' },
@@ -44,176 +52,95 @@ const LENDER_TYPES = [
   { value: 'OTHER', label: 'Other' },
 ];
 
-const lenderFormSchema = z.object({
-  lender_name: z.string().min(1, 'Lender name is required').max(200),
-  lender_type: z.string().min(1, 'Lender type is required'),
-  pan: z.string().regex(/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format').optional().or(z.literal('')),
-  cin: z.string().max(25).optional().or(z.literal('')),
-  gstin: z.string().regex(/^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/, 'Invalid GSTIN format').optional().or(z.literal('')),
-  rbi_registration: z.string().max(50).optional().or(z.literal('')),
-  registered_address: z.string().optional().or(z.literal('')),
-  contact_person: z.string().max(100).optional().or(z.literal('')),
-  contact_email: z.string().email('Invalid email').optional().or(z.literal('')),
-  contact_phone: z.string().max(20).optional().or(z.literal('')),
-  bank_name: z.string().max(100).optional().or(z.literal('')),
-  bank_branch: z.string().max(100).optional().or(z.literal('')),
-  bank_account_number: z.string().max(30).optional().or(z.literal('')),
-  bank_ifsc: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC code').optional().or(z.literal('')),
-  external_rating: z.string().max(20).optional().or(z.literal('')),
-  rating_agency: z.string().max(50).optional().or(z.literal('')),
-  rating_date: z.string().optional().or(z.literal('')),
-  total_sanction_limit: z.coerce.number().nonnegative().optional(),
-  remarks: z.string().optional().or(z.literal('')),
-});
-
-type LenderFormData = z.infer<typeof lenderFormSchema>;
-
 export default function LenderForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
   const isEditMode = Boolean(id);
+  const { data: lender, isLoading, isError, error, refetch } = useLender(id);
+  const createLenderMutation = useCreateLender();
+  const updateLenderMutation = useUpdateLender();
+  const saving = createLenderMutation.isPending || updateLenderMutation.isPending;
 
   const form = useForm<LenderFormData>({
-    resolver: zodResolver(lenderFormSchema) as any,
-    defaultValues: {
-      lender_name: '',
-      lender_type: '',
-      pan: '',
-      cin: '',
-      gstin: '',
-      rbi_registration: '',
-      registered_address: '',
-      contact_person: '',
-      contact_email: '',
-      contact_phone: '',
-      bank_name: '',
-      bank_branch: '',
-      bank_account_number: '',
-      bank_ifsc: '',
-      external_rating: '',
-      rating_agency: '',
-      rating_date: '',
-      total_sanction_limit: undefined,
-      remarks: '',
-    },
+    resolver: zodResolver(lenderFormSchema),
+    defaultValues: defaultLenderFormValues,
   });
 
   useEffect(() => {
-    if (isEditMode && id) {
-      loadLender(id);
+    if (lender) {
+      form.reset(lenderDetailToFormValues(lender));
+      return;
     }
-  }, [id, isEditMode]);
-
-  const loadLender = async (lenderId: string) => {
-    setLoading(true);
-    try {
-      const lender = await treasuryApi.getLender(lenderId);
-      form.reset({
-        lender_name: lender.lender_name || '',
-        lender_type: lender.lender_type || '',
-        pan: lender.pan || '',
-        cin: lender.cin || '',
-        gstin: lender.gstin || '',
-        rbi_registration: lender.rbi_registration || '',
-        registered_address: lender.registered_address || '',
-        contact_person: lender.contact_person || '',
-        contact_email: lender.contact_email || '',
-        contact_phone: lender.contact_phone || '',
-        bank_name: lender.bank_name || '',
-        bank_branch: lender.bank_branch || '',
-        bank_account_number: lender.bank_account_number || '',
-        bank_ifsc: lender.bank_ifsc || '',
-        external_rating: lender.external_rating || '',
-        rating_agency: lender.rating_agency || '',
-        rating_date: lender.rating_date || '',
-        total_sanction_limit: lender.total_sanction_limit || undefined,
-        remarks: lender.remarks || '',
-      });
-    } catch (error) {
-      console.error('Failed to load lender:', error);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load lender details',
-      });
-    } finally {
-      setLoading(false);
+    if (!isEditMode) {
+      form.reset(defaultLenderFormValues);
     }
-  };
+  }, [form, isEditMode, lender]);
 
   const onSubmit = async (data: LenderFormData) => {
-    setSaving(true);
     try {
-      const payload: CreateLenderRequest = {
-        lender_name: data.lender_name,
-        lender_type: data.lender_type as CreateLenderRequest['lender_type'],
-        contact_person: data.contact_person || undefined,
-        contact_email: data.contact_email || undefined,
-        contact_phone: data.contact_phone || undefined,
-        address: data.registered_address || undefined,
-        remarks: data.remarks || undefined,
-      };
+      const payload = lenderFormToRequest(data);
 
       if (isEditMode && id) {
-        await treasuryApi.updateLender(id, payload);
+        await updateLenderMutation.mutateAsync({ lenderId: id, payload });
         toast({
           title: 'Success',
           description: 'Lender updated successfully',
         });
       } else {
-        const newLender = await treasuryApi.createLender(payload);
+        const newLender = await createLenderMutation.mutateAsync(payload);
         toast({
           title: 'Success',
           description: 'Lender created successfully',
         });
-        navigate(`/admin/lending/treasury/lenders/${newLender.lender_id}`);
+        navigate(`/admin/treasury/lenders/${newLender.lenderId}`);
         return;
       }
-      navigate('/admin/lending/treasury/lenders');
-    } catch (error) {
-      console.error('Failed to save lender:', error);
+      navigate('/admin/treasury/lenders');
+    } catch {
       toast({
         variant: 'destructive',
         title: 'Error',
         description: `Failed to ${isEditMode ? 'update' : 'create'} lender`,
       });
-    } finally {
-      setSaving(false);
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
 
+  if (isEditMode && isError) {
+    return (
+      <ErrorState
+        title="Could not load lender details"
+        error={error}
+        onRetry={() => void refetch()}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {isEditMode ? 'Edit Lender' : 'Add New Lender'}
-          </h1>
-          <p className="text-muted-foreground">
-            {isEditMode
-              ? 'Update lender/funding source details'
-              : 'Create a new lender/funding source record'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEditMode ? 'Edit Lender' : 'Add New Lender'}
+        subtitle={
+          isEditMode
+            ? 'Update lender/funding source details'
+            : 'Create a new lender/funding source record'
+        }
+        breadcrumbs={[
+          { label: 'Lenders', to: '/admin/treasury/lenders' },
+          { label: isEditMode ? 'Edit' : 'New' },
+        ]}
+      />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           {/* Basic Information */}
           <Card>
             <CardHeader>
@@ -224,7 +151,7 @@ export default function LenderForm() {
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="lender_name"
+                  name="lenderName"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Lender Name *</FormLabel>
@@ -237,7 +164,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="lender_type"
+                  name="lenderType"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Lender Type *</FormLabel>
@@ -273,9 +200,7 @@ export default function LenderForm() {
                           placeholder="ABCDE1234F"
                           {...field}
                           className="uppercase"
-                          onChange={(e) =>
-                            field.onChange(e.target.value.toUpperCase())
-                          }
+                          onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                         />
                       </FormControl>
                       <FormMessage />
@@ -306,9 +231,7 @@ export default function LenderForm() {
                           placeholder="22AAAAA0000A1Z5"
                           {...field}
                           className="uppercase"
-                          onChange={(e) =>
-                            field.onChange(e.target.value.toUpperCase())
-                          }
+                          onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                         />
                       </FormControl>
                       <FormMessage />
@@ -320,7 +243,7 @@ export default function LenderForm() {
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="rbi_registration"
+                  name="rbiRegistration"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>RBI Registration</FormLabel>
@@ -333,7 +256,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="total_sanction_limit"
+                  name="totalSanctionLimit"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Total Sanction Limit</FormLabel>
@@ -358,16 +281,12 @@ export default function LenderForm() {
 
               <FormField
                 control={form.control}
-                name="registered_address"
+                name="registeredAddress"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Registered Address</FormLabel>
                     <FormControl>
-                      <Textarea
-                        placeholder="Full registered address"
-                        {...field}
-                        rows={2}
-                      />
+                      <Textarea placeholder="Full registered address" {...field} rows={2} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -386,7 +305,7 @@ export default function LenderForm() {
               <div className="grid gap-4 md:grid-cols-3">
                 <FormField
                   control={form.control}
-                  name="contact_person"
+                  name="contactPerson"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Contact Person</FormLabel>
@@ -399,16 +318,12 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="contact_email"
+                  name="contactEmail"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Email</FormLabel>
                       <FormControl>
-                        <Input
-                          type="email"
-                          placeholder="email@example.com"
-                          {...field}
-                        />
+                        <Input type="email" placeholder="email@example.com" {...field} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -416,7 +331,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="contact_phone"
+                  name="contactPhone"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Phone</FormLabel>
@@ -435,15 +350,13 @@ export default function LenderForm() {
           <Card>
             <CardHeader>
               <CardTitle>Bank Details</CardTitle>
-              <CardDescription>
-                Bank account details for payment processing
-              </CardDescription>
+              <CardDescription>Bank account details for payment processing</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="bank_name"
+                  name="bankName"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Bank Name</FormLabel>
@@ -456,7 +369,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="bank_branch"
+                  name="bankBranch"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Branch</FormLabel>
@@ -471,7 +384,7 @@ export default function LenderForm() {
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
-                  name="bank_account_number"
+                  name="bankAccountNumber"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Account Number</FormLabel>
@@ -484,7 +397,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="bank_ifsc"
+                  name="bankIfsc"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>IFSC Code</FormLabel>
@@ -493,9 +406,7 @@ export default function LenderForm() {
                           placeholder="HDFC0001234"
                           {...field}
                           className="uppercase"
-                          onChange={(e) =>
-                            field.onChange(e.target.value.toUpperCase())
-                          }
+                          onChange={(e) => field.onChange(e.target.value.toUpperCase())}
                         />
                       </FormControl>
                       <FormMessage />
@@ -516,7 +427,7 @@ export default function LenderForm() {
               <div className="grid gap-4 md:grid-cols-3">
                 <FormField
                   control={form.control}
-                  name="external_rating"
+                  name="externalRating"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Rating</FormLabel>
@@ -529,7 +440,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="rating_agency"
+                  name="ratingAgency"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Rating Agency</FormLabel>
@@ -554,7 +465,7 @@ export default function LenderForm() {
                 />
                 <FormField
                   control={form.control}
-                  name="rating_date"
+                  name="ratingDate"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Rating Date</FormLabel>
@@ -582,11 +493,7 @@ export default function LenderForm() {
                   <FormItem>
                     <FormLabel>Remarks</FormLabel>
                     <FormControl>
-                      <Textarea
-                        placeholder="Any additional notes or remarks"
-                        {...field}
-                        rows={3}
-                      />
+                      <Textarea placeholder="Any additional notes or remarks" {...field} rows={3} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -597,12 +504,7 @@ export default function LenderForm() {
 
           {/* Actions */}
           <div className="flex justify-end gap-4">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => navigate(-1)}
-              disabled={saving}
-            >
+            <Button type="button" variant="outline" onClick={() => navigate(-1)} disabled={saving}>
               Cancel
             </Button>
             <Button type="submit" disabled={saving}>

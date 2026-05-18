@@ -1,11 +1,11 @@
+import { Edit, Key, MoreHorizontal, Plus, Trash2, Unlock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Edit, Key, MoreHorizontal, Plus, Trash2, Unlock } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,6 +24,7 @@ import {
 import { usersApi } from '@/services/api';
 import type { User, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function UserList() {
   const navigate = useNavigate();
   const [users, setUsers] = useState<User[]>([]);
@@ -38,7 +39,7 @@ export function UserList() {
       setUsers(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch users:', error);
+      logger.error('Failed to fetch users:', error);
     } finally {
       setLoading(false);
     }
@@ -54,7 +55,7 @@ export function UserList() {
       await usersApi.delete(id);
       fetchUsers(pagination.page);
     } catch (error) {
-      console.error('Failed to delete user:', error);
+      logger.error('Failed to delete user:', error);
     }
   };
 
@@ -63,7 +64,7 @@ export function UserList() {
       await usersApi.unlock(id);
       fetchUsers(pagination.page);
     } catch (error) {
-      console.error('Failed to unlock user:', error);
+      logger.error('Failed to unlock user:', error);
     }
   };
 
@@ -74,7 +75,7 @@ export function UserList() {
       await usersApi.resetPassword(id, newPassword, true);
       alert('Password reset successfully');
     } catch (error) {
-      console.error('Failed to reset password:', error);
+      logger.error('Failed to reset password:', error);
     }
   };
 
@@ -92,6 +93,9 @@ export function UserList() {
         return 'bg-slate-100 text-slate-600 hover:bg-slate-100';
     }
   };
+
+  const getRoleCode = (role: User['roles'][number] | string) =>
+    typeof role === 'string' ? role : role.code;
 
   return (
     <div className="space-y-6">
@@ -147,8 +151,8 @@ export function UserList() {
                       <TableCell>
                         <div className="flex flex-wrap gap-1">
                           {user.roles.slice(0, 2).map((role) => (
-                            <Badge key={role.id} variant="outline" className="text-xs">
-                              {role.code}
+                            <Badge key={getRoleCode(role)} variant="outline" className="text-xs">
+                              {getRoleCode(role)}
                             </Badge>
                           ))}
                           {user.roles.length > 2 && (
@@ -170,9 +174,7 @@ export function UserList() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getStatusBadge(user.status)}>
-                          {user.status}
-                        </Badge>
+                        <Badge className={getStatusBadge(user.status)}>{user.status}</Badge>
                       </TableCell>
                       <TableCell>
                         <DropdownMenu>
@@ -182,7 +184,9 @@ export function UserList() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => navigate(`/admin/users/${user.id}/edit`)}>
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/admin/users/${user.id}/edit`)}
+                            >
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>

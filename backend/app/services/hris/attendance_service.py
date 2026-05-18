@@ -1,40 +1,39 @@
 """Attendance service for HRIS module."""
 
-from datetime import date, time, datetime, timedelta
+import builtins
+from datetime import date, datetime, time
 from decimal import Decimal
-from typing import List, Optional, Tuple, Dict, Any
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.constants import (
+    AttendanceStatus,
+    EmploymentStatus,
+    LeaveApplicationStatus,
+    RegularizationStatus,
+)
 from app.models.hris.attendance import (
-    AttendancePunch,
     Attendance,
+    AttendancePunch,
     AttendanceRegularization,
     MonthlyAttendanceSummary,
 )
 from app.models.hris.employee import Employee
-from app.models.hris.shift import Shift
 from app.models.hris.leave import LeaveApplication
+from app.models.hris.shift import Shift
 from app.schemas.hris.attendance import (
-    AttendancePunchCreate,
     AttendanceCreate,
-    AttendanceUpdate,
     AttendanceFilters,
+    AttendanceProcessingResult,
+    AttendancePunchCreate,
     AttendanceRegularizationCreate,
     AttendanceRegularizationFilters,
+    AttendanceUpdate,
     ProcessDailyAttendanceRequest,
     ProcessMonthlyAttendanceRequest,
-    AttendanceProcessingResult,
-)
-from app.core.constants import (
-    AttendanceStatus,
-    AttendanceSource,
-    RegularizationStatus,
-    LeaveApplicationStatus,
-    EmploymentStatus,
 )
 from app.services.hris.shift_service import HolidayService
 
@@ -49,20 +48,18 @@ class AttendanceService:
     # Punch Operations
     # ============================================
     async def record_punch(
-        self, data: AttendancePunchCreate, created_by: Optional[UUID] = None
+        self, data: AttendancePunchCreate, created_by: UUID | None = None
     ) -> AttendancePunch:
         """Record an attendance punch."""
         punch = AttendancePunch(**data.model_dump())
         if created_by:
             punch.created_by = created_by
         self.db.add(punch)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(punch)
         return punch
 
-    async def get_punches(
-        self, employee_id: UUID, punch_date: date
-    ) -> List[AttendancePunch]:
+    async def get_punches(self, employee_id: UUID, punch_date: date) -> list[AttendancePunch]:
         """Get all punches for an employee on a date."""
         start_dt = datetime.combine(punch_date, time.min)
         end_dt = datetime.combine(punch_date, time.max)
@@ -81,9 +78,7 @@ class AttendanceService:
     # ============================================
     # Attendance Operations
     # ============================================
-    async def get_attendance(
-        self, employee_id: UUID, attendance_date: date
-    ) -> Optional[Attendance]:
+    async def get_attendance(self, employee_id: UUID, attendance_date: date) -> Attendance | None:
         """Get attendance for an employee on a date."""
         result = await self.db.execute(
             select(Attendance).where(
@@ -93,7 +88,7 @@ class AttendanceService:
         )
         return result.scalar_one_or_none()
 
-    async def get_by_id(self, attendance_id: UUID) -> Optional[Attendance]:
+    async def get_by_id(self, attendance_id: UUID) -> Attendance | None:
         """Get attendance by ID."""
         result = await self.db.execute(
             select(Attendance)
@@ -110,7 +105,7 @@ class AttendanceService:
         filters: AttendanceFilters,
         skip: int = 0,
         limit: int = 50,
-    ) -> Tuple[List[Attendance], int]:
+    ) -> tuple[list[Attendance], int]:
         """List attendance records with filters."""
         query = select(Attendance).options(
             selectinload(Attendance.employee),
@@ -153,18 +148,20 @@ class AttendanceService:
         total = total_result.scalar() or 0
 
         # Apply pagination
-        query = query.order_by(
-            Attendance.attendance_date.desc(),
-            Attendance.employee_id,
-        ).offset(skip).limit(limit)
+        query = (
+            query.order_by(
+                Attendance.attendance_date.desc(),
+                Attendance.employee_id,
+            )
+            .offset(skip)
+            .limit(limit)
+        )
         result = await self.db.execute(query)
         records = list(result.scalars().all())
 
         return records, total
 
-    async def create_or_update(
-        self, data: AttendanceCreate, user_id: UUID
-    ) -> Attendance:
+    async def create_or_update(self, data: AttendanceCreate, user_id: UUID) -> Attendance:
         """Create or update attendance."""
         existing = await self.get_attendance(data.employee_id, data.attendance_date)
         if existing:
@@ -172,19 +169,19 @@ class AttendanceService:
             for field, value in update_data.items():
                 setattr(existing, field, value)
             existing.updated_by = user_id
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(existing)
             return existing
         else:
             attendance = Attendance(**data.model_dump(), created_by=user_id)
             self.db.add(attendance)
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(attendance)
             return attendance
 
     async def update(
         self, attendance_id: UUID, data: AttendanceUpdate, updated_by: UUID
-    ) -> Optional[Attendance]:
+    ) -> Attendance | None:
         """Update attendance."""
         attendance = await self.get_by_id(attendance_id)
         if not attendance:
@@ -198,7 +195,7 @@ class AttendanceService:
             setattr(attendance, field, value)
 
         attendance.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(attendance)
         return attendance
 
@@ -237,14 +234,16 @@ class AttendanceService:
                 )
                 result.processed += 1
             except Exception as e:
-                result.errors.append({
-                    "employee_id": str(employee.id),
-                    "employee_code": employee.employee_code,
-                    "error": str(e),
-                })
+                result.errors.append(
+                    {
+                        "employee_id": str(employee.id),
+                        "employee_code": employee.employee_code,
+                        "error": str(e),
+                    }
+                )
                 result.skipped += 1
 
-        await self.db.commit()
+        await self.db.flush()
         return result
 
     async def _process_employee_attendance(
@@ -266,9 +265,7 @@ class AttendanceService:
         # Get shift
         shift = None
         if employee.shift_id:
-            result = await self.db.execute(
-                select(Shift).where(Shift.id == employee.shift_id)
-            )
+            result = await self.db.execute(select(Shift).where(Shift.id == employee.shift_id))
             shift = result.scalar_one_or_none()
 
         # Check for holiday
@@ -359,8 +356,7 @@ class AttendanceService:
             first_in=first_in,
             last_out=last_out,
             all_punches=[
-                {"time": p.punch_datetime.isoformat(), "type": p.punch_type}
-                for p in punches
+                {"time": p.punch_datetime.isoformat(), "type": p.punch_type} for p in punches
             ],
             status=status,
             total_work_minutes=total_work_minutes,
@@ -391,13 +387,11 @@ class AttendanceService:
             created_by=created_by,
         )
         self.db.add(regularization)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(regularization)
         return regularization
 
-    async def get_regularization(
-        self, regularization_id: UUID
-    ) -> Optional[AttendanceRegularization]:
+    async def get_regularization(self, regularization_id: UUID) -> AttendanceRegularization | None:
         """Get regularization by ID."""
         result = await self.db.execute(
             select(AttendanceRegularization)
@@ -411,7 +405,7 @@ class AttendanceService:
         filters: AttendanceRegularizationFilters,
         skip: int = 0,
         limit: int = 20,
-    ) -> Tuple[List[AttendanceRegularization], int]:
+    ) -> tuple[builtins.list[AttendanceRegularization], int]:
         """List regularization requests."""
         query = select(AttendanceRegularization).options(
             selectinload(AttendanceRegularization.employee)
@@ -455,15 +449,26 @@ class AttendanceService:
         return records, total
 
     async def approve_regularization(
-        self, regularization_id: UUID, remarks: Optional[str], approved_by: UUID
-    ) -> Optional[AttendanceRegularization]:
-        """Approve regularization and update attendance."""
+        self, regularization_id: UUID, remarks: str | None, approved_by: UUID
+    ) -> AttendanceRegularization | None:
+        """Approve regularization and update attendance.
+
+        §8.4 maker-checker: the employee who submitted the regularization
+        request cannot also approve it.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         regularization = await self.get_regularization(regularization_id)
         if not regularization:
             return None
 
         if regularization.status != RegularizationStatus.PENDING:
             raise ValueError("Can only approve pending regularizations")
+
+        ensure_maker_is_not_checker(
+            maker_user_id=regularization.created_by,
+            checker_user_id=approved_by,
+        )
 
         # Update attendance
         attendance = await self.get_attendance(
@@ -485,13 +490,13 @@ class AttendanceService:
         regularization.approved_at = date.today()
         regularization.approver_remarks = remarks
         regularization.updated_by = approved_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(regularization)
         return regularization
 
     async def reject_regularization(
         self, regularization_id: UUID, reason: str, rejected_by: UUID
-    ) -> Optional[AttendanceRegularization]:
+    ) -> AttendanceRegularization | None:
         """Reject regularization."""
         regularization = await self.get_regularization(regularization_id)
         if not regularization:
@@ -505,7 +510,7 @@ class AttendanceService:
         regularization.rejected_at = date.today()
         regularization.rejection_reason = reason
         regularization.updated_by = rejected_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(regularization)
         return regularization
 
@@ -542,14 +547,16 @@ class AttendanceService:
                 )
                 result.processed += 1
             except Exception as e:
-                result.errors.append({
-                    "employee_id": str(employee.id),
-                    "employee_code": employee.employee_code,
-                    "error": str(e),
-                })
+                result.errors.append(
+                    {
+                        "employee_id": str(employee.id),
+                        "employee_code": employee.employee_code,
+                        "error": str(e),
+                    }
+                )
                 result.skipped += 1
 
-        await self.db.commit()
+        await self.db.flush()
         return result
 
     async def _calculate_monthly_summary(
@@ -558,6 +565,7 @@ class AttendanceService:
         """Calculate monthly summary for an employee."""
         # Get all attendance for the month
         from calendar import monthrange
+
         _, days_in_month = monthrange(year, month)
         first_day = date(year, month, 1)
         last_day = date(year, month, days_in_month)
@@ -583,7 +591,7 @@ class AttendanceService:
         total_late_minutes = 0
         total_overtime_hours = Decimal("0")
 
-        leave_breakdown: Dict[str, Decimal] = {}
+        leave_breakdown: dict[str, Decimal] = {}
 
         for att in attendances:
             if att.status == AttendanceStatus.PRESENT:
@@ -600,7 +608,9 @@ class AttendanceService:
                 on_leave += Decimal("1")
                 if att.leave_type_id:
                     leave_id = str(att.leave_type_id)
-                    leave_breakdown[leave_id] = leave_breakdown.get(leave_id, Decimal("0")) + Decimal("1")
+                    leave_breakdown[leave_id] = leave_breakdown.get(
+                        leave_id, Decimal("0")
+                    ) + Decimal("1")
             elif att.status == AttendanceStatus.LATE:
                 present_days += Decimal("1")
                 late_days += 1
@@ -698,5 +708,5 @@ class AttendanceService:
             summary.locked_at = datetime.now()
             summary.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         return len(summaries)

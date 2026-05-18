@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { BookOpen, Eye, FileSpreadsheet, FileText, Filter, Printer } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BookOpen, Download, Eye, FileSpreadsheet, FileText, Filter, Printer } from 'lucide-react';
-import { exportDayBookToExcel, exportDayBookToPDF } from '@/utils/exportUtils';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,7 +25,9 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { reportsApi, organizationsApi, voucherTypesApi } from '@/services/api';
+import { exportDayBookToExcel, exportDayBookToPDF } from '@/utils/exportUtils';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -73,6 +75,27 @@ export function DayBook() {
   const [reportData, setReportData] = useState<DayBookResponse | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const fetchOrganizations = useCallback(async () => {
+    try {
+      const response = await organizationsApi.list({ page_size: 100 });
+      setOrganizations(response.data.items);
+      if (response.data.items.length > 0) {
+        setSelectedOrgId(response.data.items[0].id);
+      }
+    } catch (error) {
+      logger.error('Failed to fetch organizations:', error);
+    }
+  }, []);
+
+  const fetchVoucherTypes = useCallback(async () => {
+    try {
+      const response = await voucherTypesApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      setVoucherTypes(response.data.items);
+    } catch (error) {
+      logger.error('Failed to fetch voucher types:', error);
+    }
+  }, [selectedOrgId]);
+
   useEffect(() => {
     fetchOrganizations();
     // Set default dates to current month
@@ -81,40 +104,19 @@ export function DayBook() {
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     setFromDate(firstDay.toISOString().split('T')[0]);
     setToDate(lastDay.toISOString().split('T')[0]);
-  }, []);
+  }, [fetchOrganizations]);
 
   useEffect(() => {
     if (selectedOrgId) {
       fetchVoucherTypes();
     }
-  }, [selectedOrgId]);
-
-  const fetchOrganizations = async () => {
-    try {
-      const response = await organizationsApi.list({ page_size: 100 });
-      setOrganizations(response.data.items);
-      if (response.data.items.length > 0) {
-        setSelectedOrgId(response.data.items[0].id);
-      }
-    } catch (error) {
-      console.error('Failed to fetch organizations:', error);
-    }
-  };
-
-  const fetchVoucherTypes = async () => {
-    try {
-      const response = await voucherTypesApi.list({ organization_id: selectedOrgId, page_size: 100 });
-      setVoucherTypes(response.data.items);
-    } catch (error) {
-      console.error('Failed to fetch voucher types:', error);
-    }
-  };
+  }, [fetchVoucherTypes, selectedOrgId]);
 
   const generateReport = async () => {
     if (!selectedOrgId || !fromDate || !toDate) return;
     try {
       setLoading(true);
-      const params: any = {
+      const params: Parameters<typeof reportsApi.getDayBook>[0] = {
         organization_id: selectedOrgId,
         from_date: fromDate,
         to_date: toDate,
@@ -125,7 +127,7 @@ export function DayBook() {
       const response = await reportsApi.getDayBook(params);
       setReportData(response.data);
     } catch (error) {
-      console.error('Failed to generate report:', error);
+      logger.error('Failed to generate report:', error);
     } finally {
       setLoading(false);
     }
@@ -138,12 +140,6 @@ export function DayBook() {
       minimumFractionDigits: 2,
     }).format(amount);
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
 
   const handlePrint = () => {
     window.print();
@@ -281,7 +277,7 @@ export function DayBook() {
               <h2 className="text-xl font-bold">{reportData.organization_name}</h2>
               <h3 className="text-lg font-semibold text-slate-700">Day Book / Journal Register</h3>
               <p className="text-sm text-slate-500">
-                From {formatDate(reportData.from_date)} to {formatDate(reportData.to_date)}
+                From <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>
@@ -344,14 +340,14 @@ export function DayBook() {
                       {/* Date Header Row */}
                       <TableRow key={`header-${dateStr}`} className="bg-slate-100">
                         <TableCell colSpan={8} className="font-semibold text-slate-700">
-                          {formatDate(dateStr)} - {entries.length} voucher(s)
+                          <DateDisplay date={dateStr} /> - {entries.length} voucher(s)
                         </TableCell>
                       </TableRow>
                       {/* Voucher Rows */}
                       {entries.map((entry) => (
                         <TableRow key={entry.voucher_id} className="hover:bg-slate-50">
                           <TableCell className="font-mono text-sm text-slate-500">
-                            {formatDate(entry.voucher_date)}
+                            <DateDisplay date={entry.voucher_date} />
                           </TableCell>
                           <TableCell className="font-medium text-blue-600">
                             {entry.voucher_number}

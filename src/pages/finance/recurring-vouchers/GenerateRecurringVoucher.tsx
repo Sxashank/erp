@@ -1,15 +1,19 @@
-import { useEffect, useState } from 'react';
+import { Calendar, FileText, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Calendar, FileText, Loader2 } from 'lucide-react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { recurringVouchersApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface RecurringVoucherDetail {
   id: string;
   template_name: string;
@@ -20,12 +24,12 @@ interface RecurringVoucherDetail {
   completed_occurrences: number;
   total_occurrences: number | null;
   status: string;
-  lines: Array<{
+  lines: {
     account_name: string;
     account_code: string;
     debit_amount: number;
     credit_amount: number;
-  }>;
+  }[];
 }
 
 const FREQUENCY_LABELS: Record<string, string> = {
@@ -55,13 +59,7 @@ export function GenerateRecurringVoucher() {
 
   const [voucherDate, setVoucherDate] = useState(new Date().toISOString().split('T')[0]);
 
-  useEffect(() => {
-    if (id) {
-      fetchRecurringVoucher(id);
-    }
-  }, [id]);
-
-  const fetchRecurringVoucher = async (rvId: string) => {
+  const fetchRecurringVoucher = useCallback(async (rvId: string) => {
     try {
       setLoading(true);
       const response = await recurringVouchersApi.get(rvId);
@@ -70,12 +68,22 @@ export function GenerateRecurringVoucher() {
         setVoucherDate(response.data.next_run_date);
       }
     } catch (error) {
-      console.error('Failed to fetch recurring voucher:', error);
-      toast({ title: 'Error', description: 'Failed to load recurring voucher', variant: 'destructive' });
+      logger.error('Failed to fetch recurring voucher:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load recurring voucher',
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
+
+  useEffect(() => {
+    if (id) {
+      fetchRecurringVoucher(id);
+    }
+  }, [fetchRecurringVoucher, id]);
 
   const handleSubmit = async () => {
     if (!id) return;
@@ -90,12 +98,8 @@ export function GenerateRecurringVoucher() {
       } else {
         toast({ title: 'Error', description: response.data.message, variant: 'destructive' });
       }
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to generate voucher',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setSubmitting(false);
     }
@@ -110,7 +114,7 @@ export function GenerateRecurringVoucher() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
@@ -118,9 +122,13 @@ export function GenerateRecurringVoucher() {
 
   if (!recurringVoucher) {
     return (
-      <div className="text-center py-12">
+      <div className="py-12 text-center">
         <p className="text-slate-500">Recurring voucher not found</p>
-        <Button variant="outline" className="mt-4" onClick={() => navigate('/admin/finance/recurring-vouchers')}>
+        <Button
+          variant="outline"
+          className="mt-4"
+          onClick={() => navigate('/admin/finance/recurring-vouchers')}
+        >
           Back to Recurring Vouchers
         </Button>
       </div>
@@ -129,20 +137,18 @@ export function GenerateRecurringVoucher() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/finance/recurring-vouchers')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">Generate Voucher</h1>
-          <p className="text-sm text-slate-500">Manually generate a voucher from this recurring template</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Generate Voucher"
+        subtitle="Manually generate a voucher from this recurring template"
+        breadcrumbs={[
+          { label: 'Recurring Vouchers', to: '/admin/finance/recurring-vouchers' },
+          { label: 'Generate' },
+        ]}
+      />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Recurring Voucher Info */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -152,7 +158,9 @@ export function GenerateRecurringVoucher() {
                 </div>
                 <div className="flex gap-2">
                   <Badge variant="outline">{FREQUENCY_LABELS[recurringVoucher.frequency]}</Badge>
-                  <Badge className={STATUS_COLORS[recurringVoucher.status]}>{recurringVoucher.status}</Badge>
+                  <Badge className={STATUS_COLORS[recurringVoucher.status]}>
+                    {recurringVoucher.status}
+                  </Badge>
                 </div>
               </div>
             </CardHeader>
@@ -161,14 +169,14 @@ export function GenerateRecurringVoucher() {
                 <div className="grid grid-cols-3 gap-4 text-sm">
                   <div>
                     <span className="text-slate-500">Amount:</span>{' '}
-                    <span className="font-mono font-medium">{formatCurrency(recurringVoucher.total_amount)}</span>
+                    <span className="font-mono font-medium">
+                      {formatCurrency(recurringVoucher.total_amount)}
+                    </span>
                   </div>
                   <div>
                     <span className="text-slate-500">Next Run:</span>{' '}
                     <span className="font-medium">
-                      {recurringVoucher.next_run_date
-                        ? new Date(recurringVoucher.next_run_date).toLocaleDateString('en-IN')
-                        : 'N/A'}
+                      <DateDisplay date={recurringVoucher.next_run_date} />
                     </span>
                   </div>
                   <div>
@@ -181,20 +189,21 @@ export function GenerateRecurringVoucher() {
                   </div>
                 </div>
 
-                <div className="border rounded-lg overflow-hidden">
+                <div className="overflow-hidden rounded-lg border">
                   <table className="w-full text-sm">
                     <thead className="bg-slate-50">
                       <tr>
-                        <th className="text-left p-3 font-medium">Account</th>
-                        <th className="text-right p-3 font-medium">Debit</th>
-                        <th className="text-right p-3 font-medium">Credit</th>
+                        <th className="p-3 text-left font-medium">Account</th>
+                        <th className="p-3 text-right font-medium">Debit</th>
+                        <th className="p-3 text-right font-medium">Credit</th>
                       </tr>
                     </thead>
                     <tbody>
                       {recurringVoucher.lines.map((line, idx) => (
                         <tr key={idx} className="border-t">
                           <td className="p-3">
-                            <span className="text-slate-500">{line.account_code}</span> - {line.account_name}
+                            <span className="text-slate-500">{line.account_code}</span> -{' '}
+                            {line.account_name}
                           </td>
                           <td className="p-3 text-right font-mono">
                             {line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-'}
@@ -208,8 +217,12 @@ export function GenerateRecurringVoucher() {
                     <tfoot className="bg-slate-50 font-medium">
                       <tr className="border-t">
                         <td className="p-3">Total</td>
-                        <td className="p-3 text-right font-mono">{formatCurrency(recurringVoucher.total_amount)}</td>
-                        <td className="p-3 text-right font-mono">{formatCurrency(recurringVoucher.total_amount)}</td>
+                        <td className="p-3 text-right font-mono">
+                          {formatCurrency(recurringVoucher.total_amount)}
+                        </td>
+                        <td className="p-3 text-right font-mono">
+                          {formatCurrency(recurringVoucher.total_amount)}
+                        </td>
                       </tr>
                     </tfoot>
                   </table>
@@ -237,16 +250,18 @@ export function GenerateRecurringVoucher() {
                   onChange={(e) => setVoucherDate(e.target.value)}
                 />
                 {recurringVoucher.next_run_date && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    Scheduled: {new Date(recurringVoucher.next_run_date).toLocaleDateString('en-IN')}
+                  <p className="mt-1 text-xs text-slate-500">
+                    Scheduled: <DateDisplay date={recurringVoucher.next_run_date} />
                   </p>
                 )}
               </div>
 
-              <div className="pt-4 border-t">
-                <div className="flex justify-between text-sm mb-2">
+              <div className="border-t pt-4">
+                <div className="mb-2 flex justify-between text-sm">
                   <span className="text-slate-500">Voucher Amount:</span>
-                  <span className="font-bold font-mono">{formatCurrency(recurringVoucher.total_amount)}</span>
+                  <span className="font-mono font-bold">
+                    {formatCurrency(recurringVoucher.total_amount)}
+                  </span>
                 </div>
               </div>
             </CardContent>

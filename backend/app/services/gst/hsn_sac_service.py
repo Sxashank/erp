@@ -30,7 +30,7 @@ class HSNSACService:
             created_by=created_by,
         )
         self.session.add(hsn_sac)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(hsn_sac)
         return hsn_sac
 
@@ -50,7 +50,7 @@ class HSNSACService:
             setattr(hsn_sac, field, value)
         hsn_sac.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(hsn_sac)
         return hsn_sac
 
@@ -84,4 +84,4 @@ class HSNSACService:
         if not hsn_sac:
             raise NotFoundException("HSN/SAC code not found")
         hsn_sac.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

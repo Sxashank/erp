@@ -118,17 +118,25 @@ export interface NotificationPreferenceUpdate {
 
 export interface NotificationLog {
   id: string;
-  notification_id: string;
+  notificationId: string;
+  notificationTitle?: string;
   channel: NotificationChannel;
   status: NotificationStatus;
-  attempt_number: number;
-  attempted_at: string;
-  response_code?: string;
-  response_message?: string;
+  attemptNumber: number;
+  attemptedAt: string;
+  responseCode?: string;
+  responseMessage?: string;
   provider?: string;
-  provider_message_id?: string;
+  providerMessageId?: string;
   cost?: number;
   currency?: string;
+}
+
+export interface NotificationLogListResponse {
+  items: NotificationLog[];
+  total: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface NotificationStats {

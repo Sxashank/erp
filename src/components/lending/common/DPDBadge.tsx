@@ -3,8 +3,8 @@
  * Days Past Due indicator with visual severity levels
  */
 
-import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 export interface DPDBadgeProps {
   dpd: number | null | undefined;

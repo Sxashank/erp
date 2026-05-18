@@ -3,43 +3,6 @@
  * View and manage empanelled advocates
  */
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
 import {
   User,
   Plus,
@@ -53,20 +16,91 @@ import {
   Briefcase,
   Award,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { advocateApi, lawFirmApi } from '@/services/legalApi';
 import type { Advocate, LawFirm } from '@/types/legal';
 
+import { logger } from "@/lib/logger";
 const indianStates = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',
-  'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur', 'Meghalaya', 'Mizoram',
-  'Nagaland', 'Odisha', 'Punjab', 'Rajasthan', 'Sikkim', 'Tamil Nadu',
-  'Telangana', 'Tripura', 'Uttar Pradesh', 'Uttarakhand', 'West Bengal', 'Delhi',
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chhattisgarh',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
+  'Delhi',
 ];
 
 const specializations = [
-  'DRT', 'SARFAESI', 'NCLT', 'IBC', 'Banking Law', 'Civil Litigation',
-  'Property Law', 'Arbitration', 'Consumer Law', 'Cheque Bounce (138 NI Act)',
+  'DRT',
+  'SARFAESI',
+  'NCLT',
+  'IBC',
+  'Banking Law',
+  'Civil Litigation',
+  'Property Law',
+  'Arbitration',
+  'Consumer Law',
+  'Cheque Bounce (138 NI Act)',
 ];
 
 export default function AdvocateList() {
@@ -105,10 +139,10 @@ export default function AdvocateList() {
         }),
         lawFirmApi.getList({ is_active: true }),
       ]);
-      setAdvocates(advocatesRes.data);
-      setLawFirms(firmsRes.data);
+      setAdvocates(advocatesRes.data.items);
+      setLawFirms(firmsRes.data.items);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -166,7 +200,7 @@ export default function AdvocateList() {
       setShowDialog(false);
       fetchData();
     } catch (error) {
-      console.error('Failed to save advocate:', error);
+      logger.error('Failed to save advocate:', error);
     } finally {
       setSubmitting(false);
     }
@@ -179,7 +213,7 @@ export default function AdvocateList() {
       await advocateApi.delete(id);
       fetchData();
     } catch (error) {
-      console.error('Failed to delete advocate:', error);
+      logger.error('Failed to delete advocate:', error);
     }
   };
 
@@ -194,7 +228,7 @@ export default function AdvocateList() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -207,7 +241,7 @@ export default function AdvocateList() {
         subtitle="Manage empanelled advocates"
         actions={
           <Button onClick={() => handleOpenDialog()}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Add Advocate
           </Button>
         }
@@ -217,8 +251,8 @@ export default function AdvocateList() {
       <Card>
         <CardContent className="p-4">
           <div className="flex gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 placeholder="Search advocates..."
                 value={searchQuery}
@@ -264,7 +298,7 @@ export default function AdvocateList() {
                 <TableRow key={advocate.id}>
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 bg-blue-100 rounded-full flex items-center justify-center">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100">
                         <User className="h-5 w-5 text-blue-600" />
                       </div>
                       <div>
@@ -309,9 +343,7 @@ export default function AdvocateList() {
                       <Briefcase className="h-4 w-4 text-gray-400" />
                       <span>{advocate.cases_handled}</span>
                       {advocate.success_rate && (
-                        <span className="text-green-600 text-sm">
-                          ({advocate.success_rate}%)
-                        </span>
+                        <span className="text-sm text-green-600">({advocate.success_rate}%)</span>
                       )}
                     </div>
                   </TableCell>
@@ -335,14 +367,14 @@ export default function AdvocateList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem onClick={() => handleOpenDialog(advocate)}>
-                          <Edit className="h-4 w-4 mr-2" />
+                          <Edit className="mr-2 h-4 w-4" />
                           Edit
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => handleDelete(advocate.id)}
                           className="text-red-600"
                         >
-                          <Trash2 className="h-4 w-4 mr-2" />
+                          <Trash2 className="mr-2 h-4 w-4" />
                           Delete
                         </DropdownMenuItem>
                       </DropdownMenuContent>
@@ -352,8 +384,8 @@ export default function AdvocateList() {
               ))}
               {advocates.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <TableCell colSpan={8} className="py-8 text-center text-gray-500">
+                    <User className="mx-auto mb-4 h-12 w-12 opacity-50" />
                     <p>No advocates found</p>
                   </TableCell>
                 </TableRow>
@@ -365,11 +397,9 @@ export default function AdvocateList() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {editingAdvocate ? 'Edit Advocate' : 'Add Advocate'}
-            </DialogTitle>
+            <DialogTitle>{editingAdvocate ? 'Edit Advocate' : 'Add Advocate'}</DialogTitle>
             <DialogDescription>
               {editingAdvocate ? 'Update advocate details' : 'Register a new advocate'}
             </DialogDescription>
@@ -387,9 +417,7 @@ export default function AdvocateList() {
               <Label>Enrollment Number *</Label>
               <Input
                 value={formData.enrollment_number}
-                onChange={(e) =>
-                  setFormData({ ...formData, enrollment_number: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, enrollment_number: e.target.value })}
                 placeholder="e.g., MH/1234/2020"
               />
             </div>
@@ -435,9 +463,7 @@ export default function AdvocateList() {
               <Input
                 type="number"
                 value={formData.experience_years}
-                onChange={(e) =>
-                  setFormData({ ...formData, experience_years: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, experience_years: e.target.value })}
                 min="0"
               />
             </div>
@@ -463,9 +489,7 @@ export default function AdvocateList() {
                 {specializations.map((spec) => (
                   <Badge
                     key={spec}
-                    variant={
-                      formData.specializations.includes(spec) ? 'default' : 'outline'
-                    }
+                    variant={formData.specializations.includes(spec) ? 'default' : 'outline'}
                     className="cursor-pointer"
                     onClick={() => toggleSpecialization(spec)}
                   >

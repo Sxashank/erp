@@ -6,11 +6,12 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import BaseSchema, AuditSchema
+from app.schemas.base import CamelSchema
+from app.schemas.fixed_assets.common import FixedAssetsAuditSchema, OffsetPaginatedResponse
 from app.core.constants import AssetType, DepreciationMethod
 
 
-class AssetCategoryCreate(BaseSchema):
+class AssetCategoryCreate(CamelSchema):
     """Schema for creating an asset category."""
 
     category_code: str = Field(..., min_length=1, max_length=20)
@@ -38,7 +39,7 @@ class AssetCategoryCreate(BaseSchema):
     organization_id: UUID
 
 
-class AssetCategoryUpdate(BaseSchema):
+class AssetCategoryUpdate(CamelSchema):
     """Schema for updating an asset category."""
 
     category_code: Optional[str] = Field(None, min_length=1, max_length=20)
@@ -65,7 +66,7 @@ class AssetCategoryUpdate(BaseSchema):
     requires_amc: Optional[bool] = None
 
 
-class AssetCategoryResponse(AuditSchema):
+class AssetCategoryResponse(FixedAssetsAuditSchema):
     """Asset category response schema."""
 
     id: UUID
@@ -99,7 +100,7 @@ class AssetCategoryResponse(AuditSchema):
     asset_count: int = 0
 
 
-class AssetCategoryTreeResponse(BaseSchema):
+class AssetCategoryTreeResponse(CamelSchema):
     """Asset category tree node for hierarchical display."""
 
     id: UUID
@@ -114,3 +115,7 @@ class AssetCategoryTreeResponse(BaseSchema):
 
 # Update forward reference
 AssetCategoryTreeResponse.model_rebuild()
+
+
+class AssetCategoryListResponse(OffsetPaginatedResponse[AssetCategoryResponse]):
+    """Paginated asset-category response."""

@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { DataTableConfig } from '@/types/bi';
+import type { DataTableConfig } from '@/types/bi';
 
 interface DataTableWidgetProps {
   config: DataTableConfig;
@@ -24,7 +24,7 @@ const formatValue = (
   if (value === undefined || value === null) return '-';
 
   switch (format) {
-    case 'currency':
+    case 'currency': {
       const num = Number(value) || 0;
       if (Math.abs(num) >= 10000000) {
         return `₹${(num / 10000000).toFixed(2)} Cr`;
@@ -33,6 +33,7 @@ const formatValue = (
         return `₹${(num / 100000).toFixed(2)} L`;
       }
       return `₹${num.toLocaleString('en-IN')}`;
+    }
 
     case 'number':
       return Number(value).toLocaleString('en-IN');

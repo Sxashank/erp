@@ -1,9 +1,10 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
 
+import { logout, refreshTokens } from './auth';
+
 import { useAuthStore } from '@/stores/authStore';
 import { useOrganizationStore } from '@/stores/organizationStore';
 
-import { logout, refreshTokens } from './auth';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
 
@@ -99,8 +100,8 @@ export const organizationsApi = {
   list: (params?: { page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/organizations', { params }),
   get: (id: string) => api.get(`/organizations/${id}`),
-  create: (data: any) => api.post('/organizations', data),
-  update: (id: string, data: any) => api.put(`/organizations/${id}`, data),
+  create: (data: unknown) => api.post('/organizations', data),
+  update: (id: string, data: unknown) => api.put(`/organizations/${id}`, data),
   delete: (id: string) => api.delete(`/organizations/${id}`),
 
   // Bank Accounts
@@ -108,9 +109,9 @@ export const organizationsApi = {
     api.get(`/organizations/${orgId}/bank-accounts`, { params }),
   getBankAccount: (orgId: string, id: string) =>
     api.get(`/organizations/${orgId}/bank-accounts/${id}`),
-  createBankAccount: (orgId: string, data: any) =>
+  createBankAccount: (orgId: string, data: unknown) =>
     api.post(`/organizations/${orgId}/bank-accounts`, data),
-  updateBankAccount: (orgId: string, id: string, data: any) =>
+  updateBankAccount: (orgId: string, id: string, data: unknown) =>
     api.put(`/organizations/${orgId}/bank-accounts/${id}`, data),
   deleteBankAccount: (orgId: string, id: string) =>
     api.delete(`/organizations/${orgId}/bank-accounts/${id}`),
@@ -122,9 +123,9 @@ export const organizationsApi = {
     api.get(`/organizations/${orgId}/addresses`, { params }),
   getAddress: (orgId: string, id: string) =>
     api.get(`/organizations/${orgId}/addresses/${id}`),
-  createAddress: (orgId: string, data: any) =>
+  createAddress: (orgId: string, data: unknown) =>
     api.post(`/organizations/${orgId}/addresses`, data),
-  updateAddress: (orgId: string, id: string, data: any) =>
+  updateAddress: (orgId: string, id: string, data: unknown) =>
     api.put(`/organizations/${orgId}/addresses/${id}`, data),
   deleteAddress: (orgId: string, id: string) =>
     api.delete(`/organizations/${orgId}/addresses/${id}`),
@@ -137,8 +138,8 @@ export const unitsApi = {
   list: (params?: { organization_id?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/units', { params }),
   get: (id: string) => api.get(`/units/${id}`),
-  create: (data: any) => api.post('/units', data),
-  update: (id: string, data: any) => api.put(`/units/${id}`, data),
+  create: (data: unknown) => api.post('/units', data),
+  update: (id: string, data: unknown) => api.put(`/units/${id}`, data),
   delete: (id: string) => api.delete(`/units/${id}`),
   getTree: (organizationId: string) => api.get('/units/tree', { params: { organization_id: organizationId } }),
   getChildren: (id: string) => api.get(`/units/${id}/children`),
@@ -149,8 +150,8 @@ export const departmentsApi = {
   list: (params?: { organization_id?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/departments', { params }),
   get: (id: string) => api.get(`/departments/${id}`),
-  create: (data: any) => api.post('/departments', data),
-  update: (id: string, data: any) => api.put(`/departments/${id}`, data),
+  create: (data: unknown) => api.post('/departments', data),
+  update: (id: string, data: unknown) => api.put(`/departments/${id}`, data),
   delete: (id: string) => api.delete(`/departments/${id}`),
   getTree: (organizationId: string) => api.get('/departments/tree', { params: { organization_id: organizationId } }),
   getChildren: (id: string) => api.get(`/departments/${id}/children`),
@@ -161,8 +162,8 @@ export const designationsApi = {
   list: (params?: { department_id?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/designations', { params }),
   get: (id: string) => api.get(`/designations/${id}`),
-  create: (data: any) => api.post('/designations', data),
-  update: (id: string, data: any) => api.put(`/designations/${id}`, data),
+  create: (data: unknown) => api.post('/designations', data),
+  update: (id: string, data: unknown) => api.put(`/designations/${id}`, data),
   delete: (id: string) => api.delete(`/designations/${id}`),
   getReports: (id: string) => api.get(`/designations/${id}/reports`),
   getHierarchy: (id: string) => api.get(`/designations/${id}/hierarchy`),
@@ -173,10 +174,10 @@ export const usersApi = {
   list: (params?: { page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/users', { params }),
   get: (id: string) => api.get(`/users/${id}`),
-  create: (data: any) => api.post('/users', data),
-  update: (id: string, data: any) => api.put(`/users/${id}`, data),
+  create: (data: unknown) => api.post('/users', data),
+  update: (id: string, data: unknown) => api.put(`/users/${id}`, data),
   delete: (id: string) => api.delete(`/users/${id}`),
-  assignRole: (id: string, data: any) => api.post(`/users/${id}/roles`, data),
+  assignRole: (id: string, data: unknown) => api.post(`/users/${id}/roles`, data),
   removeRole: (userId: string, roleId: string, unitId?: string) =>
     api.delete(`/users/${userId}/roles/${roleId}`, { params: { unit_id: unitId } }),
   unlock: (id: string) => api.post(`/users/${id}/unlock`),
@@ -188,8 +189,8 @@ export const usersApi = {
 export const rolesApi = {
   list: () => api.get('/roles'),
   get: (id: string) => api.get(`/roles/${id}`),
-  create: (data: any) => api.post('/roles', data),
-  update: (id: string, data: any) => api.put(`/roles/${id}`, data),
+  create: (data: unknown) => api.post('/roles', data),
+  update: (id: string, data: unknown) => api.put(`/roles/${id}`, data),
   delete: (id: string) => api.delete(`/roles/${id}`),
   setPermissions: (id: string, permissionIds: string[]) =>
     api.put(`/roles/${id}/permissions`, { permission_ids: permissionIds }),
@@ -197,17 +198,112 @@ export const rolesApi = {
   getPermissionsGrouped: () => api.get('/roles/permissions/grouped'),
 };
 
+export type ApprovalWorkflowType =
+  | 'FIN_VOUCHER'
+  | 'FIN_JOURNAL'
+  | 'PAYMENT_RELEASE'
+  | 'PAYROLL_POSTING'
+  | 'LOAN_SANCTION'
+  | 'LOAN_DISBURSEMENT'
+  | 'LOAN_WRITE_OFF'
+  | 'LOAN_OTS'
+  | 'FA_ASSET_CREATION'
+  | 'FA_ASSET_CAPITALIZATION'
+  | 'FA_ASSET_DISPOSAL'
+  | 'FA_ASSET_REVALUATION'
+  | 'FA_ASSET_IMPAIRMENT'
+  | 'FA_ASSET_TRANSFER'
+  | 'FA_DEPRECIATION_RUN'
+  | 'FA_INSURANCE_CLAIM'
+  | 'FA_LEASE_ACTIVATION'
+  | 'FA_LEASE_MODIFICATION'
+  | 'FA_LEASE_TERMINATION';
+
+export interface ApprovalWorkflowLevelPayload {
+  levelNumber: number;
+  levelName: string;
+  approverRoles?: string[] | null;
+  approverUsers?: string[] | null;
+  minApprovers: number;
+  thresholdAmount?: number | null;
+  escalationHours?: number | null;
+  escalationUserId?: string | null;
+}
+
+export interface ApprovalWorkflowPayload {
+  organizationId: string;
+  workflowType: ApprovalWorkflowType;
+  workflowName: string;
+  description?: string | null;
+  thresholdAmount: number;
+  thresholdCurrency?: string;
+  approvalLevels: number;
+  isSequential?: boolean;
+  autoApproveOnTimeout?: boolean;
+  timeoutHours?: number | null;
+  allowSelfApproval?: boolean;
+  notifyOnSubmit?: boolean;
+  notifyOnApproval?: boolean;
+  notifyOnRejection?: boolean;
+  levels: ApprovalWorkflowLevelPayload[];
+}
+
+export interface ApprovalWorkflowUpdatePayload extends Partial<Omit<ApprovalWorkflowPayload, 'organizationId' | 'workflowType'>> {
+  isActive?: boolean;
+}
+
+export interface ApprovalWorkflowResponse extends ApprovalWorkflowPayload {
+  id: string;
+  thresholdCurrency: string;
+  isSequential: boolean;
+  autoApproveOnTimeout: boolean;
+  timeoutHours: number | null;
+  allowSelfApproval: boolean;
+  notifyOnSubmit: boolean;
+  notifyOnApproval: boolean;
+  notifyOnRejection: boolean;
+  levels: (ApprovalWorkflowLevelPayload & {
+    id: string;
+    workflowId: string;
+    createdAt: string;
+    updatedAt: string | null;
+    isActive: boolean;
+  })[];
+  createdAt: string;
+  updatedAt: string | null;
+  isActive: boolean;
+}
+
+export const approvalsApi = {
+  listWorkflows: (params: { organization_id: string; skip?: number; limit?: number }) =>
+    api.get<{
+      items: ApprovalWorkflowResponse[];
+      total: number;
+      page: number;
+      pageSize: number;
+      totalPages: number;
+    }>('/approvals/workflows', { params }),
+  getWorkflow: (id: string) => api.get<ApprovalWorkflowResponse>(`/approvals/workflows/${id}`),
+  createWorkflow: (data: ApprovalWorkflowPayload) =>
+    api.post<ApprovalWorkflowResponse>('/approvals/workflows', data),
+  updateWorkflow: (id: string, data: ApprovalWorkflowUpdatePayload) =>
+    api.put<ApprovalWorkflowResponse>(`/approvals/workflows/${id}`, data),
+  deleteWorkflow: (id: string) => api.delete(`/approvals/workflows/${id}`),
+};
+
 // Financial Years API
 export const financialYearsApi = {
   list: (params?: { organization_id: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/financial-years', { params }),
   get: (id: string) => api.get(`/financial-years/${id}`),
-  create: (data: any) => api.post('/financial-years', data),
-  update: (id: string, data: any) => api.put(`/financial-years/${id}`, data),
+  create: (data: unknown) => api.post('/financial-years', data),
+  update: (id: string, data: unknown) => api.put(`/financial-years/${id}`, data),
   delete: (id: string) => api.delete(`/financial-years/${id}`),
   setCurrent: (id: string) => api.post(`/financial-years/${id}/set-current`),
   closePeriod: (yearId: string, periodId: string) =>
-    api.post(`/financial-years/${yearId}/periods/${periodId}/close`),
+    api.post(`/financial-years/${yearId}/close-period`, { period_id: periodId }),
+  lockPeriod: (yearId: string, periodId: string, reason: string) =>
+    api.post(`/financial-years/${yearId}/lock-period`, { period_id: periodId, reason }),
   closeYear: (id: string) => api.post(`/financial-years/${id}/close`),
 };
 
@@ -216,8 +312,8 @@ export const accountGroupsApi = {
   list: (params?: { organization_id: string; nature?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/account-groups', { params }),
   get: (id: string) => api.get(`/account-groups/${id}`),
-  create: (data: any) => api.post('/account-groups', data),
-  update: (id: string, data: any) => api.put(`/account-groups/${id}`, data),
+  create: (data: unknown) => api.post('/account-groups', data),
+  update: (id: string, data: unknown) => api.put(`/account-groups/${id}`, data),
   delete: (id: string) => api.delete(`/account-groups/${id}`),
   getTree: (organizationId: string) => api.get('/account-groups/tree', { params: { organization_id: organizationId } }),
 };
@@ -227,8 +323,8 @@ export const accountsApi = {
   list: (params?: { organization_id: string; account_group_id?: string; account_type?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/accounts', { params }),
   get: (id: string) => api.get(`/accounts/${id}`),
-  create: (data: any) => api.post('/accounts', data),
-  update: (id: string, data: any) => api.put(`/accounts/${id}`, data),
+  create: (data: unknown) => api.post('/accounts', data),
+  update: (id: string, data: unknown) => api.put(`/accounts/${id}`, data),
   delete: (id: string) => api.delete(`/accounts/${id}`),
   search: (params: { organization_id: string; query: string; limit?: number }) =>
     api.get('/accounts/search', { params }),
@@ -239,8 +335,8 @@ export const voucherTypesApi = {
   list: (params?: { organization_id: string; voucher_class?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/voucher-types', { params }),
   get: (id: string) => api.get(`/voucher-types/${id}`),
-  create: (data: any) => api.post('/voucher-types', data),
-  update: (id: string, data: any) => api.put(`/voucher-types/${id}`, data),
+  create: (data: unknown) => api.post('/voucher-types', data),
+  update: (id: string, data: unknown) => api.put(`/voucher-types/${id}`, data),
   delete: (id: string) => api.delete(`/voucher-types/${id}`),
 };
 
@@ -257,8 +353,8 @@ export const vouchersApi = {
     include_inactive?: boolean;
   }) => api.get('/vouchers', { params }),
   get: (id: string) => api.get(`/vouchers/${id}`),
-  create: (data: any) => api.post('/vouchers', data),
-  update: (id: string, data: any) => api.put(`/vouchers/${id}`, data),
+  create: (data: unknown) => api.post('/vouchers', data),
+  update: (id: string, data: unknown) => api.put(`/vouchers/${id}`, data),
   delete: (id: string) => api.delete(`/vouchers/${id}`),
   submit: (id: string) => api.post(`/vouchers/${id}/submit`),
   approve: (id: string, remarks?: string) =>
@@ -295,8 +391,8 @@ export const recurringVouchersApi = {
     page_size?: number;
   }) => api.get('/recurring-vouchers', { params }),
   get: (id: string) => api.get(`/recurring-vouchers/${id}`),
-  create: (data: any) => api.post('/recurring-vouchers', data),
-  update: (id: string, data: any) => api.put(`/recurring-vouchers/${id}`, data),
+  create: (data: unknown) => api.post('/recurring-vouchers', data),
+  update: (id: string, data: unknown) => api.put(`/recurring-vouchers/${id}`, data),
   delete: (id: string) => api.delete(`/recurring-vouchers/${id}`),
   pause: (id: string, reason?: string) =>
     api.post(`/recurring-vouchers/${id}/pause`, { reason }),
@@ -327,8 +423,8 @@ export const voucherTemplatesApi = {
     page_size?: number;
   }) => api.get('/voucher-templates', { params }),
   get: (id: string) => api.get(`/voucher-templates/${id}`),
-  create: (data: any) => api.post('/voucher-templates', data),
-  update: (id: string, data: any) => api.put(`/voucher-templates/${id}`, data),
+  create: (data: unknown) => api.post('/voucher-templates', data),
+  update: (id: string, data: unknown) => api.put(`/voucher-templates/${id}`, data),
   delete: (id: string) => api.delete(`/voucher-templates/${id}`),
   toggleFavorite: (id: string) => api.post(`/voucher-templates/${id}/toggle-favorite`),
   use: (id: string, data: { voucher_date: string; narration_override?: string; amount_multiplier?: number }) =>
@@ -346,8 +442,8 @@ export const gstRatesApi = {
   list: (params?: { page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/gst/rates', { params }),
   get: (id: string) => api.get(`/gst/rates/${id}`),
-  create: (data: any) => api.post('/gst/rates', data),
-  update: (id: string, data: any) => api.put(`/gst/rates/${id}`, data),
+  create: (data: unknown) => api.post('/gst/rates', data),
+  update: (id: string, data: unknown) => api.put(`/gst/rates/${id}`, data),
   delete: (id: string) => api.delete(`/gst/rates/${id}`),
   getActive: (params?: { as_of_date?: string; page?: number; page_size?: number }) =>
     api.get('/gst/rates/active', { params }),
@@ -355,14 +451,12 @@ export const gstRatesApi = {
 
 // HSN/SAC API
 export const hsnSacApi = {
-  list: (params?: { hsn_type?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
+  list: (params?: { search?: string; hsn_sac_type?: string; page?: number; page_size?: number }) =>
     api.get('/gst/hsn-sac', { params }),
   get: (id: string) => api.get(`/gst/hsn-sac/${id}`),
-  create: (data: any) => api.post('/gst/hsn-sac', data),
-  update: (id: string, data: any) => api.put(`/gst/hsn-sac/${id}`, data),
+  create: (data: unknown) => api.post('/gst/hsn-sac', data),
+  update: (id: string, data: unknown) => api.put(`/gst/hsn-sac/${id}`, data),
   delete: (id: string) => api.delete(`/gst/hsn-sac/${id}`),
-  search: (params: { query: string; hsn_type?: string; limit?: number }) =>
-    api.get('/gst/hsn-sac/search', { params }),
 };
 
 // GST Registrations API
@@ -370,18 +464,22 @@ export const gstRegistrationsApi = {
   list: (params?: { organization_id?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/gst/registrations', { params }),
   get: (id: string) => api.get(`/gst/registrations/${id}`),
-  create: (data: any) => api.post('/gst/registrations', data),
-  update: (id: string, data: any) => api.put(`/gst/registrations/${id}`, data),
+  create: (data: unknown) => api.post('/gst/registrations', data),
+  update: (id: string, data: unknown) => api.put(`/gst/registrations/${id}`, data),
   delete: (id: string) => api.delete(`/gst/registrations/${id}`),
 };
+
+function idempotencyHeaders(): Record<string, string> {
+  return { 'Idempotency-Key': crypto.randomUUID() };
+}
 
 // TDS Sections API
 export const tdsSectionsApi = {
   list: (params?: { return_form?: string; page?: number; page_size?: number; include_inactive?: boolean }) =>
     api.get('/tds/sections', { params }),
   get: (id: string) => api.get(`/tds/sections/${id}`),
-  create: (data: any) => api.post('/tds/sections', data),
-  update: (id: string, data: any) => api.put(`/tds/sections/${id}`, data),
+  create: (data: unknown) => api.post('/tds/sections', data),
+  update: (id: string, data: unknown) => api.put(`/tds/sections/${id}`, data),
   delete: (id: string) => api.delete(`/tds/sections/${id}`),
   getActive: (params?: { as_of_date?: string; is_tcs?: boolean; page?: number; page_size?: number }) =>
     api.get('/tds/sections/active', { params }),
@@ -398,14 +496,85 @@ export const tdsEntriesApi = {
     page_size?: number;
   }) => api.get('/tds/entries', { params }),
   get: (id: string) => api.get(`/tds/entries/${id}`),
-  create: (data: any) => api.post('/tds/entries', data),
-  update: (id: string, data: any) => api.put(`/tds/entries/${id}`, data),
+  create: (data: unknown) => api.post('/tds/entries', data),
+  validateThreshold: (data: unknown) => api.post('/tds/entries/validate-threshold', data),
+  update: (id: string, data: unknown) => api.put(`/tds/entries/${id}`, data),
   delete: (id: string) => api.delete(`/tds/entries/${id}`),
   getPendingChallans: (params: { organization_id: string; page?: number; page_size?: number }) =>
     api.get('/tds/entries/pending-challans', { params }),
   getByQuarter: (params: { organization_id: string; financial_year: string; quarter: string }) =>
     api.get(`/tds/entries/quarter/${params.financial_year}/${params.quarter}`, { params: { organization_id: params.organization_id } }),
-  updateChallan: (id: string, data: any) => api.post(`/tds/entries/${id}/challan`, data),
+  updateChallan: (id: string, data: unknown) => api.post(`/tds/entries/${id}/challan`, data),
+};
+
+// TDS Challans API
+export const tdsChallansApi = {
+  list: (params: {
+    organization_id: string;
+    from_date?: string;
+    to_date?: string;
+    status?: string;
+    tds_section_id?: string;
+    financial_year_id?: string;
+    page?: number;
+    page_size?: number;
+  }) => api.get('/tds/challans', { params }),
+  getSummary: (params: { organization_id: string; financial_year_id?: string }) =>
+    api.get('/tds/challans/summary', { params }),
+  getDue: (params: { organization_id: string }) => api.get('/tds/challans/due', { params }),
+  get: (id: string, includeEntries?: boolean) =>
+    api.get(`/tds/challans/${id}`, { params: { include_entries: includeEntries } }),
+  create: (data: unknown) => api.post('/tds/challans', data, { headers: idempotencyHeaders() }),
+  generate: (data: unknown) => api.post('/tds/challans/generate', data, { headers: idempotencyHeaders() }),
+  update: (id: string, data: unknown) => api.put(`/tds/challans/${id}`, data, { headers: idempotencyHeaders() }),
+  addEntries: (id: string, data: unknown) => api.post(`/tds/challans/${id}/entries`, data, { headers: idempotencyHeaders() }),
+  removeEntries: (id: string, data: unknown) =>
+    api.delete(`/tds/challans/${id}/entries`, { data, headers: idempotencyHeaders() }),
+  finalize: (id: string) => api.post(`/tds/challans/${id}/finalize`, undefined, { headers: idempotencyHeaders() }),
+  recordPayment: (id: string, data: unknown) => api.post(`/tds/challans/${id}/payment`, data, { headers: idempotencyHeaders() }),
+  verifyOltas: (id: string, data: unknown) => api.post(`/tds/challans/${id}/verify-oltas`, data, { headers: idempotencyHeaders() }),
+  cancel: (id: string, data: unknown) => api.post(`/tds/challans/${id}/cancel`, data, { headers: idempotencyHeaders() }),
+};
+
+// TDS Returns API
+export const tdsReturnsApi = {
+  list: (params: {
+    organization_id: string;
+    return_type?: string;
+    financial_year_id?: string;
+    quarter?: string;
+    status?: string;
+    page?: number;
+    page_size?: number;
+  }) => api.get('/tds/returns', { params }),
+  getPending: (params: { organization_id: string }) => api.get('/tds/returns/pending', { params }),
+  getDue: (params: { organization_id: string }) => api.get('/tds/returns/due', { params }),
+  get: (id: string) => api.get(`/tds/returns/${id}`),
+  create: (data: unknown) => api.post('/tds/returns', data),
+  update: (id: string, data: unknown) => api.put(`/tds/returns/${id}`, data),
+  validate: (id: string) => api.post(`/tds/returns/${id}/validate`),
+  generateFile: (id: string, data?: unknown) =>
+    api.post(`/tds/returns/${id}/generate-file`, data),
+  updateFilingDetails: (id: string, data: unknown) =>
+    api.post(`/tds/returns/${id}/filing-details`, data),
+  revise: (id: string, data: unknown) => api.post(`/tds/returns/${id}/revise`, data),
+};
+
+// TDS Form 16A API
+export const tdsForm16AApi = {
+  listCertificates: (params: {
+    organization_id: string;
+    financial_year: string;
+    quarter?: string;
+  }) => api.get('/tds/form16a/list', { params }),
+  getDeductees: (params: { organization_id: string; financial_year: string; quarter: string }) =>
+    api.get('/tds/form16a/deductees', { params }),
+  generate: (data: unknown) => api.post('/tds/form16a/generate', data),
+  generateBulk: (data: unknown) => api.post('/tds/form16a/generate-bulk', data),
+  get: (certificateNumber: string, params: { organization_id: string }) =>
+    api.get(`/tds/form16a/${certificateNumber}`, { params }),
+  download: (certificateNumber: string, params: { organization_id: string }) =>
+    api.get(`/tds/form16a/download/${certificateNumber}`, { params }),
 };
 
 // Payment Terms API
@@ -415,8 +584,8 @@ export const paymentTermsApi = {
   getActive: (params: { organization_id: string }) =>
     api.get('/payment-terms/active', { params }),
   get: (id: string) => api.get(`/payment-terms/${id}`),
-  create: (data: any) => api.post('/payment-terms', data),
-  update: (id: string, data: any) => api.put(`/payment-terms/${id}`, data),
+  create: (data: unknown) => api.post('/payment-terms', data),
+  update: (id: string, data: unknown) => api.put(`/payment-terms/${id}`, data),
   delete: (id: string) => api.delete(`/payment-terms/${id}`),
 };
 
@@ -435,8 +604,8 @@ export const vendorsApi = {
   get: (id: string) => api.get(`/vendors/${id}`),
   generateCode: (params: { organization_id: string }) =>
     api.get('/vendors/generate-code', { params }),
-  create: (data: any) => api.post('/vendors', data),
-  update: (id: string, data: any) => api.put(`/vendors/${id}`, data),
+  create: (data: unknown) => api.post('/vendors', data),
+  update: (id: string, data: unknown) => api.put(`/vendors/${id}`, data),
   delete: (id: string) => api.delete(`/vendors/${id}`),
 };
 
@@ -455,8 +624,8 @@ export const customersApi = {
   get: (id: string) => api.get(`/customers/${id}`),
   generateCode: (params: { organization_id: string }) =>
     api.get('/customers/generate-code', { params }),
-  create: (data: any) => api.post('/customers', data),
-  update: (id: string, data: any) => api.put(`/customers/${id}`, data),
+  create: (data: unknown) => api.post('/customers', data),
+  update: (id: string, data: unknown) => api.put(`/customers/${id}`, data),
   delete: (id: string) => api.delete(`/customers/${id}`),
 };
 
@@ -479,8 +648,8 @@ export const purchaseBillsApi = {
     api.get(`/purchase-bills/unpaid/${vendorId}`, { params }),
   generateNumber: (params: { organization_id: string }) =>
     api.get('/purchase-bills/generate-number', { params }),
-  create: (data: any) => api.post('/purchase-bills', data),
-  update: (id: string, data: any) => api.put(`/purchase-bills/${id}`, data),
+  create: (data: unknown) => api.post('/purchase-bills', data),
+  update: (id: string, data: unknown) => api.put(`/purchase-bills/${id}`, data),
   delete: (id: string) => api.delete(`/purchase-bills/${id}`),
   submit: (id: string) => api.post(`/purchase-bills/${id}/submit`),
   approve: (id: string) => api.post(`/purchase-bills/${id}/approve`),
@@ -507,8 +676,8 @@ export const salesInvoicesApi = {
     api.get(`/sales-invoices/unreceived/${customerId}`, { params }),
   generateNumber: (params: { organization_id: string }) =>
     api.get('/sales-invoices/generate-number', { params }),
-  create: (data: any) => api.post('/sales-invoices', data),
-  update: (id: string, data: any) => api.put(`/sales-invoices/${id}`, data),
+  create: (data: unknown) => api.post('/sales-invoices', data),
+  update: (id: string, data: unknown) => api.put(`/sales-invoices/${id}`, data),
   delete: (id: string) => api.delete(`/sales-invoices/${id}`),
   submit: (id: string) => api.post(`/sales-invoices/${id}/submit`),
   approve: (id: string) => api.post(`/sales-invoices/${id}/approve`),
@@ -548,14 +717,14 @@ export const paymentsApi = {
     skip?: number;
     limit?: number;
   }) => api.get('/payments/pending-cheques', { params }),
-  create: (data: any) => api.post('/payments', data),
-  update: (id: string, data: any) => api.put(`/payments/${id}`, data),
+  create: (data: unknown) => api.post('/payments', data),
+  update: (id: string, data: unknown) => api.put(`/payments/${id}`, data),
   delete: (id: string) => api.delete(`/payments/${id}`),
   submit: (id: string) => api.post(`/payments/${id}/submit`),
   approve: (id: string) => api.post(`/payments/${id}/approve`),
   cancel: (id: string, reason: string) =>
     api.post(`/payments/${id}/cancel`, null, { params: { reason } }),
-  updateChequeStatus: (id: string, data: any) =>
+  updateChequeStatus: (id: string, data: unknown) =>
     api.post(`/payments/${id}/cheque-status`, data),
 };
 
@@ -574,7 +743,7 @@ export const bankReconciliationApi = {
     limit?: number;
   }) => api.get('/bank-reconciliation/statements', { params }),
   getStatement: (id: string) => api.get(`/bank-reconciliation/statements/${id}`),
-  importStatements: (data: any) => api.post('/bank-reconciliation/statements/import', data),
+  importStatements: (data: unknown) => api.post('/bank-reconciliation/statements/import', data),
   parseCsvStatement: (formData: FormData) =>
     api.post('/bank-reconciliation/statements/parse-csv', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -582,7 +751,7 @@ export const bankReconciliationApi = {
   deleteStatement: (id: string) => api.delete(`/bank-reconciliation/statements/${id}`),
 
   // Matching
-  matchStatement: (data: { statement_id: string; voucher_id: string; matched_amount: number; match_type?: string }) =>
+  matchStatement: (data: { statementId: string; voucherId: string; matchedAmount: number; matchType?: string }) =>
     api.post('/bank-reconciliation/match', data),
   unmatchStatement: (matchId: string) => api.delete(`/bank-reconciliation/match/${matchId}`),
   autoMatch: (params: { bank_account_id: string; from_date: string; to_date: string }) =>
@@ -605,8 +774,8 @@ export const bankReconciliationApi = {
   getReconciliation: (id: string) => api.get(`/bank-reconciliation/${id}`),
   getLatestReconciliation: (bankAccountId: string) =>
     api.get(`/bank-reconciliation/latest/${bankAccountId}`),
-  createReconciliation: (data: any) => api.post('/bank-reconciliation', data),
-  updateReconciliation: (id: string, data: any) => api.put(`/bank-reconciliation/${id}`, data),
+  createReconciliation: (data: unknown) => api.post('/bank-reconciliation', data),
+  updateReconciliation: (id: string, data: unknown) => api.put(`/bank-reconciliation/${id}`, data),
   completeReconciliation: (id: string) => api.post(`/bank-reconciliation/${id}/complete`),
 
   // BRS Report
@@ -789,8 +958,8 @@ export const fixedAssetsApi = {
   getCategoryTree: (organizationId: string) =>
     api.get('/fixed-assets/categories/tree', { params: { organization_id: organizationId } }),
   getCategory: (id: string) => api.get(`/fixed-assets/categories/${id}`),
-  createCategory: (data: any) => api.post('/fixed-assets/categories', data),
-  updateCategory: (id: string, data: any) => api.put(`/fixed-assets/categories/${id}`, data),
+  createCategory: (data: unknown) => api.post('/fixed-assets/categories', data),
+  updateCategory: (id: string, data: unknown) => api.put(`/fixed-assets/categories/${id}`, data),
   deleteCategory: (id: string) => api.delete(`/fixed-assets/categories/${id}`),
 
   // Fixed Assets
@@ -804,8 +973,8 @@ export const fixedAssetsApi = {
     limit?: number;
   }) => api.get('/fixed-assets/assets', { params }),
   getAsset: (id: string) => api.get(`/fixed-assets/assets/${id}`),
-  createAsset: (data: any) => api.post('/fixed-assets/assets', data),
-  updateAsset: (id: string, data: any) => api.put(`/fixed-assets/assets/${id}`, data),
+  createAsset: (data: unknown) => api.post('/fixed-assets/assets', data),
+  updateAsset: (id: string, data: unknown) => api.put(`/fixed-assets/assets/${id}`, data),
   deleteAsset: (id: string) => api.delete(`/fixed-assets/assets/${id}`),
   capitalizeAsset: (id: string, data: { put_to_use_date: string; remarks?: string }) =>
     api.post(`/fixed-assets/assets/${id}/capitalize`, data),
@@ -944,16 +1113,16 @@ export const hrisApi = {
     limit?: number;
   }) => api.get('/hris/employees', { params }),
   getEmployee: (id: string) => api.get(`/hris/employees/${id}`),
-  createEmployee: (data: any) => api.post('/hris/employees', data),
-  updateEmployee: (id: string, data: any) => api.put(`/hris/employees/${id}`, data),
+  createEmployee: (data: unknown) => api.post('/hris/employees', data),
+  updateEmployee: (id: string, data: unknown) => api.put(`/hris/employees/${id}`, data),
   deleteEmployee: (id: string) => api.delete(`/hris/employees/${id}`),
 
   // Employee Documents
   listEmployeeDocuments: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/documents`),
-  createEmployeeDocument: (employeeId: string, data: any) =>
+  createEmployeeDocument: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/documents`, data),
-  updateEmployeeDocument: (employeeId: string, documentId: string, data: any) =>
+  updateEmployeeDocument: (employeeId: string, documentId: string, data: unknown) =>
     api.put(`/hris/employees/${employeeId}/documents/${documentId}`, data),
   deleteEmployeeDocument: (employeeId: string, documentId: string) =>
     api.delete(`/hris/employees/${employeeId}/documents/${documentId}`),
@@ -961,9 +1130,9 @@ export const hrisApi = {
   // Employee Family
   listEmployeeFamily: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/family`),
-  createEmployeeFamily: (employeeId: string, data: any) =>
+  createEmployeeFamily: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/family`, data),
-  updateEmployeeFamily: (employeeId: string, familyId: string, data: any) =>
+  updateEmployeeFamily: (employeeId: string, familyId: string, data: unknown) =>
     api.put(`/hris/employees/${employeeId}/family/${familyId}`, data),
   deleteEmployeeFamily: (employeeId: string, familyId: string) =>
     api.delete(`/hris/employees/${employeeId}/family/${familyId}`),
@@ -971,9 +1140,9 @@ export const hrisApi = {
   // Employee Bank Accounts
   listEmployeeBankAccounts: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/bank-accounts`),
-  createEmployeeBankAccount: (employeeId: string, data: any) =>
+  createEmployeeBankAccount: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/bank-accounts`, data),
-  updateEmployeeBankAccount: (employeeId: string, accountId: string, data: any) =>
+  updateEmployeeBankAccount: (employeeId: string, accountId: string, data: unknown) =>
     api.put(`/hris/employees/${employeeId}/bank-accounts/${accountId}`, data),
   deleteEmployeeBankAccount: (employeeId: string, accountId: string) =>
     api.delete(`/hris/employees/${employeeId}/bank-accounts/${accountId}`),
@@ -981,9 +1150,9 @@ export const hrisApi = {
   // Employee Education
   listEmployeeEducation: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/education`),
-  createEmployeeEducation: (employeeId: string, data: any) =>
+  createEmployeeEducation: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/education`, data),
-  updateEmployeeEducation: (employeeId: string, educationId: string, data: any) =>
+  updateEmployeeEducation: (employeeId: string, educationId: string, data: unknown) =>
     api.put(`/hris/employees/${employeeId}/education/${educationId}`, data),
   deleteEmployeeEducation: (employeeId: string, educationId: string) =>
     api.delete(`/hris/employees/${employeeId}/education/${educationId}`),
@@ -991,9 +1160,9 @@ export const hrisApi = {
   // Employee Experience
   listEmployeeExperience: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/experience`),
-  createEmployeeExperience: (employeeId: string, data: any) =>
+  createEmployeeExperience: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/experience`, data),
-  updateEmployeeExperience: (employeeId: string, experienceId: string, data: any) =>
+  updateEmployeeExperience: (employeeId: string, experienceId: string, data: unknown) =>
     api.put(`/hris/employees/${employeeId}/experience/${experienceId}`, data),
   deleteEmployeeExperience: (employeeId: string, experienceId: string) =>
     api.delete(`/hris/employees/${employeeId}/experience/${experienceId}`),
@@ -1001,13 +1170,13 @@ export const hrisApi = {
   // Employee Statutory
   getEmployeeStatutory: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/statutory`),
-  createOrUpdateEmployeeStatutory: (employeeId: string, data: any) =>
+  createOrUpdateEmployeeStatutory: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/statutory`, data),
 
   // Employee Lifecycle
   listEmployeeLifecycle: (employeeId: string) =>
     api.get(`/hris/employees/${employeeId}/lifecycle`),
-  createEmployeeLifecycle: (employeeId: string, data: any) =>
+  createEmployeeLifecycle: (employeeId: string, data: unknown) =>
     api.post(`/hris/employees/${employeeId}/lifecycle`, data),
 
   // Shifts
@@ -1016,8 +1185,8 @@ export const hrisApi = {
     active_only?: boolean;
   }) => api.get('/hris/shifts', { params }),
   getShift: (id: string) => api.get(`/hris/shifts/${id}`),
-  createShift: (data: any) => api.post('/hris/shifts', data),
-  updateShift: (id: string, data: any) => api.put(`/hris/shifts/${id}`, data),
+  createShift: (data: unknown) => api.post('/hris/shifts', data),
+  updateShift: (id: string, data: unknown) => api.put(`/hris/shifts/${id}`, data),
   deleteShift: (id: string) => api.delete(`/hris/shifts/${id}`),
 
   // Holiday Calendars
@@ -1026,14 +1195,14 @@ export const hrisApi = {
     year?: number;
   }) => api.get('/hris/holiday-calendars', { params }),
   getHolidayCalendar: (id: string) => api.get(`/hris/holiday-calendars/${id}`),
-  createHolidayCalendar: (data: any) => api.post('/hris/holiday-calendars', data),
-  updateHolidayCalendar: (id: string, data: any) => api.put(`/hris/holiday-calendars/${id}`, data),
+  createHolidayCalendar: (data: unknown) => api.post('/hris/holiday-calendars', data),
+  updateHolidayCalendar: (id: string, data: unknown) => api.put(`/hris/holiday-calendars/${id}`, data),
   deleteHolidayCalendar: (id: string) => api.delete(`/hris/holiday-calendars/${id}`),
 
   // Holidays
-  createHoliday: (calendarId: string, data: any) =>
+  createHoliday: (calendarId: string, data: unknown) =>
     api.post(`/hris/holiday-calendars/${calendarId}/holidays`, data),
-  updateHoliday: (calendarId: string, holidayId: string, data: any) =>
+  updateHoliday: (calendarId: string, holidayId: string, data: unknown) =>
     api.put(`/hris/holiday-calendars/${calendarId}/holidays/${holidayId}`, data),
   deleteHoliday: (calendarId: string, holidayId: string) =>
     api.delete(`/hris/holiday-calendars/${calendarId}/holidays/${holidayId}`),
@@ -1044,14 +1213,14 @@ export const hrisApi = {
     active_only?: boolean;
   }) => api.get('/hris/leaves/types', { params }),
   getLeaveType: (id: string) => api.get(`/hris/leaves/types/${id}`),
-  createLeaveType: (data: any) => api.post('/hris/leaves/types', data),
-  updateLeaveType: (id: string, data: any) => api.put(`/hris/leaves/types/${id}`, data),
+  createLeaveType: (data: unknown) => api.post('/hris/leaves/types', data),
+  updateLeaveType: (id: string, data: unknown) => api.put(`/hris/leaves/types/${id}`, data),
   deleteLeaveType: (id: string) => api.delete(`/hris/leaves/types/${id}`),
 
   // Leave Balances
   getLeaveBalances: (employeeId: string, year: number) =>
     api.get(`/hris/leaves/balances/${employeeId}`, { params: { year } }),
-  createOrUpdateLeaveBalance: (data: any) =>
+  createOrUpdateLeaveBalance: (data: unknown) =>
     api.post('/hris/leaves/balances', data),
   initializeLeaveBalances: (employeeId: string, organizationId: string, year: number) =>
     api.post(`/hris/leaves/balances/initialize/${employeeId}`, null, {
@@ -1073,8 +1242,8 @@ export const hrisApi = {
   getPendingLeaveApprovals: (params?: { skip?: number; limit?: number }) =>
     api.get('/hris/leaves/applications/pending-approval', { params }),
   getLeaveApplication: (id: string) => api.get(`/hris/leaves/applications/${id}`),
-  createLeaveApplication: (data: any) => api.post('/hris/leaves/applications', data),
-  updateLeaveApplication: (id: string, data: any) => api.put(`/hris/leaves/applications/${id}`, data),
+  createLeaveApplication: (data: unknown) => api.post('/hris/leaves/applications', data),
+  updateLeaveApplication: (id: string, data: unknown) => api.put(`/hris/leaves/applications/${id}`, data),
   approveLeaveApplication: (id: string, remarks?: string) =>
     api.post(`/hris/leaves/applications/${id}/approve`, { remarks }),
   rejectLeaveApplication: (id: string, reason: string) =>
@@ -1097,10 +1266,10 @@ export const hrisApi = {
     limit?: number;
   }) => api.get('/hris/attendance', { params }),
   getAttendance: (id: string) => api.get(`/hris/attendance/${id}`),
-  updateAttendance: (id: string, data: any) => api.put(`/hris/attendance/${id}`, data),
+  updateAttendance: (id: string, data: unknown) => api.put(`/hris/attendance/${id}`, data),
 
   // Attendance Punches
-  recordPunch: (data: any) => api.post('/hris/attendance/punch', data),
+  recordPunch: (data: unknown) => api.post('/hris/attendance/punch', data),
   getPunches: (employeeId: string, punchDate: string) =>
     api.get(`/hris/attendance/punches/${employeeId}`, { params: { punch_date: punchDate } }),
 
@@ -1117,7 +1286,7 @@ export const hrisApi = {
     limit?: number;
   }) => api.get('/hris/attendance/regularizations', { params }),
   getRegularization: (id: string) => api.get(`/hris/attendance/regularizations/${id}`),
-  createRegularization: (data: any) => api.post('/hris/attendance/regularizations', data),
+  createRegularization: (data: unknown) => api.post('/hris/attendance/regularizations', data),
   approveRegularization: (id: string, remarks?: string) =>
     api.post(`/hris/attendance/regularizations/${id}/approve`, { remarks }),
   rejectRegularization: (id: string, reason: string) =>
@@ -1140,6 +1309,51 @@ export const hrisApi = {
     year: number;
     month: number;
   }) => api.post('/hris/attendance/lock', data),
+
+  // Separation and Full & Final
+  listSeparations: (params?: {
+    organization_id?: string;
+    status?: string;
+    separation_type?: string;
+    employee_id?: string;
+    from_date?: string;
+    to_date?: string;
+    skip?: number;
+    limit?: number;
+  }) => api.get('/hris/separation', { params }),
+  getSeparation: (id: string) => api.get(`/hris/separation/${id}`),
+  initiateSeparation: (data: {
+    employee_id: string;
+    separation_type: string;
+    requested_last_working_date: string;
+    reason_category?: string;
+    reason_detail?: string;
+    resignation_letter_path?: string;
+  }) => api.post('/hris/separation', data),
+  approveSeparation: (id: string, data: { approved_last_working_date: string; remarks?: string }) =>
+    api.post(`/hris/separation/${id}/approve`, data),
+  rejectSeparation: (id: string, rejectionReason: string) =>
+    api.post(`/hris/separation/${id}/reject`, { rejection_reason: rejectionReason }),
+  withdrawSeparation: (id: string, reason?: string) =>
+    api.post(`/hris/separation/${id}/withdraw`, { reason }),
+  getClearanceStatus: (separationId: string) =>
+    api.get(`/hris/separation/${separationId}/clearance`),
+  calculateFnF: (
+    separationId: string,
+    data?: {
+      include_gratuity?: boolean;
+      include_leave_encashment?: boolean;
+      additional_earnings?: Record<string, number>;
+      additional_deductions?: Record<string, number>;
+    },
+  ) => api.post(`/hris/separation/${separationId}/fnf/calculate`, data ?? {}),
+  getFnF: (separationId: string) => api.get(`/hris/separation/${separationId}/fnf`),
+  approveFnF: (fnfId: string, remarks?: string) =>
+    api.post(`/hris/separation/fnf/${fnfId}/approve`, null, { params: { remarks } }),
+  payFnF: (
+    fnfId: string,
+    data: { payment_date: string; payment_mode: string; payment_reference: string },
+  ) => api.post(`/hris/separation/fnf/${fnfId}/pay`, data),
 };
 
 // Default export for convenience

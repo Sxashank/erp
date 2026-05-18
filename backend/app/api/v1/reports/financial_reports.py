@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.reports.financial_report_service import FinancialReportService
 from app.schemas.reports.financial_reports import (
@@ -23,15 +23,14 @@ from app.schemas.reports.financial_reports import (
 router = APIRouter()
 
 
-@router.get("/trial-balance", response_model=TrialBalanceResponse)
+@router.get("/trial-balance", response_model=TrialBalanceResponse, response_model_by_alias=True)
 async def get_trial_balance(
-    organization_id: UUID = Query(..., description="Organization ID"),
     financial_year_id: UUID = Query(..., description="Financial Year ID"),
     from_date: Optional[date] = Query(None, description="Start date (defaults to FY start)"),
     to_date: Optional[date] = Query(None, description="End date (defaults to FY end)"),
     include_zero_balance: bool = Query(False, description="Include accounts with zero balance"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate Trial Balance report.
@@ -41,18 +40,17 @@ async def get_trial_balance(
     """
     service = FinancialReportService(db)
     return await service.get_trial_balance(
-        organization_id, financial_year_id, from_date, to_date, include_zero_balance
+        current_user.organization_id, financial_year_id, from_date, to_date, include_zero_balance
     )
 
 
-@router.get("/profit-loss", response_model=ProfitLossResponse)
+@router.get("/profit-loss", response_model=ProfitLossResponse, response_model_by_alias=True)
 async def get_profit_loss(
-    organization_id: UUID = Query(..., description="Organization ID"),
     financial_year_id: UUID = Query(..., description="Financial Year ID"),
     from_date: Optional[date] = Query(None, description="Start date (defaults to FY start)"),
     to_date: Optional[date] = Query(None, description="End date (defaults to FY end)"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate Profit & Loss Statement.
@@ -62,17 +60,16 @@ async def get_profit_loss(
     """
     service = FinancialReportService(db)
     return await service.get_profit_loss(
-        organization_id, financial_year_id, from_date, to_date
+        current_user.organization_id, financial_year_id, from_date, to_date
     )
 
 
-@router.get("/balance-sheet", response_model=BalanceSheetResponse)
+@router.get("/balance-sheet", response_model=BalanceSheetResponse, response_model_by_alias=True)
 async def get_balance_sheet(
-    organization_id: UUID = Query(..., description="Organization ID"),
     financial_year_id: UUID = Query(..., description="Financial Year ID"),
     as_on_date: Optional[date] = Query(None, description="Balance sheet date (defaults to FY end)"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate Balance Sheet.
@@ -82,17 +79,17 @@ async def get_balance_sheet(
     """
     service = FinancialReportService(db)
     return await service.get_balance_sheet(
-        organization_id, financial_year_id, as_on_date
+        current_user.organization_id, financial_year_id, as_on_date
     )
 
 
-@router.get("/account-ledger/{account_id}", response_model=AccountLedgerResponse)
+@router.get("/account-ledger/{account_id}", response_model=AccountLedgerResponse, response_model_by_alias=True)
 async def get_account_ledger(
     account_id: UUID,
     from_date: date = Query(..., description="Start date"),
     to_date: date = Query(..., description="End date"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate Account Ledger (detailed transactions).
@@ -104,14 +101,13 @@ async def get_account_ledger(
     return await service.get_account_ledger(account_id, from_date, to_date)
 
 
-@router.get("/cash-flow-statement", response_model=CashFlowStatementResponse)
+@router.get("/cash-flow-statement", response_model=CashFlowStatementResponse, response_model_by_alias=True)
 async def get_cash_flow_statement(
-    organization_id: UUID = Query(..., description="Organization ID"),
     financial_year_id: UUID = Query(..., description="Financial Year ID"),
     from_date: Optional[date] = Query(None, description="Start date (defaults to FY start)"),
     to_date: Optional[date] = Query(None, description="End date (defaults to FY end)"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate Cash Flow Statement (Indirect Method).
@@ -123,18 +119,17 @@ async def get_cash_flow_statement(
     """
     service = FinancialReportService(db)
     return await service.get_cash_flow_statement(
-        organization_id, financial_year_id, from_date, to_date
+        current_user.organization_id, financial_year_id, from_date, to_date
     )
 
 
-@router.get("/day-book", response_model=DayBookResponse)
+@router.get("/day-book", response_model=DayBookResponse, response_model_by_alias=True)
 async def get_day_book(
-    organization_id: UUID = Query(..., description="Organization ID"),
     from_date: date = Query(..., description="Start date"),
     to_date: date = Query(..., description="End date"),
     voucher_type_id: Optional[UUID] = Query(None, description="Filter by voucher type"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate Day Book / Journal Register.
@@ -144,5 +139,5 @@ async def get_day_book(
     """
     service = FinancialReportService(db)
     return await service.get_day_book(
-        organization_id, from_date, to_date, voucher_type_id
+        current_user.organization_id, from_date, to_date, voucher_type_id
     )

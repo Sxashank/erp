@@ -16,7 +16,7 @@ const rows: Row[] = [
   { id: 'r3', name: 'Carol', amount: 200 },
 ];
 
-const columns: Array<Column<Row>> = [
+const columns: Column<Row>[] = [
   { key: 'name', header: 'Name', sortable: true },
   { key: 'amount', header: 'Amount', align: 'right', sortable: true },
 ];

@@ -3,10 +3,10 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.core.constants import Permissions
 from app.core.permissions import RequirePermissions
 from app.models.auth.user import User
@@ -38,6 +38,7 @@ from app.schemas.hris.employee import (
 )
 from app.schemas.common import PaginatedResponse
 from app.services.hris.employee_service import EmployeeService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -45,7 +46,7 @@ router = APIRouter()
 # ============================================
 # Employee CRUD
 # ============================================
-@router.get("", response_model=PaginatedResponse[EmployeeListResponse])
+@router.get("", response_model=PaginatedResponse[EmployeeListResponse], response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def list_employees(
     organization_id: Optional[UUID] = None,
@@ -57,7 +58,7 @@ async def list_employees(
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List employees with filters."""
@@ -98,11 +99,11 @@ async def list_employees(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-@router.post("", response_model=EmployeeResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=EmployeeResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_CREATE])
 async def create_employee(
     data: EmployeeCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new employee."""
@@ -112,49 +113,43 @@ async def create_employee(
     if data.employee_code:
         existing = await service.get_by_code(data.organization_id, data.employee_code)
         if existing:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestException(
                 detail="Employee code already exists",
+                error_code="EMPLOYEE_CODE_ALREADY_EXISTS",
             )
 
     employee = await service.create(data, current_user.id)
     return await _build_employee_response(service, employee)
 
 
-@router.get("/{employee_id}", response_model=EmployeeResponse)
+@router.get("/{employee_id}", response_model=EmployeeResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def get_employee(
     employee_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get employee by ID."""
     service = EmployeeService(db)
     employee = await service.get(employee_id, include_related=True)
     if not employee:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Employee not found",
-        )
+        raise NotFoundException(detail="Employee not found", error_code="EMPLOYEE_NOT_FOUND")
     return await _build_employee_response(service, employee)
 
 
-@router.put("/{employee_id}", response_model=EmployeeResponse)
+@router.put("/{employee_id}", response_model=EmployeeResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_employee(
     employee_id: UUID,
     data: EmployeeUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update employee."""
     service = EmployeeService(db)
     employee = await service.update(employee_id, data, current_user.id)
     if not employee:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Employee not found",
-        )
+        raise NotFoundException(detail="Employee not found", error_code="EMPLOYEE_NOT_FOUND")
     return await _build_employee_response(service, employee)
 
 
@@ -162,28 +157,25 @@ async def update_employee(
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_DELETE])
 async def delete_employee(
     employee_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete (relieve) employee."""
     service = EmployeeService(db)
     success = await service.delete(employee_id)
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Employee not found",
-        )
+        raise NotFoundException(detail="Employee not found", error_code="EMPLOYEE_NOT_FOUND")
 
 
 # ============================================
 # Documents
 # ============================================
-@router.post("/{employee_id}/documents", response_model=EmployeeDocumentResponse)
+@router.post("/{employee_id}/documents", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_document(
     employee_id: UUID,
     data: EmployeeDocumentCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add document to employee."""
@@ -192,19 +184,19 @@ async def add_document(
     return doc
 
 
-@router.put("/documents/{document_id}", response_model=EmployeeDocumentResponse)
+@router.put("/documents/{document_id}", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_document(
     document_id: UUID,
     data: EmployeeDocumentUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update employee document."""
     service = EmployeeService(db)
     doc = await service.update_document(document_id, data, current_user.id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
     return doc
 
 
@@ -212,40 +204,40 @@ async def update_document(
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_document(
     document_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete employee document."""
     service = EmployeeService(db)
     success = await service.delete_document(document_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
 
 
-@router.post("/documents/{document_id}/verify", response_model=EmployeeDocumentResponse)
+@router.post("/documents/{document_id}/verify", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def verify_document(
     document_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Verify employee document."""
     service = EmployeeService(db)
     doc = await service.verify_document(document_id, current_user.id)
     if not doc:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
     return doc
 
 
 # ============================================
 # Family Members
 # ============================================
-@router.post("/{employee_id}/family", response_model=EmployeeFamilyResponse)
+@router.post("/{employee_id}/family", response_model=EmployeeFamilyResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_family_member(
     employee_id: UUID,
     data: EmployeeFamilyCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add family member to employee."""
@@ -254,19 +246,19 @@ async def add_family_member(
     return family
 
 
-@router.put("/family/{family_id}", response_model=EmployeeFamilyResponse)
+@router.put("/family/{family_id}", response_model=EmployeeFamilyResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_family_member(
     family_id: UUID,
     data: EmployeeFamilyUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update family member."""
     service = EmployeeService(db)
     family = await service.update_family_member(family_id, data, current_user.id)
     if not family:
-        raise HTTPException(status_code=404, detail="Family member not found")
+        raise NotFoundException(detail="Family member not found", error_code="FAMILY_MEMBER_NOT_FOUND")
     return family
 
 
@@ -274,25 +266,25 @@ async def update_family_member(
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_family_member(
     family_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete family member."""
     service = EmployeeService(db)
     success = await service.delete_family_member(family_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Family member not found")
+        raise NotFoundException(detail="Family member not found", error_code="FAMILY_MEMBER_NOT_FOUND")
 
 
 # ============================================
 # Bank Accounts
 # ============================================
-@router.post("/{employee_id}/bank-accounts", response_model=EmployeeBankAccountResponse)
+@router.post("/{employee_id}/bank-accounts", response_model=EmployeeBankAccountResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_bank_account(
     employee_id: UUID,
     data: EmployeeBankAccountCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add bank account to employee."""
@@ -301,19 +293,19 @@ async def add_bank_account(
     return bank
 
 
-@router.put("/bank-accounts/{bank_id}", response_model=EmployeeBankAccountResponse)
+@router.put("/bank-accounts/{bank_id}", response_model=EmployeeBankAccountResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_bank_account(
     bank_id: UUID,
     data: EmployeeBankAccountUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update bank account."""
     service = EmployeeService(db)
     bank = await service.update_bank_account(bank_id, data, current_user.id)
     if not bank:
-        raise HTTPException(status_code=404, detail="Bank account not found")
+        raise NotFoundException(detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND")
     return bank
 
 
@@ -321,25 +313,25 @@ async def update_bank_account(
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_bank_account(
     bank_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete bank account."""
     service = EmployeeService(db)
     success = await service.delete_bank_account(bank_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Bank account not found")
+        raise NotFoundException(detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND")
 
 
 # ============================================
 # Education
 # ============================================
-@router.post("/{employee_id}/education", response_model=EmployeeEducationResponse)
+@router.post("/{employee_id}/education", response_model=EmployeeEducationResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_education(
     employee_id: UUID,
     data: EmployeeEducationCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add education to employee."""
@@ -348,19 +340,19 @@ async def add_education(
     return edu
 
 
-@router.put("/education/{education_id}", response_model=EmployeeEducationResponse)
+@router.put("/education/{education_id}", response_model=EmployeeEducationResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_education(
     education_id: UUID,
     data: EmployeeEducationUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update education."""
     service = EmployeeService(db)
     edu = await service.update_education(education_id, data, current_user.id)
     if not edu:
-        raise HTTPException(status_code=404, detail="Education not found")
+        raise NotFoundException(detail="Education not found", error_code="EDUCATION_NOT_FOUND")
     return edu
 
 
@@ -368,25 +360,25 @@ async def update_education(
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_education(
     education_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete education."""
     service = EmployeeService(db)
     success = await service.delete_education(education_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Education not found")
+        raise NotFoundException(detail="Education not found", error_code="EDUCATION_NOT_FOUND")
 
 
 # ============================================
 # Experience
 # ============================================
-@router.post("/{employee_id}/experience", response_model=EmployeeExperienceResponse)
+@router.post("/{employee_id}/experience", response_model=EmployeeExperienceResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_experience(
     employee_id: UUID,
     data: EmployeeExperienceCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add experience to employee."""
@@ -395,19 +387,19 @@ async def add_experience(
     return exp
 
 
-@router.put("/experience/{experience_id}", response_model=EmployeeExperienceResponse)
+@router.put("/experience/{experience_id}", response_model=EmployeeExperienceResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_experience(
     experience_id: UUID,
     data: EmployeeExperienceUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update experience."""
     service = EmployeeService(db)
     exp = await service.update_experience(experience_id, data, current_user.id)
     if not exp:
-        raise HTTPException(status_code=404, detail="Experience not found")
+        raise NotFoundException(detail="Experience not found", error_code="EXPERIENCE_NOT_FOUND")
     return exp
 
 
@@ -415,40 +407,40 @@ async def update_experience(
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_experience(
     experience_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete experience."""
     service = EmployeeService(db)
     success = await service.delete_experience(experience_id)
     if not success:
-        raise HTTPException(status_code=404, detail="Experience not found")
+        raise NotFoundException(detail="Experience not found", error_code="EXPERIENCE_NOT_FOUND")
 
 
 # ============================================
 # Statutory Info
 # ============================================
-@router.get("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse)
+@router.get("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def get_statutory(
     employee_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get employee statutory info."""
     service = EmployeeService(db)
     statutory = await service.get_statutory(employee_id)
     if not statutory:
-        raise HTTPException(status_code=404, detail="Statutory info not found")
+        raise NotFoundException(detail="Statutory info not found", error_code="STATUTORY_INFO_NOT_FOUND")
     return statutory
 
 
-@router.put("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse)
+@router.put("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def upsert_statutory(
     employee_id: UUID,
     data: EmployeeStatutoryCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create or update statutory info."""
@@ -460,11 +452,11 @@ async def upsert_statutory(
 # ============================================
 # Lifecycle Events
 # ============================================
-@router.get("/{employee_id}/lifecycle", response_model=list[EmployeeLifecycleEventResponse])
+@router.get("/{employee_id}/lifecycle", response_model=list[EmployeeLifecycleEventResponse], response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def get_lifecycle_events(
     employee_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get employee lifecycle events."""
@@ -473,12 +465,12 @@ async def get_lifecycle_events(
     return events
 
 
-@router.post("/{employee_id}/lifecycle", response_model=EmployeeLifecycleEventResponse)
+@router.post("/{employee_id}/lifecycle", response_model=EmployeeLifecycleEventResponse, response_model_by_alias=True)
 @RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_lifecycle_event(
     employee_id: UUID,
     data: EmployeeLifecycleEventCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Add lifecycle event to employee."""

@@ -3,22 +3,16 @@
  * Inline management of entity addresses (NO MODALS)
  */
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Plus, Edit, Trash2, X, Check, Loader2 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plus, Edit, Trash2, X, Check, Loader2 } from 'lucide-react';
 
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Form,
   FormControl,
@@ -27,41 +21,54 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { entityApi } from '@/services/lending';
 import type { EntityAddress } from '@/types/lending';
 
 const ADDRESS_TYPES = [
   { value: 'REGISTERED', label: 'Registered Office' },
   { value: 'CORRESPONDENCE', label: 'Correspondence' },
-  { value: 'CORPORATE', label: 'Corporate Office' },
+  { value: 'BRANCH', label: 'Branch Office' },
   { value: 'PLANT', label: 'Plant/Factory' },
   { value: 'WAREHOUSE', label: 'Warehouse' },
-  { value: 'OTHER', label: 'Other' },
+  { value: 'PROJECT_SITE', label: 'Project Site' },
 ];
 
 const INDIAN_STATES = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab',
-  'Rajasthan', 'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura',
-  'Uttar Pradesh', 'Uttarakhand', 'West Bengal',
-  'Delhi', 'Chandigarh', 'Puducherry', 'Ladakh', 'Jammu and Kashmir',
-  'Andaman and Nicobar Islands', 'Dadra and Nagar Haveli and Daman and Diu', 'Lakshadweep',
+  { code: '27', name: 'Maharashtra' },
+  { code: '07', name: 'Delhi' },
+  { code: '29', name: 'Karnataka' },
+  { code: '24', name: 'Gujarat' },
+  { code: '33', name: 'Tamil Nadu' },
+  { code: '36', name: 'Telangana' },
+  { code: '09', name: 'Uttar Pradesh' },
+  { code: '19', name: 'West Bengal' },
 ];
 
 const addressSchema = z.object({
-  address_type: z.enum(['REGISTERED', 'CORRESPONDENCE', 'CORPORATE', 'PLANT', 'WAREHOUSE', 'OTHER']),
-  address_line1: z.string().min(5, 'Address must be at least 5 characters'),
-  address_line2: z.string().optional(),
+  addressType: z.enum([
+    'REGISTERED',
+    'CORRESPONDENCE',
+    'BRANCH',
+    'PLANT',
+    'WAREHOUSE',
+    'PROJECT_SITE',
+  ]),
+  addressLine1: z.string().min(5, 'Address must be at least 5 characters'),
+  addressLine2: z.string().optional(),
   city: z.string().min(2, 'City is required'),
   state: z.string().min(2, 'State is required'),
+  stateCode: z.string().length(2, 'State code is required'),
   pincode: z.string().regex(/^\d{6}$/, 'Pincode must be 6 digits'),
-  country: z.string().default('India'),
-  is_primary: z.boolean().default(false),
+  country: z.string(),
+  isPrimary: z.boolean(),
 });
 
 type AddressFormData = z.infer<typeof addressSchema>;
@@ -78,16 +85,17 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
   const [saving, setSaving] = useState(false);
 
   const form = useForm<AddressFormData>({
-    resolver: zodResolver(addressSchema) as any,
+    resolver: zodResolver(addressSchema),
     defaultValues: {
-      address_type: 'REGISTERED',
-      address_line1: '',
-      address_line2: '',
+      addressType: 'REGISTERED',
+      addressLine1: '',
+      addressLine2: '',
       city: '',
       state: '',
+      stateCode: '',
       pincode: '',
       country: 'India',
-      is_primary: false,
+      isPrimary: false,
     },
   });
 
@@ -101,8 +109,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
     try {
       const data = await entityApi.getEntityAddresses(entityId);
       setAddresses(data);
-    } catch (error) {
-      console.error('Failed to load addresses:', error);
+    } catch {
     } finally {
       setLoading(false);
     }
@@ -110,14 +117,15 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
   const handleAddNew = () => {
     form.reset({
-      address_type: 'REGISTERED',
-      address_line1: '',
-      address_line2: '',
+      addressType: 'REGISTERED',
+      addressLine1: '',
+      addressLine2: '',
       city: '',
       state: '',
+      stateCode: '',
       pincode: '',
       country: 'India',
-      is_primary: false,
+      isPrimary: false,
     });
     setIsAdding(true);
     setEditingId(null);
@@ -125,16 +133,17 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
   const handleEdit = (address: EntityAddress) => {
     form.reset({
-      address_type: address.address_type as AddressFormData['address_type'],
-      address_line1: address.address_line1,
-      address_line2: address.address_line2 || '',
+      addressType: address.addressType as AddressFormData['addressType'],
+      addressLine1: address.addressLine1,
+      addressLine2: address.addressLine2 || '',
       city: address.city,
       state: address.state,
+      stateCode: address.stateCode || '',
       pincode: address.pincode,
       country: address.country,
-      is_primary: address.is_primary,
+      isPrimary: address.isPrimary,
     });
-    setEditingId(address.address_id);
+    setEditingId(address.id);
     setIsAdding(false);
   };
 
@@ -148,14 +157,13 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
     setSaving(true);
     try {
       if (editingId) {
-        await entityApi.updateEntityAddress(entityId, editingId, data as any);
+        await entityApi.updateEntityAddress(entityId, editingId, data);
       } else {
-        await entityApi.addEntityAddress(entityId, data as any);
+        await entityApi.addEntityAddress(entityId, data);
       }
       await loadAddresses();
       handleCancel();
-    } catch (error) {
-      console.error('Failed to save address:', error);
+    } catch {
     } finally {
       setSaving(false);
     }
@@ -166,14 +174,12 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
     try {
       await entityApi.deleteEntityAddress(entityId, addressId);
       await loadAddresses();
-    } catch (error) {
-      console.error('Failed to delete address:', error);
-    }
+    } catch {}
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-48">
+      <div className="flex h-48 items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
       </div>
     );
@@ -184,9 +190,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Addresses</CardTitle>
-          <CardDescription>
-            Registered, correspondence, and other addresses
-          </CardDescription>
+          <CardDescription>Registered, correspondence, and other addresses</CardDescription>
         </div>
         {!isAdding && !editingId && (
           <Button onClick={handleAddNew}>
@@ -198,16 +202,14 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
       <CardContent>
         {/* Add/Edit Form */}
         {(isAdding || editingId) && (
-          <div className="mb-6 p-4 border rounded-lg bg-gray-50">
-            <h4 className="font-medium mb-4">
-              {editingId ? 'Edit Address' : 'Add New Address'}
-            </h4>
+          <div className="mb-6 rounded-lg border bg-gray-50 p-4">
+            <h4 className="mb-4 font-medium">{editingId ? 'Edit Address' : 'Add New Address'}</h4>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(handleSave as any)} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                   <FormField
                     control={form.control}
-                    name="address_type"
+                    name="addressType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Address Type *</FormLabel>
@@ -246,7 +248,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
                   <FormField
                     control={form.control}
-                    name="address_line1"
+                    name="addressLine1"
                     render={({ field }) => (
                       <FormItem className="md:col-span-2">
                         <FormLabel>Address Line 1 *</FormLabel>
@@ -260,7 +262,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
                   <FormField
                     control={form.control}
-                    name="address_line2"
+                    name="addressLine2"
                     render={({ field }) => (
                       <FormItem className="md:col-span-2">
                         <FormLabel>Address Line 2</FormLabel>
@@ -292,7 +294,16 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>State *</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
+                        <Select
+                          onValueChange={(value) => {
+                            field.onChange(value);
+                            form.setValue(
+                              'stateCode',
+                              INDIAN_STATES.find((state) => state.name === value)?.code ?? '',
+                            );
+                          }}
+                          value={field.value}
+                        >
                           <FormControl>
                             <SelectTrigger>
                               <SelectValue placeholder="Select state" />
@@ -300,8 +311,8 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
                           </FormControl>
                           <SelectContent>
                             {INDIAN_STATES.map((state) => (
-                              <SelectItem key={state} value={state}>
-                                {state}
+                              <SelectItem key={state.code} value={state.name}>
+                                {state.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -314,14 +325,11 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
                 <FormField
                   control={form.control}
-                  name="is_primary"
+                  name="isPrimary"
                   render={({ field }) => (
                     <FormItem className="flex items-center space-x-2 space-y-0">
                       <FormControl>
-                        <Checkbox
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
+                        <Checkbox checked={field.value} onCheckedChange={field.onChange} />
                       </FormControl>
                       <FormLabel className="font-normal">Primary Address</FormLabel>
                     </FormItem>
@@ -346,29 +354,28 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
         {/* Addresses List */}
         {addresses.length === 0 && !isAdding ? (
-          <p className="text-center py-8 text-gray-500">
+          <p className="py-8 text-center text-gray-500">
             No addresses added yet. Click "Add Address" to add one.
           </p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {addresses.map((address) => (
               <div
-                key={address.address_id}
-                className={`p-4 border rounded-lg ${
-                  editingId === address.address_id ? 'hidden' : ''
-                }`}
+                key={address.id}
+                className={`rounded-lg border p-4 ${editingId === address.id ? 'hidden' : ''}`}
               >
                 <div className="flex items-start justify-between">
                   <div>
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="mb-2 flex items-center gap-2">
                       <Badge variant="outline">
-                        {ADDRESS_TYPES.find(t => t.value === address.address_type)?.label || address.address_type}
+                        {ADDRESS_TYPES.find((t) => t.value === address.addressType)?.label ||
+                          address.addressType}
                       </Badge>
-                      {address.is_primary && <Badge>Primary</Badge>}
+                      {address.isPrimary && <Badge>Primary</Badge>}
                     </div>
                     <p className="text-sm">
-                      {address.address_line1}
-                      {address.address_line2 && <>, {address.address_line2}</>}
+                      {address.addressLine1}
+                      {address.addressLine2 && <>, {address.addressLine2}</>}
                     </p>
                     <p className="text-sm">
                       {address.city}, {address.state} - {address.pincode}
@@ -376,18 +383,10 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
                     <p className="text-sm text-gray-500">{address.country}</p>
                   </div>
                   <div className="flex gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleEdit(address)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => handleEdit(address)}>
                       <Edit className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDelete(address.address_id)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => handleDelete(address.id)}>
                       <Trash2 className="h-4 w-4 text-red-500" />
                     </Button>
                   </div>

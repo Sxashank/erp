@@ -140,7 +140,7 @@ class EmployeeService:
         )
         self.db.add(event)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(employee)
         return employee
 
@@ -248,7 +248,7 @@ class EmployeeService:
             setattr(employee, field, value)
 
         employee.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(employee)
         return employee
 
@@ -260,7 +260,7 @@ class EmployeeService:
 
         employee.employment_status = EmploymentStatus.RELIEVED
         employee.date_of_leaving = date.today()
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     # ============================================
@@ -276,7 +276,7 @@ class EmployeeService:
             created_by=created_by,
         )
         self.db.add(doc)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(doc)
         return doc
 
@@ -296,7 +296,7 @@ class EmployeeService:
             setattr(doc, field, value)
 
         doc.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(doc)
         return doc
 
@@ -310,7 +310,7 @@ class EmployeeService:
             return False
 
         await self.db.delete(doc)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def verify_document(self, document_id: UUID, verified_by: UUID) -> Optional[EmployeeDocument]:
@@ -326,7 +326,7 @@ class EmployeeService:
         doc.verified_by = verified_by
         doc.verified_at = date.today()
         doc.updated_by = verified_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(doc)
         return doc
 
@@ -343,7 +343,7 @@ class EmployeeService:
             created_by=created_by,
         )
         self.db.add(family)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(family)
         return family
 
@@ -363,7 +363,7 @@ class EmployeeService:
             setattr(family, field, value)
 
         family.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(family)
         return family
 
@@ -377,7 +377,7 @@ class EmployeeService:
             return False
 
         await self.db.delete(family)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     # ============================================
@@ -409,7 +409,7 @@ class EmployeeService:
             created_by=created_by,
         )
         self.db.add(bank)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(bank)
         return bank
 
@@ -442,7 +442,7 @@ class EmployeeService:
             setattr(bank, field, value)
 
         bank.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(bank)
         return bank
 
@@ -456,7 +456,7 @@ class EmployeeService:
             return False
 
         await self.db.delete(bank)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     # ============================================
@@ -472,7 +472,7 @@ class EmployeeService:
             created_by=created_by,
         )
         self.db.add(edu)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(edu)
         return edu
 
@@ -492,7 +492,7 @@ class EmployeeService:
             setattr(edu, field, value)
 
         edu.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(edu)
         return edu
 
@@ -506,7 +506,7 @@ class EmployeeService:
             return False
 
         await self.db.delete(edu)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     # ============================================
@@ -522,7 +522,7 @@ class EmployeeService:
             created_by=created_by,
         )
         self.db.add(exp)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(exp)
         return exp
 
@@ -542,7 +542,7 @@ class EmployeeService:
             setattr(exp, field, value)
 
         exp.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(exp)
         return exp
 
@@ -556,7 +556,7 @@ class EmployeeService:
             return False
 
         await self.db.delete(exp)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     # ============================================
@@ -579,7 +579,7 @@ class EmployeeService:
             for field, value in update_data.items():
                 setattr(existing, field, value)
             existing.updated_by = user_id
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(existing)
             return existing
         else:
@@ -589,7 +589,7 @@ class EmployeeService:
                 created_by=user_id,
             )
             self.db.add(statutory)
-            await self.db.commit()
+            await self.db.flush()
             await self.db.refresh(statutory)
             return statutory
 
@@ -609,7 +609,7 @@ class EmployeeService:
             created_by=created_by,
         )
         self.db.add(event)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(event)
         return event
 

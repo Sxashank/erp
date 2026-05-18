@@ -1,129 +1,98 @@
-import { useState, useEffect } from 'react';
+import { AlertCircle, CheckCircle, KeyRound, Loader2, Shield } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Shield, KeyRound, CheckCircle, AlertCircle, ArrowLeft, RefreshCw, Loader2 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { gstnApi, gstRegistrationsApi } from '@/services/api';
-import { useAuth } from '@/contexts/AuthContext';
+import { getApiErrorMessage, useRequestGstnOtp, useVerifyGstnOtp } from '@/hooks/tax/useGstn';
+import { useGSTRegistrations } from '@/hooks/tax/useTaxation';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
-
-interface GSTRegistration {
-  id: string;
-  gstin: string;
-  legal_name: string;
-  trade_name?: string;
-  is_active: boolean;
-}
 
 export function GstnLogin() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
   const activeOrganizationId = useActiveOrganizationId();
-  const [registrations, setRegistrations] = useState<GSTRegistration[]>([]);
   const [selectedGstin, setSelectedGstin] = useState(searchParams.get('gstin') || '');
   const [step, setStep] = useState<'select' | 'otp' | 'success'>('select');
   const [otp, setOtp] = useState('');
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [otpRequested, setOtpRequested] = useState(false);
   const [countdown, setCountdown] = useState(0);
 
-  useEffect(() => {
-    fetchRegistrations();
-  }, []);
+  const registrationsQuery = useGSTRegistrations({
+    organizationId: activeOrganizationId ?? undefined,
+    includeInactive: false,
+    pageSize: 100,
+  });
+  const requestOtp = useRequestGstnOtp();
+  const verifyOtp = useVerifyGstnOtp();
+
+  const registrations = registrationsQuery.data?.items;
+  const selectedRegistration = registrations?.find((registration) => registration.gstin === selectedGstin);
 
   useEffect(() => {
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
+    if (!selectedGstin && registrations && registrations.length > 0) {
+      setSelectedGstin(registrations[0].gstin);
     }
+  }, [registrations, selectedGstin]);
+
+  useEffect(() => {
+    if (countdown <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setCountdown((current) => current - 1), 1000);
+    return () => window.clearTimeout(timer);
   }, [countdown]);
 
-  const fetchRegistrations = async () => {
-    try {
-      const response = await gstRegistrationsApi.list({
-        organization_id: activeOrganizationId ?? undefined,
-        include_inactive: false,
-      });
-      const data = response.data.items || response.data;
-      setRegistrations(data);
-      if (!selectedGstin && data.length > 0) {
-        setSelectedGstin(data[0].gstin);
-      }
-    } catch (error) {
-      console.error('Failed to fetch GST registrations:', error);
-    }
-  };
-
-  const handleRequestOtp = async () => {
+  async function handleRequestOtp() {
     if (!selectedGstin) {
       setError('Please select a GSTIN');
       return;
     }
 
-    setLoading(true);
     setError('');
     try {
-      await gstnApi.requestOtp({ gstin: selectedGstin });
-      setOtpRequested(true);
+      await requestOtp.mutateAsync(selectedGstin);
       setStep('otp');
       setCountdown(60);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to request OTP. Please try again.');
-    } finally {
-      setLoading(false);
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Failed to request OTP. Please try again.'));
     }
-  };
+  }
 
-  const handleVerifyOtp = async () => {
-    if (!otp || otp.length !== 6) {
+  async function handleVerifyOtp() {
+    if (otp.length !== 6) {
       setError('Please enter a valid 6-digit OTP');
       return;
     }
 
-    setLoading(true);
     setError('');
     try {
-      await gstnApi.verifyOtp({ gstin: selectedGstin, otp });
+      await verifyOtp.mutateAsync({ gstin: selectedGstin, otp });
       setStep('success');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid OTP. Please try again.');
-    } finally {
-      setLoading(false);
+    } catch (verifyError) {
+      setError(getApiErrorMessage(verifyError, 'Invalid OTP. Please try again.'));
     }
-  };
-
-  const handleResendOtp = async () => {
-    if (countdown > 0) return;
-    await handleRequestOtp();
-  };
-
-  const selectedRegistration = registrations.find(r => r.gstin === selectedGstin);
+  }
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/gst/gstn')}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold">Connect to GSTN Portal</h1>
-          <p className="text-muted-foreground">Authenticate using OTP to access GSTN services</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Connect to GSTN Portal"
+        subtitle="Authenticate using OTP to access GSTN services"
+        breadcrumbs={[{ label: 'GSTN Portal', to: '/admin/gst/gstn' }, { label: 'Connect' }]}
+      />
 
-      <div className="max-w-md mx-auto">
-        {/* Step: Select GSTIN */}
-        {step === 'select' && (
+      <div className="mx-auto max-w-md">
+        {step === 'select' ? (
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
+                <div className="rounded-lg bg-blue-100 p-2">
                   <Shield className="h-6 w-6 text-blue-600" />
                 </div>
                 <div>
@@ -133,47 +102,48 @@ export function GstnLogin() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {error && (
+              {error ? (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-              )}
+              ) : null}
 
               <div className="space-y-2">
                 <Label htmlFor="gstin">GSTIN</Label>
                 <select
                   id="gstin"
                   value={selectedGstin}
-                  onChange={(e) => setSelectedGstin(e.target.value)}
+                  onChange={(event) => setSelectedGstin(event.target.value)}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <option value="">Select GSTIN</option>
-                  {registrations.map((reg) => (
-                    <option key={reg.id} value={reg.gstin}>
-                      {reg.gstin} - {reg.trade_name || reg.legal_name}
+                  {registrations?.map((registration) => (
+                    <option key={registration.id} value={registration.gstin}>
+                      {registration.gstin} - {registration.tradeName || registration.legalName}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {selectedRegistration && (
-                <div className="p-3 bg-slate-50 rounded-lg space-y-1">
-                  <p className="font-medium">{selectedRegistration.trade_name || selectedRegistration.legal_name}</p>
-                  <p className="text-sm text-muted-foreground font-mono">{selectedRegistration.gstin}</p>
+              {selectedRegistration ? (
+                <div className="space-y-1 rounded-lg bg-slate-50 p-3">
+                  <p className="font-medium">{selectedRegistration.tradeName || selectedRegistration.legalName}</p>
+                  <p className="font-mono text-sm text-muted-foreground">{selectedRegistration.gstin}</p>
                 </div>
-              )}
+              ) : null}
 
               <div className="text-sm text-muted-foreground">
                 <p>An OTP will be sent to the mobile number registered with GSTN for this GSTIN.</p>
               </div>
 
-              <Button
-                className="w-full"
-                onClick={handleRequestOtp}
-                disabled={!selectedGstin || loading}
-              >
-                {loading ? (
+                <Button
+                  className="w-full"
+                  onClick={handleRequestOtp}
+                  disabled={!selectedGstin || requestOtp.isPending}
+                  data-testid="gstn-request-otp"
+                >
+                {requestOtp.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Requesting OTP...
@@ -187,31 +157,28 @@ export function GstnLogin() {
               </Button>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
-        {/* Step: Enter OTP */}
-        {step === 'otp' && (
+        {step === 'otp' ? (
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="p-2 bg-amber-100 rounded-lg">
+                <div className="rounded-lg bg-amber-100 p-2">
                   <KeyRound className="h-6 w-6 text-amber-600" />
                 </div>
                 <div>
                   <CardTitle>Enter OTP</CardTitle>
-                  <CardDescription>
-                    OTP sent to registered mobile for {selectedGstin}
-                  </CardDescription>
+                  <CardDescription>OTP sent to registered mobile for {selectedGstin}</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              {error && (
+              {error ? (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-              )}
+              ) : null}
 
               <div className="space-y-2">
                 <Label htmlFor="otp">OTP</Label>
@@ -221,27 +188,22 @@ export function GstnLogin() {
                   maxLength={6}
                   placeholder="Enter 6-digit OTP"
                   value={otp}
-                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  className="text-center text-2xl tracking-widest font-mono"
+                  onChange={(event) => setOtp(event.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="text-center font-mono text-2xl tracking-widest"
+                  data-testid="gstn-otp-input"
                 />
               </div>
 
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Didn't receive OTP?
-                </span>
+                <span className="text-muted-foreground">Did not receive OTP?</span>
                 <Button
                   variant="link"
                   size="sm"
-                  onClick={handleResendOtp}
-                  disabled={countdown > 0}
-                  className="p-0 h-auto"
+                  onClick={handleRequestOtp}
+                  disabled={countdown > 0 || requestOtp.isPending}
+                  className="h-auto p-0"
                 >
-                  {countdown > 0 ? (
-                    <span>Resend in {countdown}s</span>
-                  ) : (
-                    <span>Resend OTP</span>
-                  )}
+                  {countdown > 0 ? `Resend in ${countdown}s` : 'Resend OTP'}
                 </Button>
               </div>
 
@@ -260,9 +222,10 @@ export function GstnLogin() {
                 <Button
                   className="flex-1"
                   onClick={handleVerifyOtp}
-                  disabled={otp.length !== 6 || loading}
+                  disabled={otp.length !== 6 || verifyOtp.isPending}
+                  data-testid="gstn-verify-otp"
                 >
-                  {loading ? (
+                  {verifyOtp.isPending ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       Verifying...
@@ -274,63 +237,54 @@ export function GstnLogin() {
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
-        {/* Step: Success */}
-        {step === 'success' && (
+        {step === 'success' ? (
           <Card>
             <CardContent className="py-12">
-              <div className="text-center space-y-4">
-                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+              <div className="space-y-4 text-center">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
                   <CheckCircle className="h-8 w-8 text-green-600" />
                 </div>
                 <div>
                   <h3 className="text-lg font-semibold">Connected Successfully</h3>
-                  <p className="text-muted-foreground mt-1">
+                  <p className="mt-1 text-muted-foreground">
                     Your GSTN session is now active for {selectedGstin}
                   </p>
                 </div>
-                <div className="p-3 bg-slate-50 rounded-lg">
+                <div className="rounded-lg bg-slate-50 p-3">
                   <p className="text-sm text-muted-foreground">
                     You can now file returns, fetch GSTR-2B data, and perform ITC reconciliation.
                   </p>
                 </div>
                 <div className="flex gap-3 pt-4">
-                  <Button
-                    variant="outline"
-                    className="flex-1"
-                    onClick={() => navigate('/admin/gst/gstn')}
-                  >
+                  <Button variant="outline" className="flex-1" onClick={() => navigate('/admin/gst/gstn')}>
                     Go to Dashboard
                   </Button>
-                  <Button
-                    className="flex-1"
-                    onClick={() => navigate(`/admin/gst/gstn/gstr1?gstin=${selectedGstin}`)}
-                  >
+                  <Button className="flex-1" onClick={() => navigate(`/admin/gst/gstn/gstr1?gstin=${selectedGstin}`)}>
                     Prepare GSTR-1
                   </Button>
                 </div>
               </div>
             </CardContent>
           </Card>
-        )}
+        ) : null}
 
-        {/* Info Card */}
         <Card className="mt-6">
           <CardContent className="pt-6">
-            <h4 className="font-medium mb-2">About GSTN Authentication</h4>
-            <ul className="text-sm text-muted-foreground space-y-2">
+            <h4 className="mb-2 font-medium">About GSTN Authentication</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
               <li className="flex items-start gap-2">
-                <Shield className="h-4 w-4 mt-0.5 text-blue-500" />
+                <Shield className="mt-0.5 h-4 w-4 text-blue-500" />
                 <span>OTP is sent to the mobile number registered with GSTN</span>
               </li>
               <li className="flex items-start gap-2">
-                <Shield className="h-4 w-4 mt-0.5 text-blue-500" />
+                <Shield className="mt-0.5 h-4 w-4 text-blue-500" />
                 <span>Session remains active for approximately 6 hours</span>
               </li>
               <li className="flex items-start gap-2">
-                <Shield className="h-4 w-4 mt-0.5 text-blue-500" />
-                <span>You'll need to re-authenticate after session expiry</span>
+                <Shield className="mt-0.5 h-4 w-4 text-blue-500" />
+                <span>You need to re-authenticate after session expiry</span>
               </li>
             </ul>
           </CardContent>

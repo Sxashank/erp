@@ -5,7 +5,8 @@ from decimal import Decimal
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 from app.models.gst.gstn_models import (
     GSTReturnType,
@@ -21,25 +22,30 @@ from app.models.gst.gstn_models import (
 # GSTN Session Schemas
 # =============================================================================
 
-class GSTNSessionBase(BaseModel):
+class GSTNSessionBase(CamelSchema):
     """Base schema for GSTN session."""
     gstin: str = Field(..., min_length=15, max_length=15, description="GSTIN")
 
 
 class GSTNOTPRequest(GSTNSessionBase):
     """Request to initiate GSTN OTP."""
-    username: str = Field(..., description="GSTN portal username")
+    username: Optional[str] = Field(
+        default=None,
+        description="GSTN portal username; optional while external GSTN integration is disabled",
+    )
 
 
 class GSTNOTPVerify(GSTNSessionBase):
     """Request to verify GSTN OTP."""
     otp: str = Field(..., min_length=6, max_length=6, description="6-digit OTP")
-    otp_reference: str = Field(..., description="OTP reference from request")
+    otp_reference: Optional[str] = Field(
+        default=None,
+        description="OTP reference from request; optional while external GSTN integration is disabled",
+    )
 
 
-class GSTNSessionResponse(BaseModel):
+class GSTNSessionResponse(CamelSchema):
     """Response for GSTN session."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     gstin: str
@@ -58,7 +64,7 @@ class GSTNSessionResponse(BaseModel):
         return datetime.utcnow() < self.token_expires_at.replace(tzinfo=None)
 
 
-class GSTNSessionCreate(BaseModel):
+class GSTNSessionCreate(CamelSchema):
     """Create new GSTN session after OTP verification."""
     gst_registration_id: UUID
     auth_token: str
@@ -70,7 +76,7 @@ class GSTNSessionCreate(BaseModel):
 # GST Return Filing Schemas
 # =============================================================================
 
-class GSTReturnFilingBase(BaseModel):
+class GSTReturnFilingBase(CamelSchema):
     """Base schema for GST return filing."""
     return_type: GSTReturnType
     return_period: str = Field(..., pattern=r"^\d{2}\d{4}$", description="MMYYYY format")
@@ -82,14 +88,14 @@ class GSTReturnFilingCreate(GSTReturnFilingBase):
     gst_registration_id: UUID
 
 
-class GSTReturnFilingUpdate(BaseModel):
+class GSTReturnFilingUpdate(CamelSchema):
     """Update GST return filing."""
     status: Optional[GSTReturnStatus] = None
     summary_data: Optional[Dict[str, Any]] = None
     section_wise_data: Optional[Dict[str, Any]] = None
 
 
-class GSTReturnSummary(BaseModel):
+class GSTReturnSummary(CamelSchema):
     """Summary data for GST return."""
     total_taxable_value: Decimal = Field(default=Decimal("0"))
     total_igst: Decimal = Field(default=Decimal("0"))
@@ -107,7 +113,6 @@ class GSTReturnSummary(BaseModel):
 
 class GSTReturnFilingResponse(GSTReturnFilingBase):
     """Response for GST return filing."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     organization_id: UUID
@@ -145,7 +150,7 @@ class GSTReturnFilingDetail(GSTReturnFilingResponse):
     error_details: Optional[Dict[str, Any]] = None
 
 
-class GSTReturnFilingListResponse(BaseModel):
+class GSTReturnFilingListResponse(CamelSchema):
     """Paginated list of GST return filings."""
     items: List[GSTReturnFilingResponse]
     total: int
@@ -158,7 +163,7 @@ class GSTReturnFilingListResponse(BaseModel):
 # GSTR-1 Specific Schemas
 # =============================================================================
 
-class GSTR1B2BInvoice(BaseModel):
+class GSTR1B2BInvoice(CamelSchema):
     """B2B invoice for GSTR-1."""
     invoice_number: str
     invoice_date: date
@@ -175,7 +180,7 @@ class GSTR1B2BInvoice(BaseModel):
     rate: Decimal
 
 
-class GSTR1B2CInvoice(BaseModel):
+class GSTR1B2CInvoice(CamelSchema):
     """B2C invoice for GSTR-1."""
     place_of_supply: str
     rate: Decimal
@@ -186,7 +191,7 @@ class GSTR1B2CInvoice(BaseModel):
     cess: Decimal = Field(default=Decimal("0"))
 
 
-class GSTR1HSNSummary(BaseModel):
+class GSTR1HSNSummary(CamelSchema):
     """HSN-wise summary for GSTR-1."""
     hsn_code: str
     description: Optional[str] = None
@@ -199,7 +204,7 @@ class GSTR1HSNSummary(BaseModel):
     total_cess: Decimal = Field(default=Decimal("0"))
 
 
-class GSTR1DocumentSummary(BaseModel):
+class GSTR1DocumentSummary(CamelSchema):
     """Document summary for GSTR-1."""
     document_type: str  # Invoices, Debit Notes, Credit Notes
     from_serial: str
@@ -208,7 +213,7 @@ class GSTR1DocumentSummary(BaseModel):
     cancelled: int = 0
 
 
-class GSTR1Data(BaseModel):
+class GSTR1Data(CamelSchema):
     """Complete GSTR-1 data structure."""
     gstin: str
     return_period: str
@@ -227,7 +232,7 @@ class GSTR1Data(BaseModel):
 # GSTR-3B Specific Schemas
 # =============================================================================
 
-class GSTR3BOutwardSupplies(BaseModel):
+class GSTR3BOutwardSupplies(CamelSchema):
     """3.1 - Outward taxable supplies."""
     taxable_value: Decimal
     igst: Decimal = Field(default=Decimal("0"))
@@ -236,7 +241,7 @@ class GSTR3BOutwardSupplies(BaseModel):
     cess: Decimal = Field(default=Decimal("0"))
 
 
-class GSTR3BITCDetails(BaseModel):
+class GSTR3BITCDetails(CamelSchema):
     """4 - Eligible ITC."""
     igst: Decimal = Field(default=Decimal("0"))
     cgst: Decimal = Field(default=Decimal("0"))
@@ -244,7 +249,7 @@ class GSTR3BITCDetails(BaseModel):
     cess: Decimal = Field(default=Decimal("0"))
 
 
-class GSTR3BData(BaseModel):
+class GSTR3BData(CamelSchema):
     """Complete GSTR-3B data structure."""
     gstin: str
     return_period: str
@@ -286,7 +291,7 @@ class GSTR3BData(BaseModel):
 # ITC Reconciliation Schemas
 # =============================================================================
 
-class ITCMismatchBase(BaseModel):
+class ITCMismatchBase(CamelSchema):
     """Base schema for ITC mismatch."""
     return_period: str
     supplier_gstin: str
@@ -312,7 +317,7 @@ class ITCMismatchCreate(ITCMismatchBase):
     purchase_bill_id: Optional[UUID] = None
 
 
-class ITCMismatchResolve(BaseModel):
+class ITCMismatchResolve(CamelSchema):
     """Resolve ITC mismatch."""
     resolution_status: ITCMismatchResolution
     resolution_notes: Optional[str] = None
@@ -320,7 +325,6 @@ class ITCMismatchResolve(BaseModel):
 
 class ITCMismatchResponse(ITCMismatchBase):
     """Response for ITC mismatch."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     organization_id: UUID
@@ -347,7 +351,7 @@ class ITCMismatchResponse(ITCMismatchBase):
     created_at: datetime
 
 
-class ITCMismatchListResponse(BaseModel):
+class ITCMismatchListResponse(CamelSchema):
     """Paginated list of ITC mismatches."""
     items: List[ITCMismatchResponse]
     total: int
@@ -356,7 +360,7 @@ class ITCMismatchListResponse(BaseModel):
     total_pages: int
 
 
-class ITCReconciliationSummary(BaseModel):
+class ITCReconciliationSummary(CamelSchema):
     """Summary of ITC reconciliation."""
     return_period: str
     total_invoices_in_books: int
@@ -380,9 +384,8 @@ class ITCReconciliationSummary(BaseModel):
 # GSTR-2B Data Schemas
 # =============================================================================
 
-class GSTR2BInvoiceResponse(BaseModel):
+class GSTR2BInvoiceResponse(CamelSchema):
     """Response for GSTR-2B invoice data."""
-    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     return_period: str
@@ -407,7 +410,7 @@ class GSTR2BInvoiceResponse(BaseModel):
     fetched_at: datetime
 
 
-class GSTR2BListResponse(BaseModel):
+class GSTR2BListResponse(CamelSchema):
     """Paginated list of GSTR-2B invoices."""
     items: List[GSTR2BInvoiceResponse]
     total: int
@@ -416,7 +419,7 @@ class GSTR2BListResponse(BaseModel):
     total_pages: int
 
 
-class GSTR2BSummary(BaseModel):
+class GSTR2BSummary(CamelSchema):
     """Summary of GSTR-2B data."""
     return_period: str
     total_invoices: int
@@ -437,7 +440,7 @@ class GSTR2BSummary(BaseModel):
 # Statistics Schemas
 # =============================================================================
 
-class GSTNFilingStatistics(BaseModel):
+class GSTNFilingStatistics(CamelSchema):
     """Statistics for GSTN filings."""
     total_returns: int
     filed_on_time: int
@@ -453,7 +456,7 @@ class GSTNFilingStatistics(BaseModel):
     total_late_fee: Decimal
 
 
-class ITCReconciliationStatistics(BaseModel):
+class ITCReconciliationStatistics(CamelSchema):
     """Statistics for ITC reconciliation."""
     total_mismatches: int
     pending_resolution: int
@@ -470,27 +473,27 @@ class ITCReconciliationStatistics(BaseModel):
 # Request Schemas for API Operations
 # =============================================================================
 
-class GenerateGSTR1Request(BaseModel):
+class GenerateGSTR1Request(CamelSchema):
     """Request to generate GSTR-1 from sales data."""
     gst_registration_id: UUID
     return_period: str = Field(..., pattern=r"^\d{2}\d{4}$")
     financial_year: str = Field(..., pattern=r"^\d{4}-\d{2}$")
 
 
-class GenerateGSTR3BRequest(BaseModel):
+class GenerateGSTR3BRequest(CamelSchema):
     """Request to generate GSTR-3B summary."""
     gst_registration_id: UUID
     return_period: str = Field(..., pattern=r"^\d{2}\d{4}$")
     financial_year: str = Field(..., pattern=r"^\d{4}-\d{2}$")
 
 
-class FetchGSTR2BRequest(BaseModel):
+class FetchGSTR2BRequest(CamelSchema):
     """Request to fetch GSTR-2B from GSTN."""
     gst_registration_id: UUID
     return_period: str = Field(..., pattern=r"^\d{2}\d{4}$")
 
 
-class RunITCReconciliationRequest(BaseModel):
+class RunITCReconciliationRequest(CamelSchema):
     """Request to run ITC reconciliation."""
     gst_registration_id: UUID
     return_period: str = Field(..., pattern=r"^\d{2}\d{4}$")
@@ -500,13 +503,13 @@ class RunITCReconciliationRequest(BaseModel):
     )
 
 
-class SubmitReturnRequest(BaseModel):
+class SubmitReturnRequest(CamelSchema):
     """Request to submit return to GSTN."""
     return_id: UUID
     gstn_session_id: UUID
 
 
-class FileReturnRequest(BaseModel):
+class FileReturnRequest(CamelSchema):
     """Request to file return with DSC/EVC."""
     return_id: UUID
     gstn_session_id: UUID

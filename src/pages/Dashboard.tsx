@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   Building2,
   Users,
@@ -15,19 +13,11 @@ import {
   TrendingDown,
   LayoutDashboard,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { ResponsiveDashboardGrid } from '@/components/bi';
 import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   KPICard,
   APSummaryWidget,
@@ -36,15 +26,26 @@ import {
   TrendChart,
   RecentActivityList,
 } from '@/components/dashboard';
-import { ResponsiveDashboardGrid } from '@/components/bi';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/hooks/use-toast';
 import {
   organizationsApi,
   dashboardApi,
 } from '@/services/api';
 import { biDashboardApi } from '@/services/biApi';
-import { useToast } from '@/hooks/use-toast';
-import { DashboardListItem } from '@/types/bi';
+import type { DashboardListItem } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -64,7 +65,7 @@ export function Dashboard() {
   const [arSummary, setArSummary] = useState<any>(null);
   const [cashflow, setCashflow] = useState<any>(null);
   const [trends, setTrends] = useState<any>(null);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
+  const [recentActivity, setRecentActivity] = useState<Record<string, unknown>[]>([]);
 
   // Custom BI dashboards
   const [customDashboards, setCustomDashboards] = useState<DashboardListItem[]>([]);
@@ -93,9 +94,10 @@ export function Dashboard() {
   const loadLandingDashboards = async () => {
     try {
       const response = await biDashboardApi.getLanding();
-      setCustomDashboards((response.data || []) as any);
+      // Landing dashboards are a structural subset of DashboardListItem here.
+      setCustomDashboards((response.data || []) as unknown as DashboardListItem[]);
     } catch (error) {
-      console.error('Failed to load landing dashboards:', error);
+      logger.error('Failed to load landing dashboards:', error);
       // Silently fail - custom dashboards are optional
     }
   };
@@ -106,7 +108,7 @@ export function Dashboard() {
       const response = await biDashboardApi.get(dashboardId);
       setSelectedDashboardData(response.data);
     } catch (error) {
-      console.error('Failed to load custom dashboard:', error);
+      logger.error('Failed to load custom dashboard:', error);
       toast({
         title: 'Error',
         description: 'Failed to load dashboard',
@@ -126,7 +128,7 @@ export function Dashboard() {
         setSelectedOrg(orgs[0].id);
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
       toast({
         title: 'Error',
         description: 'Failed to load organizations',
@@ -157,7 +159,7 @@ export function Dashboard() {
       setTrends(trendsRes.data);
       setRecentActivity(activityRes.data || []);
     } catch (error) {
-      console.error('Failed to load dashboard data:', error);
+      logger.error('Failed to load dashboard data:', error);
       toast({
         title: 'Error',
         description: 'Failed to load dashboard data',
@@ -355,16 +357,16 @@ export function Dashboard() {
         {/* Right Column - Activity & Quick Actions */}
         <div className="space-y-6">
           <RecentActivityList
-            activities={recentActivity.map((a: any) => ({
-              id: a.id,
-              type: a.type,
-              number: a.number,
-              description: a.description,
-              amount: a.amount,
-              partyName: a.party_name,
-              status: a.status,
-              createdAt: a.created_at,
-              createdByName: a.created_by_name,
+            activities={recentActivity.map((a: Record<string, unknown>) => ({
+              id: String(a.id ?? ''),
+              type: String(a.type ?? ''),
+              number: String(a.number ?? ''),
+              description: String(a.description ?? ''),
+              amount: Number(a.amount ?? 0),
+              partyName: a.party_name as string | undefined,
+              status: String(a.status ?? ''),
+              createdAt: String(a.created_at ?? ''),
+              createdByName: a.created_by_name as string | undefined,
             }))}
           />
 

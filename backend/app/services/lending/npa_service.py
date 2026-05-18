@@ -242,7 +242,7 @@ class NPAService:
                 logger.error(f"Error classifying loan {loan.id}: {e}")
                 summary["errors"] += 1
 
-        await self.db.commit()
+        await self.db.flush()
 
         return summary
 
@@ -379,7 +379,7 @@ class NPAService:
         loan.is_npa = self.is_npa(new_classification)
         loan.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def write_off_loan(
@@ -431,7 +431,7 @@ class NPAService:
         loan.write_off_approved_by = approved_by
         loan.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def get_npa_summary(

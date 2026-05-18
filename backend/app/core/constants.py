@@ -327,6 +327,7 @@ class GLEntrySourceType(str, Enum):
     INTEREST_ACCRUAL = "INTEREST_ACCRUAL"  # From interest accrual process
     FEE_ACCRUAL = "FEE_ACCRUAL"  # From fee accrual process
     NPA_PROVISION = "NPA_PROVISION"  # From NPA provisioning
+    PAYROLL = "PAYROLL"  # From payroll batch posting
     TDS = "TDS"  # From TDS deduction
     GST = "GST"  # From GST computation
     DEPRECIATION = "DEPRECIATION"  # From depreciation run
@@ -894,41 +895,79 @@ class Permissions:
     # ==========================================
     # LENDING - COLLECTIONS
     # ==========================================
-    COLLECTIONS_READ = "collections:read"
-    COLLECTIONS_CREATE = "collections:create"
-    COLLECTIONS_UPDATE = "collections:update"
-    COLLECTIONS_APPROVE = "collections:approve"
+    COLLECTIONS_READ = "COLLECTIONS_READ"
+    COLLECTIONS_CREATE = "COLLECTIONS_CREATE"
+    COLLECTIONS_UPDATE = "COLLECTIONS_UPDATE"
+    COLLECTIONS_APPROVE = "COLLECTIONS_APPROVE"
 
     # NPA
-    NPA_READ = "npa:read"
-    NPA_CREATE = "npa:create"
-    NPA_UPDATE = "npa:update"
+    NPA_READ = "NPA_READ"
+    NPA_CREATE = "NPA_CREATE"
+    NPA_UPDATE = "NPA_UPDATE"
 
     # OTS (One-Time Settlement)
-    OTS_CREATE = "ots:create"
-    OTS_UPDATE = "ots:update"
-    OTS_APPROVE = "ots:approve"
+    OTS_CREATE = "OTS_CREATE"
+    OTS_UPDATE = "OTS_UPDATE"
+    OTS_APPROVE = "OTS_APPROVE"
 
     # Restructure
-    RESTRUCTURE_CREATE = "restructure:create"
-    RESTRUCTURE_UPDATE = "restructure:update"
-    RESTRUCTURE_APPROVE = "restructure:approve"
+    RESTRUCTURE_CREATE = "RESTRUCTURE_CREATE"
+    RESTRUCTURE_UPDATE = "RESTRUCTURE_UPDATE"
+    RESTRUCTURE_APPROVE = "RESTRUCTURE_APPROVE"
 
     # Write-off
-    WRITEOFF_CREATE = "writeoff:create"
-    WRITEOFF_APPROVE = "writeoff:approve"
+    WRITEOFF_CREATE = "WRITEOFF_CREATE"
+    WRITEOFF_APPROVE = "WRITEOFF_APPROVE"
 
     # Legal
-    LEGAL_READ = "legal:read"
-    LEGAL_CREATE = "legal:create"
-    LEGAL_UPDATE = "legal:update"
+    LEGAL_READ = "LEGAL_READ"
+    LEGAL_CREATE = "LEGAL_CREATE"
+    LEGAL_UPDATE = "LEGAL_UPDATE"
+    LEGAL_DELETE = "LEGAL_DELETE"
+    LEGAL_APPROVE = "LEGAL_APPROVE"
 
     # ==========================================
     # LENDING - TREASURY
     # ==========================================
-    TREASURY_READ = "treasury:read"
-    TREASURY_WRITE = "treasury:write"
-    TREASURY_APPROVE = "treasury:approve"
+    TREASURY_READ = "TREASURY_READ"
+    TREASURY_WRITE = "TREASURY_WRITE"
+    TREASURY_APPROVE = "TREASURY_APPROVE"
+
+    # ==========================================
+    # LENDING - ACCOUNT AGGREGATOR (AA)
+    # ==========================================
+    AA_CONSENT_CREATE = "AA_CONSENT_CREATE"
+    AA_CONSENT_READ = "AA_CONSENT_READ"
+    AA_CONSENT_WRITE = "AA_CONSENT_WRITE"
+    AA_CONSENT_REVOKE = "AA_CONSENT_REVOKE"
+    AA_DATA_FETCH = "AA_DATA_FETCH"
+    AA_DATA_READ = "AA_DATA_READ"
+    AA_STATISTICS_READ = "AA_STATISTICS_READ"
+
+    # ==========================================
+    # GST - e-INVOICE / e-WAY BILL / GSTN PORTAL
+    # ==========================================
+    EINVOICE_CREATE = "EINVOICE_CREATE"
+    EINVOICE_CANCEL = "EINVOICE_CANCEL"
+    EINVOICE_READ = "EINVOICE_READ"
+
+    EWAYBILL_CREATE = "EWAYBILL_CREATE"
+    EWAYBILL_CANCEL = "EWAYBILL_CANCEL"
+    EWAYBILL_READ = "EWAYBILL_READ"
+    EWAYBILL_UPDATE = "EWAYBILL_UPDATE"
+
+    GSTN_SESSION_CREATE = "GSTN_SESSION_CREATE"
+    GSTN_SESSION_READ = "GSTN_SESSION_READ"
+    GSTN_RETURN_CREATE = "GSTN_RETURN_CREATE"
+    GSTN_RETURN_READ = "GSTN_RETURN_READ"
+    GSTN_RETURN_SUBMIT = "GSTN_RETURN_SUBMIT"
+    GSTN_RETURN_FILE = "GSTN_RETURN_FILE"
+    GSTN_GSTR2B_FETCH = "GSTN_GSTR2B_FETCH"
+    GSTN_GSTR2B_READ = "GSTN_GSTR2B_READ"
+    GSTN_ITC_READ = "GSTN_ITC_READ"
+    GSTN_ITC_RECONCILE = "GSTN_ITC_RECONCILE"
+    GSTN_ITC_RESOLVE = "GSTN_ITC_RESOLVE"
+    GSTN_STATISTICS_READ = "GSTN_STATISTICS_READ"
 
     # ==========================================
     # FIXED ASSETS MODULE

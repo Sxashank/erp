@@ -2,8 +2,6 @@
  * Vendor Invoice List
  */
 
-import { useState, useEffect } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
 import {
   FileText,
   Search,
@@ -16,11 +14,22 @@ import {
   XCircle,
   AlertCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -29,17 +38,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { vendorInvoiceApi } from '@/services/vendorApi';
 import type { VendorInvoice, VendorInvoiceStatus } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorInvoiceList() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -68,7 +71,7 @@ export default function VendorInvoiceList() {
       setInvoices(response.data.items);
       setTotal(response.data.total);
     } catch (error) {
-      console.error('Failed to fetch invoices:', error);
+      logger.error('Failed to fetch invoices:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -190,7 +193,7 @@ export default function VendorInvoiceList() {
                 {invoices.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                    <TableCell>{new Date(invoice.invoice_date).toLocaleDateString()}</TableCell>
+                    <TableCell><DateDisplay date={invoice.invoice_date} /></TableCell>
                     <TableCell>{invoice.purchase_order_id ? 'Yes' : '-'}</TableCell>
                     <TableCell className="text-right">{formatCurrency(invoice.total_amount)}</TableCell>
                     <TableCell>

@@ -18,7 +18,7 @@ interface ConsoleGate {
   allowError: (pattern: RegExp | string) => void;
   allowStatus: (status: number, urlSubstring?: string) => void;
   getErrors: () => string[];
-  getFailedResponses: () => Array<{ status: number; url: string }>;
+  getFailedResponses: () => { status: number; url: string }[];
 }
 
 interface AuthFixtures {
@@ -27,12 +27,12 @@ interface AuthFixtures {
 }
 
 export const test = base.extend<AuthFixtures>({
-  // eslint-disable-next-line no-empty-pattern
+
   consoleGate: async ({ page }, use, testInfo) => {
-    const errorAllowlist: Array<RegExp | string> = [];
-    const statusAllowlist: Array<{ status: number; urlSubstring?: string }> = [];
+    const errorAllowlist: (RegExp | string)[] = [];
+    const statusAllowlist: { status: number; urlSubstring?: string }[] = [];
     const errors: string[] = [];
-    const failedResponses: Array<{ status: number; url: string }> = [];
+    const failedResponses: { status: number; url: string }[] = [];
 
     const onConsole = (msg: ConsoleMessage) => {
       if (msg.type() !== 'error') return;

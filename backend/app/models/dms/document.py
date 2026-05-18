@@ -2,10 +2,10 @@
 
 import enum
 from datetime import datetime
-from typing import Optional, List
 from uuid import UUID
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     DateTime,
     Enum,
@@ -13,10 +13,10 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    BigInteger,
     func,
 )
-from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, ARRAY
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
@@ -24,6 +24,7 @@ from app.models.base import BaseModel
 
 class DocumentStatus(str, enum.Enum):
     """Document status."""
+
     DRAFT = "draft"
     ACTIVE = "active"
     ARCHIVED = "archived"
@@ -32,6 +33,7 @@ class DocumentStatus(str, enum.Enum):
 
 class DocumentAccessLevel(str, enum.Enum):
     """Document access levels."""
+
     PRIVATE = "private"
     RESTRICTED = "restricted"
     ORGANIZATION = "organization"
@@ -52,7 +54,7 @@ class DMSDocument(BaseModel):
     )
 
     # Folder reference
-    folder_id: Mapped[Optional[UUID]] = mapped_column(
+    folder_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("dms_folder.id", ondelete="SET NULL"),
         nullable=True,
@@ -67,7 +69,7 @@ class DMSDocument(BaseModel):
         comment="Auto-generated document code",
     )
     name: Mapped[str] = mapped_column(String(500), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # File information
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -87,19 +89,19 @@ class DMSDocument(BaseModel):
         nullable=False,
         comment="s3, azure, gcs, local",
     )
-    checksum: Mapped[Optional[str]] = mapped_column(
+    checksum: Mapped[str | None] = mapped_column(
         String(128),
         nullable=True,
         comment="MD5 or SHA256 hash",
     )
 
     # Metadata
-    document_type: Mapped[Optional[str]] = mapped_column(
+    document_type: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Type category (e.g., kyc, legal, financial)",
     )
-    document_subtype: Mapped[Optional[str]] = mapped_column(
+    document_subtype: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="Subtype (e.g., pan_card, loan_agreement)",
@@ -107,12 +109,12 @@ class DMSDocument(BaseModel):
 
     # Status and access
     status: Mapped[DocumentStatus] = mapped_column(
-        Enum(DocumentStatus),
+        Enum(DocumentStatus, native_enum=False),
         default=DocumentStatus.ACTIVE,
         nullable=False,
     )
     access_level: Mapped[DocumentAccessLevel] = mapped_column(
-        Enum(DocumentAccessLevel),
+        Enum(DocumentAccessLevel, native_enum=False),
         default=DocumentAccessLevel.ORGANIZATION,
         nullable=False,
     )
@@ -121,32 +123,35 @@ class DMSDocument(BaseModel):
     current_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # Entity reference (link to business entity)
-    entity_type: Mapped[Optional[str]] = mapped_column(
+    entity_type: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
         comment="e.g., loan, customer, employee",
     )
-    entity_id: Mapped[Optional[UUID]] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    entity_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
 
     # OCR and content extraction
     is_ocr_processed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    ocr_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    extracted_metadata: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    ocr_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+    extracted_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Search keywords
-    keywords: Mapped[Optional[List[str]]] = mapped_column(
+    keywords: Mapped[list[str] | None] = mapped_column(
         ARRAY(String(100)),
         nullable=True,
         comment="Search keywords",
     )
 
     # Expiry
-    expiry_date: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expiry_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     is_expired: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Download tracking
     download_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    last_accessed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    view_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Relationships
     organization = relationship("Organization", lazy="selectin")
@@ -172,15 +177,15 @@ class DMSDocumentVersion(BaseModel):
 
     # Version info
     version_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    version_label: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    change_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    version_label: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    change_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # File information (may differ from current version)
     file_name: Mapped[str] = mapped_column(String(500), nullable=False)
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     storage_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    checksum: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    checksum: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     # Status
     is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -203,17 +208,17 @@ class DMSDocumentAccess(BaseModel):
     )
 
     # Access grantee (user or role)
-    user_id: Mapped[Optional[UUID]] = mapped_column(
+    user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="CASCADE"),
         nullable=True,
     )
-    role_id: Mapped[Optional[UUID]] = mapped_column(
+    role_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_role.id", ondelete="CASCADE"),
         nullable=True,
     )
-    department_id: Mapped[Optional[UUID]] = mapped_column(
+    department_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_department.id", ondelete="CASCADE"),
         nullable=True,
@@ -227,7 +232,7 @@ class DMSDocumentAccess(BaseModel):
     can_share: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Access expiry
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     document = relationship("DMSDocument", back_populates="access_list")
@@ -254,7 +259,7 @@ class DMSDocumentHistory(BaseModel):
         nullable=False,
         comment="created, viewed, downloaded, updated, shared, deleted",
     )
-    action_details: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    action_details: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
     # Actor
     performed_by: Mapped[UUID] = mapped_column(
@@ -269,8 +274,8 @@ class DMSDocumentHistory(BaseModel):
     )
 
     # IP/Client info
-    ip_address: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
-    user_agent: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Relationships
     document = relationship("DMSDocument", back_populates="history")

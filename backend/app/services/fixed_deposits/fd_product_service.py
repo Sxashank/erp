@@ -49,7 +49,7 @@ class FDProductService:
                 )
                 self.db.add(slab)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(product)
 
         # Load relationships
@@ -81,7 +81,7 @@ class FDProductService:
         for field, value in update_data.items():
             setattr(product, field, value)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(product)
         return product
 
@@ -92,7 +92,7 @@ class FDProductService:
             return False
 
         product.is_active = False
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def list_products(
@@ -144,7 +144,7 @@ class FDProductService:
             **data.model_dump(),
         )
         self.db.add(slab)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(slab)
         return slab
 
@@ -163,7 +163,7 @@ class FDProductService:
         for field, value in update_data.items():
             setattr(slab, field, value)
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(slab)
         return slab
 
@@ -177,7 +177,7 @@ class FDProductService:
             return False
 
         await self.db.delete(slab)
-        await self.db.commit()
+        await self.db.flush()
         return True
 
     async def get_applicable_rate(

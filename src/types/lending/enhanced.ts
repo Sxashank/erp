@@ -190,7 +190,7 @@ export interface BulkReceiptResult {
   success_count: number;
   failed_count: number;
   total_amount: number;
-  failures: Array<{ index: number; error: string; data: BulkReceiptItem }>;
+  failures: { index: number; error: string; data: BulkReceiptItem }[];
 }
 
 // ============== Disbursement Types ==============
@@ -383,7 +383,7 @@ export interface CollateralCreateParams {
 export interface SecurityCoverage {
   sanction_id: string;
   loan_amount: number;
-  securities: Array<{
+  securities: {
     id: string;
     category: SecurityCategory;
     type: SecurityType;
@@ -392,7 +392,7 @@ export interface SecurityCoverage {
     margin: number;
     net_value: number;
     status: SecurityStatus;
-  }>;
+  }[];
   category_totals: Record<string, { count: number; acceptable_value: number; net_value: number }>;
   total_acceptable_value: number;
   total_net_value: number;

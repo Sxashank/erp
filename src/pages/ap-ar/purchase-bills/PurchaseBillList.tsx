@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -12,13 +10,34 @@ import {
   CheckCircle,
   Send,
   XCircle,
-  Calendar,
-  Filter,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -34,28 +53,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { purchaseBillsApi, organizationsApi, vendorsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   code: string;
@@ -82,6 +84,8 @@ interface PurchaseBill {
   payment_status: string;
   is_posted: boolean;
 }
+
+type PurchaseBillListParams = Parameters<typeof purchaseBillsApi.list>[0];
 
 const statusLabels: Record<string, string> = {
   DRAFT: 'Draft',
@@ -138,18 +142,7 @@ export function PurchaseBillList() {
   const [cancelReason, setCancelReason] = useState('');
   const pageSize = 20;
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      loadVendors();
-      loadBills();
-    }
-  }, [selectedOrgId, page, includeInactive, searchQuery, statusFilter, paymentStatusFilter, vendorFilter, fromDate, toDate]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page: 1, page_size: 100 });
       const orgs = response.data.items || [];
@@ -158,30 +151,30 @@ export function PurchaseBillList() {
         setSelectedOrgId(orgs[0].id);
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
       toast({
         title: 'Error',
         description: 'Failed to load organizations',
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
 
-  const loadVendors = async () => {
+  const loadVendors = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
       const response = await vendorsApi.getActive({ organization_id: selectedOrgId });
       setVendors(response.data || []);
     } catch (error) {
-      console.error('Failed to load vendors:', error);
+      logger.error('Failed to load vendors:', error);
     }
-  };
+  }, [selectedOrgId]);
 
-  const loadBills = async () => {
+  const loadBills = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
     try {
-      const params: any = {
+      const params: PurchaseBillListParams = {
         organization_id: selectedOrgId,
         page,
         page_size: pageSize,
@@ -210,7 +203,7 @@ export function PurchaseBillList() {
       setTotal(response.data.total || 0);
       setTotalPages(response.data.pages || 1);
     } catch (error) {
-      console.error('Failed to load purchase bills:', error);
+      logger.error('Failed to load purchase bills:', error);
       toast({
         title: 'Error',
         description: 'Failed to load purchase bills',
@@ -219,7 +212,29 @@ export function PurchaseBillList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    fromDate,
+    includeInactive,
+    page,
+    paymentStatusFilter,
+    searchQuery,
+    selectedOrgId,
+    statusFilter,
+    toDate,
+    toast,
+    vendorFilter,
+  ]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      loadVendors();
+      loadBills();
+    }
+  }, [loadBills, loadVendors, selectedOrgId]);
 
   const handleSubmit = async (bill: PurchaseBill) => {
     try {
@@ -229,12 +244,8 @@ export function PurchaseBillList() {
         description: 'Purchase bill submitted for approval',
       });
       loadBills();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to submit purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -246,12 +257,8 @@ export function PurchaseBillList() {
         description: 'Purchase bill approved successfully',
       });
       loadBills();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -264,12 +271,8 @@ export function PurchaseBillList() {
         description: 'Purchase bill cancelled successfully',
       });
       loadBills();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to cancel purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setCancelDialogOpen(false);
       setBillToCancel(null);
@@ -286,32 +289,12 @@ export function PurchaseBillList() {
         description: 'Purchase bill deleted successfully',
       });
       loadBills();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete purchase bill',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setDeleteDialogOpen(false);
       setBillToDelete(null);
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
   };
 
   const isOverdue = (dueDate: string, status: string) => {
@@ -504,20 +487,20 @@ export function PurchaseBillList() {
                   <TableCell className="font-mono text-sm">
                     {bill.vendor_invoice_number || '-'}
                   </TableCell>
-                  <TableCell>{formatDate(bill.bill_date)}</TableCell>
+                  <TableCell><DateDisplay date={bill.bill_date} /></TableCell>
                   <TableCell>
                     <div className={isOverdue(bill.due_date, bill.status) ? 'text-red-600 font-medium' : ''}>
-                      {formatDate(bill.due_date)}
+                      <DateDisplay date={bill.due_date} />
                       {isOverdue(bill.due_date, bill.status) && (
                         <span className="block text-xs">Overdue</span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(bill.total_amount)}
+                    <AmountDisplay amount={bill.total_amount} />
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(bill.balance_amount)}
+                    <AmountDisplay amount={bill.balance_amount} />
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -641,7 +624,7 @@ export function PurchaseBillList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Purchase Bill</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete bill "{billToDelete?.bill_number}"? This action
+              Are you sure you want to delete bill &quot;{billToDelete?.bill_number}&quot;? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -663,7 +646,7 @@ export function PurchaseBillList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Purchase Bill</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel bill "{billToCancel?.bill_number}"?
+              Are you sure you want to cancel bill &quot;{billToCancel?.bill_number}&quot;?
               Please provide a reason for cancellation.
             </AlertDialogDescription>
           </AlertDialogHeader>

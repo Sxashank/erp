@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.gst.hsn_sac_service import HSNSACService
 from app.schemas.gst.hsn_sac import HSNSACCreate, HSNSACUpdate, HSNSACResponse
@@ -37,14 +37,14 @@ def _to_response(hsn_sac) -> HSNSACResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[HSNSACResponse])
+@router.get("", response_model=PaginatedResponse[HSNSACResponse], response_model_by_alias=True)
 async def search_hsn_sac(
     search: str = Query("", description="Search by code or description"),
     hsn_sac_type: Optional[HSNSACType] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Search HSN/SAC codes."""
     service = HSNSACService(db)
@@ -54,11 +54,11 @@ async def search_hsn_sac(
     return PaginatedResponse.create(responses, total, page, page_size)
 
 
-@router.post("", response_model=HSNSACResponse)
+@router.post("", response_model=HSNSACResponse, response_model_by_alias=True)
 async def create_hsn_sac(
     data: HSNSACCreate,
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new HSN/SAC code."""
     service = HSNSACService(db)
@@ -66,11 +66,11 @@ async def create_hsn_sac(
     return _to_response(hsn_sac)
 
 
-@router.get("/{hsn_sac_id}", response_model=HSNSACResponse)
+@router.get("/{hsn_sac_id}", response_model=HSNSACResponse, response_model_by_alias=True)
 async def get_hsn_sac(
     hsn_sac_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get HSN/SAC by ID."""
     service = HSNSACService(db)
@@ -78,12 +78,12 @@ async def get_hsn_sac(
     return _to_response(hsn_sac)
 
 
-@router.put("/{hsn_sac_id}", response_model=HSNSACResponse)
+@router.put("/{hsn_sac_id}", response_model=HSNSACResponse, response_model_by_alias=True)
 async def update_hsn_sac(
     hsn_sac_id: UUID,
     data: HSNSACUpdate,
     current_user: User = Depends(RequirePermissions("FIN_COA_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update an HSN/SAC code."""
     service = HSNSACService(db)
@@ -95,7 +95,7 @@ async def update_hsn_sac(
 async def delete_hsn_sac(
     hsn_sac_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete an HSN/SAC code."""
     service = HSNSACService(db)

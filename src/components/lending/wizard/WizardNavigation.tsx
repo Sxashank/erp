@@ -4,14 +4,18 @@
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+
 import { useWizard } from './WizardContext';
+
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+
+export type WizardSubmitHandler = (data: Record<string, unknown>) => void | Promise<void>;
 
 export interface WizardNavigationProps {
   className?: string;
-  onSaveDraft?: () => void | Promise<void>;
-  onSubmit?: () => void | Promise<void>;
+  onSaveDraft?: WizardSubmitHandler;
+  onSubmit?: WizardSubmitHandler;
   onCancel?: () => void;
   showSaveDraft?: boolean;
   showCancel?: boolean;
@@ -47,6 +51,7 @@ export function WizardNavigation({
     isSubmitting,
     isDirty,
     setSubmitting,
+    data,
   } = useWizard();
 
   const [isSaving, setIsSaving] = React.useState(false);
@@ -68,7 +73,7 @@ export function WizardNavigation({
 
     setIsSaving(true);
     try {
-      await onSaveDraft();
+      await onSaveDraft(data);
     } finally {
       setIsSaving(false);
     }
@@ -84,7 +89,7 @@ export function WizardNavigation({
 
     setSubmitting(true);
     try {
-      await onSubmit();
+      await onSubmit(data);
     } finally {
       setSubmitting(false);
     }
@@ -92,23 +97,20 @@ export function WizardNavigation({
 
   const handleCancel = () => {
     if (isDirty) {
-      const confirmed = window.confirm('You have unsaved changes. Are you sure you want to cancel?');
+      const confirmed = window.confirm(
+        'You have unsaved changes. Are you sure you want to cancel?',
+      );
       if (!confirmed) return;
     }
     onCancel?.();
   };
 
   return (
-    <div className={cn('flex items-center justify-between pt-6 border-t', className)}>
+    <div className={cn('flex items-center justify-between border-t pt-6', className)}>
       {/* Left side: Cancel and Save Draft */}
       <div className="flex items-center gap-2">
         {showCancel && onCancel && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleCancel}
-            disabled={isSubmitting}
-          >
+          <Button type="button" variant="ghost" onClick={handleCancel} disabled={isSubmitting}>
             {cancelLabel}
           </Button>
         )}
@@ -121,9 +123,20 @@ export function WizardNavigation({
           >
             {isSaving ? (
               <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                <svg className="-ml-1 mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 Saving...
               </>
@@ -143,44 +156,57 @@ export function WizardNavigation({
             onClick={handlePrevious}
             disabled={!canGoPrevious}
           >
-            <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            <svg className="mr-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 19l-7-7 7-7"
+              />
             </svg>
             {previousLabel}
           </Button>
         )}
 
         {isLastStep ? (
-          <Button
-            type="button"
-            onClick={handleSubmit}
-            disabled={isSubmitting || !canGoNext}
-          >
+          <Button type="button" onClick={handleSubmit} disabled={isSubmitting || !canGoNext}>
             {isSubmitting ? (
               <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                <svg className="-ml-1 mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                  />
                 </svg>
                 Submitting...
               </>
             ) : (
               <>
                 {submitLabel}
-                <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                <svg className="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 13l4 4L19 7"
+                  />
                 </svg>
               </>
             )}
           </Button>
         ) : (
-          <Button
-            type="button"
-            onClick={handleNext}
-            disabled={!canGoNext}
-          >
+          <Button type="button" onClick={handleNext} disabled={!canGoNext}>
             {nextLabel}
-            <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
             </svg>
           </Button>
@@ -199,7 +225,7 @@ export function WizardNavigationCompact({
   validateBeforeNext,
 }: {
   className?: string;
-  onSubmit?: () => void | Promise<void>;
+  onSubmit?: WizardSubmitHandler;
   validateBeforeNext?: () => boolean | Promise<boolean>;
 }) {
   const {
@@ -213,6 +239,7 @@ export function WizardNavigationCompact({
     setSubmitting,
     currentStepIndex,
     steps,
+    data,
   } = useWizard();
 
   const handleNext = async () => {
@@ -224,7 +251,7 @@ export function WizardNavigationCompact({
     if (isLastStep && onSubmit) {
       setSubmitting(true);
       try {
-        await onSubmit();
+        await onSubmit(data);
       } finally {
         setSubmitting(false);
       }
@@ -243,7 +270,7 @@ export function WizardNavigationCompact({
         disabled={!canGoPrevious}
         className="gap-1"
       >
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
         Back
@@ -262,7 +289,7 @@ export function WizardNavigationCompact({
       >
         {isLastStep ? 'Submit' : 'Next'}
         {!isLastStep && (
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         )}
@@ -276,9 +303,9 @@ export function WizardNavigationCompact({
  */
 export function WizardKeyboardHint({ className }: { className?: string }) {
   return (
-    <p className={cn('text-xs text-muted-foreground text-center', className)}>
-      Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Ctrl</kbd> +{' '}
-      <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Enter</kbd> to proceed
+    <p className={cn('text-center text-xs text-muted-foreground', className)}>
+      Press <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">Ctrl</kbd> +{' '}
+      <kbd className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs">Enter</kbd> to proceed
     </p>
   );
 }

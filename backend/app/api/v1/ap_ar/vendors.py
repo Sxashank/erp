@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.ap_ar.vendor_service import VendorService
 from app.schemas.ap_ar.vendor import (
@@ -88,56 +88,53 @@ def _to_list_response(vendor) -> VendorListResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[VendorListResponse])
+@router.get("", response_model=PaginatedResponse[VendorListResponse], response_model_by_alias=True)
 async def list_vendors(
-    organization_id: UUID = Query(..., description="Organization ID"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     search: Optional[str] = Query(None, description="Search in code, name, GSTIN, PAN"),
     vendor_type: Optional[str] = Query(None, description="Filter by vendor type"),
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of vendors for an organization."""
     service = VendorService(db)
     skip = (page - 1) * page_size
     vendors, total = await service.get_all(
-        organization_id, skip, page_size, include_inactive, search, vendor_type
+        current_user.organization_id, skip, page_size, include_inactive, search, vendor_type
     )
     items = [_to_list_response(v) for v in vendors]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/active", response_model=list[VendorListResponse])
+@router.get("/active", response_model=list[VendorListResponse], response_model_by_alias=True)
 async def list_active_vendors(
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active vendors for dropdown lists."""
     service = VendorService(db)
-    vendors = await service.get_active(organization_id)
+    vendors = await service.get_active(current_user.organization_id)
     return [_to_list_response(v) for v in vendors]
 
 
 @router.get("/generate-code")
 async def generate_vendor_code(
-    organization_id: UUID = Query(..., description="Organization ID"),
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate next vendor code."""
     service = VendorService(db)
-    code = await service.generate_code(organization_id)
+    code = await service.generate_code(current_user.organization_id)
     return {"code": code}
 
 
-@router.post("", response_model=VendorResponse)
+@router.post("", response_model=VendorResponse, response_model_by_alias=True)
 async def create_vendor(
     data: VendorCreate,
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new vendor."""
     service = VendorService(db)
@@ -145,11 +142,11 @@ async def create_vendor(
     return _to_response(vendor)
 
 
-@router.get("/{vendor_id}", response_model=VendorResponse)
+@router.get("/{vendor_id}", response_model=VendorResponse, response_model_by_alias=True)
 async def get_vendor(
     vendor_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get vendor by ID."""
     service = VendorService(db)
@@ -157,12 +154,12 @@ async def get_vendor(
     return _to_response(vendor)
 
 
-@router.put("/{vendor_id}", response_model=VendorResponse)
+@router.put("/{vendor_id}", response_model=VendorResponse, response_model_by_alias=True)
 async def update_vendor(
     vendor_id: UUID,
     data: VendorUpdate,
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a vendor."""
     service = VendorService(db)
@@ -174,7 +171,7 @@ async def update_vendor(
 async def delete_vendor(
     vendor_id: UUID,
     current_user: User = Depends(RequirePermissions("APAR_VENDOR_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a vendor."""
     service = VendorService(db)

@@ -44,7 +44,7 @@ class JobService:
         )
 
         self.session.add(job)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(job)
 
         logger.info(f"Created background job {job.id} of type {job_type}")
@@ -111,7 +111,7 @@ class JobService:
             raise ValueError(f"Job {job_id} not found")
 
         job.start()
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(job)
 
         logger.info(f"Started job {job_id}")
@@ -139,7 +139,7 @@ class JobService:
                 ),
             )
         )
-        await self.session.commit()
+        await self.session.flush()
 
     async def complete_job(
         self,
@@ -160,7 +160,7 @@ class JobService:
             output_data=output_data,
             result_file=result_file,
         )
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(job)
 
         logger.info(
@@ -180,7 +180,7 @@ class JobService:
             raise ValueError(f"Job {job_id} not found")
 
         job.fail(error_message, error_details)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(job)
 
         logger.error(f"Failed job {job_id}: {error_message}")
@@ -197,7 +197,7 @@ class JobService:
 
         job.status = JobStatus.CANCELLED
         job.completed_at = datetime.now(timezone.utc)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(job)
 
         logger.info(f"Cancelled job {job_id}")
@@ -226,7 +226,7 @@ class JobService:
                 )
             )
         )
-        await self.session.commit()
+        await self.session.flush()
 
         deleted_count = result.rowcount
         logger.info(f"Cleaned up {deleted_count} old jobs for org {organization_id}")

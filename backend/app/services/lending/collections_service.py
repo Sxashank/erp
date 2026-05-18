@@ -1,46 +1,31 @@
 """Phase 3: NPA & Collections service for the lending module."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
-from typing import Dict, List, Optional, Tuple
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from app.repositories.lending.collections_repo import (
-    CollectionFollowUpRepository,
-    DemandNoticeRepository,
-    NPARecordRepository,
-    PenalInterestRepository,
-    PenalWaiverRepository,
-    OTSProposalRepository,
-    OTSPaymentScheduleRepository,
-    LoanRestructureRepository,
-    LegalCaseRepository,
-    LegalHearingRepository,
-    PropertyAuctionRepository,
-    WriteOffRecordRepository,
-)
-from app.repositories.lending.loan_account_repo import LoanAccountRepository
+from app.core.exceptions import BadRequestException, NotFoundException
 from app.models.lending.collections import (
     CollectionFollowUp,
     DemandNotice,
-    NPARecord,
-    PenalInterest,
-    PenalWaiver,
-    OTSProposal,
-    OTSPaymentSchedule,
-    LoanRestructure,
     LegalCase,
     LegalHearing,
+    LoanRestructure,
+    NPARecord,
+    OTSPaymentSchedule,
+    OTSProposal,
+    PenalInterest,
+    PenalWaiver,
     PropertyAuction,
     WriteOffRecord,
 )
 from app.models.lending.enums import (
     AssetClassification,
     AuctionStatus,
-    CollectionStage,
-    FollowUpOutcome,
     FollowUpStatus,
     LegalCaseStatus,
     NPAStatus,
@@ -48,40 +33,56 @@ from app.models.lending.enums import (
     RestructureStatus,
     WriteOffStatus,
 )
+from app.models.lending.loan_account import LoanAccount
+from app.repositories.lending.collections_repo import (
+    CollectionFollowUpRepository,
+    DemandNoticeRepository,
+    LegalCaseRepository,
+    LegalHearingRepository,
+    LoanRestructureRepository,
+    NPARecordRepository,
+    OTSPaymentScheduleRepository,
+    OTSProposalRepository,
+    PenalInterestRepository,
+    PenalWaiverRepository,
+    PropertyAuctionRepository,
+    WriteOffRecordRepository,
+)
+from app.repositories.lending.loan_account_repo import LoanAccountRepository
 from app.schemas.lending.collections import (
+    CollectionActivitySummary,
     CollectionFollowUpCreate,
-    CollectionFollowUpUpdate,
     CollectionFollowUpExecute,
+    CollectionFollowUpUpdate,
     DemandNoticeCreate,
     DemandNoticeUpdate,
-    NPARecordCreate,
-    NPARecordUpdate,
-    PenalInterestCreate,
-    PenalWaiverCreate,
-    PenalWaiverApprove,
-    OTSProposalCreate,
-    OTSProposalUpdate,
-    OTSProposalApprove,
-    OTSBorrowerAccept,
-    OTSPaymentScheduleCreate,
-    LoanRestructureCreate,
-    LoanRestructureUpdate,
-    LoanRestructureApprove,
-    LoanRestructureImplement,
     LegalCaseCreate,
     LegalCaseUpdate,
     LegalHearingCreate,
     LegalHearingUpdate,
+    LoanRestructureApprove,
+    LoanRestructureCreate,
+    LoanRestructureImplement,
+    LoanRestructureUpdate,
+    NPARecordCreate,
+    NPARecordUpdate,
+    NPASummary,
+    OTSBorrowerAccept,
+    OTSPaymentScheduleCreate,
+    OTSProposalApprove,
+    OTSProposalCreate,
+    OTSProposalUpdate,
+    PenalInterestCreate,
+    PenalWaiverApprove,
+    PenalWaiverCreate,
     PropertyAuctionCreate,
     PropertyAuctionUpdate,
-    WriteOffCreate,
-    WriteOffApprove,
-    WriteOffEffect,
-    NPASummary,
-    CollectionActivitySummary,
     RecoverySummary,
+    WriteOffApprove,
+    WriteOffCreate,
+    WriteOffEffect,
 )
-from app.core.exceptions import BadRequestException, NotFoundException
+from app.services.audit import record_financial_action
 
 
 class CollectionsService:
@@ -104,13 +105,188 @@ class CollectionsService:
         self.loan_account_repo = LoanAccountRepository(session)
 
     # =========================================================================
+    # Paginated org-scoped list queries (for list pages)
+    # =========================================================================
+
+    async def list_legal_cases_for_org(
+        self,
+        organization_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        status: LegalCaseStatus | None = None,
+        case_type: str | None = None,
+    ) -> tuple[list[LegalCase], int]:
+        """Paginated list of legal cases scoped to caller's org."""
+        join_filters = [LoanAccount.organization_id == organization_id]
+        if status is not None:
+            join_filters.append(LegalCase.status == status)
+        if case_type is not None:
+            join_filters.append(LegalCase.case_type == case_type)
+        count_q = (
+            select(func.count(LegalCase.id))
+            .select_from(LegalCase)
+            .join(LoanAccount, LegalCase.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+        )
+        total = (await self.session.execute(count_q)).scalar() or 0
+        result = await self.session.execute(
+            select(LegalCase)
+            .join(LoanAccount, LegalCase.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+            .options(
+                selectinload(LegalCase.loan_account).selectinload(LoanAccount.entity),
+            )
+            .order_by(LegalCase.filing_date.desc().nullslast())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_npa_accounts_for_org(
+        self,
+        organization_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        classification: AssetClassification | None = None,
+    ) -> tuple[list[tuple[LoanAccount, "NPARecord | None"]], int]:
+        """Paginated list of NPA accounts scoped to caller's org.
+
+        Returns ``[(LoanAccount, NPARecord|None), ...]`` tuples — the
+        list response schema flattens both into a single row.
+        """
+
+        npa_classifications = [
+            AssetClassification.SUBSTANDARD,
+            AssetClassification.DOUBTFUL_1,
+            AssetClassification.DOUBTFUL_2,
+            AssetClassification.DOUBTFUL_3,
+            AssetClassification.LOSS,
+        ]
+        filters = [
+            LoanAccount.organization_id == organization_id,
+            LoanAccount.asset_classification.in_(npa_classifications),
+        ]
+        if classification is not None:
+            filters.append(LoanAccount.asset_classification == classification)
+
+        count_q = select(func.count(LoanAccount.id)).select_from(LoanAccount).where(*filters)
+        total = (await self.session.execute(count_q)).scalar() or 0
+
+        result = await self.session.execute(
+            select(LoanAccount, NPARecord)
+            .outerjoin(NPARecord, NPARecord.loan_account_id == LoanAccount.id)
+            .where(*filters)
+            .options(
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.product),
+            )
+            .order_by(LoanAccount.days_past_due.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return [(row[0], row[1]) for row in result.all()], total
+
+    async def list_follow_ups_for_org(
+        self,
+        organization_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        status: FollowUpStatus | None = None,
+    ) -> tuple[list[CollectionFollowUp], int]:
+        """Paginated list of follow-ups scoped to caller's org."""
+        join_filters = [LoanAccount.organization_id == organization_id]
+        if status is not None:
+            join_filters.append(CollectionFollowUp.status == status)
+        count_q = (
+            select(func.count(CollectionFollowUp.id))
+            .select_from(CollectionFollowUp)
+            .join(LoanAccount, CollectionFollowUp.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+        )
+        total = (await self.session.execute(count_q)).scalar() or 0
+        result = await self.session.execute(
+            select(CollectionFollowUp)
+            .join(LoanAccount, CollectionFollowUp.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+            .options(
+                selectinload(CollectionFollowUp.loan_account).selectinload(LoanAccount.entity),
+            )
+            .order_by(CollectionFollowUp.scheduled_date.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_ots_proposals_for_org(
+        self,
+        organization_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        status: OTSStatus | None = None,
+    ) -> tuple[list[OTSProposal], int]:
+        """Paginated list of OTS proposals scoped to caller's org."""
+        join_filters = [LoanAccount.organization_id == organization_id]
+        if status is not None:
+            join_filters.append(OTSProposal.status == status)
+        count_q = (
+            select(func.count(OTSProposal.id))
+            .select_from(OTSProposal)
+            .join(LoanAccount, OTSProposal.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+        )
+        total = (await self.session.execute(count_q)).scalar() or 0
+        result = await self.session.execute(
+            select(OTSProposal)
+            .join(LoanAccount, OTSProposal.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+            .options(
+                selectinload(OTSProposal.loan_account).selectinload(LoanAccount.entity),
+            )
+            .order_by(OTSProposal.proposal_date.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    async def list_restructures_for_org(
+        self,
+        organization_id: UUID,
+        skip: int = 0,
+        limit: int = 50,
+        status: RestructureStatus | None = None,
+    ) -> tuple[list[LoanRestructure], int]:
+        """Paginated list of restructures scoped to caller's org."""
+        join_filters = [LoanAccount.organization_id == organization_id]
+        if status is not None:
+            join_filters.append(LoanRestructure.status == status)
+        count_q = (
+            select(func.count(LoanRestructure.id))
+            .select_from(LoanRestructure)
+            .join(LoanAccount, LoanRestructure.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+        )
+        total = (await self.session.execute(count_q)).scalar() or 0
+        result = await self.session.execute(
+            select(LoanRestructure)
+            .join(LoanAccount, LoanRestructure.loan_account_id == LoanAccount.id)
+            .where(*join_filters)
+            .options(
+                selectinload(LoanRestructure.loan_account).selectinload(LoanAccount.entity),
+            )
+            .order_by(LoanRestructure.proposal_date.desc())
+            .offset(skip)
+            .limit(limit)
+        )
+        return list(result.scalars().all()), total
+
+    # =========================================================================
     # Collection Follow-Up Operations
     # =========================================================================
 
     async def create_follow_up(
         self,
         data: CollectionFollowUpCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> CollectionFollowUp:
         """Create a collection follow-up."""
         follow_up = CollectionFollowUp(
@@ -124,7 +300,7 @@ class CollectionsService:
         self,
         follow_up_id: UUID,
         data: CollectionFollowUpUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> CollectionFollowUp:
         """Update a collection follow-up."""
         follow_up = await self.follow_up_repo.get(follow_up_id)
@@ -140,7 +316,7 @@ class CollectionsService:
         self,
         follow_up_id: UUID,
         data: CollectionFollowUpExecute,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> CollectionFollowUp:
         """Record follow-up execution outcome."""
         follow_up = await self.follow_up_repo.get(follow_up_id)
@@ -160,17 +336,15 @@ class CollectionsService:
     async def get_scheduled_follow_ups(
         self,
         scheduled_date: date,
-        assigned_to_id: Optional[UUID] = None,
-    ) -> List[CollectionFollowUp]:
+        assigned_to_id: UUID | None = None,
+    ) -> list[CollectionFollowUp]:
         """Get follow-ups scheduled for a date."""
-        return await self.follow_up_repo.get_scheduled_for_date(
-            scheduled_date, assigned_to_id
-        )
+        return await self.follow_up_repo.get_scheduled_for_date(scheduled_date, assigned_to_id)
 
     async def mark_ptp_broken(
         self,
         follow_up_id: UUID,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> CollectionFollowUp:
         """Mark a Promise to Pay as broken."""
         follow_up = await self.follow_up_repo.get(follow_up_id)
@@ -192,7 +366,7 @@ class CollectionsService:
     async def create_demand_notice(
         self,
         data: DemandNoticeCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> DemandNotice:
         """Create a demand notice."""
         notice_number = await self.demand_notice_repo.generate_notice_number()
@@ -208,7 +382,7 @@ class CollectionsService:
         self,
         notice_id: UUID,
         data: DemandNoticeUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> DemandNotice:
         """Update a demand notice."""
         notice = await self.demand_notice_repo.get(notice_id)
@@ -225,11 +399,9 @@ class CollectionsService:
         loan_account_id: UUID,
         skip: int = 0,
         limit: int = 100,
-    ) -> List[DemandNotice]:
+    ) -> list[DemandNotice]:
         """Get demand notices for a loan account."""
-        return await self.demand_notice_repo.get_by_loan_account(
-            loan_account_id, skip, limit
-        )
+        return await self.demand_notice_repo.get_by_loan_account(loan_account_id, skip, limit)
 
     # =========================================================================
     # NPA Record Operations
@@ -238,7 +410,7 @@ class CollectionsService:
     async def create_npa_record(
         self,
         data: NPARecordCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> NPARecord:
         """Create an NPA record."""
         existing = await self.npa_record_repo.get_by_loan_account(data.loan_account_id)
@@ -255,7 +427,7 @@ class CollectionsService:
         self,
         npa_record_id: UUID,
         data: NPARecordUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> NPARecord:
         """Update an NPA record."""
         npa_record = await self.npa_record_repo.get(npa_record_id)
@@ -270,7 +442,7 @@ class CollectionsService:
     async def get_npa_record(
         self,
         loan_account_id: UUID,
-    ) -> Optional[NPARecord]:
+    ) -> NPARecord | None:
         """Get NPA record for a loan account."""
         return await self.npa_record_repo.get_by_loan_account(loan_account_id)
 
@@ -278,7 +450,7 @@ class CollectionsService:
         self,
         loan_account_id: UUID,
         upgrade_date: date,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> NPARecord:
         """Upgrade an NPA account back to standard."""
         npa_record = await self.npa_record_repo.get_by_loan_account(loan_account_id)
@@ -305,7 +477,7 @@ class CollectionsService:
         loan_account_id: UUID,
         period_start: date,
         period_end: date,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> PenalInterest:
         """Calculate penal interest for a loan account."""
         loan_account = await self.loan_account_repo.get(loan_account_id)
@@ -349,7 +521,7 @@ class CollectionsService:
     async def create_penal_waiver(
         self,
         data: PenalWaiverCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> PenalWaiver:
         """Create a penal waiver request."""
         waiver_reference = await self.penal_waiver_repo.generate_waiver_reference()
@@ -368,15 +540,27 @@ class CollectionsService:
         self,
         waiver_id: UUID,
         data: PenalWaiverApprove,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> PenalWaiver:
-        """Approve a penal waiver."""
+        """Approve a penal waiver.
+
+        §8.4 maker-checker: the collector who proposed the waiver cannot
+        also approve it. Waiving penal charges is a concession that reduces
+        recoverable income — it needs two-person sign-off.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         waiver = await self.penal_waiver_repo.get(waiver_id)
         if not waiver:
             raise NotFoundException("Penal waiver not found")
 
         if waiver.is_approved:
             raise BadRequestException("Waiver is already approved")
+
+        ensure_maker_is_not_checker(
+            maker_user_id=waiver.created_by,
+            checker_user_id=updated_by,
+        )
 
         update_data = data.model_dump()
         update_data["is_approved"] = True
@@ -392,15 +576,19 @@ class CollectionsService:
     async def create_ots_proposal(
         self,
         data: OTSProposalCreate,
-        payment_schedule: Optional[List[OTSPaymentScheduleCreate]] = None,
-        created_by: Optional[UUID] = None,
+        payment_schedule: list[OTSPaymentScheduleCreate] | None = None,
+        created_by: UUID | None = None,
     ) -> OTSProposal:
         """Create an OTS proposal."""
         ots_reference = await self.ots_proposal_repo.generate_ots_reference()
 
         # Calculate haircut
         haircut_amount = data.total_outstanding - data.ots_amount
-        haircut_percent = (haircut_amount / data.total_outstanding * 100) if data.total_outstanding > 0 else Decimal("0")
+        haircut_percent = (
+            (haircut_amount / data.total_outstanding * 100)
+            if data.total_outstanding > 0
+            else Decimal("0")
+        )
 
         proposal = OTSProposal(
             **data.model_dump(),
@@ -429,7 +617,7 @@ class CollectionsService:
         self,
         proposal_id: UUID,
         data: OTSProposalUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> OTSProposal:
         """Update an OTS proposal."""
         proposal = await self.ots_proposal_repo.get(proposal_id)
@@ -448,9 +636,16 @@ class CollectionsService:
         self,
         proposal_id: UUID,
         data: OTSProposalApprove,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> OTSProposal:
-        """Approve an OTS proposal."""
+        """Approve an OTS proposal.
+
+        §8.4 maker-checker: the user who prepared the OTS proposal cannot
+        also approve it. OTS typically involves a haircut on recoverable
+        principal + interest — two-person sign-off is mandatory.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         proposal = await self.ots_proposal_repo.get(proposal_id)
         if not proposal:
             raise NotFoundException("OTS proposal not found")
@@ -458,18 +653,75 @@ class CollectionsService:
         if proposal.status != OTSStatus.PENDING_APPROVAL:
             raise BadRequestException("Proposal is not pending approval")
 
+        ensure_maker_is_not_checker(
+            maker_user_id=proposal.created_by,
+            checker_user_id=updated_by,
+        )
+
+        before_status = (
+            proposal.status.value if hasattr(proposal.status, "value") else str(proposal.status)
+        )
+
         update_data = data.model_dump()
         update_data["status"] = OTSStatus.APPROVED
         update_data["approval_date"] = date.today()
         update_data["updated_by"] = updated_by
 
-        return await self.ots_proposal_repo.update(proposal, update_data)
+        updated = await self.ots_proposal_repo.update(proposal, update_data)
+
+        # Domain audit: OTS approval — §8.5 / §4.8. The haircut split (waiver
+        # by component) is captured in metadata so reviewers can reconstruct
+        # exactly what concession was granted.
+        if updated_by is not None:
+            loan = await self.loan_account_repo.get(updated.loan_account_id)
+            await record_financial_action(
+                self.session,
+                organization_id=loan.organization_id if loan else updated.organization_id,  # type: ignore[attr-defined]
+                entity_type="OTS_PROPOSAL",
+                entity_id=updated.id,
+                entity_reference=updated.ots_reference,
+                action="OTS_APPROVE",
+                user_id=updated_by,
+                before={
+                    "status": before_status,
+                    "total_outstanding": proposal.total_outstanding,
+                    "ots_amount": proposal.ots_amount,
+                    "haircut_amount": proposal.haircut_amount,
+                    "haircut_percent": proposal.haircut_percent,
+                },
+                after={
+                    "status": "APPROVED",
+                    "approval_date": updated.approval_date,
+                    "approval_authority": updated.approval_authority,
+                    "ots_amount": updated.ots_amount,
+                    "haircut_amount": updated.haircut_amount,
+                    "haircut_percent": updated.haircut_percent,
+                },
+                metadata={
+                    "transaction_type": "OTS_APPROVE",
+                    "loan_account_id": str(updated.loan_account_id),
+                    "loan_account_number": loan.loan_account_number if loan else None,
+                    "principal_outstanding": str(updated.principal_outstanding),
+                    "interest_outstanding": str(updated.interest_outstanding),
+                    "penal_outstanding": str(updated.penal_outstanding),
+                    "other_charges": str(updated.other_charges),
+                    "principal_waiver": str(updated.principal_waiver),
+                    "interest_waiver": str(updated.interest_waiver),
+                    "penal_waiver": str(updated.penal_waiver),
+                    "charges_waiver": str(updated.charges_waiver),
+                    "haircut_amount": str(updated.haircut_amount),
+                    "haircut_percent": str(updated.haircut_percent),
+                },
+                change_reason="OTS proposal approved (maker-checker complete)",
+            )
+
+        return updated
 
     async def accept_ots_by_borrower(
         self,
         proposal_id: UUID,
         data: OTSBorrowerAccept,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> OTSProposal:
         """Record borrower acceptance of OTS."""
         proposal = await self.ots_proposal_repo.get(proposal_id)
@@ -491,14 +743,18 @@ class CollectionsService:
         amount: Decimal,
         payment_date: date,
         receipt_reference: str,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> OTSProposal:
         """Record payment against OTS proposal."""
         proposal = await self.ots_proposal_repo.get(proposal_id)
         if not proposal:
             raise NotFoundException("OTS proposal not found")
 
-        if proposal.status not in [OTSStatus.ACCEPTED, OTSStatus.PAYMENT_PENDING, OTSStatus.PARTIALLY_PAID]:
+        if proposal.status not in [
+            OTSStatus.ACCEPTED,
+            OTSStatus.PAYMENT_PENDING,
+            OTSStatus.PARTIALLY_PAID,
+        ]:
             raise BadRequestException("Proposal is not in payment status")
 
         new_total_received = proposal.total_received + amount
@@ -528,7 +784,7 @@ class CollectionsService:
     async def create_restructure(
         self,
         data: LoanRestructureCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> LoanRestructure:
         """Create a loan restructure proposal."""
         restructure_reference = await self.restructure_repo.generate_restructure_reference()
@@ -545,7 +801,7 @@ class CollectionsService:
         self,
         restructure_id: UUID,
         data: LoanRestructureUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> LoanRestructure:
         """Update a restructure proposal."""
         restructure = await self.restructure_repo.get(restructure_id)
@@ -564,9 +820,16 @@ class CollectionsService:
         self,
         restructure_id: UUID,
         data: LoanRestructureApprove,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> LoanRestructure:
-        """Approve a restructure."""
+        """Approve a restructure.
+
+        §8.4 maker-checker: the user who prepared the restructure proposal
+        cannot also approve it. Restructuring changes the economics of a
+        live loan — two-person sign-off is mandatory.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         restructure = await self.restructure_repo.get(restructure_id)
         if not restructure:
             raise NotFoundException("Restructure not found")
@@ -574,18 +837,73 @@ class CollectionsService:
         if restructure.status != RestructureStatus.PENDING_APPROVAL:
             raise BadRequestException("Restructure is not pending approval")
 
+        ensure_maker_is_not_checker(
+            maker_user_id=restructure.created_by,
+            checker_user_id=updated_by,
+        )
+
+        before_status = (
+            restructure.status.value if hasattr(restructure.status, "value") else str(restructure.status)
+        )
+
         update_data = data.model_dump()
         update_data["status"] = RestructureStatus.APPROVED
         update_data["approval_date"] = date.today()
         update_data["updated_by"] = updated_by
 
-        return await self.restructure_repo.update(restructure, update_data)
+        updated = await self.restructure_repo.update(restructure, update_data)
+
+        # Domain audit: restructure approved — §8.5 / §4.8.
+        if updated_by is not None:
+            loan = await self.loan_account_repo.get(updated.loan_account_id)
+            await record_financial_action(
+                self.session,
+                organization_id=loan.organization_id if loan else updated.organization_id,  # type: ignore[attr-defined]
+                entity_type="LOAN_RESTRUCTURE",
+                entity_id=updated.id,
+                entity_reference=updated.restructure_reference,
+                action="RESTRUCTURE_APPROVE",
+                user_id=updated_by,
+                before={
+                    "status": before_status,
+                    "pre_interest_rate": restructure.pre_interest_rate,
+                    "pre_tenure_months": restructure.pre_tenure_months,
+                    "pre_emi_amount": restructure.pre_emi_amount,
+                    "pre_maturity_date": restructure.pre_maturity_date,
+                },
+                after={
+                    "status": "APPROVED",
+                    "approval_date": updated.approval_date,
+                    "post_interest_rate": updated.post_interest_rate,
+                    "post_tenure_months": updated.post_tenure_months,
+                    "post_emi_amount": updated.post_emi_amount,
+                    "post_maturity_date": updated.post_maturity_date,
+                },
+                metadata={
+                    "transaction_type": "RESTRUCTURE_APPROVE",
+                    "loan_account_id": str(updated.loan_account_id),
+                    "loan_account_number": loan.loan_account_number if loan else None,
+                    "restructure_type": (
+                        updated.restructure_type.value
+                        if hasattr(updated.restructure_type, "value")
+                        else str(updated.restructure_type)
+                    ),
+                    "interest_waived": str(updated.interest_waived),
+                    "penal_waived": str(updated.penal_waived),
+                    "principal_converted_to_fitl": str(updated.principal_converted_to_fitl),
+                    "moratorium_months": updated.moratorium_months,
+                    "downgrade_required": updated.downgrade_required,
+                },
+                change_reason="Restructure approved (maker-checker complete)",
+            )
+
+        return updated
 
     async def implement_restructure(
         self,
         restructure_id: UUID,
         data: LoanRestructureImplement,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> LoanRestructure:
         """Implement an approved restructure."""
         restructure = await self.restructure_repo.get(restructure_id)
@@ -626,13 +944,17 @@ class CollectionsService:
     async def create_legal_case(
         self,
         data: LegalCaseCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> LegalCase:
         """Create a legal case."""
         case_reference = await self.legal_case_repo.generate_case_reference()
+        loan_account = await self.loan_account_repo.get(data.loan_account_id)
+        if not loan_account:
+            raise ValueError("Loan account not found")
 
         legal_case = LegalCase(
             **data.model_dump(),
+            organization_id=loan_account.organization_id,
             case_reference=case_reference,
             status=LegalCaseStatus.DRAFT,
             created_by=created_by,
@@ -643,7 +965,7 @@ class CollectionsService:
         self,
         case_id: UUID,
         data: LegalCaseUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> LegalCase:
         """Update a legal case."""
         legal_case = await self.legal_case_repo.get(case_id)
@@ -658,7 +980,7 @@ class CollectionsService:
     async def create_hearing(
         self,
         data: LegalHearingCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> LegalHearing:
         """Create a hearing for a legal case."""
         hearing = LegalHearing(
@@ -682,7 +1004,7 @@ class CollectionsService:
         self,
         hearing_id: UUID,
         data: LegalHearingUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> LegalHearing:
         """Update a hearing."""
         hearing = await self.legal_hearing_repo.get(hearing_id)
@@ -708,7 +1030,7 @@ class CollectionsService:
     async def get_upcoming_hearings(
         self,
         days: int = 7,
-    ) -> List[LegalCase]:
+    ) -> list[LegalCase]:
         """Get cases with upcoming hearings."""
         return await self.legal_case_repo.get_upcoming_hearings(days)
 
@@ -719,7 +1041,7 @@ class CollectionsService:
     async def create_auction(
         self,
         data: PropertyAuctionCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> PropertyAuction:
         """Create a property auction."""
         auction_reference = await self.auction_repo.generate_auction_reference()
@@ -736,7 +1058,7 @@ class CollectionsService:
         self,
         auction_id: UUID,
         data: PropertyAuctionUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> PropertyAuction:
         """Update an auction."""
         auction = await self.auction_repo.get(auction_id)
@@ -751,7 +1073,7 @@ class CollectionsService:
     async def get_upcoming_auctions(
         self,
         days: int = 30,
-    ) -> List[PropertyAuction]:
+    ) -> list[PropertyAuction]:
         """Get upcoming auctions."""
         return await self.auction_repo.get_upcoming_auctions(days)
 
@@ -762,7 +1084,7 @@ class CollectionsService:
     async def create_write_off(
         self,
         data: WriteOffCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> WriteOffRecord:
         """Create a write-off proposal."""
         write_off_reference = await self.write_off_repo.generate_write_off_reference()
@@ -779,9 +1101,17 @@ class CollectionsService:
         self,
         write_off_id: UUID,
         data: WriteOffApprove,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> WriteOffRecord:
-        """Approve a write-off."""
+        """Approve a write-off.
+
+        §8.4 maker-checker: the user who prepared the write-off recommendation
+        cannot also approve it. Writing off a loan removes it from the balance
+        sheet — this is the highest-severity concession and demands two-person
+        sign-off.
+        """
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         write_off = await self.write_off_repo.get(write_off_id)
         if not write_off:
             raise NotFoundException("Write-off not found")
@@ -789,18 +1119,82 @@ class CollectionsService:
         if write_off.status != WriteOffStatus.PENDING_APPROVAL:
             raise BadRequestException("Write-off is not pending approval")
 
+        ensure_maker_is_not_checker(
+            maker_user_id=write_off.created_by,
+            checker_user_id=updated_by,
+        )
+
+        before_status = (
+            write_off.status.value if hasattr(write_off.status, "value") else str(write_off.status)
+        )
+
         update_data = data.model_dump()
         update_data["status"] = WriteOffStatus.APPROVED
         update_data["approval_date"] = date.today()
         update_data["updated_by"] = updated_by
 
-        return await self.write_off_repo.update(write_off, update_data)
+        updated = await self.write_off_repo.update(write_off, update_data)
+
+        # Domain audit: write-off approval — §8.5 / §4.8.
+        # Captures the principal/interest/penal split being written off.
+        if updated_by is not None:
+            loan = await self.loan_account_repo.get(updated.loan_account_id)
+            await record_financial_action(
+                self.session,
+                organization_id=loan.organization_id if loan else updated.organization_id,  # type: ignore[attr-defined]
+                entity_type="WRITE_OFF",
+                entity_id=updated.id,
+                entity_reference=updated.write_off_reference,
+                action="WRITE_OFF",
+                user_id=updated_by,
+                before={
+                    "status": before_status,
+                    "principal_outstanding": write_off.principal_outstanding,
+                    "interest_outstanding": write_off.interest_outstanding,
+                    "penal_outstanding": write_off.penal_outstanding,
+                    "total_outstanding": write_off.total_outstanding,
+                },
+                after={
+                    "status": "APPROVED",
+                    "approval_date": updated.approval_date,
+                    "approval_authority": updated.approval_authority,
+                    "principal_written_off": updated.principal_written_off,
+                    "interest_written_off": updated.interest_written_off,
+                    "penal_written_off": updated.penal_written_off,
+                    "total_written_off": updated.total_written_off,
+                },
+                metadata={
+                    "transaction_type": "WRITE_OFF",
+                    "loan_account_id": str(updated.loan_account_id),
+                    "loan_account_number": loan.loan_account_number if loan else None,
+                    "write_off_type": (
+                        updated.write_off_type.value
+                        if hasattr(updated.write_off_type, "value")
+                        else str(updated.write_off_type)
+                    ),
+                    "principal_written_off": str(updated.principal_written_off),
+                    "interest_written_off": str(updated.interest_written_off),
+                    "penal_written_off": str(updated.penal_written_off),
+                    "total_written_off": str(updated.total_written_off),
+                    "provision_utilized": str(updated.provision_utilized),
+                    "provision_available": str(updated.provision_available),
+                    "board_resolution_number": updated.board_resolution_number,
+                    "board_resolution_date": (
+                        updated.board_resolution_date.isoformat()
+                        if updated.board_resolution_date
+                        else None
+                    ),
+                },
+                change_reason="Write-off approved (maker-checker complete)",
+            )
+
+        return updated
 
     async def effect_write_off(
         self,
         write_off_id: UUID,
         data: WriteOffEffect,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> WriteOffRecord:
         """Effect an approved write-off."""
         write_off = await self.write_off_repo.get(write_off_id)
@@ -820,8 +1214,10 @@ class CollectionsService:
         loan_account = await self.loan_account_repo.get(write_off.loan_account_id)
         if loan_account:
             loan_update = {
-                "principal_written_off": loan_account.principal_written_off + write_off.principal_written_off,
-                "interest_written_off": loan_account.interest_written_off + write_off.interest_written_off,
+                "principal_written_off": loan_account.principal_written_off
+                + write_off.principal_written_off,
+                "interest_written_off": loan_account.interest_written_off
+                + write_off.interest_written_off,
                 "write_off_date": data.effective_date,
             }
             await self.loan_account_repo.update(loan_account, loan_update)
@@ -832,8 +1228,14 @@ class CollectionsService:
     # Summary & Dashboard Operations
     # =========================================================================
 
-    async def get_npa_summary(self) -> NPASummary:
-        """Get NPA portfolio summary."""
+    async def get_npa_summary(self, organization_id: UUID | None = None) -> NPASummary:
+        """Get NPA portfolio summary.
+
+        The ``organization_id`` argument is accepted for symmetry with the
+        other summary methods; current repo-level filter already runs
+        under the request's org-scoped session (RLS via get_db_with_tenant).
+        """
+        _ = organization_id  # currently unused at this layer
         npa_data = await self.npa_record_repo.get_npa_summary()
 
         summary = NPASummary()
@@ -879,8 +1281,11 @@ class CollectionsService:
 
         return summary
 
-    async def get_collection_summary(self) -> CollectionActivitySummary:
+    async def get_collection_summary(
+        self, organization_id: UUID | None = None
+    ) -> CollectionActivitySummary:
         """Get collection activity summary."""
+        _ = organization_id
         today = date.today()
 
         # Get pending follow-ups
@@ -892,15 +1297,20 @@ class CollectionsService:
 
         return summary
 
-    async def get_recovery_summary(self) -> RecoverySummary:
+    async def get_recovery_summary(self, organization_id: UUID | None = None) -> RecoverySummary:
         """Get recovery summary."""
+        _ = organization_id
         # Get OTS stats
         ots_approved = await self.ots_proposal_repo.get_by_status(OTSStatus.APPROVED)
         ots_completed = await self.ots_proposal_repo.get_by_status(OTSStatus.COMPLETED)
 
         # Get restructure stats
-        restructures_approved = await self.restructure_repo.get_by_status(RestructureStatus.APPROVED)
-        restructures_implemented = await self.restructure_repo.get_by_status(RestructureStatus.IMPLEMENTED)
+        restructures_approved = await self.restructure_repo.get_by_status(
+            RestructureStatus.APPROVED
+        )
+        restructures_implemented = await self.restructure_repo.get_by_status(
+            RestructureStatus.IMPLEMENTED
+        )
 
         # Get legal case stats
         legal_pending = await self.legal_case_repo.get_by_status(LegalCaseStatus.PENDING)
@@ -910,14 +1320,14 @@ class CollectionsService:
         write_off_data = await self.write_off_repo.get_total_written_off()
 
         # Calculate OTS settlement amount
-        ots_settlement_amount = sum(
-            p.ots_amount for p in ots_completed
-        ) if ots_completed else Decimal("0")
+        ots_settlement_amount = (
+            sum(p.ots_amount for p in ots_completed) if ots_completed else Decimal("0")
+        )
 
         # Calculate legal recovery
-        recovery_through_legal = sum(
-            c.recovery_through_case for c in legal_decree
-        ) if legal_decree else Decimal("0")
+        recovery_through_legal = (
+            sum(c.recovery_through_case for c in legal_decree) if legal_decree else Decimal("0")
+        )
 
         return RecoverySummary(
             approved_ots=len(ots_approved),
@@ -939,7 +1349,7 @@ class CollectionsService:
     async def identify_npa_accounts(
         self,
         as_of_date: date,
-    ) -> List[Tuple[UUID, AssetClassification]]:
+    ) -> list[tuple[UUID, AssetClassification]]:
         """Identify accounts that should be classified as NPA based on DPD."""
         accounts = await self.loan_account_repo.get_accounts_for_npa_check()
 
@@ -963,7 +1373,7 @@ class CollectionsService:
     async def auto_create_follow_ups(
         self,
         as_of_date: date,
-    ) -> List[CollectionFollowUp]:
+    ) -> list[CollectionFollowUp]:
         """Auto-create follow-ups for overdue accounts based on DPD."""
         # This would be called by a scheduled job
         created_follow_ups = []

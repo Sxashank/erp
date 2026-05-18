@@ -3,8 +3,9 @@
  * Displays audit trail / activity history
  */
 
-import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
+
+import { cn } from '@/lib/utils';
 
 export interface AuditEntry {
   id: string;

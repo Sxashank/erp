@@ -2,49 +2,47 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import NotFoundException, ValidationException
 from app.models.lending.application import (
-    LoanApplication,
     ApplicationDocument,
     ApplicationFee,
-    TechnicalAppraisal,
     FinancialAnalysis,
+    LoanApplication,
     ProjectMilestone,
+    TechnicalAppraisal,
 )
 from app.models.lending.enums import (
     ApplicationStage,
     ApplicationStatus,
     MilestoneStatus,
 )
-from app.schemas.lending.application import (
-    LoanApplicationCreate,
-    LoanApplicationUpdate,
-    ApplicationDocumentCreate,
-    ApplicationDocumentUpdate,
-    ApplicationFeeCreate,
-    ApplicationFeeUpdate,
-    TechnicalAppraisalCreate,
-    TechnicalAppraisalUpdate,
-    FinancialAnalysisCreate,
-    FinancialAnalysisUpdate,
-    ProjectMilestoneCreate,
-    ProjectMilestoneUpdate,
-)
 from app.repositories.lending.application_repo import (
-    LoanApplicationRepository,
     ApplicationDocumentRepository,
     ApplicationFeeRepository,
-    TechnicalAppraisalRepository,
     FinancialAnalysisRepository,
+    LoanApplicationRepository,
     ProjectMilestoneRepository,
+    TechnicalAppraisalRepository,
 )
 from app.repositories.lending.entity_repo import EntityRepository
 from app.repositories.lending.product_repo import LoanProductRepository
-from app.core.exceptions import NotFoundException, ConflictException, ValidationException
+from app.schemas.lending.application import (
+    ApplicationDocumentCreate,
+    ApplicationFeeCreate,
+    FinancialAnalysisCreate,
+    FinancialAnalysisUpdate,
+    LoanApplicationCreate,
+    LoanApplicationUpdate,
+    ProjectMilestoneCreate,
+    ProjectMilestoneUpdate,
+    TechnicalAppraisalCreate,
+    TechnicalAppraisalUpdate,
+)
 
 
 class ApplicationService:
@@ -81,13 +79,9 @@ class ApplicationService:
 
         # Validate amount against product limits
         if data.requested_amount < product.min_amount:
-            raise ValidationException(
-                f"Requested amount is below minimum ({product.min_amount})"
-            )
+            raise ValidationException(f"Requested amount is below minimum ({product.min_amount})")
         if data.requested_amount > product.max_amount:
-            raise ValidationException(
-                f"Requested amount exceeds maximum ({product.max_amount})"
-            )
+            raise ValidationException(f"Requested amount exceeds maximum ({product.max_amount})")
 
         # Validate tenure against product limits
         if data.requested_tenure_months < product.min_tenure_months:
@@ -113,7 +107,7 @@ class ApplicationService:
             created_by=created_by,
         )
         self.session.add(application)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(application)
         return application
 
@@ -136,13 +130,11 @@ class ApplicationService:
             setattr(application, field, value)
         application.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(application)
         return application
 
-    async def submit_application(
-        self, id: UUID, submitted_by: UUID
-    ) -> LoanApplication:
+    async def submit_application(self, id: UUID, submitted_by: UUID) -> LoanApplication:
         """Submit application for processing."""
         application = await self.app_repo.get(id)
         if not application:
@@ -157,10 +149,10 @@ class ApplicationService:
         application.updated_by = submitted_by
 
         # Route through the workflow engine. The application's requested
-        # amount drives the delegation-band required level. Actual
-        # workflow-engine dispatch + SLA tracking lives in
-        # app.services.workflow. See CLAUDE.md §8.4.
+        # amount drives the delegation-band required level. See CLAUDE.md §8.4.
         from app.core.maker_checker import build_workflow_request
+        from app.models.workflow.enums import WorkflowEntityType
+        from app.services.workflow.workflow_engine import WorkflowEngine
 
         self._pending_workflow_request = build_workflow_request(
             workflow_code="LOAN_APPLICATION_REVIEW",
@@ -171,13 +163,33 @@ class ApplicationService:
             amount=getattr(application, "requested_amount", None),
         )
 
-        await self.session.commit()
+        # Dispatch. If no WorkflowDefinition is seeded yet, fall through to
+        # "submitted, no workflow" — deployments without the seed still work.
+        try:
+            workflow_instance = await WorkflowEngine(self.session).start_workflow(
+                entity_type=WorkflowEntityType.LOAN_APPLICATION,
+                entity_id=application.id,
+                entity_reference=application.application_number,
+                organization_id=application.organization_id,
+                context={
+                    "amount": (
+                        float(application.requested_amount)
+                        if application.requested_amount is not None
+                        else None
+                    ),
+                    "application_number": application.application_number,
+                },
+                started_by=submitted_by,
+            )
+            application.workflow_instance_id = workflow_instance.id
+        except NotFoundException:
+            pass  # No WorkflowDefinition seeded for LOAN_APPLICATION_REVIEW yet.
+
+        await self.session.flush()
         await self.session.refresh(application)
         return application
 
-    async def move_to_appraisal(
-        self, id: UUID, updated_by: UUID
-    ) -> LoanApplication:
+    async def move_to_appraisal(self, id: UUID, updated_by: UUID) -> LoanApplication:
         """Move application to appraisal stage."""
         application = await self.app_repo.get(id)
         if not application:
@@ -190,20 +202,29 @@ class ApplicationService:
         application.status = ApplicationStatus.UNDER_REVIEW
         application.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(application)
         return application
 
     async def get_application(self, id: UUID) -> LoanApplication:
-        """Get application by ID."""
-        application = await self.app_repo.get(id)
+        """Get application by ID with entity + product eagerly loaded."""
+        from sqlalchemy import select as _select
+        from sqlalchemy.orm import selectinload
+
+        result = await self.session.execute(
+            _select(LoanApplication)
+            .where(LoanApplication.id == id)
+            .options(
+                selectinload(LoanApplication.entity),
+                selectinload(LoanApplication.product),
+            )
+        )
+        application = result.scalar_one_or_none()
         if not application:
             raise NotFoundException("Application not found")
         return application
 
-    async def get_application_with_details(
-        self, id: UUID
-    ) -> LoanApplication:
+    async def get_application_with_details(self, id: UUID) -> LoanApplication:
         """Get application with all related data."""
         application = await self.app_repo.get_with_details(id)
         if not application:
@@ -216,16 +237,16 @@ class ApplicationService:
         skip: int = 0,
         limit: int = 100,
         include_inactive: bool = False,
-        search: Optional[str] = None,
-        entity_id: Optional[UUID] = None,
-        product_id: Optional[UUID] = None,
-        stage: Optional[ApplicationStage] = None,
-        status: Optional[ApplicationStatus] = None,
-        relationship_manager_id: Optional[UUID] = None,
-        credit_officer_id: Optional[UUID] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
-    ) -> Tuple[List[LoanApplication], int]:
+        search: str | None = None,
+        entity_id: UUID | None = None,
+        product_id: UUID | None = None,
+        stage: ApplicationStage | None = None,
+        status: ApplicationStatus | None = None,
+        relationship_manager_id: UUID | None = None,
+        credit_officer_id: UUID | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
+    ) -> tuple[list[LoanApplication], int]:
         """Get all applications with filters."""
         return await self.app_repo.get_all_by_organization(
             organization_id=organization_id,
@@ -245,13 +266,11 @@ class ApplicationService:
 
     async def get_entity_applications(
         self, entity_id: UUID, include_inactive: bool = False
-    ) -> List[LoanApplication]:
+    ) -> list[LoanApplication]:
         """Get all applications for an entity."""
         return await self.app_repo.get_by_entity(entity_id, include_inactive)
 
-    async def get_stage_counts(
-        self, organization_id: UUID
-    ) -> Dict[str, int]:
+    async def get_stage_counts(self, organization_id: UUID) -> dict[str, int]:
         """Get application counts by stage."""
         return await self.app_repo.get_stage_counts(organization_id)
 
@@ -263,7 +282,7 @@ class ApplicationService:
         if application.status != ApplicationStatus.DRAFT:
             raise ValidationException("Only draft applications can be deleted")
         application.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
 
     # =========================================================================
     # Application Document Operations
@@ -277,12 +296,14 @@ class ApplicationService:
         if not application:
             raise NotFoundException("Application not found")
 
+        document_data = data.model_dump()
+        document_data["upload_date"] = document_data.get("upload_date") or datetime.utcnow()
         doc = ApplicationDocument(
-            **data.model_dump(),
+            **document_data,
             created_by=created_by,
         )
         self.session.add(doc)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(doc)
         return doc
 
@@ -290,26 +311,34 @@ class ApplicationService:
         self,
         id: UUID,
         verified_by: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> ApplicationDocument:
         """Verify an application document."""
         doc = await self.doc_repo.get(id)
         if not doc:
             raise NotFoundException("Document not found")
 
-        doc.is_verified = True
+        doc.status = "VERIFIED"
         doc.verified_by_id = verified_by
         doc.verified_at = datetime.utcnow()
         doc.verification_remarks = remarks
         doc.updated_by = verified_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(doc)
         return doc
 
+    async def delete_document(self, id: UUID, deleted_by: UUID) -> None:
+        """Soft delete an application document."""
+        doc = await self.doc_repo.get(id)
+        if not doc:
+            raise NotFoundException("Document not found")
+        doc.soft_delete(deleted_by)
+        await self.session.flush()
+
     async def get_application_documents(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[ApplicationDocument]:
+    ) -> list[ApplicationDocument]:
         """Get all documents for an application."""
         return await self.doc_repo.get_by_application(application_id, include_inactive)
 
@@ -330,7 +359,7 @@ class ApplicationService:
             created_by=created_by,
         )
         self.session.add(fee)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(fee)
         return fee
 
@@ -346,24 +375,22 @@ class ApplicationService:
         if not fee:
             raise NotFoundException("Application fee not found")
 
-        fee.collected_amount = collected_amount
-        fee.collected_date = collected_date
-        fee.is_collected = True
+        fee.status = "COLLECTED"
+        fee.collection_date = collected_date
+        fee.collection_reference = f"MANUAL-{collected_by}-{collected_date.isoformat()}"
         fee.updated_by = collected_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(fee)
         return fee
 
     async def get_application_fees(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[ApplicationFee]:
+    ) -> list[ApplicationFee]:
         """Get all fees for an application."""
         return await self.fee_repo.get_by_application(application_id, include_inactive)
 
-    async def get_fee_summary(
-        self, application_id: UUID
-    ) -> Dict[str, Any]:
+    async def get_fee_summary(self, application_id: UUID) -> dict[str, Any]:
         """Get fee summary for an application."""
         total = await self.fee_repo.get_total_fee_amount(application_id)
         collected = await self.fee_repo.get_total_collected_amount(application_id)
@@ -388,12 +415,18 @@ class ApplicationService:
         if not application:
             raise NotFoundException("Application not found")
 
+        appraisal_data = data.model_dump()
+        appraisal_data["appraisal_reference"] = (
+            appraisal_data.get("appraisal_reference")
+            or f"TA-{datetime.utcnow().strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
+        )
+        appraisal_data["appraiser_id"] = appraisal_data.get("appraiser_id") or created_by
         appraisal = TechnicalAppraisal(
-            **data.model_dump(),
+            **appraisal_data,
             created_by=created_by,
         )
         self.session.add(appraisal)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(appraisal)
         return appraisal
 
@@ -410,17 +443,15 @@ class ApplicationService:
             setattr(appraisal, field, value)
         appraisal.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(appraisal)
         return appraisal
 
     async def get_technical_appraisals(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[TechnicalAppraisal]:
+    ) -> list[TechnicalAppraisal]:
         """Get all technical appraisals for an application."""
-        return await self.tech_appraisal_repo.get_by_application(
-            application_id, include_inactive
-        )
+        return await self.tech_appraisal_repo.get_by_application(application_id, include_inactive)
 
     # =========================================================================
     # Financial Analysis Operations
@@ -434,12 +465,18 @@ class ApplicationService:
         if not application:
             raise NotFoundException("Application not found")
 
+        analysis_data = data.model_dump()
+        analysis_data["analysis_reference"] = (
+            analysis_data.get("analysis_reference")
+            or f"FA-{datetime.utcnow().strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
+        )
+        analysis_data["analyst_id"] = analysis_data.get("analyst_id") or created_by
         analysis = FinancialAnalysis(
-            **data.model_dump(),
+            **analysis_data,
             created_by=created_by,
         )
         self.session.add(analysis)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(analysis)
         return analysis
 
@@ -456,17 +493,15 @@ class ApplicationService:
             setattr(analysis, field, value)
         analysis.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(analysis)
         return analysis
 
     async def get_financial_analyses(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[FinancialAnalysis]:
+    ) -> list[FinancialAnalysis]:
         """Get all financial analyses for an application."""
-        return await self.fin_analysis_repo.get_by_application(
-            application_id, include_inactive
-        )
+        return await self.fin_analysis_repo.get_by_application(application_id, include_inactive)
 
     # =========================================================================
     # Project Milestone Operations
@@ -485,7 +520,7 @@ class ApplicationService:
             created_by=created_by,
         )
         self.session.add(milestone)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(milestone)
         return milestone
 
@@ -502,7 +537,7 @@ class ApplicationService:
             setattr(milestone, field, value)
         milestone.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(milestone)
         return milestone
 
@@ -511,7 +546,7 @@ class ApplicationService:
         id: UUID,
         completion_date: date,
         verified_by: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> ProjectMilestone:
         """Mark a milestone as completed."""
         milestone = await self.milestone_repo.get(id)
@@ -519,27 +554,22 @@ class ApplicationService:
             raise NotFoundException("Milestone not found")
 
         milestone.status = MilestoneStatus.COMPLETED
-        milestone.actual_completion_date = completion_date
-        milestone.completion_percentage = Decimal("100")
+        milestone.actual_date = completion_date
         milestone.verified_by_id = verified_by
         milestone.verified_at = datetime.utcnow()
         milestone.verification_remarks = remarks
         milestone.updated_by = verified_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(milestone)
         return milestone
 
     async def get_application_milestones(
         self, application_id: UUID, include_inactive: bool = False
-    ) -> List[ProjectMilestone]:
+    ) -> list[ProjectMilestone]:
         """Get all milestones for an application."""
-        return await self.milestone_repo.get_by_application(
-            application_id, include_inactive
-        )
+        return await self.milestone_repo.get_by_application(application_id, include_inactive)
 
-    async def get_next_milestone(
-        self, application_id: UUID
-    ) -> Optional[ProjectMilestone]:
+    async def get_next_milestone(self, application_id: UUID) -> ProjectMilestone | None:
         """Get next pending milestone for an application."""
         return await self.milestone_repo.get_next_milestone(application_id)

@@ -9,12 +9,13 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
 # ============== Statutory Setup ==============
 
-class StatutorySetupBase(BaseModel):
+class StatutorySetupBase(CamelSchema):
     """Base schema for statutory setup"""
     statutory_type: str = Field(..., description="PF, ESI, PT, LWF")
 
@@ -51,7 +52,7 @@ class StatutorySetupCreate(StatutorySetupBase):
     organization_id: UUID
 
 
-class StatutorySetupUpdate(BaseModel):
+class StatutorySetupUpdate(CamelSchema):
     """Schema for updating statutory setup"""
     pf_employer_rate: Optional[Decimal] = None
     pf_employee_rate: Optional[Decimal] = None
@@ -78,13 +79,10 @@ class StatutorySetupResponse(StatutorySetupBase):
     id: UUID
     organization_id: UUID
 
-    class Config:
-        from_attributes = True
-
 
 # ============== Payroll Batch ==============
 
-class PayrollBatchBase(BaseModel):
+class PayrollBatchBase(CamelSchema):
     """Base schema for payroll batch"""
     payroll_month: int = Field(..., ge=1, le=12)
     payroll_year: int = Field(..., ge=2000, le=2100)
@@ -99,7 +97,7 @@ class PayrollBatchCreate(PayrollBatchBase):
     organization_id: UUID
 
 
-class PayrollBatchUpdate(BaseModel):
+class PayrollBatchUpdate(CamelSchema):
     """Schema for updating payroll batch"""
     pay_period_from: Optional[date] = None
     pay_period_to: Optional[date] = None
@@ -131,11 +129,8 @@ class PayrollBatchResponse(PayrollBatchBase):
     approved_at: Optional[datetime] = None
     paid_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
 
-
-class PayrollBatchList(BaseModel):
+class PayrollBatchList(CamelSchema):
     """Minimal schema for listing"""
     id: UUID
     batch_number: str
@@ -145,24 +140,60 @@ class PayrollBatchList(BaseModel):
     total_net: Decimal
     status: str
 
-    class Config:
-        from_attributes = True
 
-
-class PayrollProcessRequest(BaseModel):
+class PayrollProcessRequest(CamelSchema):
     """Request schema for processing payroll"""
     batch_id: UUID
     employee_ids: Optional[List[UUID]] = None  # If None, process all
 
 
-class PayrollApproveRequest(BaseModel):
+class PayrollApproveRequest(CamelSchema):
     """Request schema for approving payroll"""
     remarks: Optional[str] = None
 
 
+class PayrollMarkPaidRequest(CamelSchema):
+    """Request schema for marking payroll paid."""
+    payment_reference: Optional[str] = None
+
+
+class PayrollBankFileResponse(CamelSchema):
+    """Manual salary bank upload file response."""
+    file_name: str
+    file_content: str
+    record_count: int
+    total_amount: Decimal
+    generated_at: datetime
+
+
+class PayrollGLPostRequest(CamelSchema):
+    """Request schema for posting approved payroll to GL."""
+    salary_expense_account_id: UUID
+    net_salary_payable_account_id: UUID
+    pf_payable_account_id: Optional[UUID] = None
+    esi_payable_account_id: Optional[UUID] = None
+    pt_payable_account_id: Optional[UUID] = None
+    tds_payable_account_id: Optional[UUID] = None
+    other_deductions_payable_account_id: Optional[UUID] = None
+    employer_contribution_expense_account_id: Optional[UUID] = None
+    voucher_date: Optional[date] = None
+    cost_center_id: Optional[UUID] = None
+    narration: Optional[str] = None
+
+
+class PayrollGLPostResponse(CamelSchema):
+    """Response schema for payroll GL posting."""
+    posted: bool
+    source_reference: str
+    gl_entry_count: int
+    voucher_number: Optional[str] = None
+    total_debit: Decimal
+    total_credit: Decimal
+
+
 # ============== Payslip ==============
 
-class PayslipComponentResponse(BaseModel):
+class PayslipComponentResponse(CamelSchema):
     """Schema for payslip component response"""
     id: UUID
     component_code: str
@@ -175,11 +206,8 @@ class PayslipComponentResponse(BaseModel):
     taxable_amount: Decimal
     display_order: int
 
-    class Config:
-        from_attributes = True
 
-
-class PayrollStatutoryResponse(BaseModel):
+class PayrollStatutoryResponse(CamelSchema):
     """Schema for payroll statutory response"""
     id: UUID
     statutory_type: str
@@ -193,11 +221,8 @@ class PayrollStatutoryResponse(BaseModel):
     admin_charges: Decimal
     total_amount: Decimal
 
-    class Config:
-        from_attributes = True
 
-
-class PayslipBase(BaseModel):
+class PayslipBase(CamelSchema):
     """Base schema for payslip"""
     working_days: Decimal
     days_present: Decimal
@@ -253,11 +278,8 @@ class PayslipResponse(PayslipBase):
     components: List[PayslipComponentResponse] = []
     statutory: List[PayrollStatutoryResponse] = []
 
-    class Config:
-        from_attributes = True
 
-
-class PayslipList(BaseModel):
+class PayslipList(CamelSchema):
     """Minimal schema for listing"""
     id: UUID
     payslip_number: str
@@ -268,11 +290,8 @@ class PayslipList(BaseModel):
     net_salary: Decimal
     status: str
 
-    class Config:
-        from_attributes = True
 
-
-class PayslipUpdate(BaseModel):
+class PayslipUpdate(CamelSchema):
     """Schema for updating payslip (manual adjustments)"""
     working_days: Optional[Decimal] = None
     days_present: Optional[Decimal] = None
@@ -285,7 +304,7 @@ class PayslipUpdate(BaseModel):
     remarks: Optional[str] = None
 
 
-class PayslipGeneratePDF(BaseModel):
+class PayslipGeneratePDF(CamelSchema):
     """Request for generating payslip PDF"""
     payslip_id: UUID
     include_employer_contribution: bool = False

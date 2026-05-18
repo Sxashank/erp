@@ -22,10 +22,11 @@ from app.schemas.vendor_portal.asn import (
     ASNSummary,
 )
 
+from app.api.deps import get_db_with_tenant
 router = APIRouter()
 
 
-@router.get("/", response_model=ASNListResponse)
+@router.get("/", response_model=ASNListResponse, response_model_by_alias=True)
 async def list_asns(
     vendor_id: UUID,  # From auth middleware
     skip: int = Query(0, ge=0),
@@ -34,7 +35,7 @@ async def list_asns(
     po_id: Optional[UUID] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List ASNs for vendor."""
     service = VendorASNService(db)
@@ -55,10 +56,10 @@ async def list_asns(
     )
 
 
-@router.get("/summary", response_model=ASNSummary)
+@router.get("/summary", response_model=ASNSummary, response_model_by_alias=True)
 async def get_asn_summary(
     vendor_id: UUID,  # From auth middleware
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get ASN summary for dashboard."""
     service = VendorASNService(db)
@@ -66,13 +67,13 @@ async def get_asn_summary(
     return summary
 
 
-@router.post("/", response_model=ASNResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=ASNResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_asn(
     vendor_id: UUID,  # From auth middleware
     organization_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     data: ASNCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Create a new ASN."""
     service = VendorASNService(db)
@@ -89,7 +90,7 @@ async def create_asn(
 async def get_available_po_lines(
     vendor_id: UUID,  # From auth middleware
     po_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get available PO lines for creating ASN."""
     service = VendorASNService(db)
@@ -97,11 +98,11 @@ async def get_available_po_lines(
     return lines
 
 
-@router.get("/{asn_id}", response_model=ASNResponse)
+@router.get("/{asn_id}", response_model=ASNResponse, response_model_by_alias=True)
 async def get_asn(
     vendor_id: UUID,  # From auth middleware
     asn_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Get ASN details."""
     service = VendorASNService(db)
@@ -109,12 +110,12 @@ async def get_asn(
     return asn
 
 
-@router.put("/{asn_id}", response_model=ASNResponse)
+@router.put("/{asn_id}", response_model=ASNResponse, response_model_by_alias=True)
 async def update_asn(
     vendor_id: UUID,  # From auth middleware
     asn_id: UUID,
     data: ASNUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update an ASN draft."""
     service = VendorASNService(db)
@@ -122,12 +123,12 @@ async def update_asn(
     return asn
 
 
-@router.post("/{asn_id}/lines", response_model=ASNLineResponse)
+@router.post("/{asn_id}/lines", response_model=ASNLineResponse, response_model_by_alias=True)
 async def add_asn_line(
     vendor_id: UUID,  # From auth middleware
     asn_id: UUID,
     data: ASNLineCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Add line item to ASN."""
     service = VendorASNService(db)
@@ -135,13 +136,13 @@ async def add_asn_line(
     return line
 
 
-@router.put("/{asn_id}/lines/{line_id}", response_model=ASNLineResponse)
+@router.put("/{asn_id}/lines/{line_id}", response_model=ASNLineResponse, response_model_by_alias=True)
 async def update_asn_line(
     vendor_id: UUID,  # From auth middleware
     asn_id: UUID,
     line_id: UUID,
     data: ASNLineCreate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update ASN line item."""
     service = VendorASNService(db)
@@ -154,20 +155,20 @@ async def remove_asn_line(
     vendor_id: UUID,  # From auth middleware
     asn_id: UUID,
     line_id: UUID,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Remove ASN line item."""
     service = VendorASNService(db)
     await service.remove_line(vendor_id, asn_id, line_id)
 
 
-@router.post("/{asn_id}/dispatch", response_model=ASNResponse)
+@router.post("/{asn_id}/dispatch", response_model=ASNResponse, response_model_by_alias=True)
 async def dispatch_asn(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     asn_id: UUID,
     data: ASNDispatch,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Mark ASN as dispatched."""
     service = VendorASNService(db)
@@ -175,12 +176,12 @@ async def dispatch_asn(
     return asn
 
 
-@router.put("/{asn_id}/tracking", response_model=ASNResponse)
+@router.put("/{asn_id}/tracking", response_model=ASNResponse, response_model_by_alias=True)
 async def update_tracking(
     vendor_id: UUID,  # From auth middleware
     asn_id: UUID,
     data: ASNTrackingUpdate,
-    db: Annotated[AsyncSession, Depends(get_db)],
+    db: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ):
     """Update tracking information."""
     service = VendorASNService(db)
@@ -188,13 +189,13 @@ async def update_tracking(
     return asn
 
 
-@router.post("/{asn_id}/cancel", response_model=ASNResponse)
+@router.post("/{asn_id}/cancel", response_model=ASNResponse, response_model_by_alias=True)
 async def cancel_asn(
     vendor_id: UUID,  # From auth middleware
     user_id: UUID,  # From auth middleware
     asn_id: UUID,
     reason: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel an ASN."""
     service = VendorASNService(db)
@@ -203,13 +204,13 @@ async def cancel_asn(
 
 
 # Buyer/admin endpoint
-@router.post("/{asn_id}/delivered", response_model=ASNResponse)
+@router.post("/{asn_id}/delivered", response_model=ASNResponse, response_model_by_alias=True)
 async def mark_delivered(
     asn_id: UUID,
     user_id: UUID,  # From auth middleware
     delivery_date: Optional[date] = None,
     remarks: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Mark ASN as delivered (buyer operation)."""
     service = VendorASNService(db)

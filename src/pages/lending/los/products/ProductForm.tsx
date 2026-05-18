@@ -1,13 +1,16 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Save, Plus, Trash2 } from 'lucide-react';
+import { useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountInput } from '@/components/lending/common/AmountInput';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,8 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -25,9 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch';
-import { AmountInput } from '@/components/lending/common/AmountInput';
-
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const productSchema = z.object({
   productCode: z.string().min(1, 'Product code is required'),
@@ -71,7 +72,7 @@ const productSchema = z.object({
         minAmount: z.number().optional(),
         maxAmount: z.number().optional(),
         isMandatory: z.boolean().default(false),
-      })
+      }),
     )
     .optional(),
   documentChecklist: z
@@ -81,7 +82,7 @@ const productSchema = z.object({
         documentName: z.string(),
         isMandatory: z.boolean().default(false),
         stage: z.enum(['APPLICATION', 'APPRAISAL', 'SANCTION', 'DISBURSEMENT']),
-      })
+      }),
     )
     .optional(),
   status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).default('ACTIVE'),
@@ -150,26 +151,24 @@ export default function ProductForm() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/lending/products')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold">
-            {isEdit ? 'Edit Loan Product' : 'Create Loan Product'}
-          </h1>
-          <p className="text-muted-foreground">
-            {isEdit
-              ? 'Update product configuration and terms'
-              : 'Configure a new loan product with terms and conditions'}
-          </p>
-        </div>
-        <Button onClick={handleSubmit(onSubmit as any)} disabled={isSubmitting}>
-          <Save className="mr-2 h-4 w-4" />
-          {isEdit ? 'Update Product' : 'Create Product'}
-        </Button>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Loan Product' : 'Create Loan Product'}
+        subtitle={
+          isEdit
+            ? 'Update product configuration and terms'
+            : 'Configure a new loan product with terms and conditions'
+        }
+        breadcrumbs={[
+          { label: 'Loan Products', to: '/admin/lending/products' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+        actions={
+          <Button onClick={handleSubmit(onSubmit as any)} disabled={isSubmitting}>
+            <Save className="mr-2 h-4 w-4" />
+            {isEdit ? 'Update Product' : 'Create Product'}
+          </Button>
+        }
+      />
 
       <form onSubmit={handleSubmit(onSubmit as any)}>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -182,7 +181,7 @@ export default function ProductForm() {
           </TabsList>
 
           {/* Basic Info Tab */}
-          <TabsContent value="basic" className="space-y-6 mt-6">
+          <TabsContent value="basic" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Product Details</CardTitle>
@@ -276,7 +275,9 @@ export default function ProductForm() {
             <Card>
               <CardHeader>
                 <CardTitle>Amount & Tenure Limits</CardTitle>
-                <CardDescription>Define the permissible range for loan amounts and tenures</CardDescription>
+                <CardDescription>
+                  Define the permissible range for loan amounts and tenures
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -335,11 +336,13 @@ export default function ProductForm() {
           </TabsContent>
 
           {/* Interest & Fees Tab */}
-          <TabsContent value="interest" className="space-y-6 mt-6">
+          <TabsContent value="interest" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Interest Configuration</CardTitle>
-                <CardDescription>Define interest rate type and calculation parameters</CardDescription>
+                <CardDescription>
+                  Define interest rate type and calculation parameters
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -469,11 +472,13 @@ export default function ProductForm() {
           </TabsContent>
 
           {/* Terms & Conditions Tab */}
-          <TabsContent value="terms" className="space-y-6 mt-6">
+          <TabsContent value="terms" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Repayment Terms</CardTitle>
-                <CardDescription>Configure repayment frequencies and moratorium options</CardDescription>
+                <CardDescription>
+                  Configure repayment frequencies and moratorium options
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -571,7 +576,7 @@ export default function ProductForm() {
           </TabsContent>
 
           {/* Fee Structure Tab */}
-          <TabsContent value="fees" className="space-y-6 mt-6">
+          <TabsContent value="fees" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Fee Structure</CardTitle>
@@ -592,7 +597,7 @@ export default function ProductForm() {
                   <TableBody>
                     {feeFields.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                           No fees configured. Click "Add Fee" to add fee structures.
                         </TableCell>
                       </TableRow>
@@ -628,7 +633,10 @@ export default function ProductForm() {
                             <Select
                               value={watch(`fees.${index}.chargeType`)}
                               onValueChange={(v) =>
-                                setValue(`fees.${index}.chargeType`, v as 'PERCENTAGE' | 'FIXED' | 'SLAB')
+                                setValue(
+                                  `fees.${index}.chargeType`,
+                                  v as 'PERCENTAGE' | 'FIXED' | 'SLAB',
+                                )
                               }
                             >
                               <SelectTrigger className="w-[130px]">
@@ -701,11 +709,13 @@ export default function ProductForm() {
           </TabsContent>
 
           {/* Document Checklist Tab */}
-          <TabsContent value="documents" className="space-y-6 mt-6">
+          <TabsContent value="documents" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Document Checklist</CardTitle>
-                <CardDescription>Define required documents for this product at each stage</CardDescription>
+                <CardDescription>
+                  Define required documents for this product at each stage
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -721,7 +731,7 @@ export default function ProductForm() {
                   <TableBody>
                     {documentFields.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                           No documents configured. Click "Add Document" to add to the checklist.
                         </TableCell>
                       </TableRow>
@@ -761,7 +771,7 @@ export default function ProductForm() {
                               onValueChange={(v) =>
                                 setValue(
                                   `documentChecklist.${index}.stage`,
-                                  v as 'APPLICATION' | 'APPRAISAL' | 'SANCTION' | 'DISBURSEMENT'
+                                  v as 'APPLICATION' | 'APPRAISAL' | 'SANCTION' | 'DISBURSEMENT',
                                 )
                               }
                             >

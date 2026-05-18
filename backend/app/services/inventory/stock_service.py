@@ -385,7 +385,7 @@ class StockService:
         transaction.approved_by = approved_by
         transaction.approved_at = datetime.now(timezone.utc)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transaction)
         return transaction
 
@@ -408,7 +408,7 @@ class StockService:
         transaction.approved_at = datetime.now(timezone.utc)
         transaction.rejection_reason = rejection_reason
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transaction)
         return transaction
 
@@ -493,7 +493,7 @@ class StockService:
         # Update balance immediately (since auto-approved)
         await self._apply_transaction_to_balance(transaction, balance)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(transaction)
         return transaction
 

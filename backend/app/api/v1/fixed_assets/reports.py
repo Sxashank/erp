@@ -4,10 +4,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions, AssetStatus, AssetType
 from app.core.permissions import PermissionChecker
@@ -16,11 +16,12 @@ from app.schemas.fixed_assets.depreciation import (
     DepreciationSummaryResponse,
 )
 from app.services.fixed_assets.reports_service import FAReportsService
+from app.core.exceptions import BadRequestException
 
 router = APIRouter()
 
 
-@router.get("/asset-register", response_model=AssetRegisterResponse)
+@router.get("/asset-register", response_model=AssetRegisterResponse, response_model_by_alias=True)
 async def get_asset_register(
     request: Request,
     organization_id: UUID,
@@ -29,7 +30,7 @@ async def get_asset_register(
     location_id: Optional[UUID] = None,
     asset_type: Optional[AssetType] = None,
     include_disposed: bool = Query(False, description="Include disposed assets"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -69,12 +70,12 @@ async def get_asset_register(
     )
 
 
-@router.get("/depreciation-summary", response_model=DepreciationSummaryResponse)
+@router.get("/depreciation-summary", response_model=DepreciationSummaryResponse, response_model_by_alias=True)
 async def get_depreciation_summary(
     request: Request,
     organization_id: UUID,
     depreciation_period: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -93,13 +94,13 @@ async def get_depreciation_summary(
     )
 
 
-@router.get("/nbs-7", response_model=dict)
+@router.get("/nbs-7", response_model=dict, response_model_by_alias=True)
 async def get_nbs7_schedule(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     quarter: int = Query(..., ge=1, le=4),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -131,18 +132,15 @@ async def get_nbs7_schedule(
             quarter=quarter,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/category-wise-summary", response_model=dict)
+@router.get("/category-wise-summary", response_model=dict, response_model_by_alias=True)
 async def get_category_wise_summary(
     request: Request,
     organization_id: UUID,
     as_on_date: date = Query(default=None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):
@@ -210,12 +208,12 @@ async def get_category_wise_summary(
     }
 
 
-@router.get("/location-wise-summary", response_model=dict)
+@router.get("/location-wise-summary", response_model=dict, response_model_by_alias=True)
 async def get_location_wise_summary(
     request: Request,
     organization_id: UUID,
     as_on_date: date = Query(default=None),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):

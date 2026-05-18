@@ -3,37 +3,52 @@
 import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional, Dict, Any, Tuple
-from uuid import UUID, uuid4
+from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_, update, desc
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.lending.aa_consent import (
-    AAConsent, AAFetchSession, AABankAccount, AABankTransaction, AAConsentLog
-)
-from app.models.lending.entity import Entity
-from app.models.lending.application import LoanApplication
-from app.models.lending.loan_account import LoanAccount
-from app.models.lending.enums import (
-    AAProvider, AAConsentStatus, AAConsentPurpose, AAConsentMode,
-    AAFetchFrequency, AAFIType, AAFetchSessionStatus, AADataStatus
-)
-from app.models.core.integration_config import IntegrationConfig, IntegrationType
-from app.schemas.lending.aa import (
-    AAConsentCreate, AAConsentUpdate, AAConsentResponse, AAConsentListResponse,
-    AAConsentDetailResponse, AAConsentRequestInitiate, AAConsentInitiateResponse,
-    AAFetchDataRequest, AAFetchDataResponse, AAFetchSessionResponse,
-    AAFetchSessionDetailResponse, AAFetchSessionListResponse,
-    AABankAccountResponse, AABankAccountDetailResponse, AABankAccountListResponse,
-    AABankTransactionResponse, AABankTransactionListResponse,
-    AAConsentStatistics, AAFetchStatistics, AABankStatementAnalysis,
-    AAConsentLogResponse, AAConsentLogListResponse,
-)
-from app.integrations.aa.factory import AAClientFactory
 from app.integrations.aa.base import AAClientBase
+from app.integrations.aa.factory import AAClientFactory
 from app.integrations.aa.schemas import AAConsentRequest, AAFetchRequest
+from app.models.core.integration_config import IntegrationConfig, IntegrationType
+from app.models.lending.aa_consent import (
+    AABankAccount,
+    AABankTransaction,
+    AAConsent,
+    AAConsentLog,
+    AAFetchSession,
+)
+from app.models.lending.enums import (
+    AAConsentMode,
+    AAConsentStatus,
+    AADataStatus,
+    AAFetchFrequency,
+    AAFetchSessionStatus,
+    AAFIType,
+    AAProvider,
+)
+from app.schemas.lending.aa import (
+    AABankAccountDetailResponse,
+    AABankAccountListResponse,
+    AABankAccountResponse,
+    AABankTransactionListResponse,
+    AABankTransactionResponse,
+    AAConsentDetailResponse,
+    AAConsentInitiateResponse,
+    AAConsentListResponse,
+    AAConsentRequestInitiate,
+    AAConsentResponse,
+    AAConsentStatistics,
+    AAFetchDataRequest,
+    AAFetchDataResponse,
+    AAFetchSessionDetailResponse,
+    AAFetchSessionListResponse,
+    AAFetchSessionResponse,
+    AAFetchStatistics,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +67,7 @@ class AAService:
         self,
         organization_id: UUID,
         provider: AAProvider,
-    ) -> Tuple[AAClientBase, IntegrationConfig]:
+    ) -> tuple[AAClientBase, IntegrationConfig]:
         """Get AA client for the organization and provider.
 
         Args:
@@ -98,7 +113,7 @@ class AAService:
     async def initiate_consent(
         self,
         request: AAConsentRequestInitiate,
-        created_by_id: Optional[UUID] = None,
+        created_by_id: UUID | None = None,
     ) -> AAConsentInitiateResponse:
         """Initiate a new consent request.
 
@@ -127,7 +142,9 @@ class AAService:
             redirect_url=request.redirect_url or config.config_data.get("callback_url"),
             fiu_entity_id=config.config_data.get("entity_id", ""),
             customer_id=str(request.entity_id) if request.entity_id else None,
-            loan_application_id=str(request.loan_application_id) if request.loan_application_id else None,
+            loan_application_id=(
+                str(request.loan_application_id) if request.loan_application_id else None
+            ),
             loan_account_id=str(request.loan_account_id) if request.loan_account_id else None,
         )
 
@@ -178,7 +195,7 @@ class AAService:
             created_by_id=created_by_id,
         )
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(consent)
 
         return AAConsentInitiateResponse(
@@ -207,19 +224,54 @@ class AAService:
 
         return self._to_consent_detail_response(consent)
 
+    async def list_consents_for_org(
+        self,
+        organization_id: UUID,
+        entity_id: UUID | None = None,
+        status: AAConsentStatus | None = None,
+        provider: AAProvider | None = None,
+        skip: int = 0,
+        limit: int = 50,
+    ):
+        """Paginated list of AA consents scoped to caller's org.
+
+        Returns (items, total) — the new camelCase list endpoint serialises
+        each item via AAConsentListItemResponse.
+        """
+        query = (
+            select(AAConsent)
+            .where(AAConsent.organization_id == organization_id)
+            .order_by(desc(AAConsent.created_at))
+        )
+        if entity_id:
+            query = query.where(AAConsent.entity_id == entity_id)
+        if status:
+            query = query.where(AAConsent.status == status)
+        if provider:
+            query = query.where(AAConsent.provider == provider)
+
+        count_query = select(func.count()).select_from(query.subquery())
+        total = (await self.db.execute(count_query)).scalar() or 0
+
+        result = await self.db.execute(query.offset(skip).limit(limit))
+        items = list(result.scalars().all())
+        return items, total
+
     async def list_consents(
         self,
         organization_id: UUID,
-        entity_id: Optional[UUID] = None,
-        status: Optional[AAConsentStatus] = None,
-        provider: Optional[AAProvider] = None,
+        entity_id: UUID | None = None,
+        status: AAConsentStatus | None = None,
+        provider: AAProvider | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> AAConsentListResponse:
         """List consents with filters."""
-        query = select(AAConsent).where(
-            AAConsent.organization_id == organization_id
-        ).order_by(desc(AAConsent.created_at))
+        query = (
+            select(AAConsent)
+            .where(AAConsent.organization_id == organization_id)
+            .order_by(desc(AAConsent.created_at))
+        )
 
         if entity_id:
             query = query.where(AAConsent.entity_id == entity_id)
@@ -297,15 +349,15 @@ class AAService:
                         aa_response=aa_response.raw_response,
                     )
 
-                    await self.db.commit()
+                    await self.db.flush()
 
         return self._to_consent_response(consent)
 
     async def revoke_consent(
         self,
         consent_id: UUID,
-        reason: Optional[str] = None,
-        revoked_by_id: Optional[UUID] = None,
+        reason: str | None = None,
+        revoked_by_id: UUID | None = None,
     ) -> AAConsentResponse:
         """Revoke an active consent."""
         consent = await self.db.get(AAConsent, consent_id)
@@ -321,7 +373,9 @@ class AAService:
             aa_response = await client.revoke_consent(consent.consent_id, reason)
 
             if not aa_response.success:
-                logger.warning(f"Failed to revoke consent with provider: {aa_response.error_message}")
+                logger.warning(
+                    f"Failed to revoke consent with provider: {aa_response.error_message}"
+                )
 
         # Update local status
         old_status = consent.status
@@ -340,7 +394,7 @@ class AAService:
             created_by_id=revoked_by_id,
         )
 
-        await self.db.commit()
+        await self.db.flush()
         return self._to_consent_response(consent)
 
     # =========================================================================
@@ -394,7 +448,7 @@ class AAService:
             aa_response=aa_response.raw_response,
         )
         self.db.add(session)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(session)
 
         return AAFetchDataResponse(
@@ -430,7 +484,7 @@ class AAService:
             session.status = AAFetchSessionStatus.FAILED
             session.error_code = aa_response.error_code
             session.error_message = aa_response.error_message
-            await self.db.commit()
+            await self.db.flush()
             raise ValueError(aa_response.error_message or "Failed to fetch data")
 
         # Process FI data
@@ -474,7 +528,9 @@ class AAService:
                 if fi_data.summary:
                     summary = fi_data.summary
                     bank_account.current_balance = Decimal(str(summary.get("currentBalance", 0)))
-                    bank_account.available_balance = Decimal(str(summary.get("availableBalance", 0)))
+                    bank_account.available_balance = Decimal(
+                        str(summary.get("availableBalance", 0))
+                    )
                     if summary.get("balanceDateTime"):
                         try:
                             bank_account.balance_as_on = datetime.fromisoformat(
@@ -496,14 +552,26 @@ class AAService:
                             txn_type=txn.get("type", "UNKNOWN"),
                             mode=txn.get("mode"),
                             amount=Decimal(str(txn.get("amount", 0))),
-                            balance_after=Decimal(str(txn.get("currentBalance", 0))) if txn.get("currentBalance") else None,
+                            balance_after=(
+                                Decimal(str(txn.get("currentBalance", 0)))
+                                if txn.get("currentBalance")
+                                else None
+                            ),
                             transaction_date=datetime.strptime(
-                                txn.get("transactionTimestamp", txn.get("valueDate", "1970-01-01"))[:10],
-                                "%Y-%m-%d"
+                                txn.get("transactionTimestamp", txn.get("valueDate", "1970-01-01"))[
+                                    :10
+                                ],
+                                "%Y-%m-%d",
                             ).date(),
-                            transaction_timestamp=datetime.fromisoformat(
-                                txn.get("transactionTimestamp", "1970-01-01T00:00:00").replace("Z", "+00:00")
-                            ) if txn.get("transactionTimestamp") else None,
+                            transaction_timestamp=(
+                                datetime.fromisoformat(
+                                    txn.get("transactionTimestamp", "1970-01-01T00:00:00").replace(
+                                        "Z", "+00:00"
+                                    )
+                                )
+                                if txn.get("transactionTimestamp")
+                                else None
+                            ),
                             narration=txn.get("narration"),
                             reference=txn.get("reference"),
                             counterparty_name=txn.get("counterpartyName"),
@@ -516,7 +584,7 @@ class AAService:
             session.completed_at = datetime.utcnow()
 
         session.aa_response = aa_response.raw_response
-        await self.db.commit()
+        await self.db.flush()
 
         # Reload with relationships
         query = (
@@ -596,8 +664,8 @@ class AAService:
     async def list_bank_accounts(
         self,
         organization_id: UUID,
-        entity_id: Optional[UUID] = None,
-        fi_type: Optional[AAFIType] = None,
+        entity_id: UUID | None = None,
+        fi_type: AAFIType | None = None,
         page: int = 1,
         page_size: int = 20,
     ) -> AABankAccountListResponse:
@@ -631,9 +699,9 @@ class AAService:
     async def list_transactions(
         self,
         bank_account_id: UUID,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-        txn_type: Optional[str] = None,
+        start_date: date | None = None,
+        end_date: date | None = None,
+        txn_type: str | None = None,
         page: int = 1,
         page_size: int = 50,
     ) -> AABankTransactionListResponse:
@@ -779,9 +847,9 @@ class AAService:
     async def handle_consent_notification(
         self,
         consent_handle: str,
-        consent_id: Optional[str],
+        consent_id: str | None,
         status: str,
-        raw_payload: Dict[str, Any],
+        raw_payload: dict[str, Any],
     ):
         """Handle consent status update from webhook."""
         # Find consent by handle
@@ -819,15 +887,15 @@ class AAService:
             aa_response=raw_payload,
         )
 
-        await self.db.commit()
+        await self.db.flush()
 
     async def handle_fi_notification(
         self,
         consent_id: str,
         session_id: str,
         status: str,
-        fi_status_response: Optional[List[Dict[str, Any]]],
-        raw_payload: Dict[str, Any],
+        fi_status_response: list[dict[str, Any]] | None,
+        raw_payload: dict[str, Any],
     ):
         """Handle FI data notification from webhook."""
         # Find session
@@ -850,7 +918,7 @@ class AAService:
             session.error_message = "Data request timed out"
 
         session.aa_response = raw_payload
-        await self.db.commit()
+        await self.db.flush()
 
     # =========================================================================
     # Helpers
@@ -860,12 +928,12 @@ class AAService:
         self,
         consent_id: UUID,
         event_type: str,
-        old_status: Optional[AAConsentStatus] = None,
-        new_status: Optional[AAConsentStatus] = None,
-        source: Optional[str] = None,
-        message: Optional[str] = None,
-        aa_response: Optional[Dict[str, Any]] = None,
-        created_by_id: Optional[UUID] = None,
+        old_status: AAConsentStatus | None = None,
+        new_status: AAConsentStatus | None = None,
+        source: str | None = None,
+        message: str | None = None,
+        aa_response: dict[str, Any] | None = None,
+        created_by_id: UUID | None = None,
     ):
         """Create a consent log entry."""
         log = AAConsentLog(
@@ -938,9 +1006,7 @@ class AAService:
 
     def _to_consent_detail_response(self, consent: AAConsent) -> AAConsentDetailResponse:
         """Convert consent model to detailed response."""
-        response = AAConsentDetailResponse(
-            **self._to_consent_response(consent).model_dump()
-        )
+        response = AAConsentDetailResponse(**self._to_consent_response(consent).model_dump())
         response.fetch_sessions = [
             self._to_fetch_session_response(s) for s in (consent.fetch_sessions or [])
         ]
@@ -1033,9 +1099,7 @@ class AAService:
         ]
         return response
 
-    def _to_transaction_response(
-        self, txn: AABankTransaction
-    ) -> AABankTransactionResponse:
+    def _to_transaction_response(self, txn: AABankTransaction) -> AABankTransactionResponse:
         """Convert transaction model to response."""
         return AABankTransactionResponse(
             id=txn.id,

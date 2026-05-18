@@ -5,14 +5,11 @@
  * Shows fetched accounts and allows data pull.
  */
 
-import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  ArrowLeft,
   RefreshCw,
   Download,
-  Play,
+  Loader2,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -23,10 +20,15 @@ import {
   Calendar,
   ChevronRight,
 } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -35,43 +37,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Skeleton } from '@/components/ui/skeleton';
+import { useAASession, useFetchAASessionData } from '@/hooks/lending/useAASession';
 import { useToast } from '@/hooks/use-toast';
-import { Progress } from '@/components/ui/progress';
-
-// Types
-interface BankAccount {
-  id: string;
-  fi_type: string;
-  fip_name: string;
-  masked_account_number: string;
-  account_type: string;
-  bank_name: string;
-  holder_name: string;
-  current_balance: number;
-  currency: string;
-  transactions_count: number;
-}
-
-interface FetchSessionDetail {
-  id: string;
-  consent_id: string;
-  session_id: string;
-  status: string;
-  fi_types_requested: string[];
-  accounts_count: number;
-  transactions_count: number;
-  data_from: string;
-  data_to: string;
-  initiated_at: string;
-  completed_at: string | null;
-  error_message: string | null;
-  bank_accounts: BankAccount[];
-}
+import { getErrorEnvelope, showErrorToast } from '@/lib/errorToast';
 
 // Status styling
 const getStatusBadge = (status: string) => {
-  const statusStyles: Record<string, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }> = {
+  const statusStyles: Record<
+    string,
+    { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode }
+  > = {
     INITIATED: { variant: 'secondary', icon: <Clock className="h-3 w-3" /> },
     PENDING: { variant: 'secondary', icon: <Clock className="h-3 w-3" /> },
     READY: { variant: 'default', icon: <CheckCircle className="h-3 w-3" /> },
@@ -92,7 +67,7 @@ const getStatusBadge = (status: string) => {
 };
 
 // Format currency
-const formatCurrency = (amount: number, currency: string = 'INR') => {
+const formatCurrency = (amount: number, currency = 'INR') => {
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: currency,
@@ -105,75 +80,45 @@ export default function SessionDetailPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const [session, setSession] = useState<FetchSessionDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [fetching, setFetching] = useState(false);
+  const sessionQuery = useAASession(sessionId);
+  const fetchData = useFetchAASessionData(sessionId);
 
-  // Fetch session details
-  const fetchSessionDetails = async () => {
-    try {
-      const response = await fetch(`/api/v1/lending/aa/sessions/${sessionId}`);
-      if (!response.ok) {
-        if (response.status === 404) {
-          toast({
-            title: 'Session not found',
-            description: 'The requested session does not exist.',
-            variant: 'destructive',
-          });
-          navigate(-1);
-          return;
-        }
-        throw new Error('Failed to fetch session details');
-      }
-      const data = await response.json();
-      setSession(data);
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load session details.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Bounce back to the previous page on a true 404, mirroring the legacy
+  // behaviour of the old fetch-based handler.
   useEffect(() => {
-    fetchSessionDetails();
-  }, [sessionId]);
-
-  // Fetch data for session
-  const handleFetchData = async () => {
-    setFetching(true);
-    try {
-      const response = await fetch(`/api/v1/lending/aa/sessions/${sessionId}/fetch-data`, {
-        method: 'POST',
-      });
-      if (!response.ok) throw new Error('Failed to fetch data');
-
-      const data = await response.json();
-      setSession(data);
-
+    if (!sessionQuery.isError) return;
+    const envelope = getErrorEnvelope(sessionQuery.error);
+    const status = (sessionQuery.error as { response?: { status?: number } } | undefined)?.response
+      ?.status;
+    if (status === 404 || envelope?.error_code === 'NOT_FOUND') {
       toast({
-        title: 'Data fetched',
-        description: `Fetched ${data.accounts_count} accounts with ${data.transactions_count} transactions.`,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to fetch financial data.',
+        title: 'Session not found',
+        description: 'The requested session does not exist.',
         variant: 'destructive',
       });
-    } finally {
-      setFetching(false);
+      navigate('/admin/lending/aa/sessions', { replace: true });
     }
+  }, [sessionQuery.isError, sessionQuery.error, navigate, toast]);
+
+  const handleFetchData = () => {
+    fetchData.mutate(undefined, {
+      onSuccess: (data) => {
+        toast({
+          title: 'Data fetched',
+          description: `Fetched ${data.accountsCount} accounts with ${data.transactionsCount} transactions.`,
+        });
+      },
+      onError: (err) => showErrorToast(err, toast),
+    });
   };
 
-  if (loading) {
+  const fetching = fetchData.isPending;
+
+  if (sessionQuery.isLoading) {
     return (
-      <div className="container mx-auto py-6 space-y-6">
+      <div className="container mx-auto space-y-6 py-6">
         <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
           <Skeleton className="h-24" />
@@ -184,18 +129,27 @@ export default function SessionDetailPage() {
     );
   }
 
+  if (sessionQuery.isError && !sessionQuery.data) {
+    return (
+      <div className="container mx-auto space-y-6 py-6">
+        <ErrorState
+          title="Could not load session"
+          error={sessionQuery.error}
+          onRetry={() => sessionQuery.refetch()}
+        />
+      </div>
+    );
+  }
+
+  const session = sessionQuery.data;
   if (!session) {
     return (
       <div className="container mx-auto py-6">
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <AlertCircle className="h-12 w-12 text-muted-foreground mb-4" />
+            <AlertCircle className="mb-4 h-12 w-12 text-muted-foreground" />
             <p className="text-lg font-medium">Session not found</p>
-            <Button
-              variant="outline"
-              className="mt-4"
-              onClick={() => navigate(-1)}
-            >
+            <Button variant="outline" className="mt-4" onClick={() => navigate(-1)}>
               Go Back
             </Button>
           </CardContent>
@@ -205,60 +159,60 @@ export default function SessionDetailPage() {
   }
 
   const canFetch = ['READY', 'PARTIAL', 'INITIATED'].includes(session.status);
-  const totalBalance = session.bank_accounts?.reduce((sum, acc) => sum + (acc.current_balance || 0), 0) || 0;
+  const totalBalance =
+    session.bankAccounts?.reduce((sum, acc) => sum + (acc.currentBalance || 0), 0) || 0;
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Fetch Session</h1>
-            <p className="text-sm text-muted-foreground font-mono">
-              {session.session_id}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={fetchSessionDetails}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
-          </Button>
-
-          {canFetch && (
-            <Button size="sm" onClick={handleFetchData} disabled={fetching}>
-              {fetching ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Fetching...
-                </>
+    <div className="container mx-auto space-y-6 py-6">
+      <PageHeader
+        title="Fetch Session"
+        subtitle={session.sessionId}
+        breadcrumbs={[
+          { label: 'AA Consents', to: '/admin/lending/aa/consents' },
+          { label: session.sessionId },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => sessionQuery.refetch()}
+              disabled={sessionQuery.isFetching}
+            >
+              {sessionQuery.isFetching ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
-                <>
-                  <Download className="h-4 w-4 mr-2" />
-                  Fetch Data
-                </>
+                <RefreshCw className="mr-2 h-4 w-4" />
               )}
+              Refresh
             </Button>
-          )}
-        </div>
-      </div>
+
+            {canFetch && (
+              <Button size="sm" onClick={handleFetchData} disabled={fetching}>
+                {fetching ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Fetching...
+                  </>
+                ) : (
+                  <>
+                    <Download className="mr-2 h-4 w-4" />
+                    Fetch Data
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+        }
+      />
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Status</CardDescription>
           </CardHeader>
-          <CardContent>
-            {getStatusBadge(session.status)}
-          </CardContent>
+          <CardContent>{getStatusBadge(session.status)}</CardContent>
         </Card>
 
         <Card>
@@ -268,7 +222,7 @@ export default function SessionDetailPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <CreditCard className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{session.accounts_count}</span>
+              <span className="text-2xl font-bold">{session.accountsCount}</span>
             </div>
           </CardContent>
         </Card>
@@ -280,7 +234,7 @@ export default function SessionDetailPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <Database className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{session.transactions_count}</span>
+              <span className="text-2xl font-bold">{session.transactionsCount}</span>
             </div>
           </CardContent>
         </Card>
@@ -296,25 +250,25 @@ export default function SessionDetailPage() {
       </div>
 
       {/* Error Message */}
-      {session.error_message && (
+      {session.errorMessage && (
         <Card className="border-destructive">
           <CardHeader>
-            <CardTitle className="text-destructive flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-destructive">
               <AlertCircle className="h-5 w-5" />
               Error
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-sm text-destructive">{session.error_message}</p>
+            <p className="text-sm text-destructive">{session.errorMessage}</p>
           </CardContent>
         </Card>
       )}
 
       {/* Session Details */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
               <Calendar className="h-5 w-5" />
               Session Information
             </CardTitle>
@@ -323,27 +277,23 @@ export default function SessionDetailPage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Data From</p>
-                <p className="font-medium">
-                  {format(new Date(session.data_from), 'dd MMM yyyy')}
-                </p>
+                <p className="font-medium">{format(new Date(session.dataFrom), 'dd MMM yyyy')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Data To</p>
-                <p className="font-medium">
-                  {format(new Date(session.data_to), 'dd MMM yyyy')}
-                </p>
+                <p className="font-medium">{format(new Date(session.dataTo), 'dd MMM yyyy')}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Initiated</p>
                 <p className="font-medium">
-                  {format(new Date(session.initiated_at), 'dd MMM yyyy HH:mm')}
+                  {format(new Date(session.initiatedAt), 'dd MMM yyyy HH:mm')}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Completed</p>
                 <p className="font-medium">
-                  {session.completed_at
-                    ? format(new Date(session.completed_at), 'dd MMM yyyy HH:mm')
+                  {session.completedAt
+                    ? format(new Date(session.completedAt), 'dd MMM yyyy HH:mm')
                     : '-'}
                 </p>
               </div>
@@ -353,14 +303,14 @@ export default function SessionDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
               <Database className="h-5 w-5" />
               FI Types Requested
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {session.fi_types_requested?.map((type) => (
+              {session.fiTypesRequested?.map((type) => (
                 <Badge key={type} variant="secondary">
                   {type.replace(/_/g, ' ')}
                 </Badge>
@@ -373,22 +323,24 @@ export default function SessionDetailPage() {
       {/* Bank Accounts */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
             <Building2 className="h-5 w-5" />
             Fetched Bank Accounts
           </CardTitle>
-          <CardDescription>
-            Financial accounts retrieved in this session
-          </CardDescription>
+          <CardDescription>Financial accounts retrieved in this session</CardDescription>
         </CardHeader>
         <CardContent>
-          {session.bank_accounts?.length === 0 ? (
-            <div className="text-center py-12">
-              <CreditCard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          {session.bankAccounts?.length === 0 ? (
+            <div className="py-12 text-center">
+              <CreditCard className="mx-auto mb-4 h-12 w-12 text-muted-foreground" />
               <p className="text-muted-foreground">No accounts fetched yet</p>
               {canFetch && (
                 <Button className="mt-4" onClick={handleFetchData} disabled={fetching}>
-                  <Download className="h-4 w-4 mr-2" />
+                  {fetching ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4" />
+                  )}
                   Fetch Data Now
                 </Button>
               )}
@@ -407,29 +359,27 @@ export default function SessionDetailPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {session.bank_accounts?.map((account) => (
+                {session.bankAccounts?.map((account) => (
                   <TableRow key={account.id}>
                     <TableCell>
                       <div>
-                        <p className="font-medium">{account.bank_name}</p>
-                        <p className="text-xs text-muted-foreground">{account.fip_name}</p>
+                        <p className="font-medium">{account.bankName}</p>
+                        <p className="text-xs text-muted-foreground">{account.fipName}</p>
                       </div>
                     </TableCell>
                     <TableCell className="font-mono text-sm">
-                      {account.masked_account_number}
+                      {account.maskedAccountNumber}
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{account.account_type}</Badge>
+                      <Badge variant="outline">{account.accountType}</Badge>
                     </TableCell>
-                    <TableCell>{account.holder_name}</TableCell>
+                    <TableCell>{account.holderName}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(account.current_balance, account.currency)}
+                      {formatCurrency(account.currentBalance, account.currency)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {account.transactions_count}
-                    </TableCell>
+                    <TableCell className="text-right">{account.transactionsCount}</TableCell>
                     <TableCell>
-                      <Link to={`/lending/aa/fetched-data?account_id=${account.id}`}>
+                      <Link to={`/admin/lending/aa/fetched-data?account_id=${account.id}`}>
                         <Button variant="ghost" size="icon">
                           <ChevronRight className="h-4 w-4" />
                         </Button>

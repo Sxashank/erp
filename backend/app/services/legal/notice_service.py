@@ -6,24 +6,22 @@ legal notices as per Indian legal requirements.
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import List, Optional, Tuple, Dict, Any
 from uuid import UUID
 
-from sqlalchemy import select, func, and_, or_
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.models.legal.notice import (
-    NoticeTemplate,
-    LegalNotice,
-    NoticeDelivery,
-    NoticeResponse,
-)
 from app.models.legal.enums import (
-    NoticeType,
-    NoticeStatus,
     DeliveryMode,
     DeliveryStatus,
+    NoticeStatus,
+    NoticeType,
+)
+from app.models.legal.notice import (
+    LegalNotice,
+    NoticeDelivery,
+    NoticeTemplate,
 )
 
 
@@ -62,13 +60,13 @@ class NoticeService:
         act_reference: str,
         statutory_period_days: int,
         template_content: str,
-        section_reference: Optional[str] = None,
-        response_period_days: Optional[int] = None,
+        section_reference: str | None = None,
+        response_period_days: int | None = None,
         template_format: str = "HTML",
-        placeholders: Optional[List[str]] = None,
+        placeholders: list[str] | None = None,
         language: str = "ENGLISH",
         is_default: bool = False,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> NoticeTemplate:
         """Create a new notice template."""
         template = NoticeTemplate(
@@ -91,7 +89,7 @@ class NoticeService:
         await self.db.flush()
         return template
 
-    async def get_template(self, template_id: UUID) -> Optional[NoticeTemplate]:
+    async def get_template(self, template_id: UUID) -> NoticeTemplate | None:
         """Get template by ID."""
         result = await self.db.execute(
             select(NoticeTemplate).where(NoticeTemplate.id == template_id)
@@ -103,7 +101,7 @@ class NoticeService:
         organization_id: UUID,
         notice_type: NoticeType,
         language: str = "ENGLISH",
-    ) -> Optional[NoticeTemplate]:
+    ) -> NoticeTemplate | None:
         """Get default template for a notice type."""
         result = await self.db.execute(
             select(NoticeTemplate).where(
@@ -121,9 +119,9 @@ class NoticeService:
     async def list_templates(
         self,
         organization_id: UUID,
-        notice_type: Optional[NoticeType] = None,
-        language: Optional[str] = None,
-    ) -> List[NoticeTemplate]:
+        notice_type: NoticeType | None = None,
+        language: str | None = None,
+    ) -> list[NoticeTemplate]:
         """List notice templates."""
         query = select(NoticeTemplate).where(
             and_(
@@ -154,26 +152,24 @@ class NoticeService:
         loan_account_number: str,
         principal_outstanding: Decimal,
         interest_outstanding: Decimal,
-        template_id: Optional[UUID] = None,
-        legal_case_id: Optional[UUID] = None,
-        notice_date: Optional[date] = None,
+        template_id: UUID | None = None,
+        legal_case_id: UUID | None = None,
+        notice_date: date | None = None,
         penal_outstanding: Decimal = Decimal("0"),
         other_charges: Decimal = Decimal("0"),
-        co_borrower_names: Optional[str] = None,
-        guarantor_names: Optional[str] = None,
-        security_description: Optional[str] = None,
-        security_address: Optional[str] = None,
-        security_value: Optional[Decimal] = None,
-        future_interest_rate: Optional[Decimal] = None,
+        co_borrower_names: str | None = None,
+        guarantor_names: str | None = None,
+        security_description: str | None = None,
+        security_address: str | None = None,
+        security_value: Decimal | None = None,
+        future_interest_rate: Decimal | None = None,
         language: str = "ENGLISH",
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> LegalNotice:
         """Generate a new legal notice."""
         # Get template if not provided
         if not template_id:
-            template = await self.get_default_template(
-                organization_id, notice_type, language
-            )
+            template = await self.get_default_template(organization_id, notice_type, language)
             if template:
                 template_id = template.id
 
@@ -182,9 +178,7 @@ class NoticeService:
 
         # Calculate dates
         actual_notice_date = notice_date or date.today()
-        response_due = self.calculate_statutory_deadline(
-            notice_type, actual_notice_date
-        )
+        response_due = self.calculate_statutory_deadline(notice_type, actual_notice_date)
 
         # Calculate total amount
         total_amount = (
@@ -249,9 +243,7 @@ class NoticeService:
         approved_by_name: str,
     ) -> LegalNotice:
         """Approve a notice for dispatch."""
-        result = await self.db.execute(
-            select(LegalNotice).where(LegalNotice.id == notice_id)
-        )
+        result = await self.db.execute(select(LegalNotice).where(LegalNotice.id == notice_id))
         notice = result.scalar_one_or_none()
         if not notice:
             raise ValueError(f"Notice {notice_id} not found")
@@ -267,9 +259,7 @@ class NoticeService:
         await self.db.flush()
         return notice
 
-    def calculate_statutory_deadline(
-        self, notice_type: NoticeType, start_date: date
-    ) -> date:
+    def calculate_statutory_deadline(self, notice_type: NoticeType, start_date: date) -> date:
         """Calculate statutory deadline based on notice type."""
         days = self.STATUTORY_PERIODS.get(notice_type, 30)
         return start_date + timedelta(days=days)
@@ -285,18 +275,16 @@ class NoticeService:
         recipient_name: str,
         delivery_address: str,
         recipient_type: str = "BORROWER",
-        dispatch_date: Optional[date] = None,
-        tracking_number: Optional[str] = None,
-        courier_name: Optional[str] = None,
-        dispatched_by: Optional[str] = None,
-        delivery_cost: Optional[Decimal] = None,
-        created_by: Optional[UUID] = None,
+        dispatch_date: date | None = None,
+        tracking_number: str | None = None,
+        courier_name: str | None = None,
+        dispatched_by: str | None = None,
+        delivery_cost: Decimal | None = None,
+        created_by: UUID | None = None,
     ) -> NoticeDelivery:
         """Record dispatch of a notice."""
         # Update notice status
-        result = await self.db.execute(
-            select(LegalNotice).where(LegalNotice.id == notice_id)
-        )
+        result = await self.db.execute(select(LegalNotice).where(LegalNotice.id == notice_id))
         notice = result.scalar_one_or_none()
         if not notice:
             raise ValueError(f"Notice {notice_id} not found")
@@ -339,13 +327,13 @@ class NoticeService:
         self,
         delivery_id: UUID,
         delivery_status: DeliveryStatus,
-        delivery_date: Optional[date] = None,
-        received_by: Optional[str] = None,
-        relationship_to_borrower: Optional[str] = None,
-        pod_document_path: Optional[str] = None,
-        return_date: Optional[date] = None,
-        return_reason: Optional[str] = None,
-        updated_by: Optional[UUID] = None,
+        delivery_date: date | None = None,
+        received_by: str | None = None,
+        relationship_to_borrower: str | None = None,
+        pod_document_path: str | None = None,
+        return_date: date | None = None,
+        return_reason: str | None = None,
+        updated_by: UUID | None = None,
     ) -> NoticeDelivery:
         """Update delivery status."""
         result = await self.db.execute(
@@ -395,7 +383,7 @@ class NoticeService:
     # Notice Queries
     # =========================================================================
 
-    async def get_notice(self, notice_id: UUID) -> Optional[LegalNotice]:
+    async def get_notice(self, notice_id: UUID) -> LegalNotice | None:
         """Get notice by ID with related data."""
         result = await self.db.execute(
             select(LegalNotice)
@@ -410,15 +398,17 @@ class NoticeService:
     async def list_notices(
         self,
         organization_id: UUID,
-        loan_account_id: Optional[UUID] = None,
-        legal_case_id: Optional[UUID] = None,
-        notice_type: Optional[NoticeType] = None,
-        status: Optional[NoticeStatus] = None,
-        from_date: Optional[date] = None,
-        to_date: Optional[date] = None,
+        loan_account_id: UUID | None = None,
+        legal_case_id: UUID | None = None,
+        customer_id: UUID | None = None,
+        notice_type: NoticeType | None = None,
+        is_responded: bool | None = None,
+        status: NoticeStatus | None = None,
+        from_date: date | None = None,
+        to_date: date | None = None,
         page: int = 1,
         page_size: int = 20,
-    ) -> Tuple[List[LegalNotice], int]:
+    ) -> tuple[list[LegalNotice], int]:
         """List notices with filtering and pagination."""
         query = select(LegalNotice).where(
             and_(
@@ -431,10 +421,19 @@ class NoticeService:
             query = query.where(LegalNotice.loan_account_id == loan_account_id)
         if legal_case_id:
             query = query.where(LegalNotice.legal_case_id == legal_case_id)
+        if customer_id:
+            query = query.where(False)
         if notice_type:
             query = query.where(LegalNotice.notice_type == notice_type)
         if status:
             query = query.where(LegalNotice.status == status)
+        if is_responded is not None:
+            responded_statuses = [NoticeStatus.RESPONDED]
+            query = query.where(
+                LegalNotice.status.in_(responded_statuses)
+                if is_responded
+                else LegalNotice.status.not_in(responded_statuses)
+            )
         if from_date:
             query = query.where(LegalNotice.notice_date >= from_date)
         if to_date:
@@ -456,8 +455,8 @@ class NoticeService:
     async def get_overdue_notices(
         self,
         organization_id: UUID,
-        as_of_date: Optional[date] = None,
-    ) -> List[LegalNotice]:
+        as_of_date: date | None = None,
+    ) -> list[LegalNotice]:
         """Get notices that are past their statutory deadline without response."""
         check_date = as_of_date or date.today()
 
@@ -467,10 +466,12 @@ class NoticeService:
                 and_(
                     LegalNotice.organization_id == organization_id,
                     LegalNotice.is_active == True,
-                    LegalNotice.status.in_([
-                        NoticeStatus.DISPATCHED,
-                        NoticeStatus.DELIVERED,
-                    ]),
+                    LegalNotice.status.in_(
+                        [
+                            NoticeStatus.DISPATCHED,
+                            NoticeStatus.DELIVERED,
+                        ]
+                    ),
                     LegalNotice.response_due_date < check_date,
                 )
             )
@@ -513,7 +514,7 @@ class NoticeService:
 
     async def _render_notice_content(
         self,
-        template_id: Optional[UUID],
+        template_id: UUID | None,
         borrower_name: str,
         borrower_address: str,
         loan_account_number: str,

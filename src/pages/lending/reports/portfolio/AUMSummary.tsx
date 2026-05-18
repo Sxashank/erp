@@ -1,15 +1,22 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Download, TrendingUp, TrendingDown, Filter } from 'lucide-react';
+/**
+ * AUM Summary Report
+ *
+ * Surfaces live AUM via the lending dashboard aggregator endpoint.
+ * Branch / industry / vintage breakdowns require dedicated aggregator
+ * endpoints (not yet built) and show EmptyState placeholders.
+ */
+
+import { Download, RefreshCw, AlertTriangle } from 'lucide-react';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   Table,
   TableBody,
@@ -18,164 +25,66 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { PercentageDisplay } from '@/components/lending/common/PercentageDisplay';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-} from 'recharts';
-
-// Mock data
-const summaryData = {
-  totalAUM: 50000000000, // 500 Cr
-  lastMonthAUM: 47500000000, // 475 Cr
-  ytdGrowth: 18.5,
-  activeAccounts: 245,
-  avgTicketSize: 204081632,
-};
-
-const monthlyTrend = [
-  { month: 'Apr', aum: 420 },
-  { month: 'May', aum: 435 },
-  { month: 'Jun', aum: 448 },
-  { month: 'Jul', aum: 455 },
-  { month: 'Aug', aum: 462 },
-  { month: 'Sep', aum: 470 },
-  { month: 'Oct', aum: 478 },
-  { month: 'Nov', aum: 485 },
-  { month: 'Dec', aum: 492 },
-  { month: 'Jan', aum: 500 },
-];
-
-const productWiseBreakdown = [
-  { product: 'Term Loan - Corporate', aum: 15000000000, accounts: 45, share: 30, color: '#3b82f6' },
-  { product: 'Term Loan - Project', aum: 10000000000, accounts: 25, share: 20, color: '#60a5fa' },
-  { product: 'Working Capital', aum: 12000000000, accounts: 80, share: 24, color: '#10b981' },
-  { product: 'LAP', aum: 8000000000, accounts: 60, share: 16, color: '#f59e0b' },
-  { product: 'Project Finance', aum: 5000000000, accounts: 35, share: 10, color: '#8b5cf6' },
-];
-
-const branchWiseData = [
-  { branch: 'Mumbai', aum: 20000000000, share: 40 },
-  { branch: 'Delhi', aum: 12500000000, share: 25 },
-  { branch: 'Chennai', aum: 7500000000, share: 15 },
-  { branch: 'Kolkata', aum: 5000000000, share: 10 },
-  { branch: 'Hyderabad', aum: 5000000000, share: 10 },
-];
-
-const classificationBreakdown = [
-  { classification: 'Standard', aum: 48500000000, share: 97.0, color: '#22c55e' },
-  { classification: 'SMA-0', aum: 300000000, share: 0.6, color: '#eab308' },
-  { classification: 'SMA-1', aum: 200000000, share: 0.4, color: '#f59e0b' },
-  { classification: 'SMA-2', aum: 150000000, share: 0.3, color: '#f97316' },
-  { classification: 'NPA', aum: 850000000, share: 1.7, color: '#ef4444' },
-];
+import { useLendingDashboard } from '@/hooks/lending/useLendingDashboard';
 
 export default function AUMSummary() {
-  const navigate = useNavigate();
-  const [period, setPeriod] = useState<'MTD' | 'QTD' | 'YTD'>('YTD');
-  const [branchFilter, setBranchFilter] = useState('ALL');
+  const { data, isLoading, isError, error, refetch, isFetching } = useLendingDashboard();
+  const kpis = data?.portfolioKpis;
+  const productSlices = data?.portfolioByProduct ?? [];
+  const classification = data?.assetClassification ?? [];
 
-  const aumChange = summaryData.totalAUM - summaryData.lastMonthAUM;
-  const aumChangePercent = (aumChange / summaryData.lastMonthAUM) * 100;
+  const pieData = productSlices.map((p) => ({
+    name: p.name,
+    value: Number(p.value),
+    color: p.color,
+  }));
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate('/admin/lending/reports')}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-semibold">AUM Summary Report</h1>
-            <p className="text-muted-foreground">
-              Assets Under Management analysis and trends
-            </p>
+      <PageHeader
+        title="AUM Summary"
+        subtitle="Assets under management — product split, classification, vintage"
+        breadcrumbs={[
+          { label: 'Reports', to: '/admin/lending/reports' },
+          { label: 'Portfolio' },
+          { label: 'AUM Summary' },
+        ]}
+        actions={
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
+              Refresh
+            </Button>
+            <Button variant="outline">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <Tabs value={period} onValueChange={(v) => setPeriod(v as 'MTD' | 'QTD' | 'YTD')}>
-            <TabsList>
-              <TabsTrigger value="MTD">MTD</TabsTrigger>
-              <TabsTrigger value="QTD">QTD</TabsTrigger>
-              <TabsTrigger value="YTD">YTD</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          <Select value={branchFilter} onValueChange={setBranchFilter}>
-            <SelectTrigger className="w-[150px]">
-              <Filter className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="Branch" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Branches</SelectItem>
-              <SelectItem value="MUMBAI">Mumbai</SelectItem>
-              <SelectItem value="DELHI">Delhi</SelectItem>
-              <SelectItem value="CHENNAI">Chennai</SelectItem>
-              <SelectItem value="KOLKATA">Kolkata</SelectItem>
-              <SelectItem value="HYDERABAD">Hyderabad</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Summary Cards */}
+      {isError && (
+        <ErrorState title="Could not load AUM summary" error={error} onRetry={() => refetch()} />
+      )}
+
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total AUM
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total AUM</CardTitle>
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={summaryData.totalAUM} abbreviated className="text-2xl font-bold" />
-            <div className="flex items-center gap-1 text-sm mt-1">
-              {aumChange >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-green-500" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-500" />
-              )}
-              <span className={aumChange >= 0 ? 'text-green-600' : 'text-red-600'}>
-                {aumChange >= 0 ? '+' : ''}
-                <AmountDisplay amount={aumChange} abbreviated />
-              </span>
-              <span className="text-muted-foreground">vs last month</span>
-            </div>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <AmountDisplay
+                amount={kpis?.totalAum ?? 0}
+                abbreviated
+                className="text-2xl font-bold"
+              />
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">Outstanding</p>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              YTD Growth
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              +<PercentageDisplay value={summaryData.ytdGrowth} />
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Since April 2024
-            </p>
-          </CardContent>
-        </Card>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -183,222 +92,146 @@ export default function AUMSummary() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{summaryData.activeAccounts}</div>
-            <p className="text-sm text-muted-foreground mt-1">
-              +12 new this month
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{kpis?.activeAccounts ?? 0}</div>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">Live loan accounts</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Avg Ticket Size
+              Sanctioned Pipeline
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <AmountDisplay amount={summaryData.avgTicketSize} abbreviated className="text-2xl font-bold" />
-            <p className="text-sm text-muted-foreground mt-1">
-              Per account
-            </p>
+            {isLoading ? (
+              <Skeleton className="h-8 w-24" />
+            ) : (
+              <AmountDisplay
+                amount={kpis?.sanctionedPipeline ?? 0}
+                abbreviated
+                className="text-2xl font-bold text-amber-600"
+              />
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">Awaiting disbursement</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Gross NPA</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">
+                <PercentageDisplay value={kpis?.grossNpa ?? '0'} />
+              </div>
+            )}
+            <p className="mt-1 text-xs text-muted-foreground">RBI definition</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* AUM Trend Chart */}
+      {/* Product split */}
       <Card>
         <CardHeader>
-          <CardTitle>AUM Trend</CardTitle>
-          <CardDescription>Monthly AUM movement (in Cr)</CardDescription>
+          <CardTitle>AUM by Product</CardTitle>
+          <CardDescription>Portfolio split (₹ Cr)</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={monthlyTrend}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip formatter={(value: number | undefined) => [`₹ ${value ?? 0} Cr`, 'AUM']} />
-                <Line
-                  type="monotone"
-                  dataKey="aum"
-                  stroke="#3b82f6"
-                  strokeWidth={2}
-                  dot={{ fill: '#3b82f6' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Product & Branch Distribution */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Product-wise Breakdown */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Product-wise Breakdown</CardTitle>
-            <CardDescription>AUM distribution by loan product</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[250px]">
+          {isLoading ? (
+            <Skeleton className="h-80 w-full" />
+          ) : pieData.length === 0 ? (
+            <EmptyState
+              title="No active loans yet"
+              subtitle="Product split will populate once loans are disbursed."
+            />
+          ) : (
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={productWiseBreakdown}
+                    data={pieData as unknown as Record<string, unknown>[]}
                     cx="50%"
                     cy="50%"
-                    outerRadius={80}
-                    dataKey="aum"
-                    label={({ product, share }: any) => `${share}%`}
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={2}
+                    dataKey="value"
+                    label={({ name, percent }) => `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`}
                   >
-                    {productWiseBreakdown.map((entry, index) => (
+                    {pieData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    formatter={(value: number | undefined) => [
-                      `₹ ${((value ?? 0) / 10000000).toFixed(0)} Cr`,
-                      'AUM',
-                    ]}
-                  />
+                  <Tooltip formatter={(v: number | undefined) => [`₹ ${v ?? 0} Cr`, 'AUM']} />
                   <Legend />
                 </PieChart>
               </ResponsiveContainer>
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Branch-wise Distribution */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Branch-wise Distribution</CardTitle>
-            <CardDescription>AUM by branch location</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[250px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={branchWiseData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis type="number" />
-                  <YAxis dataKey="branch" type="category" width={80} />
-                  <Tooltip
-                    formatter={(value: number | undefined) => [
-                      `₹ ${((value ?? 0) / 10000000).toFixed(0)} Cr`,
-                      'AUM',
-                    ]}
-                  />
-                  <Bar dataKey="aum" fill="#3b82f6" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Asset Classification */}
+      {/* Asset classification */}
       <Card>
         <CardHeader>
           <CardTitle>Asset Classification</CardTitle>
           <CardDescription>Portfolio quality breakdown</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Classification</TableHead>
-                <TableHead className="text-right">AUM</TableHead>
-                <TableHead className="text-right">Share (%)</TableHead>
-                <TableHead className="text-right">Accounts</TableHead>
-                <TableHead>Distribution</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {classificationBreakdown.map((item) => (
-                <TableRow key={item.classification}>
-                  <TableCell className="font-medium">{item.classification}</TableCell>
-                  <TableCell className="text-right">
-                    <AmountDisplay amount={item.aum} abbreviated />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <PercentageDisplay value={item.share} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {Math.round(245 * (item.share / 100))}
-                  </TableCell>
-                  <TableCell>
-                    <div className="w-full h-2 bg-muted rounded-full">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${item.share}%`,
-                          backgroundColor: item.color,
-                        }}
-                      />
-                    </div>
-                  </TableCell>
+        <CardContent className="p-0">
+          {isLoading ? (
+            <div className="p-6">
+              <Skeleton className="h-40 w-full" />
+            </div>
+          ) : classification.length === 0 ? (
+            <div className="p-6">
+              <EmptyState
+                title="No active loans yet"
+                subtitle="Classification breakdown shows once accounts are live."
+              />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Category</TableHead>
+                  <TableHead className="text-right">Amount (₹ Cr)</TableHead>
+                  <TableHead className="text-right">% of Portfolio</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {classification.map((row) => (
+                  <TableRow key={row.category}>
+                    <TableCell className="font-medium">{row.category}</TableCell>
+                    <TableCell className="text-right">{row.amount}</TableCell>
+                    <TableCell className="text-right">
+                      <PercentageDisplay value={row.percentage} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
-      {/* Detailed Product Table */}
+      {/* Branch / industry / vintage placeholders */}
       <Card>
         <CardHeader>
-          <CardTitle>Product-wise Details</CardTitle>
-          <CardDescription>Detailed breakdown by loan product</CardDescription>
+          <CardTitle>Branch / Industry / Vintage Breakdowns</CardTitle>
+          <CardDescription>Detailed slices of the portfolio</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead className="text-right">AUM (Cr)</TableHead>
-                <TableHead className="text-right">Accounts</TableHead>
-                <TableHead className="text-right">Share (%)</TableHead>
-                <TableHead className="text-right">Avg Ticket (Cr)</TableHead>
-                <TableHead className="text-right">MoM Change</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {productWiseBreakdown.map((item) => (
-                <TableRow key={item.product}>
-                  <TableCell className="font-medium">{item.product}</TableCell>
-                  <TableCell className="text-right">
-                    <AmountDisplay amount={item.aum} abbreviated />
-                  </TableCell>
-                  <TableCell className="text-right">{item.accounts}</TableCell>
-                  <TableCell className="text-right">
-                    <PercentageDisplay value={item.share} />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AmountDisplay amount={item.aum / item.accounts} abbreviated />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className="text-green-600">+2.5%</span>
-                  </TableCell>
-                </TableRow>
-              ))}
-              <TableRow className="font-bold bg-muted/50">
-                <TableCell>Total</TableCell>
-                <TableCell className="text-right">
-                  <AmountDisplay amount={summaryData.totalAUM} abbreviated />
-                </TableCell>
-                <TableCell className="text-right">{summaryData.activeAccounts}</TableCell>
-                <TableCell className="text-right">100%</TableCell>
-                <TableCell className="text-right">
-                  <AmountDisplay amount={summaryData.avgTicketSize} abbreviated />
-                </TableCell>
-                <TableCell className="text-right">
-                  <span className="text-green-600">
-                    +<PercentageDisplay value={aumChangePercent} />
-                  </span>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          <EmptyState
+            title="Detailed breakdowns not yet wired"
+            subtitle="Branch-wise, industry-wise and vintage breakdowns require a dedicated portfolio-analytics endpoint that joins loan accounts to entities, branches and FY of disbursement. Coming soon."
+            icon={AlertTriangle}
+          />
         </CardContent>
       </Card>
     </div>

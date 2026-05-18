@@ -4,10 +4,10 @@ from typing import List, Optional
 from uuid import UUID
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -27,6 +27,7 @@ from app.schemas.fixed_assets.physical_verification import (
 )
 from app.schemas.base import MessageResponse
 from app.services.fixed_assets.physical_verification_service import PhysicalVerificationService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
@@ -127,7 +128,7 @@ def _discrepancy_to_response(discrepancy) -> DiscrepancyResponse:
 # Schedule Endpoints
 # ============================================
 
-@router.get("/schedules", response_model=dict)
+@router.get("/schedules", response_model=dict, response_model_by_alias=True)
 async def list_schedules(
     request: Request,
     organization_id: UUID,
@@ -135,7 +136,7 @@ async def list_schedules(
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -153,11 +154,11 @@ async def list_schedules(
     }
 
 
-@router.get("/schedules/{schedule_id}", response_model=VerificationScheduleResponse)
+@router.get("/schedules/{schedule_id}", response_model=VerificationScheduleResponse, response_model_by_alias=True)
 async def get_schedule(
     request: Request,
     schedule_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -165,18 +166,15 @@ async def get_schedule(
     service = PhysicalVerificationService(db)
     schedule = await service.get_schedule(schedule_id)
     if not schedule:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Schedule not found",
-        )
+        raise NotFoundException(detail="Schedule not found", error_code="SCHEDULE_NOT_FOUND")
     return _schedule_to_response(schedule)
 
 
-@router.post("/schedules", response_model=VerificationScheduleResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/schedules", response_model=VerificationScheduleResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_schedule(
     request: Request,
     data: VerificationScheduleCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -186,18 +184,15 @@ async def create_schedule(
         schedule = await service.create_schedule(data, created_by=current_user.id)
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/schedules/{schedule_id}", response_model=VerificationScheduleResponse)
+@router.put("/schedules/{schedule_id}", response_model=VerificationScheduleResponse, response_model_by_alias=True)
 async def update_schedule(
     request: Request,
     schedule_id: UUID,
     data: VerificationScheduleUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -208,24 +203,18 @@ async def update_schedule(
             schedule_id, data, updated_by=current_user.id
         )
         if not schedule:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Schedule not found",
-            )
+            raise NotFoundException(detail="Schedule not found", error_code="SCHEDULE_NOT_FOUND")
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/start", response_model=VerificationScheduleResponse)
+@router.post("/schedules/{schedule_id}/start", response_model=VerificationScheduleResponse, response_model_by_alias=True)
 async def start_schedule(
     request: Request,
     schedule_id: UUID,
     data: Optional[StartVerificationRequest] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -237,18 +226,15 @@ async def start_schedule(
         )
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/complete", response_model=VerificationScheduleResponse)
+@router.post("/schedules/{schedule_id}/complete", response_model=VerificationScheduleResponse, response_model_by_alias=True)
 async def complete_schedule(
     request: Request,
     schedule_id: UUID,
     data: Optional[CompleteVerificationRequest] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -260,17 +246,14 @@ async def complete_schedule(
         )
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/approve", response_model=VerificationScheduleResponse)
+@router.post("/schedules/{schedule_id}/approve", response_model=VerificationScheduleResponse, response_model_by_alias=True)
 async def approve_schedule(
     request: Request,
     schedule_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -282,24 +265,21 @@ async def approve_schedule(
         )
         return _schedule_to_response(schedule)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Entry Endpoints
 # ============================================
 
-@router.get("/schedules/{schedule_id}/entries", response_model=dict)
+@router.get("/schedules/{schedule_id}/entries", response_model=dict, response_model_by_alias=True)
 async def list_entries(
     request: Request,
     schedule_id: UUID,
     verification_result: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -317,11 +297,11 @@ async def list_entries(
     }
 
 
-@router.get("/entries/{entry_id}", response_model=VerificationEntryResponse)
+@router.get("/entries/{entry_id}", response_model=VerificationEntryResponse, response_model_by_alias=True)
 async def get_entry(
     request: Request,
     entry_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -329,19 +309,16 @@ async def get_entry(
     service = PhysicalVerificationService(db)
     entry = await service.get_entry(entry_id)
     if not entry:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Entry not found",
-        )
+        raise NotFoundException(detail="Entry not found", error_code="ENTRY_NOT_FOUND")
     return _entry_to_response(entry)
 
 
-@router.put("/entries/{entry_id}/verify", response_model=VerificationEntryResponse)
+@router.put("/entries/{entry_id}/verify", response_model=VerificationEntryResponse, response_model_by_alias=True)
 async def verify_entry(
     request: Request,
     entry_id: UUID,
     data: VerificationEntryCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -353,18 +330,15 @@ async def verify_entry(
         )
         return _entry_to_response(entry)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/bulk-verify", response_model=dict)
+@router.post("/schedules/{schedule_id}/bulk-verify", response_model=dict, response_model_by_alias=True)
 async def bulk_verify(
     request: Request,
     schedule_id: UUID,
     data: BulkVerificationRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -382,24 +356,21 @@ async def bulk_verify(
             "updated_count": updated_count,
         }
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============================================
 # Discrepancy Endpoints
 # ============================================
 
-@router.get("/discrepancies", response_model=dict)
+@router.get("/discrepancies", response_model=dict, response_model_by_alias=True)
 async def list_discrepancies(
     request: Request,
     organization_id: UUID,
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -417,11 +388,11 @@ async def list_discrepancies(
     }
 
 
-@router.get("/discrepancies/{discrepancy_id}", response_model=DiscrepancyResponse)
+@router.get("/discrepancies/{discrepancy_id}", response_model=DiscrepancyResponse, response_model_by_alias=True)
 async def get_discrepancy(
     request: Request,
     discrepancy_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_VIEW])),
 ):
@@ -429,19 +400,16 @@ async def get_discrepancy(
     service = PhysicalVerificationService(db)
     discrepancy = await service.get_discrepancy(discrepancy_id)
     if not discrepancy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Discrepancy not found",
-        )
+        raise NotFoundException(detail="Discrepancy not found", error_code="DISCREPANCY_NOT_FOUND")
     return _discrepancy_to_response(discrepancy)
 
 
-@router.put("/discrepancies/{discrepancy_id}", response_model=DiscrepancyResponse)
+@router.put("/discrepancies/{discrepancy_id}", response_model=DiscrepancyResponse, response_model_by_alias=True)
 async def update_discrepancy(
     request: Request,
     discrepancy_id: UUID,
     data: DiscrepancyUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_ASSET_UPDATE])),
 ):
@@ -451,10 +419,7 @@ async def update_discrepancy(
         discrepancy_id, data, updated_by=current_user.id
     )
     if not discrepancy:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Discrepancy not found",
-        )
+        raise NotFoundException(detail="Discrepancy not found", error_code="DISCREPANCY_NOT_FOUND")
     return _discrepancy_to_response(discrepancy)
 
 
@@ -462,12 +427,12 @@ async def update_discrepancy(
 # Reports
 # ============================================
 
-@router.get("/summary", response_model=VerificationSummaryResponse)
+@router.get("/summary", response_model=VerificationSummaryResponse, response_model_by_alias=True)
 async def get_verification_summary(
     request: Request,
     organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.FA_REPORT_VIEW])),
 ):

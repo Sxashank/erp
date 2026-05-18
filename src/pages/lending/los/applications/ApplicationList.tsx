@@ -1,15 +1,45 @@
 /**
  * Application List Page
- * Pipeline view of loan applications with stage-based filtering
+ * Pipeline view of loan applications with stage-based filtering.
+ *
+ * Data source: GET /lending/applications (camelCase via Pydantic CamelSchema).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  Plus,
+  Search,
+  Filter,
+  Download,
+  MoreHorizontal,
+  Eye,
+  Edit,
+  Trash2,
+  RefreshCw,
+  Loader2,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Search, Filter, Download, MoreHorizontal, Eye, Edit, Trash2, RefreshCw } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { DateDisplay } from '@/components/lending/common/DateDisplay';
+import {
+  ApplicationStageBadge,
+  ApplicationStatusBadge,
+} from '@/components/lending/common/StatusBadge';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -25,32 +55,17 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-import { ApplicationStageBadge, ApplicationStatusBadge } from '@/components/lending/common/StatusBadge';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
-import { DateDisplay } from '@/components/lending/common/DateDisplay';
-
+import {
+  useApplications,
+  type ApplicationFilters,
+  type ApplicationStageValue,
+  type ApplicationStatusValue,
+} from '@/hooks/lending/useApplications';
+import { useToast } from '@/hooks/use-toast';
 import { applicationApi } from '@/services/lending';
-import type { LoanApplication, ApplicationFilters, PaginatedResponse } from '@/types/lending';
 
-const APPLICATION_STAGES = [
+const APPLICATION_STAGES: { value: ApplicationStageValue; label: string; color: string }[] = [
   { value: 'APPLICATION', label: 'Application', color: 'bg-blue-500' },
   { value: 'APPRAISAL', label: 'Appraisal', color: 'bg-amber-500' },
   { value: 'SANCTION', label: 'Sanction', color: 'bg-purple-500' },
@@ -58,7 +73,7 @@ const APPLICATION_STAGES = [
   { value: 'DISBURSED', label: 'Disbursed', color: 'bg-green-500' },
 ];
 
-const APPLICATION_STATUSES = [
+const APPLICATION_STATUSES: { value: ApplicationStatusValue; label: string }[] = [
   { value: 'DRAFT', label: 'Draft' },
   { value: 'SUBMITTED', label: 'Submitted' },
   { value: 'UNDER_REVIEW', label: 'Under Review' },
@@ -71,111 +86,73 @@ const PAGE_SIZES = [10, 25, 50, 100];
 
 export default function ApplicationList() {
   const navigate = useNavigate();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // State
-  const [applications, setApplications] = useState<LoanApplication[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
-  const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
+  const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
 
-  // Filters from URL params
-  const [filters, setFilters] = useState<ApplicationFilters>({
-    search: searchParams.get('search') || '',
-    stage: searchParams.get('stage') as ApplicationFilters['stage'] || undefined,
-    status: searchParams.get('status') as ApplicationFilters['status'] || undefined,
-    date_from: searchParams.get('date_from') || undefined,
-    date_to: searchParams.get('date_to') || undefined,
-    page: parseInt(searchParams.get('page') || '1'),
-    page_size: parseInt(searchParams.get('page_size') || '25'),
-  });
+  const filters: ApplicationFilters = useMemo(
+    () => ({
+      search: searchParams.get('search') || undefined,
+      stage: (searchParams.get('stage') as ApplicationStageValue) || undefined,
+      status: (searchParams.get('status') as ApplicationStatusValue) || undefined,
+      fromDate: searchParams.get('date_from') || undefined,
+      toDate: searchParams.get('date_to') || undefined,
+      page: parseInt(searchParams.get('page') ?? '1', 10),
+      pageSize: parseInt(searchParams.get('page_size') ?? '25', 10),
+    }),
+    [searchParams],
+  );
 
-  // Fetch applications
-  const fetchApplications = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response: PaginatedResponse<LoanApplication> = await applicationApi.getApplications(filters);
-      setApplications(response.items);
-      setTotalCount(response.total);
-      setTotalPages(response.total_pages);
+  const { data, isLoading, isError, error, refetch, isFetching } = useApplications(filters);
+  const applications = data?.items ?? [];
+  const totalCount = data?.total ?? 0;
+  const totalPages = data?.total_pages ?? 0;
 
-      // Calculate stage counts (in production, this would be a separate API call)
-      const counts: Record<string, number> = {};
-      APPLICATION_STAGES.forEach(stage => {
-        counts[stage.value] = response.items.filter(app => app.stage === stage.value).length;
-      });
-      setStageCounts(counts);
-    } catch (error) {
-      console.error('Failed to fetch applications:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [filters]);
-
+  // Debounce search → URL
   useEffect(() => {
-    fetchApplications();
-  }, [fetchApplications]);
+    const t = setTimeout(() => {
+      if (searchInput === (searchParams.get('search') ?? '')) return;
+      const next = new URLSearchParams(searchParams);
+      if (searchInput) next.set('search', searchInput);
+      else next.delete('search');
+      next.set('page', '1');
+      setSearchParams(next);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput, searchParams, setSearchParams]);
 
-  // Update URL params when filters change
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (filters.search) params.set('search', filters.search);
-    if (filters.stage) params.set('stage', filters.stage);
-    if (filters.status) params.set('status', filters.status);
-    if (filters.date_from) params.set('date_from', filters.date_from);
-    if (filters.date_to) params.set('date_to', filters.date_to);
-    if (filters.page && filters.page > 1) params.set('page', filters.page.toString());
-    if (filters.page_size && filters.page_size !== 25) params.set('page_size', filters.page_size.toString());
-    setSearchParams(params);
-  }, [filters, setSearchParams]);
-
-  // Handle filter changes
-  const updateFilter = (key: keyof ApplicationFilters, value: string | number | undefined) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value,
-      page: key !== 'page' ? 1 : (value as number),
-    }));
+  const updateParam = (key: string, value: string | undefined) => {
+    const next = new URLSearchParams(searchParams);
+    if (value) next.set(key, value);
+    else next.delete(key);
+    if (key !== 'page') next.set('page', '1');
+    setSearchParams(next);
   };
 
-  // Handle search with debounce
-  const [searchInput, setSearchInput] = useState(filters.search || '');
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (searchInput !== filters.search) {
-        updateFilter('search', searchInput || undefined);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [searchInput]);
-
-  // Clear all filters
   const clearFilters = () => {
     setSearchInput('');
-    setFilters({
-      page: 1,
-      page_size: 25,
-    });
+    setSearchParams(new URLSearchParams());
   };
 
-  // Delete application
   const handleDelete = async (applicationId: string) => {
     if (!confirm('Are you sure you want to delete this application?')) return;
     try {
       await applicationApi.deleteApplication(applicationId);
-      fetchApplications();
-    } catch (error) {
-      console.error('Failed to delete application:', error);
+      toast({ title: 'Application deleted' });
+      queryClient.invalidateQueries({ queryKey: ['lending', 'applications'] });
+    } catch (err: unknown) {
+      toast({
+        title: 'Failed to delete application',
+        description: err instanceof Error ? err.message : 'Unknown error',
+        variant: 'destructive',
+      });
     }
   };
 
-  // Pagination
-  const handlePageChange = (page: number) => {
-    updateFilter('page', page);
-  };
-
-  const hasActiveFilters = filters.search || filters.stage || filters.status || filters.date_from || filters.date_to;
+  const hasActiveFilters =
+    filters.search || filters.stage || filters.status || filters.fromDate || filters.toDate;
 
   return (
     <div className="space-y-6">
@@ -195,7 +172,7 @@ export default function ApplicationList() {
         <CardContent className="pt-6">
           <Tabs
             value={filters.stage || 'all'}
-            onValueChange={(value) => updateFilter('stage', value === 'all' ? undefined : value as ApplicationFilters['stage'])}
+            onValueChange={(v) => updateParam('stage', v === 'all' ? undefined : v)}
           >
             <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="all" className="gap-2">
@@ -206,11 +183,8 @@ export default function ApplicationList() {
               </TabsTrigger>
               {APPLICATION_STAGES.map((stage) => (
                 <TabsTrigger key={stage.value} value={stage.value} className="gap-2">
-                  <span className={`w-2 h-2 rounded-full ${stage.color}`} />
+                  <span className={`h-2 w-2 rounded-full ${stage.color}`} />
                   {stage.label}
-                  <Badge variant="secondary" className="ml-1">
-                    {stageCounts[stage.value] || 0}
-                  </Badge>
                 </TabsTrigger>
               ))}
             </TabsList>
@@ -218,85 +192,68 @@ export default function ApplicationList() {
         </CardContent>
       </Card>
 
-      {/* Filters Card */}
+      {/* Filters */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base font-medium flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-base font-medium">
             <Filter className="h-4 w-4" />
             Filters
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-            {/* Search */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
             <div className="relative lg:col-span-2">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Search by application number, entity..."
+                placeholder="Search by application number..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 className="pl-9"
               />
             </div>
-
-            {/* Status */}
             <Select
               value={filters.status || 'all'}
-              onValueChange={(value) => updateFilter('status', value === 'all' ? undefined : value as ApplicationFilters['status'])}
+              onValueChange={(v) => updateParam('status', v === 'all' ? undefined : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
-                {APPLICATION_STATUSES.map((status) => (
-                  <SelectItem key={status.value} value={status.value}>
-                    {status.label}
+                {APPLICATION_STATUSES.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-
-            {/* Date From */}
             <Input
               type="date"
-              placeholder="From Date"
-              value={filters.date_from || ''}
-              onChange={(e) => updateFilter('date_from', e.target.value || undefined)}
+              value={filters.fromDate || ''}
+              onChange={(e) => updateParam('date_from', e.target.value || undefined)}
             />
-
-            {/* Date To */}
             <Input
               type="date"
-              placeholder="To Date"
-              value={filters.date_to || ''}
-              onChange={(e) => updateFilter('date_to', e.target.value || undefined)}
+              value={filters.toDate || ''}
+              onChange={(e) => updateParam('date_to', e.target.value || undefined)}
             />
           </div>
-
-          {/* Active filters and clear button */}
           {hasActiveFilters && (
-            <div className="mt-4 flex items-center gap-2">
-              <span className="text-sm text-gray-500">Active filters:</span>
-              {filters.search && (
-                <Badge variant="secondary">Search: {filters.search}</Badge>
-              )}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">Active filters:</span>
+              {filters.search && <Badge variant="secondary">Search: {filters.search}</Badge>}
               {filters.stage && (
                 <Badge variant="secondary">
-                  Stage: {APPLICATION_STAGES.find(s => s.value === filters.stage)?.label}
+                  Stage: {APPLICATION_STAGES.find((s) => s.value === filters.stage)?.label}
                 </Badge>
               )}
               {filters.status && (
                 <Badge variant="secondary">
-                  Status: {APPLICATION_STATUSES.find(s => s.value === filters.status)?.label}
+                  Status: {APPLICATION_STATUSES.find((s) => s.value === filters.status)?.label}
                 </Badge>
               )}
-              {filters.date_from && (
-                <Badge variant="secondary">From: {filters.date_from}</Badge>
-              )}
-              {filters.date_to && (
-                <Badge variant="secondary">To: {filters.date_to}</Badge>
-              )}
+              {filters.fromDate && <Badge variant="secondary">From: {filters.fromDate}</Badge>}
+              {filters.toDate && <Badge variant="secondary">To: {filters.toDate}</Badge>}
               <Button variant="ghost" size="sm" onClick={clearFilters}>
                 Clear all
               </Button>
@@ -305,16 +262,18 @@ export default function ApplicationList() {
         </CardContent>
       </Card>
 
-      {/* Results Card */}
+      {/* Results */}
       <Card>
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between">
             <CardDescription>
-              {loading ? 'Loading...' : `Showing ${applications.length} of ${totalCount} applications`}
+              {isLoading
+                ? 'Loading...'
+                : `Showing ${applications.length} of ${totalCount} applications`}
             </CardDescription>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={fetchApplications}>
-                <RefreshCw className="h-4 w-4" />
+              <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+                <RefreshCw className={`h-4 w-4 ${isFetching ? 'animate-spin' : ''}`} />
               </Button>
               <Button variant="outline" size="sm">
                 <Download className="mr-2 h-4 w-4" />
@@ -327,7 +286,7 @@ export default function ApplicationList() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[180px]">Application #</TableHead>
+                <TableHead className="w-[200px]">Application #</TableHead>
                 <TableHead>Entity</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Product</TableHead>
@@ -338,55 +297,60 @@ export default function ApplicationList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-40" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-28" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-8" /></TableCell>
-                  </TableRow>
-                ))
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                    Loading applications...
+                  </TableCell>
+                </TableRow>
+              ) : isError ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="py-8">
+                    <ErrorState
+                      title="Could not load applications"
+                      error={error}
+                      onRetry={() => refetch()}
+                    />
+                  </TableCell>
+                </TableRow>
               ) : applications.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    No applications found. {hasActiveFilters && 'Try adjusting your filters.'}
+                  <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                    No applications found.
+                    {hasActiveFilters && ' Try adjusting your filters.'}
                   </TableCell>
                 </TableRow>
               ) : (
-                applications.map((application) => (
+                applications.map((app) => (
                   <TableRow
-                    key={application.application_id}
-                    className="cursor-pointer hover:bg-gray-50"
-                    onClick={() => navigate(`/admin/lending/applications/${application.application_id}`)}
+                    key={app.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/admin/lending/applications/${app.id}`)}
                   >
-                    <TableCell className="font-medium">
-                      <div className="font-mono text-sm">{application.application_number}</div>
+                    <TableCell>
+                      <div className="font-mono text-sm">{app.applicationNumber}</div>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <div className="font-medium">{application.entity_name || 'N/A'}</div>
-                        <div className="text-xs text-gray-500">{(application as any).entity_code}</div>
-                      </div>
+                      <div className="font-medium">{app.entityName ?? '—'}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={application.requested_amount} />
+                      <AmountDisplay amount={app.requestedAmount} />
+                      <div className="text-xs text-muted-foreground">
+                        {app.requestedTenureMonths} months
+                      </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{application.product_name || 'N/A'}</Badge>
+                      <Badge variant="outline">{app.productName ?? '—'}</Badge>
                     </TableCell>
                     <TableCell>
-                      <ApplicationStageBadge status={application.stage} />
+                      <ApplicationStageBadge status={app.stage} />
                     </TableCell>
                     <TableCell>
-                      <ApplicationStatusBadge status={application.status} />
+                      <ApplicationStatusBadge status={app.status} />
                     </TableCell>
                     <TableCell>
-                      <DateDisplay date={application.created_at} />
+                      <DateDisplay date={app.createdAt} />
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
@@ -397,24 +361,24 @@ export default function ApplicationList() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => navigate(`/admin/lending/applications/${application.application_id}`)}
+                            onClick={() => navigate(`/admin/lending/applications/${app.id}`)}
                           >
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
-                          {application.status === 'DRAFT' && (
+                          {app.status === 'DRAFT' && (
                             <DropdownMenuItem
-                              onClick={() => navigate(`/admin/lending/applications/${application.application_id}/edit`)}
+                              onClick={() => navigate(`/admin/lending/applications/${app.id}/edit`)}
                             >
                               <Edit className="mr-2 h-4 w-4" />
                               Edit
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuSeparator />
-                          {application.status === 'DRAFT' && (
+                          {app.status === 'DRAFT' && (
                             <DropdownMenuItem
                               className="text-red-600"
-                              onClick={() => handleDelete(application.application_id)}
+                              onClick={() => handleDelete(app.id)}
                             >
                               <Trash2 className="mr-2 h-4 w-4" />
                               Delete
@@ -429,37 +393,35 @@ export default function ApplicationList() {
             </TableBody>
           </Table>
 
-          {/* Pagination */}
-          {!loading && totalPages > 1 && (
-            <div className="flex items-center justify-between px-6 py-4 border-t">
+          {!isLoading && totalPages > 1 && (
+            <div className="flex items-center justify-between border-t px-6 py-4">
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Rows per page:</span>
+                <span className="text-sm text-muted-foreground">Rows per page:</span>
                 <Select
-                  value={filters.page_size?.toString() || '25'}
-                  onValueChange={(value) => updateFilter('page_size', parseInt(value))}
+                  value={String(filters.pageSize ?? 25)}
+                  onValueChange={(v) => updateParam('page_size', v)}
                 >
                   <SelectTrigger className="w-[70px]">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {PAGE_SIZES.map((size) => (
-                      <SelectItem key={size} value={size.toString()}>
+                      <SelectItem key={size} value={String(size)}>
                         {size}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   Page {filters.page} of {totalPages}
                 </span>
                 <div className="flex gap-1">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handlePageChange(1)}
+                    onClick={() => updateParam('page', '1')}
                     disabled={filters.page === 1}
                   >
                     First
@@ -467,7 +429,7 @@ export default function ApplicationList() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handlePageChange((filters.page || 1) - 1)}
+                    onClick={() => updateParam('page', String((filters.page ?? 1) - 1))}
                     disabled={filters.page === 1}
                   >
                     Previous
@@ -475,7 +437,7 @@ export default function ApplicationList() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handlePageChange((filters.page || 1) + 1)}
+                    onClick={() => updateParam('page', String((filters.page ?? 1) + 1))}
                     disabled={filters.page === totalPages}
                   >
                     Next
@@ -483,7 +445,7 @@ export default function ApplicationList() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => handlePageChange(totalPages)}
+                    onClick={() => updateParam('page', String(totalPages))}
                     disabled={filters.page === totalPages}
                   >
                     Last

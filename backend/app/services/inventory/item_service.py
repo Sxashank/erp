@@ -48,7 +48,7 @@ class ItemMasterService:
 
         item = ItemMaster(**item_data)
         self.session.add(item)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(item)
         return item
 
@@ -98,7 +98,7 @@ class ItemMasterService:
         if updated_by:
             item.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(item)
         return item
 
@@ -118,7 +118,7 @@ class ItemMasterService:
             raise ValueError("Cannot delete item with existing stock")
 
         item.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()
         return True
 
     async def list_by_organization(

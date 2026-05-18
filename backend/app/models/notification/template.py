@@ -4,7 +4,7 @@ import enum
 from typing import Optional, List
 from uuid import UUID
 
-from sqlalchemy import Boolean, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Enum, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB, ARRAY
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -25,6 +25,9 @@ class NotificationTemplate(BaseModel):
     """Notification template for reusable notification content."""
 
     __tablename__ = "mst_notification_template"
+    __table_args__ = (
+        Index("ix_mst_notification_template_org_code", "organization_id", "code", unique=True),
+    )
 
     # Organization scope (null = global template)
     organization_id: Mapped[Optional[UUID]] = mapped_column(
@@ -38,7 +41,6 @@ class NotificationTemplate(BaseModel):
     code: Mapped[str] = mapped_column(
         String(100),
         nullable=False,
-        unique=True,
         comment="Unique template code for reference",
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -46,12 +48,12 @@ class NotificationTemplate(BaseModel):
 
     # Template type and category
     template_type: Mapped[NotificationTemplateType] = mapped_column(
-        Enum(NotificationTemplateType),
+        Enum(NotificationTemplateType, native_enum=False),
         default=NotificationTemplateType.TRANSACTIONAL,
         nullable=False,
     )
     category: Mapped[NotificationCategory] = mapped_column(
-        Enum(NotificationCategory),
+        Enum(NotificationCategory, native_enum=False),
         default=NotificationCategory.SYSTEM,
         nullable=False,
     )

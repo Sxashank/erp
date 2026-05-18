@@ -3,7 +3,204 @@
  * Handles all Employee Self-Service portal API calls
  */
 
-import api from './api';
+import axios from 'axios';
+
+import { useEssAuthStore } from '@/stores/essAuthStore';
+import type {
+  ESSDashboard,
+  Payslip,
+  YTDSummary,
+  ReimbursementSummary,
+  TaxCalculation,
+} from '@/types/ess';
+
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001/api/v1';
+
+const api = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+api.interceptors.request.use((config) => {
+  const token = useEssAuthStore.getState().accessToken;
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+    if (
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !String(originalRequest.url ?? '').includes('/ess/auth/refresh')
+    ) {
+      originalRequest._retry = true;
+      const refreshToken = useEssAuthStore.getState().refreshToken;
+      if (refreshToken) {
+        try {
+          const response = await axios.post(`${API_BASE_URL}/ess/auth/refresh`, {
+            refresh_token: refreshToken,
+          });
+          useEssAuthStore
+            .getState()
+            .setSession(response.data.access_token, response.data.refresh_token, response.data.user);
+          originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
+          return api(originalRequest);
+        } catch (_refreshError) {
+          useEssAuthStore.getState().clear();
+          window.location.href = '/ess/login';
+        }
+      }
+    }
+    return Promise.reject(error);
+  },
+);
+
+// Backend responses come in different shapes between phases of the ESS rollout;
+// each normalizer is defensive — it accepts a loose payload and coerces it to
+// the shape the UI expects.
+type RawPayload = Record<string, unknown>;
+
+function pickNumber(v: unknown, fallback = 0): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function pickString(v: unknown, fallback = ''): string {
+  return v == null ? fallback : String(v);
+}
+
+function asObject(v: unknown): RawPayload {
+  return v && typeof v === 'object' ? (v as RawPayload) : {};
+}
+
+function normalizePayslip(raw: RawPayload): Payslip {
+  return {
+    ...raw,
+    month: raw.month ?? raw.pay_period ?? '',
+    gross_salary: raw.gross_salary ?? raw.total_earnings ?? 0,
+    tax_deduction: raw.tax_deduction ?? raw.tax_deducted ?? 0,
+    payment_status: raw.payment_status ?? raw.status ?? 'GENERATED',
+  } as unknown as Payslip;
+}
+
+function normalizeYtdSummary(raw: RawPayload): YTDSummary {
+  return {
+    ...raw,
+    total_earnings: raw.total_earnings ?? raw.total_gross ?? 0,
+    total_net_pay: raw.total_net_pay ?? raw.total_net ?? 0,
+    total_tax_deducted: raw.total_tax_deducted ?? raw.total_tax ?? 0,
+    total_pf_contribution: raw.total_pf_contribution ?? 0,
+    months_paid: raw.months_paid ?? raw.months_processed ?? 0,
+    breakdown: raw.breakdown ?? { earnings: {}, deductions: {} },
+  } as unknown as YTDSummary;
+}
+
+interface LeaveBalanceItem {
+  code?: string;
+  balance?: number | string;
+}
+
+function normalizeDashboard(raw: RawPayload): ESSDashboard {
+  const leaveBalances: LeaveBalanceItem[] = Array.isArray(raw.leave_balance)
+    ? (raw.leave_balance as LeaveBalanceItem[])
+    : [];
+  const leaveByCode = leaveBalances.reduce(
+    (acc: Record<string, number>, leave: LeaveBalanceItem) => {
+      acc[pickString(leave.code).toUpperCase()] = pickNumber(leave.balance);
+      return acc;
+    },
+    {},
+  );
+  const attendance = asObject(raw.attendance_this_month);
+  const latestPayslip = asObject(raw.latest_payslip);
+  const employee = asObject(raw.employee);
+
+  return {
+    ...raw,
+    employee: {
+      ...employee,
+      employee_code: employee.employee_code ?? employee.code ?? '',
+      name: employee.name ?? 'Employee',
+    },
+    attendance: raw.attendance ?? {
+      present_days: attendance.present ?? 0,
+      absent_days: attendance.absent ?? 0,
+      leave_days: attendance.leave ?? 0,
+      wfh_days: attendance.work_from_home ?? 0,
+      current_month: attendance.month ?? '',
+    },
+    leave_balance: {
+      casual_leave: leaveByCode.CL ?? 0,
+      sick_leave: leaveByCode.SL ?? 0,
+      earned_leave: leaveByCode.EL ?? leaveByCode.PL ?? 0,
+      total_available: leaveBalances.reduce(
+        (sum: number, leave: LeaveBalanceItem) => sum + pickNumber(leave.balance),
+        0,
+      ),
+    },
+    pending_actions: raw.pending_actions ?? {
+      pending_claims: 0,
+      pending_tickets: 0,
+      pending_regularizations: 0,
+      pending_declarations: raw.pending_requests ?? 0,
+    },
+    recent_payslip: raw.recent_payslip ?? (Object.keys(latestPayslip).length
+      ? {
+          month: latestPayslip.period ?? '',
+          net_salary: latestPayslip.net ?? 0,
+          payslip_id: latestPayslip.id ?? '',
+        }
+      : undefined),
+    announcements: raw.announcements ?? [],
+  } as unknown as ESSDashboard;
+}
+
+function listResponse<T extends { data: unknown }>(response: T) {
+  const data = response.data;
+  const items = Array.isArray(data)
+    ? data
+    : (data as { items?: unknown[] } | null | undefined)?.items ?? [];
+  return {
+    ...response,
+    data: { items },
+  };
+}
+
+function normalizeReimbursementSummary(raw: RawPayload): ReimbursementSummary {
+  const byStatus = asObject(raw.by_status);
+  return {
+    ...raw,
+    total_claimed_amount: raw.total_claimed_amount ?? raw.total_claimed ?? 0,
+    total_approved_amount: raw.total_approved_amount ?? raw.total_approved ?? 0,
+    total_paid_amount: raw.total_paid_amount ?? raw.total_paid ?? 0,
+    approved_claims: raw.approved_claims ?? pickNumber(byStatus.APPROVED),
+    rejected_claims: raw.rejected_claims ?? pickNumber(byStatus.REJECTED),
+    by_category: raw.by_category ?? {},
+  } as unknown as ReimbursementSummary;
+}
+
+function normalizeTaxCalculation(raw: RawPayload): TaxCalculation {
+  return {
+    ...raw,
+    gross_income: raw.gross_income ?? raw.gross_salary ?? 0,
+    standard_deduction: raw.standard_deduction ?? 0,
+    chapter_vi_a_deductions: raw.chapter_vi_a_deductions ?? raw.total_deductions ?? 0,
+    hra_exemption: raw.hra_exemption ?? 0,
+    lta_exemption: raw.lta_exemption ?? 0,
+    other_exemptions: raw.other_exemptions ?? 0,
+    education_cess: raw.education_cess ?? raw.cess ?? 0,
+    total_tax_liability: raw.total_tax_liability ?? raw.total_tax ?? 0,
+    breakdown: raw.breakdown ?? { deductions_by_section: {}, tax_slabs: [] },
+  } as unknown as TaxCalculation;
+}
 
 // ==================== Auth APIs ====================
 
@@ -17,7 +214,7 @@ export const essAuthApi = {
   /**
    * Verify OTP and login
    */
-  login: (data: { mobile: string; otp: string; device_info?: any }) =>
+  login: (data: { mobile: string; otp: string; device_info?: Record<string, unknown> }) =>
     api.post('/ess/auth/login', data),
 
   /**
@@ -47,8 +244,8 @@ export const essAuthApi = {
   /**
    * Register device for push notifications
    */
-  registerDevice: (data: { device_uuid: string; device_name: string; fcm_token?: string }) =>
-    api.post('/ess/auth/devices', data),
+  registerDevice: (data: { device_uuid: string; device_name: string; device_type?: string; fcm_token?: string }) =>
+    api.post('/ess/auth/devices', { device_type: 'web', ...data }),
 };
 
 // ==================== Profile APIs ====================
@@ -58,24 +255,25 @@ export const essProfileApi = {
    * Get employee dashboard summary
    */
   getDashboard: () =>
-    api.get('/ess/profile/dashboard'),
+    api.get('/ess/profile/dashboard')
+      .then((response) => ({ ...response, data: normalizeDashboard(response.data) })),
 
   /**
    * Get employee profile
    */
   getProfile: () =>
-    api.get('/ess/profile'),
+    api.get('/ess/profile/me'),
 
   /**
    * Request profile update
    */
   requestUpdate: (data: {
     update_type: string;
-    requested_values: Record<string, any>;
+    requested_values: Record<string, unknown>;
     change_reason?: string;
-    attachments?: any;
+    attachments?: unknown;
   }) =>
-    api.post('/ess/profile/update-request', data),
+    api.post('/ess/profile/update-requests', data),
 
   /**
    * Get profile update requests
@@ -87,7 +285,19 @@ export const essProfileApi = {
    * Get payslips
    */
   getPayslips: (params?: { year?: number; limit?: number }) =>
-    api.get('/ess/profile/payslips', { params }),
+    api.get('/ess/profile/payslips', {
+      params: {
+        financial_year: params?.year ? `${params.year}-${params.year + 1}` : undefined,
+        limit: params?.limit,
+      },
+    }).then((response) => ({
+      ...response,
+      data: {
+        items: Array.isArray(response.data)
+          ? (response.data as RawPayload[]).map(normalizePayslip)
+          : [],
+      },
+    })),
 
   /**
    * Download payslip PDF
@@ -99,7 +309,8 @@ export const essProfileApi = {
    * Get YTD salary summary
    */
   getYtdSummary: (financialYear?: string) =>
-    api.get('/ess/profile/ytd-summary', { params: { financial_year: financialYear } }),
+    api.get('/ess/profile/ytd-summary', { params: { financial_year: financialYear } })
+      .then((response) => ({ ...response, data: normalizeYtdSummary(response.data) })),
 
   /**
    * Get leave balance
@@ -121,7 +332,7 @@ export const essReimbursementApi = {
    * Get reimbursement categories
    */
   getCategories: () =>
-    api.get('/ess/reimbursement/categories'),
+    api.get('/ess/reimbursements/categories'),
 
   /**
    * Get reimbursement claims
@@ -134,13 +345,13 @@ export const essReimbursementApi = {
     limit?: number;
     offset?: number;
   }) =>
-    api.get('/ess/reimbursement/claims', { params }),
+    api.get('/ess/reimbursements', { params }).then(listResponse),
 
   /**
    * Get claim details
    */
   getClaim: (claimId: string) =>
-    api.get(`/ess/reimbursement/claims/${claimId}`),
+    api.get(`/ess/reimbursements/${claimId}`),
 
   /**
    * Create new claim
@@ -151,21 +362,22 @@ export const essReimbursementApi = {
     expense_from: string;
     expense_to: string;
     description: string;
+    claimed_amount: number;
     purpose?: string;
   }) =>
-    api.post('/ess/reimbursement/claims', data),
+    api.post('/ess/reimbursements', data),
 
   /**
    * Update claim
    */
-  updateClaim: (claimId: string, data: any) =>
-    api.put(`/ess/reimbursement/claims/${claimId}`, data),
+  updateClaim: (claimId: string, data: Record<string, unknown>) =>
+    api.patch(`/ess/reimbursements/${claimId}`, data),
 
   /**
    * Delete draft claim
    */
   deleteClaim: (claimId: string) =>
-    api.delete(`/ess/reimbursement/claims/${claimId}`),
+    api.delete(`/ess/reimbursements/${claimId}`),
 
   /**
    * Add line item to claim
@@ -178,31 +390,32 @@ export const essReimbursementApi = {
     bill_date?: string;
     vendor_name?: string;
   }) =>
-    api.post(`/ess/reimbursement/claims/${claimId}/items`, data),
+    api.post(`/ess/reimbursements/${claimId}/items`, data),
 
   /**
    * Update line item
    */
-  updateLineItem: (claimId: string, itemId: string, data: any) =>
-    api.put(`/ess/reimbursement/claims/${claimId}/items/${itemId}`, data),
+  updateLineItem: (claimId: string, itemId: string, data: Record<string, unknown>) =>
+    api.put(`/ess/reimbursements/${claimId}/items/${itemId}`, data),
 
   /**
    * Delete line item
    */
   deleteLineItem: (claimId: string, itemId: string) =>
-    api.delete(`/ess/reimbursement/claims/${claimId}/items/${itemId}`),
+    api.delete(`/ess/reimbursements/${claimId}/items/${itemId}`),
 
   /**
    * Submit claim for approval
    */
   submitClaim: (claimId: string) =>
-    api.post(`/ess/reimbursement/claims/${claimId}/submit`),
+    api.post(`/ess/reimbursements/${claimId}/submit`),
 
   /**
    * Get claim summary
    */
   getSummary: () =>
-    api.get('/ess/reimbursement/summary'),
+    api.get('/ess/reimbursements/summary')
+      .then((response) => ({ ...response, data: normalizeReimbursementSummary(response.data) })),
 };
 
 // ==================== Helpdesk APIs ====================
@@ -225,7 +438,7 @@ export const essHelpdeskApi = {
     limit?: number;
     offset?: number;
   }) =>
-    api.get('/ess/helpdesk', { params }),
+    api.get('/ess/helpdesk', { params }).then(listResponse),
 
   /**
    * Get ticket details
@@ -242,7 +455,7 @@ export const essHelpdeskApi = {
     category_type: string;
     category_id?: string;
     priority?: string;
-    attachments?: any;
+    attachments?: unknown;
   }) =>
     api.post('/ess/helpdesk', data),
 
@@ -283,14 +496,14 @@ export const essITDeclarationApi = {
   /**
    * Get IT declaration sections
    */
-  getSections: (financialYear?: string) =>
-    api.get('/ess/it-declaration/sections', { params: { financial_year: financialYear } }),
+  getSections: (_financialYear?: string, taxRegime = 'OLD') =>
+    api.get('/ess/it-declaration/sections', { params: { tax_regime: taxRegime } }),
 
   /**
    * Get current declaration
    */
-  getDeclaration: (financialYear?: string) =>
-    api.get('/ess/it-declaration', { params: { financial_year: financialYear } }),
+  getDeclaration: (financialYear = '2024-25', taxRegime = 'OLD') =>
+    api.post(`/ess/it-declaration/${financialYear}`, null, { params: { tax_regime: taxRegime } }),
 
   /**
    * Create/update declaration
@@ -306,7 +519,9 @@ export const essITDeclarationApi = {
     home_loan_principal?: number;
     lender_name?: string;
   }) =>
-    api.post('/ess/it-declaration', data),
+    api.post(`/ess/it-declaration/${data.financial_year}`, null, {
+      params: { tax_regime: data.tax_regime },
+    }),
 
   /**
    * Add declaration item
@@ -324,8 +539,8 @@ export const essITDeclarationApi = {
   /**
    * Update declaration item
    */
-  updateItem: (declarationId: string, itemId: string, data: any) =>
-    api.put(`/ess/it-declaration/${declarationId}/items/${itemId}`, data),
+  updateItem: (declarationId: string, itemId: string, data: Record<string, unknown>) =>
+    api.patch(`/ess/it-declaration/${declarationId}/items/${itemId}`, data),
 
   /**
    * Delete declaration item
@@ -358,8 +573,14 @@ export const essITDeclarationApi = {
   /**
    * Calculate tax
    */
-  calculateTax: (declarationId: string) =>
-    api.get(`/ess/it-declaration/${declarationId}/calculate-tax`),
+  calculateTax: (
+    declarationId: string,
+    data: { gross_salary?: number; other_income?: number } = {},
+  ) =>
+    api.post(`/ess/it-declaration/${declarationId}/calculate-tax`, {
+      gross_salary: data.gross_salary ?? 0,
+      other_income: data.other_income ?? 0,
+    }).then((response) => ({ ...response, data: normalizeTaxCalculation(response.data) })),
 };
 
 // ==================== Attendance Regularization APIs ====================

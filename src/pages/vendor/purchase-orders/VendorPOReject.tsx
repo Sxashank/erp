@@ -2,22 +2,21 @@
  * Vendor PO Reject Page
  */
 
+import { XCircle, Loader2, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  ArrowLeft,
-  XCircle,
-  Loader2,
-  AlertTriangle,
-} from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder } from '@/types/vendor';
 
+import { logger } from "@/lib/logger";
 export default function VendorPOReject() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -37,7 +36,7 @@ export default function VendorPOReject() {
       const response = await vendorPOApi.get(id!);
       setPO(response.data.purchase_order);
     } catch (error) {
-      console.error('Failed to fetch PO:', error);
+      logger.error('Failed to fetch PO:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -70,7 +69,7 @@ export default function VendorPOReject() {
       toast({ title: 'Purchase order rejected' });
       navigate(`/vendor/purchase-orders/${id}`);
     } catch (error) {
-      console.error('Failed to reject PO:', error);
+      logger.error('Failed to reject PO:', error);
       toast({
         variant: 'destructive',
         title: 'Error',
@@ -83,7 +82,7 @@ export default function VendorPOReject() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
       </div>
     );
@@ -95,26 +94,24 @@ export default function VendorPOReject() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center space-x-4">
-        <Button variant="ghost" onClick={() => navigate(`/vendor/purchase-orders/${id}`)}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to PO
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Reject Purchase Order</h1>
-          <p className="text-gray-600">PO: {po.po_number}</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Reject Purchase Order"
+        subtitle={`PO: ${po.po_number}`}
+        breadcrumbs={[
+          { label: 'Purchase Orders', to: '/vendor/purchase-orders' },
+          { label: po.po_number, to: `/vendor/purchase-orders/${id}` },
+          { label: 'Reject' },
+        ]}
+      />
 
       {/* Warning Banner */}
       <Card className="border-red-200 bg-red-50">
         <CardContent className="pt-6">
           <div className="flex items-start space-x-4">
-            <AlertTriangle className="h-6 w-6 text-red-600 mt-0.5" />
+            <AlertTriangle className="mt-0.5 h-6 w-6 text-red-600" />
             <div>
               <h3 className="font-semibold text-red-800">Important Notice</h3>
-              <p className="text-sm text-red-700 mt-1">
+              <p className="mt-1 text-sm text-red-700">
                 Rejecting this purchase order will notify the buyer. This action cannot be undone.
                 Please provide a clear reason for the rejection.
               </p>
@@ -123,7 +120,7 @@ export default function VendorPOReject() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* PO Summary */}
         <Card>
           <CardHeader>
@@ -138,13 +135,11 @@ export default function VendorPOReject() {
               </div>
               <div>
                 <Label className="text-gray-500">Order Date</Label>
-                <p className="font-medium">{new Date(po.po_date).toLocaleDateString()}</p>
+                <DateDisplay date={po.po_date} className="font-medium" />
               </div>
               <div>
                 <Label className="text-gray-500">Expected Delivery</Label>
-                <p className="font-medium">
-                  {po.delivery_date ? new Date(po.delivery_date).toLocaleDateString() : '-'}
-                </p>
+                <DateDisplay date={po.delivery_date} className="font-medium" />
               </div>
               <div>
                 <Label className="text-gray-500">Total Amount</Label>
@@ -162,12 +157,10 @@ export default function VendorPOReject() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center text-red-700">
-              <XCircle className="h-5 w-5 mr-2" />
+              <XCircle className="mr-2 h-5 w-5" />
               Rejection Details
             </CardTitle>
-            <CardDescription>
-              Please provide a reason for rejecting this order
-            </CardDescription>
+            <CardDescription>Please provide a reason for rejecting this order</CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -182,9 +175,7 @@ export default function VendorPOReject() {
                   required
                   className="resize-none"
                 />
-                <p className="text-xs text-gray-500">
-                  This reason will be shared with the buyer
-                </p>
+                <p className="text-xs text-gray-500">This reason will be shared with the buyer</p>
               </div>
 
               <div className="flex justify-end space-x-4 pt-4">
@@ -201,7 +192,7 @@ export default function VendorPOReject() {
                   variant="destructive"
                 >
                   {processing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  <XCircle className="h-4 w-4 mr-2" />
+                  <XCircle className="mr-2 h-4 w-4" />
                   Reject Order
                 </Button>
               </div>

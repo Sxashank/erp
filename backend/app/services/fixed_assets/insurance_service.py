@@ -96,7 +96,7 @@ class InsuranceService:
         )
 
         self.session.add(policy)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(policy)
 
         return policy
@@ -191,7 +191,7 @@ class InsuranceService:
         policy.updated_by = updated_by
         increment_version(policy)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(policy)
 
         return policy
@@ -212,7 +212,7 @@ class InsuranceService:
         policy.status = InsurancePolicyStatus.ACTIVE
         policy.updated_by = activated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(policy)
 
         return policy
@@ -244,7 +244,7 @@ class InsuranceService:
 
         policy.updated_by = recorded_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(policy)
 
         return policy
@@ -307,7 +307,7 @@ class InsuranceService:
         )
 
         self.session.add(new_policy)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(new_policy)
 
         return new_policy
@@ -354,7 +354,7 @@ class InsuranceService:
             policy.total_claims_count += 1
             policy.total_claims_amount += data.claim_amount
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(claim)
 
         return claim
@@ -437,7 +437,7 @@ class InsuranceService:
             claim.approval_date = date.today()
 
         claim.updated_by = updated_by
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(claim)
 
         return claim
@@ -459,7 +459,7 @@ class InsuranceService:
         claim.submitted_date = date.today()
         claim.updated_by = submitted_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(claim)
 
         return claim
@@ -493,7 +493,7 @@ class InsuranceService:
         if policy:
             policy.total_settled_amount += data.settled_amount
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(claim)
 
         return claim

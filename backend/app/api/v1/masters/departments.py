@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, RequirePermissions
+from app.api.deps import get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.masters.department_service import DepartmentService
 from app.schemas.masters.department import (
@@ -21,14 +21,14 @@ from app.schemas.base import PaginatedResponse, MessageResponse
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[DepartmentResponse])
+@router.get("", response_model=PaginatedResponse[DepartmentResponse], response_model_by_alias=True)
 async def list_departments(
     organization_id: Optional[UUID] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of departments.
@@ -43,11 +43,11 @@ async def list_departments(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=DepartmentResponse)
+@router.post("", response_model=DepartmentResponse, response_model_by_alias=True)
 async def create_department(
     data: DepartmentCreate,
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new department.
@@ -59,11 +59,11 @@ async def create_department(
     return _dept_to_response(dept)
 
 
-@router.get("/tree", response_model=List[DepartmentTreeResponse])
+@router.get("/tree", response_model=List[DepartmentTreeResponse], response_model_by_alias=True)
 async def get_department_tree(
     organization_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get department hierarchy tree for an organization.
@@ -75,11 +75,11 @@ async def get_department_tree(
     return tree
 
 
-@router.get("/{dept_id}", response_model=DepartmentResponse)
+@router.get("/{dept_id}", response_model=DepartmentResponse, response_model_by_alias=True)
 async def get_department(
     dept_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get department by ID.
@@ -113,12 +113,12 @@ async def get_department(
     )
 
 
-@router.put("/{dept_id}", response_model=DepartmentResponse)
+@router.put("/{dept_id}", response_model=DepartmentResponse, response_model_by_alias=True)
 async def update_department(
     dept_id: UUID,
     data: DepartmentUpdate,
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing department.
@@ -130,11 +130,11 @@ async def update_department(
     return _dept_to_response(dept)
 
 
-@router.delete("/{dept_id}", response_model=MessageResponse)
+@router.delete("/{dept_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_department(
     dept_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a department.
@@ -146,11 +146,11 @@ async def delete_department(
     return MessageResponse(message="Department deleted successfully")
 
 
-@router.get("/{dept_id}/children", response_model=List[DepartmentResponse])
+@router.get("/{dept_id}/children", response_model=List[DepartmentResponse], response_model_by_alias=True)
 async def get_department_children(
     dept_id: UUID,
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get child departments of a department.

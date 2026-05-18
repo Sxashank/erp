@@ -2,28 +2,11 @@
  * Data Source List Page
  */
 
+import { Plus, Edit, Trash2, Loader2, Database, Search, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Loader2, Database, Search, Eye } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -34,6 +17,17 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Sheet,
   SheetContent,
@@ -41,12 +35,20 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { biDataSourceApi } from '@/services/biApi';
-import { DataSourceListItem, DataSourceType } from '@/types/bi';
 import { hasPermission, Permissions } from '@/lib/permissions';
+import { biDataSourceApi } from '@/services/biApi';
+import type { DataSourceListItem, DataSourceType } from '@/types/bi';
 
+import { logger } from "@/lib/logger";
 const SOURCE_TYPES: DataSourceType[] = ['API_ENDPOINT', 'SQL_QUERY', 'STATIC'];
 
 export function DataSourceList() {
@@ -81,7 +83,7 @@ export function DataSourceList() {
       setDataSources(response.data);
       setFilteredDataSources(response.data);
     } catch (error) {
-      console.error('Error fetching data sources:', error);
+      logger.error('Error fetching data sources:', error);
       toast({
         title: 'Error',
         description: 'Failed to load data sources',
@@ -128,7 +130,7 @@ export function DataSourceList() {
       });
       fetchDataSources();
     } catch (error) {
-      console.error('Error deleting data source:', error);
+      logger.error('Error deleting data source:', error);
       toast({
         title: 'Error',
         description: 'Failed to delete data source',
@@ -149,7 +151,7 @@ export function DataSourceList() {
       const response = await biDataSourceApi.preview(id);
       setPreviewData(response.data);
     } catch (error) {
-      console.error('Error fetching preview:', error);
+      logger.error('Error fetching preview:', error);
       toast({
         title: 'Error',
         description: 'Failed to fetch data preview',

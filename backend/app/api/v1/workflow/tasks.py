@@ -3,11 +3,11 @@
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, HTTPException, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.workflow import WorkflowEngine
 from app.schemas.workflow import (
@@ -17,15 +17,16 @@ from app.schemas.workflow import (
     WorkflowInstanceDetailResponse,
 )
 from app.schemas.base import MessageResponse
+from app.core.exceptions import BadRequestException
 
 router = APIRouter()
 
 
-@router.get("/pending", response_model=List[WorkflowTaskResponse])
+@router.get("/pending", response_model=List[WorkflowTaskResponse], response_model_by_alias=True)
 async def get_pending_tasks(
     organization_id: Optional[UUID] = Query(None),
     current_user: User = Depends(RequirePermissions("WORKFLOW_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all pending approval tasks for the current user."""
     engine = WorkflowEngine(db)
@@ -64,12 +65,12 @@ async def get_pending_tasks(
     ]
 
 
-@router.post("/{task_id}/approve", response_model=WorkflowInstanceDetailResponse)
+@router.post("/{task_id}/approve", response_model=WorkflowInstanceDetailResponse, response_model_by_alias=True)
 async def approve_task(
     task_id: UUID,
     data: ApprovalActionRequest,
     current_user: User = Depends(RequirePermissions("WORKFLOW_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Approve or reject a workflow task."""
     engine = WorkflowEngine(db)
@@ -82,20 +83,17 @@ async def approve_task(
             action_by=current_user.id,
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return _instance_to_detail_response(instance)
 
 
-@router.post("/{task_id}/delegate", response_model=WorkflowTaskResponse)
+@router.post("/{task_id}/delegate", response_model=WorkflowTaskResponse, response_model_by_alias=True)
 async def delegate_task(
     task_id: UUID,
     data: DelegateTaskRequest,
     current_user: User = Depends(RequirePermissions("WORKFLOW_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delegate a task to another user."""
     engine = WorkflowEngine(db)
@@ -108,10 +106,7 @@ async def delegate_task(
             delegated_by=current_user.id,
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return WorkflowTaskResponse(
         id=task.id,

@@ -31,7 +31,7 @@ class GSTRateService:
             created_by=created_by,
         )
         self.session.add(rate)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rate)
         return rate
 
@@ -51,7 +51,7 @@ class GSTRateService:
             setattr(rate, field, value)
         rate.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(rate)
         return rate
 
@@ -93,4 +93,4 @@ class GSTRateService:
         if not rate:
             raise NotFoundException("GST rate not found")
         rate.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

@@ -3,17 +3,20 @@
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.database import close_db
 from app.api.v1.router import api_router
+from app.core.exceptions import AppException
 from app.middleware import (
     CorrelationIdMiddleware,
     RequestLoggingMiddleware,
     AuditMiddleware,
 )
+from app.middleware.correlation import get_correlation_id
 from app.middleware.idempotency import IdempotencyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.core.rate_limit import limiter, rate_limit_exceeded_handler
@@ -64,6 +67,21 @@ app = FastAPI(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+
+# Error envelope (CLAUDE.md §7). Every AppException renders as
+# `{error_code, message, correlation_id, details?}` so the frontend
+# `showErrorToast` contract is preserved.
+@app.exception_handler(AppException)
+async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
+    body: dict[str, object] = {
+        "error_code": getattr(exc, "error_code", None) or "ERROR",
+        "message": exc.detail if isinstance(exc.detail, str) else "Error",
+        "correlation_id": get_correlation_id() or None,
+    }
+    if isinstance(exc.detail, dict):
+        body["details"] = exc.detail
+    return JSONResponse(status_code=exc.status_code, content=body, headers=exc.headers)
 
 # CORS middleware
 app.add_middleware(

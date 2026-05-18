@@ -4,15 +4,16 @@ from datetime import date
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_db_with_tenant
 from app.api.v1.portal.auth import get_portal_user
 from app.models.portal.enums import PortalDocumentType, KYCType
 from app.services.portal.document_service import PortalDocumentService
+from app.core.exceptions import BadRequestException, ForbiddenException, NotFoundException
 
 router = APIRouter(prefix="/documents", tags=["Portal Documents"])
 
@@ -119,7 +120,7 @@ class PaginatedResponse(BaseModel):
 
 @router.get(
     "",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Documents",
 )
 async def get_documents(
@@ -128,7 +129,7 @@ async def get_documents(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get documents available to the customer."""
     service = PortalDocumentService(db)
@@ -151,23 +152,20 @@ async def get_documents(
 
 @router.get(
     "/{document_id}",
-    response_model=DocumentResponse,
+    response_model=DocumentResponse, response_model_by_alias=True,
     summary="Get Document Details",
 )
 async def get_document(
     document_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get document details."""
     service = PortalDocumentService(db)
     document = await service.get_document(document_id, user.id)
 
     if not document:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
 
     # Record view
     await service.record_view(document_id, user.id)
@@ -194,7 +192,7 @@ async def get_document(
 async def download_document(
     document_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Download a document."""
     service = PortalDocumentService(db)
@@ -202,16 +200,10 @@ async def download_document(
     await db.commit()
 
     if not result:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found",
-        )
+        raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
 
     if "error" in result:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=result["error"],
-        )
+        raise ForbiddenException(detail=result["error"], error_code="FORBIDDEN")
 
     # In production, this would stream the file from storage
     # Placeholder: Return file info
@@ -236,7 +228,7 @@ async def generate_statement(
     from_date: date,
     to_date: date,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate and download account statement.
@@ -268,7 +260,7 @@ async def generate_interest_certificate(
     loan_account_id: UUID,
     financial_year: str = Query(..., description="Format: 2023-24"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate interest certificate for tax purposes.
@@ -300,7 +292,7 @@ async def generate_tds_certificate(
     financial_year: str = Query(..., description="Format: 2023-24"),
     quarter: str = Query(..., description="Q1, Q2, Q3, Q4"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Generate TDS certificate (Form 16A).
@@ -331,14 +323,14 @@ async def generate_tds_certificate(
 
 @router.post(
     "/requests",
-    response_model=DocumentRequestResponse,
+    response_model=DocumentRequestResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Request Document",
 )
 async def create_document_request(
     request: DocumentRequestCreate,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Request a document.
@@ -366,7 +358,7 @@ async def create_document_request(
 
 @router.get(
     "/requests",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Document Requests",
 )
 async def get_document_requests(
@@ -374,7 +366,7 @@ async def get_document_requests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get document requests."""
     service = PortalDocumentService(db)
@@ -396,22 +388,22 @@ async def get_document_requests(
 
 @router.get(
     "/requests/{request_id}",
-    response_model=DocumentRequestResponse,
+    response_model=DocumentRequestResponse, response_model_by_alias=True,
     summary="Get Document Request Status",
 )
 async def get_document_request(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get document request status."""
     service = PortalDocumentService(db)
     doc_request = await service.get_document_request(request_id, user.id)
 
     if not doc_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Document request not found",
+            error_code="DOCUMENT_REQUEST_NOT_FOUND",
         )
 
     return DocumentRequestResponse(
@@ -432,13 +424,13 @@ async def get_document_request(
 
 @router.post(
     "/kyc/aadhaar",
-    response_model=KYCResponse,
+    response_model=KYCResponse, response_model_by_alias=True,
     summary="Initiate Aadhaar eKYC",
 )
 async def initiate_aadhaar_kyc(
     request: KYCInitiateRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Initiate Aadhaar eKYC verification.
@@ -446,15 +438,15 @@ async def initiate_aadhaar_kyc(
     Sends OTP to Aadhaar-linked mobile number.
     """
     if request.kyc_type != KYCType.AADHAAR_OTP:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Use this endpoint only for Aadhaar OTP KYC",
+            error_code="USE_THIS_ENDPOINT_ONLY_FOR_AADHAAR",
         )
 
     if not request.aadhaar_last4:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Aadhaar last 4 digits required",
+            error_code="AADHAAR_LAST_DIGITS_REQUIRED",
         )
 
     service = PortalDocumentService(db)
@@ -472,13 +464,13 @@ async def initiate_aadhaar_kyc(
 
 @router.post(
     "/kyc/aadhaar/verify",
-    response_model=KYCResponse,
+    response_model=KYCResponse, response_model_by_alias=True,
     summary="Verify Aadhaar OTP",
 )
 async def verify_aadhaar_otp(
     request: KYCVerifyOTPRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Verify Aadhaar OTP and complete eKYC."""
     service = PortalDocumentService(db)
@@ -490,10 +482,7 @@ async def verify_aadhaar_otp(
     await db.commit()
 
     if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.get("error"),
-        )
+        raise BadRequestException(detail=result.get("error"), error_code="BAD_REQUEST")
 
     return KYCResponse(
         kyc_id=result.get("kyc_id"),
@@ -505,13 +494,13 @@ async def verify_aadhaar_otp(
 
 @router.post(
     "/kyc/pan",
-    response_model=KYCResponse,
+    response_model=KYCResponse, response_model_by_alias=True,
     summary="Verify PAN",
 )
 async def verify_pan(
     request: KYCInitiateRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Verify PAN number.
@@ -519,15 +508,15 @@ async def verify_pan(
     Validates PAN and matches name with records.
     """
     if request.kyc_type != KYCType.PAN_VERIFICATION:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Use this endpoint only for PAN verification",
+            error_code="USE_THIS_ENDPOINT_ONLY_FOR_PAN",
         )
 
     if not request.pan_number or not request.name_to_match:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="PAN number and name required",
+            error_code="PAN_NUMBER_AND_NAME_REQUIRED",
         )
 
     service = PortalDocumentService(db)
@@ -541,10 +530,7 @@ async def verify_pan(
     await db.commit()
 
     if not result.get("success"):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=result.get("error"),
-        )
+        raise BadRequestException(detail=result.get("error"), error_code="BAD_REQUEST")
 
     return KYCResponse(
         kyc_id=result.get("kyc_id"),
@@ -559,12 +545,12 @@ async def verify_pan(
 
 @router.get(
     "/kyc/history",
-    response_model=List[KYCHistoryItem],
+    response_model=List[KYCHistoryItem], response_model_by_alias=True,
     summary="Get KYC History",
 )
 async def get_kyc_history(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get KYC verification history."""
     service = PortalDocumentService(db)

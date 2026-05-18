@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.gst.gst_rate_service import GSTRateService
 from app.schemas.gst.gst_rate import GSTRateCreate, GSTRateUpdate, GSTRateResponse
@@ -39,13 +39,13 @@ def _to_response(rate) -> GSTRateResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[GSTRateResponse])
+@router.get("", response_model=PaginatedResponse[GSTRateResponse], response_model_by_alias=True)
 async def list_gst_rates(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of GST rates."""
     service = GSTRateService(db)
@@ -55,13 +55,13 @@ async def list_gst_rates(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/active", response_model=PaginatedResponse[GSTRateResponse])
+@router.get("/active", response_model=PaginatedResponse[GSTRateResponse], response_model_by_alias=True)
 async def list_active_gst_rates(
     as_of_date: Optional[date] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active GST rates as of a specific date."""
     service = GSTRateService(db)
@@ -71,11 +71,11 @@ async def list_active_gst_rates(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=GSTRateResponse)
+@router.post("", response_model=GSTRateResponse, response_model_by_alias=True)
 async def create_gst_rate(
     data: GSTRateCreate,
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new GST rate."""
     service = GSTRateService(db)
@@ -83,11 +83,11 @@ async def create_gst_rate(
     return _to_response(rate)
 
 
-@router.get("/{rate_id}", response_model=GSTRateResponse)
+@router.get("/{rate_id}", response_model=GSTRateResponse, response_model_by_alias=True)
 async def get_gst_rate(
     rate_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get GST rate by ID."""
     service = GSTRateService(db)
@@ -95,12 +95,12 @@ async def get_gst_rate(
     return _to_response(rate)
 
 
-@router.put("/{rate_id}", response_model=GSTRateResponse)
+@router.put("/{rate_id}", response_model=GSTRateResponse, response_model_by_alias=True)
 async def update_gst_rate(
     rate_id: UUID,
     data: GSTRateUpdate,
     current_user: User = Depends(RequirePermissions("FIN_COA_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a GST rate."""
     service = GSTRateService(db)
@@ -112,7 +112,7 @@ async def update_gst_rate(
 async def delete_gst_rate(
     rate_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a GST rate."""
     service = GSTRateService(db)

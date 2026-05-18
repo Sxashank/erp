@@ -4,15 +4,20 @@ Payroll Service
 Business logic for payroll processing, payslips, and statutory calculations.
 """
 
-from datetime import date, datetime
+import csv
+from datetime import date, datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
+from io import StringIO
 from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import delete, select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.payroll_statutory import compute_esi, compute_pf, compute_pt_maharashtra
+from app.core.constants import GLEntrySourceType
+from app.models.finance.gl_entry import GLEntry
 from app.models.payroll.payroll import (
     PayrollBatch,
     Payslip,
@@ -24,14 +29,23 @@ from app.models.payroll.payroll import (
 )
 from app.models.payroll.salary_component import EmployeeSalary, EmployeeSalaryComponent
 from app.models.hris.employee import Employee
-from app.models.hris.attendance import DailyAttendanceSummary
+from app.models.hris.attendance import MonthlyAttendanceSummary
+from app.repositories.finance.financial_year_repo import (
+    FinancialPeriodRepository,
+    FinancialYearRepository,
+)
 from app.schemas.payroll.payroll import (
+    PayrollBankFileResponse,
     PayrollBatchCreate,
     PayrollBatchUpdate,
+    PayrollGLPostRequest,
+    PayrollGLPostResponse,
     PayslipUpdate,
     StatutorySetupCreate,
     StatutorySetupUpdate,
 )
+from app.services.audit import record_financial_action
+from app.services.finance.gl_posting_service import GLPostingService
 
 
 class StatutorySetupService:
@@ -42,16 +56,34 @@ class StatutorySetupService:
 
     async def create(self, data: StatutorySetupCreate, created_by: UUID) -> StatutorySetup:
         """Create statutory setup"""
+        result = await self.db.execute(
+            select(StatutorySetup).where(
+                and_(
+                    StatutorySetup.organization_id == data.organization_id,
+                    StatutorySetup.statutory_type == data.statutory_type,
+                )
+            )
+        )
+        existing = result.scalar_one_or_none()
+        if existing:
+            raise ValueError(
+                f"{data.statutory_type} statutory setup already exists; update the existing setup"
+            )
+
         setup = StatutorySetup(**data.model_dump(), created_by=created_by)
         self.db.add(setup)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(setup)
         return setup
 
-    async def get(self, id: UUID) -> Optional[StatutorySetup]:
+    async def get(self, id: UUID, organization_id: Optional[UUID] = None) -> Optional[StatutorySetup]:
         """Get statutory setup by ID"""
+        query = select(StatutorySetup).where(StatutorySetup.id == id)
+        if organization_id:
+            query = query.where(StatutorySetup.organization_id == organization_id)
+
         result = await self.db.execute(
-            select(StatutorySetup).where(StatutorySetup.id == id)
+            query
         )
         return result.scalar_one_or_none()
 
@@ -95,17 +127,22 @@ class StatutorySetupService:
         self,
         id: UUID,
         data: StatutorySetupUpdate,
-        updated_by: UUID
+        updated_by: UUID,
+        organization_id: Optional[UUID] = None,
     ) -> Optional[StatutorySetup]:
         """Update statutory setup"""
-        setup = await self.get(id)
+        setup = await self.get(id, organization_id)
         if not setup:
             return None
+
+        if data.effective_to and data.effective_from and data.effective_to < data.effective_from:
+            raise ValueError("Effective to date cannot be before effective from date")
+
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(setup, field, value)
         setup.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(setup)
         return setup
 
@@ -118,6 +155,9 @@ class PayrollBatchService:
 
     async def create(self, data: PayrollBatchCreate, created_by: UUID) -> PayrollBatch:
         """Create a new payroll batch"""
+        self._validate_payroll_period(data)
+        await self._ensure_unique_period(data.organization_id, data.payroll_year, data.payroll_month)
+
         # Generate batch number
         batch_number = await self._generate_batch_number(
             data.organization_id, data.payroll_year, data.payroll_month
@@ -129,9 +169,34 @@ class PayrollBatchService:
             created_by=created_by
         )
         self.db.add(batch)
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
         return batch
+
+    def _validate_payroll_period(self, data: PayrollBatchCreate) -> None:
+        if data.pay_period_from > data.pay_period_to:
+            raise ValueError("Pay period start cannot be after pay period end")
+        if data.pay_period_from.year != data.payroll_year or data.pay_period_to.year != data.payroll_year:
+            raise ValueError("Pay period must be in the payroll year")
+        if (
+            data.pay_period_from.month != data.payroll_month
+            or data.pay_period_to.month != data.payroll_month
+        ):
+            raise ValueError("Pay period must be in the payroll month")
+
+    async def _ensure_unique_period(self, organization_id: UUID, year: int, month: int) -> None:
+        result = await self.db.execute(
+            select(PayrollBatch.id).where(
+                and_(
+                    PayrollBatch.organization_id == organization_id,
+                    PayrollBatch.payroll_year == year,
+                    PayrollBatch.payroll_month == month,
+                    PayrollBatch.status != PayrollBatchStatus.CANCELLED,
+                )
+            ).limit(1)
+        )
+        if result.scalar_one_or_none():
+            raise ValueError("A payroll batch already exists for this month")
 
     async def _generate_batch_number(
         self,
@@ -151,12 +216,18 @@ class PayrollBatchService:
         seq = (result.scalar() or 0) + 1
         return f"PAY/{year}/{month:02d}/{seq:03d}"
 
-    async def get(self, id: UUID) -> Optional[PayrollBatch]:
+    async def get(self, id: UUID, organization_id: Optional[UUID] = None) -> Optional[PayrollBatch]:
         """Get payroll batch by ID"""
-        result = await self.db.execute(
+        query = (
             select(PayrollBatch)
             .options(selectinload(PayrollBatch.payslips))
             .where(PayrollBatch.id == id)
+        )
+        if organization_id:
+            query = query.where(PayrollBatch.organization_id == organization_id)
+
+        result = await self.db.execute(
+            query
         )
         return result.scalar_one_or_none()
 
@@ -194,25 +265,37 @@ class PayrollBatchService:
         self,
         id: UUID,
         data: PayrollBatchUpdate,
-        updated_by: UUID
+        updated_by: UUID,
+        organization_id: Optional[UUID] = None,
     ) -> Optional[PayrollBatch]:
         """Update payroll batch"""
-        batch = await self.get(id)
+        batch = await self.get(id, organization_id) if organization_id else await self.get(id)
         if not batch:
             return None
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(batch, field, value)
         batch.updated_by = updated_by
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
         return batch
 
-    async def approve(self, id: UUID, approved_by: UUID, remarks: Optional[str] = None) -> Optional[PayrollBatch]:
-        """Approve payroll batch"""
-        batch = await self.get(id)
+    async def approve(
+        self,
+        id: UUID,
+        approved_by: UUID,
+        remarks: Optional[str] = None,
+        organization_id: Optional[UUID] = None,
+    ) -> Optional[PayrollBatch]:
+        """Approve payroll batch (PROCESSED → APPROVED — the locking step)."""
+        batch = await self.get(id, organization_id) if organization_id else await self.get(id)
         if not batch or batch.status != PayrollBatchStatus.PROCESSED:
             return None
+
+        before_status = batch.status
+        before_total_gross = batch.total_gross
+        before_total_net = batch.total_net
+        before_total_employees = batch.total_employees
 
         batch.status = PayrollBatchStatus.APPROVED
         batch.approved_by = approved_by
@@ -224,15 +307,67 @@ class PayrollBatchService:
         for payslip in batch.payslips:
             payslip.status = PayslipStatus.APPROVED
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
+
+        # Domain audit: payroll finalize (approve) — §8.5 / §4.11.
+        # The PROCESSED → APPROVED transition is the locking step: once
+        # approved, payslips cannot be edited and the batch is ready for
+        # bank-file generation + payment.
+        await record_financial_action(
+            self.db,
+            organization_id=batch.organization_id,
+            entity_type="PAYROLL_BATCH",
+            entity_id=batch.id,
+            entity_reference=batch.batch_number,
+            action="PAYROLL_FINALIZE",
+            user_id=approved_by,
+            before={
+                "status": before_status,
+                "total_gross": before_total_gross,
+                "total_net": before_total_net,
+                "total_employees": before_total_employees,
+            },
+            after={
+                "status": batch.status,
+                "total_gross": batch.total_gross,
+                "total_net": batch.total_net,
+                "total_employees": batch.total_employees,
+                "approved_at": batch.approved_at,
+            },
+            metadata={
+                "transaction_type": "PAYROLL_FINALIZE",
+                "payroll_year": batch.payroll_year,
+                "payroll_month": batch.payroll_month,
+                "total_gross": str(batch.total_gross),
+                "total_net": str(batch.total_net),
+                "total_deductions": str(batch.total_deductions),
+                "employee_count": batch.total_employees,
+                "payslip_count": len(batch.payslips),
+                "remarks": remarks,
+            },
+            change_reason="Payroll batch approved (finalized)",
+        )
+
         return batch
 
-    async def mark_paid(self, id: UUID, updated_by: UUID) -> Optional[PayrollBatch]:
+    async def mark_paid(
+        self,
+        id: UUID,
+        updated_by: UUID,
+        payment_reference: Optional[str] = None,
+        organization_id: Optional[UUID] = None,
+    ) -> Optional[PayrollBatch]:
         """Mark payroll batch as paid"""
-        batch = await self.get(id)
+        batch = await self.get(id, organization_id) if organization_id else await self.get(id)
         if not batch or batch.status != PayrollBatchStatus.APPROVED:
             return None
+
+        reference = (payment_reference or "").strip()
+        if not reference:
+            raise ValueError("Payment reference is required before marking payroll paid")
+
+        self._validate_payroll_bank_details(batch)
 
         batch.status = PayrollBatchStatus.PAID
         batch.paid_at = datetime.utcnow()
@@ -241,10 +376,196 @@ class PayrollBatchService:
         for payslip in batch.payslips:
             payslip.status = PayslipStatus.PAID
             payslip.paid_at = datetime.utcnow()
+            payslip.payment_reference = reference
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
         return batch
+
+    async def export_bank_file(
+        self,
+        id: UUID,
+        organization_id: Optional[UUID] = None,
+    ) -> PayrollBankFileResponse:
+        """Generate a manual bank-upload CSV for an approved or paid payroll batch."""
+        batch = await self.get(id, organization_id) if organization_id else await self.get(id)
+        if not batch:
+            raise ValueError("Batch not found")
+        if batch.status not in [PayrollBatchStatus.APPROVED, PayrollBatchStatus.PAID]:
+            raise ValueError("Bank payout export is available only after approval")
+
+        payable_payslips = self._validate_payroll_bank_details(batch)
+
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow([
+            "employee_code",
+            "employee_name",
+            "bank_account_number",
+            "ifsc",
+            "amount",
+            "narration",
+            "payment_reference",
+        ])
+
+        total_amount = Decimal("0")
+        for payslip in payable_payslips:
+            total_amount += payslip.net_salary
+            writer.writerow([
+                payslip.employee_code,
+                payslip.employee_name,
+                payslip.bank_account_number,
+                payslip.bank_ifsc,
+                f"{payslip.net_salary:.2f}",
+                f"Salary {batch.payroll_year}-{batch.payroll_month:02d}",
+                payslip.payment_reference or "",
+            ])
+
+        safe_batch_number = batch.batch_number.replace("/", "_")
+        return PayrollBankFileResponse(
+            file_name=f"salary_payout_{safe_batch_number}.csv",
+            file_content=output.getvalue(),
+            record_count=len(payable_payslips),
+            total_amount=total_amount,
+            generated_at=datetime.now(timezone.utc),
+        )
+
+    def _validate_payroll_bank_details(self, batch: PayrollBatch) -> list[Payslip]:
+        """Return payable payslips only after validating salary bank details."""
+        payable_payslips = [p for p in batch.payslips if p.net_salary > 0]
+        missing_bank = [
+            f"{p.employee_code} - {p.employee_name}"
+            for p in payable_payslips
+            if not p.bank_account_number or not p.bank_ifsc
+        ]
+        if missing_bank:
+            raise ValueError(f"Missing salary bank details for: {', '.join(missing_bank)}")
+        return payable_payslips
+
+    async def post_to_gl(
+        self,
+        id: UUID,
+        data: PayrollGLPostRequest,
+        posted_by: UUID,
+        organization_id: Optional[UUID] = None,
+    ) -> PayrollGLPostResponse:
+        """Post approved payroll batch to finance as a balanced source voucher."""
+        batch = await self.get(id, organization_id) if organization_id else await self.get(id)
+        if not batch:
+            raise ValueError("Batch not found")
+        if batch.status not in [PayrollBatchStatus.APPROVED, PayrollBatchStatus.PAID]:
+            raise ValueError("Only approved or paid payroll can be posted to GL")
+
+        source_reference = f"PAYROLL:{batch.batch_number}"
+        existing = await self.db.execute(
+            select(GLEntry.id).where(
+                and_(
+                    GLEntry.source_id == batch.id,
+                    GLEntry.source_reference == source_reference,
+                )
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none():
+            raise ValueError("Payroll batch is already posted to GL")
+
+        voucher_date = data.voucher_date or batch.payment_date or batch.pay_period_to
+        fy = await FinancialYearRepository(self.db).get_by_date(batch.organization_id, voucher_date)
+        if not fy:
+            raise ValueError(f"No financial year found for {voucher_date}")
+        period = await FinancialPeriodRepository(self.db).get_by_date(fy.id, voucher_date)
+        if not period:
+            raise ValueError(f"No financial period found for {voucher_date}")
+
+        known_employee_deductions = (
+            batch.total_pf_employee
+            + batch.total_esi_employee
+            + batch.total_pt
+            + batch.total_tds
+        )
+        other_deductions = batch.total_deductions - known_employee_deductions
+        if other_deductions < 0:
+            other_deductions = Decimal("0")
+
+        required_payables: list[tuple[Decimal, Optional[UUID], str]] = [
+            (batch.total_pf_employee + batch.total_pf_employer, data.pf_payable_account_id, "PF payable account"),
+            (batch.total_esi_employee + batch.total_esi_employer, data.esi_payable_account_id, "ESI payable account"),
+            (batch.total_pt, data.pt_payable_account_id, "PT payable account"),
+            (batch.total_tds, data.tds_payable_account_id, "TDS payable account"),
+            (other_deductions, data.other_deductions_payable_account_id, "Other deductions payable account"),
+        ]
+        for amount, account_id, label in required_payables:
+            if amount > 0 and not account_id:
+                raise ValueError(f"{label} is required")
+        if batch.total_employer_statutory > 0 and not data.employer_contribution_expense_account_id:
+            raise ValueError("Employer contribution expense account is required")
+
+        lines = [
+            {
+                "account_id": data.salary_expense_account_id,
+                "debit_amount": batch.total_gross,
+                "credit_amount": Decimal("0"),
+                "cost_center_id": data.cost_center_id,
+                "narration": "Payroll salary expense",
+            },
+            {
+                "account_id": data.net_salary_payable_account_id,
+                "debit_amount": Decimal("0"),
+                "credit_amount": batch.total_net,
+                "cost_center_id": data.cost_center_id,
+                "narration": "Net salary payable",
+            },
+        ]
+
+        if batch.total_employer_statutory > 0:
+            lines.append({
+                "account_id": data.employer_contribution_expense_account_id,
+                "debit_amount": batch.total_employer_statutory,
+                "credit_amount": Decimal("0"),
+                "cost_center_id": data.cost_center_id,
+                "narration": "Employer statutory contribution expense",
+            })
+
+        for amount, account_id, narration in [
+            (batch.total_pf_employee + batch.total_pf_employer, data.pf_payable_account_id, "PF payable"),
+            (batch.total_esi_employee + batch.total_esi_employer, data.esi_payable_account_id, "ESI payable"),
+            (batch.total_pt, data.pt_payable_account_id, "Professional tax payable"),
+            (batch.total_tds, data.tds_payable_account_id, "TDS payable"),
+            (other_deductions, data.other_deductions_payable_account_id, "Other payroll deductions payable"),
+        ]:
+            if amount > 0:
+                lines.append({
+                    "account_id": account_id,
+                    "debit_amount": Decimal("0"),
+                    "credit_amount": amount,
+                    "cost_center_id": data.cost_center_id,
+                    "narration": narration,
+                })
+
+        gl_entries = await GLPostingService(self.db).post_entries(
+            organization_id=batch.organization_id,
+            financial_year_id=fy.id,
+            period_id=period.id,
+            voucher_date=voucher_date,
+            source_type=GLEntrySourceType.PAYROLL,
+            source_id=batch.id,
+            source_reference=source_reference,
+            lines=lines,
+            narration=data.narration or f"Payroll posting {batch.batch_number}",
+            posted_by=posted_by,
+        )
+
+        await self.db.flush()
+        voucher_number = gl_entries[0].voucher_number if gl_entries else None
+        total_debit = sum(entry.debit_amount for entry in gl_entries)
+        total_credit = sum(entry.credit_amount for entry in gl_entries)
+        return PayrollGLPostResponse(
+            posted=True,
+            source_reference=source_reference,
+            gl_entry_count=len(gl_entries),
+            voucher_number=voucher_number,
+            total_debit=total_debit,
+            total_credit=total_credit,
+        )
 
 
 class PayrollProcessingService:
@@ -257,12 +578,15 @@ class PayrollProcessingService:
         self,
         batch_id: UUID,
         employee_ids: Optional[List[UUID]] = None,
-        processed_by: UUID = None
+        processed_by: UUID = None,
+        organization_id: Optional[UUID] = None,
     ) -> PayrollBatch:
         """Process payroll for a batch"""
-        # Get batch
+        batch_filters = [PayrollBatch.id == batch_id]
+        if organization_id:
+            batch_filters.append(PayrollBatch.organization_id == organization_id)
         batch_result = await self.db.execute(
-            select(PayrollBatch).where(PayrollBatch.id == batch_id)
+            select(PayrollBatch).where(and_(*batch_filters))
         )
         batch = batch_result.scalar_one_or_none()
         if not batch:
@@ -271,11 +595,38 @@ class PayrollProcessingService:
         if batch.status not in [PayrollBatchStatus.DRAFT, PayrollBatchStatus.PROCESSING]:
             raise ValueError("Batch is not in draft or processing status")
 
+        if batch.pay_period_from > batch.pay_period_to:
+            raise ValueError("Pay period start cannot be after pay period end")
+
+        if (
+            batch.pay_period_to.year != batch.payroll_year
+            or batch.pay_period_to.month != batch.payroll_month
+        ):
+            raise ValueError("Pay period end must fall in the payroll month")
+
         batch.status = PayrollBatchStatus.PROCESSING
+        batch.total_employees = 0
+        batch.total_gross = Decimal("0")
+        batch.total_deductions = Decimal("0")
+        batch.total_net = Decimal("0")
+        batch.total_pf_employee = Decimal("0")
+        batch.total_pf_employer = Decimal("0")
+        batch.total_esi_employee = Decimal("0")
+        batch.total_esi_employer = Decimal("0")
+        batch.total_pt = Decimal("0")
+        batch.total_tds = Decimal("0")
+        batch.total_employer_statutory = Decimal("0")
+
+        await self.db.execute(delete(Payslip).where(Payslip.batch_id == batch.id))
+        await self.db.flush()
 
         # Get employees with active salary
         employee_query = select(Employee).options(
-            selectinload(Employee.salaries)
+            selectinload(Employee.salaries),
+            selectinload(Employee.department),
+            selectinload(Employee.designation),
+            selectinload(Employee.bank_accounts),
+            selectinload(Employee.statutory_info),
         ).where(
             and_(
                 Employee.organization_id == batch.organization_id,
@@ -290,9 +641,9 @@ class PayrollProcessingService:
         employees = employees_result.scalars().all()
 
         # Get statutory setup
-        pf_setup = await self._get_statutory_setup(batch.organization_id, "PF")
-        esi_setup = await self._get_statutory_setup(batch.organization_id, "ESI")
-        pt_setup = await self._get_statutory_setup(batch.organization_id, "PT")
+        pf_setup = await self._get_statutory_setup(batch.organization_id, "PF", batch.pay_period_to)
+        esi_setup = await self._get_statutory_setup(batch.organization_id, "ESI", batch.pay_period_to)
+        pt_setup = await self._get_statutory_setup(batch.organization_id, "PT", batch.pay_period_to)
 
         # Initialize totals
         total_gross = Decimal("0")
@@ -313,7 +664,7 @@ class PayrollProcessingService:
 
             # Get attendance summary
             attendance = await self._get_attendance_summary(
-                employee.id, batch.pay_period_from, batch.pay_period_to
+                employee.id, batch.payroll_year, batch.payroll_month
             )
 
             # Generate payslip
@@ -346,21 +697,25 @@ class PayrollProcessingService:
         batch.status = PayrollBatchStatus.PROCESSED
         batch.processed_at = datetime.utcnow()
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(batch)
         return batch
 
     async def _get_statutory_setup(
         self,
         organization_id: UUID,
-        statutory_type: str
+        statutory_type: str,
+        as_of_date: Optional[date] = None,
     ) -> Optional[StatutorySetup]:
         """Get effective statutory setup"""
+        check_date = as_of_date or date.today()
         result = await self.db.execute(
             select(StatutorySetup).where(
                 and_(
                     StatutorySetup.organization_id == organization_id,
                     StatutorySetup.statutory_type == statutory_type,
+                    StatutorySetup.effective_from <= check_date,
+                    (StatutorySetup.effective_to >= check_date) | (StatutorySetup.effective_to.is_(None)),
                     StatutorySetup.is_active == True
                 )
             ).order_by(StatutorySetup.effective_from.desc()).limit(1)
@@ -395,37 +750,34 @@ class PayrollProcessingService:
     async def _get_attendance_summary(
         self,
         employee_id: UUID,
-        from_date: date,
-        to_date: date
+        year: int,
+        month: int
     ) -> dict:
-        """Get attendance summary for the period"""
+        """Get locked monthly attendance summary for payroll."""
         result = await self.db.execute(
-            select(DailyAttendanceSummary).where(
+            select(MonthlyAttendanceSummary).where(
                 and_(
-                    DailyAttendanceSummary.employee_id == employee_id,
-                    DailyAttendanceSummary.period_from <= to_date,
-                    DailyAttendanceSummary.period_to >= from_date
+                    MonthlyAttendanceSummary.employee_id == employee_id,
+                    MonthlyAttendanceSummary.year == year,
+                    MonthlyAttendanceSummary.month == month,
                 )
             )
         )
         summary = result.scalar_one_or_none()
 
-        if summary:
-            return {
-                "working_days": summary.total_working_days or Decimal("26"),
-                "days_present": summary.total_present_days or Decimal("26"),
-                "days_absent": summary.total_absent_days or Decimal("0"),
-                "leave_days": summary.total_leave_days or Decimal("0"),
-                "lop_days": summary.lop_days or Decimal("0"),
-            }
+        if not summary or not summary.is_processed:
+            raise ValueError("Attendance summary is not processed for employee")
 
-        # Default if no summary
+        if not summary.is_locked:
+            raise ValueError("Attendance must be locked before payroll processing")
+
+        half_days = Decimal(str(summary.half_days or 0)) * Decimal("0.5")
         return {
-            "working_days": Decimal("26"),
-            "days_present": Decimal("26"),
-            "days_absent": Decimal("0"),
-            "leave_days": Decimal("0"),
-            "lop_days": Decimal("0"),
+            "working_days": Decimal(str(summary.working_days or 0)),
+            "days_present": Decimal(str(summary.present_days or 0)) + half_days,
+            "days_absent": Decimal(str(summary.absent_days or 0)),
+            "leave_days": Decimal(str(summary.paid_leave_days or 0)),
+            "lop_days": Decimal(str(summary.lop_days or 0)),
         }
 
     async def _generate_payslip(
@@ -449,8 +801,8 @@ class PayrollProcessingService:
         payslip_number = await self._generate_payslip_number(batch.batch_number, employee.employee_code)
 
         # Get employee snapshot data
-        department_name = employee.department.department_name if employee.department else None
-        designation_name = employee.designation.designation_name if employee.designation else None
+        department_name = employee.department.name if employee.department else None
+        designation_name = employee.designation.name if employee.designation else None
 
         # Get bank details
         bank_account = None
@@ -462,11 +814,11 @@ class PayrollProcessingService:
                 bank_ifsc = primary_bank.ifsc_code
 
         # Get statutory numbers
-        uan_number = None
-        esi_number = None
-        if employee.statutory:
-            uan_number = employee.statutory.uan_number
-            esi_number = employee.statutory.esi_number
+        uan_number = employee.uan_number
+        esi_number = employee.esic_number
+        if employee.statutory_info:
+            uan_number = employee.uan_number or employee.statutory_info.pf_account_number
+            esi_number = employee.statutory_info.esi_number or employee.esic_number
 
         # Create payslip
         payslip = Payslip(
@@ -542,23 +894,21 @@ class PayrollProcessingService:
 
         # PF Calculation
         if pf_setup and pf_wage > 0:
-            pf_wage_capped = min(pf_wage, pf_setup.pf_wage_ceiling or Decimal("15000"))
-            pf_employee = (pf_wage_capped * (pf_setup.pf_employee_rate or Decimal("12")) / 100).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-            pf_employer = (pf_wage_capped * (pf_setup.pf_employer_rate or Decimal("12")) / 100).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
+            pf = compute_pf(pf_wage)
+            pf_employee = pf.employee_contribution
+            pf_employer = pf.employer_total
 
             # Create PF statutory record
             pf_statutory = PayrollStatutory(
                 payslip_id=payslip.id,
                 statutory_type="PF",
-                wage_base=pf_wage_capped,
-                employee_rate=pf_setup.pf_employee_rate,
+                wage_base=pf.pf_wages,
+                employee_rate=Decimal("12.00"),
                 employee_amount=pf_employee,
-                employer_rate=pf_setup.pf_employer_rate,
+                employer_rate=Decimal("12.00"),
                 employer_amount=pf_employer,
+                eps_amount=pf.employer_eps,
+                admin_charges=pf.employer_admin,
                 total_amount=pf_employee + pf_employer,
                 created_by=created_by
             )
@@ -566,32 +916,33 @@ class PayrollProcessingService:
             total_deductions += pf_employee
 
         # ESI Calculation
-        if esi_setup and esi_wage <= (esi_setup.esi_wage_ceiling or Decimal("21000")):
-            esi_employee = (esi_wage * (esi_setup.esi_employee_rate or Decimal("0.75")) / 100).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
-            esi_employer = (esi_wage * (esi_setup.esi_employer_rate or Decimal("3.25")) / 100).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
+        if esi_setup:
+            esi = compute_esi(esi_wage)
+            esi_employee = esi.employee_contribution
+            esi_employer = esi.employer_contribution
 
             # Create ESI statutory record
-            esi_statutory = PayrollStatutory(
-                payslip_id=payslip.id,
-                statutory_type="ESI",
-                wage_base=esi_wage,
-                employee_rate=esi_setup.esi_employee_rate,
-                employee_amount=esi_employee,
-                employer_rate=esi_setup.esi_employer_rate,
-                employer_amount=esi_employer,
-                total_amount=esi_employee + esi_employer,
-                created_by=created_by
-            )
-            self.db.add(esi_statutory)
-            total_deductions += esi_employee
+            if esi.applicable:
+                esi_statutory = PayrollStatutory(
+                    payslip_id=payslip.id,
+                    statutory_type="ESI",
+                    wage_base=esi_wage,
+                    employee_rate=Decimal("0.75"),
+                    employee_amount=esi_employee,
+                    employer_rate=Decimal("3.25"),
+                    employer_amount=esi_employer,
+                    total_amount=esi_employee + esi_employer,
+                    created_by=created_by
+                )
+                self.db.add(esi_statutory)
+                total_deductions += esi_employee
 
-        # PT Calculation (simplified - actual implementation should use slabs)
-        if pt_setup and pt_setup.pt_slabs:
-            pt_amount = self._calculate_pt(total_earnings, pt_setup.pt_slabs)
+        # PT Calculation
+        if pt_setup:
+            if pt_setup.pt_slabs:
+                pt_amount = self._calculate_pt(total_earnings, pt_setup.pt_slabs)
+            elif not pt_setup.pt_state or pt_setup.pt_state.upper() == "MAHARASHTRA":
+                pt_amount = compute_pt_maharashtra(total_earnings)
             if pt_amount > 0:
                 pt_statutory = PayrollStatutory(
                     payslip_id=payslip.id,
@@ -659,9 +1010,9 @@ class PayslipService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get(self, id: UUID) -> Optional[Payslip]:
+    async def get(self, id: UUID, organization_id: Optional[UUID] = None) -> Optional[Payslip]:
         """Get payslip by ID"""
-        result = await self.db.execute(
+        query = (
             select(Payslip)
             .options(
                 selectinload(Payslip.components),
@@ -669,10 +1020,17 @@ class PayslipService:
             )
             .where(Payslip.id == id)
         )
+        if organization_id:
+            query = query.join(PayrollBatch).where(PayrollBatch.organization_id == organization_id)
+
+        result = await self.db.execute(
+            query
+        )
         return result.scalar_one_or_none()
 
     async def list(
         self,
+        organization_id: UUID,
         batch_id: Optional[UUID] = None,
         employee_id: Optional[UUID] = None,
         status: Optional[str] = None,
@@ -680,7 +1038,7 @@ class PayslipService:
         limit: int = 50
     ) -> Tuple[List[Payslip], int]:
         """List payslips with filters"""
-        query = select(Payslip)
+        query = select(Payslip).join(PayrollBatch).where(PayrollBatch.organization_id == organization_id)
 
         if batch_id:
             query = query.where(Payslip.batch_id == batch_id)
@@ -706,10 +1064,11 @@ class PayslipService:
         self,
         id: UUID,
         data: PayslipUpdate,
-        updated_by: UUID
+        updated_by: UUID,
+        organization_id: Optional[UUID] = None,
     ) -> Optional[Payslip]:
         """Update payslip (manual adjustments)"""
-        payslip = await self.get(id)
+        payslip = await self.get(id, organization_id)
         if not payslip:
             return None
 
@@ -718,12 +1077,13 @@ class PayslipService:
             setattr(payslip, field, value)
         payslip.updated_by = updated_by
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(payslip)
         return payslip
 
     async def get_employee_payslips(
         self,
+        organization_id: UUID,
         employee_id: UUID,
         year: Optional[int] = None,
         skip: int = 0,
@@ -731,7 +1091,10 @@ class PayslipService:
     ) -> Tuple[List[Payslip], int]:
         """Get payslips for an employee"""
         query = select(Payslip).join(PayrollBatch).where(
-            Payslip.employee_id == employee_id
+            and_(
+                PayrollBatch.organization_id == organization_id,
+                Payslip.employee_id == employee_id,
+            )
         )
 
         if year:

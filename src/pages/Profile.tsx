@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
 import {
   User,
   Mail,
@@ -12,11 +10,12 @@ import {
   Key,
   CheckCircle,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Dialog,
   DialogContent,
@@ -26,9 +25,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { PageHeader } from '@/components/common/PageHeader';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { authApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 interface UserProfile {
   id: string;
   username: string;
@@ -79,7 +81,7 @@ export function Profile() {
       const response = await authApi.me();
       setProfile(response.data);
     } catch (error) {
-      console.error('Failed to fetch profile:', error);
+      logger.error('Failed to fetch profile:', error);
     } finally {
       setLoading(false);
     }
@@ -96,8 +98,8 @@ export function Profile() {
         setPasswordDialogOpen(false);
         setPasswordChanged(false);
       }, 2000);
-    } catch (err: any) {
-      setPasswordError(err.response?.data?.detail || 'Failed to change password');
+    } catch (err: unknown) {
+      setPasswordError(getErrorMessage(err, 'Failed to change password'));
     } finally {
       setChangingPassword(false);
     }

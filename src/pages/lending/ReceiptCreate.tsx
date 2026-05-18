@@ -1,21 +1,14 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Receipt, Check, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, Receipt, Check, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -25,52 +18,56 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useLoanAccounts } from '@/hooks/lending/useLoanAccounts';
+import { useCreateReceipt, type CreateReceiptResponse } from '@/hooks/lending/useReceipts';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { formatCurrency } from '@/lib/utils';
 
 const receiptSchema = z.object({
-  loan_account_id: z.string().min(1, 'Loan account is required'),
-  receipt_amount: z.string().min(1, 'Amount is required'),
-  receipt_date: z.string().min(1, 'Receipt date is required'),
-  value_date: z.string().optional(),
-  receipt_type: z.string().default('REGULAR'),
-  receipt_mode: z.string().min(1, 'Receipt mode is required'),
-  instrument_number: z.string().optional(),
-  instrument_date: z.string().optional(),
-  instrument_bank: z.string().optional(),
+  loanAccountId: z.string().min(1, 'Loan account is required'),
+  receiptAmount: z.string().min(1, 'Amount is required'),
+  receiptDate: z.string().min(1, 'Receipt date is required'),
+  valueDate: z.string().optional(),
+  receiptType: z.string().default('REGULAR'),
+  receiptMode: z.string().min(1, 'Receipt mode is required'),
+  instrumentNumber: z.string().optional(),
+  instrumentDate: z.string().optional(),
+  instrumentBank: z.string().optional(),
   remarks: z.string().optional(),
 });
 
-type ReceiptFormData = z.infer<typeof receiptSchema>;
+type ReceiptFormInput = z.input<typeof receiptSchema>;
+type ReceiptFormData = z.output<typeof receiptSchema>;
 
-// Mock data
-const loanAccounts = [
-  {
-    id: '1',
-    number: 'SMFC/LA/2024/00125',
-    entity: 'ABC Trading Co.',
-    outstanding: 15000000,
-    overdue: 500000,
-    next_emi: 450000,
-    next_due_date: '2025-01-15',
-  },
-  {
-    id: '2',
-    number: 'SMFC/LA/2024/00089',
-    entity: 'XYZ Industries',
-    outstanding: 25000000,
-    overdue: 0,
-    next_emi: 750000,
-    next_due_date: '2025-01-20',
-  },
-];
+interface LoanAccountOption {
+  id: string;
+  number: string;
+  entity: string;
+  outstanding: number;
+  overdue: number;
+  nextDue: number;
+  nextDueDate: string | null;
+}
 
 const receiptTypes = [
   { value: 'REGULAR', label: 'Regular Payment' },
   { value: 'PREPAYMENT', label: 'Prepayment' },
-  { value: 'PARTIAL_PREPAYMENT', label: 'Partial Prepayment' },
   { value: 'FORECLOSURE', label: 'Foreclosure' },
-  { value: 'BOUNCE_RECOVERY', label: 'Bounce Recovery' },
+  { value: 'SUBVENTION', label: 'Subvention' },
+  { value: 'INSURANCE_CLAIM', label: 'Insurance Claim' },
+  { value: 'LEGAL_RECOVERY', label: 'Legal Recovery' },
+  { value: 'OTS_SETTLEMENT', label: 'OTS Settlement' },
+  { value: 'WRITE_BACK', label: 'Write Back' },
 ];
 
 const receiptModes = [
@@ -86,53 +83,105 @@ const receiptModes = [
 
 export default function ReceiptCreate() {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedLoan, setSelectedLoan] = useState<typeof loanAccounts[0] | null>(null);
-  const [showSuccess, setShowSuccess] = useState(false);
+  const { toast } = useToast();
+  const { data: loanAccountData, isLoading: isLoadingLoanAccounts } = useLoanAccounts({
+    status: 'ACTIVE',
+    pageSize: 100,
+  });
+  const loanAccounts: LoanAccountOption[] =
+    loanAccountData?.items.map((loan) => {
+      const outstanding = Number(loan.totalOutstanding);
+      return {
+        id: loan.id,
+        number: loan.loanAccountNumber,
+        entity: loan.entityName ?? 'Borrower entity',
+        outstanding,
+        overdue: loan.daysPastDue > 0 ? outstanding : 0,
+        nextDue: outstanding > 0 ? outstanding : Number(loan.principalOutstanding),
+        nextDueDate: loan.maturityDate,
+      };
+    }) ?? [];
+  const [selectedLoan, setSelectedLoan] = useState<LoanAccountOption | null>(null);
+  const [created, setCreated] = useState<CreateReceiptResponse | null>(null);
+  const createReceipt = useCreateReceipt();
 
-  const form = useForm<ReceiptFormData>({
-    resolver: zodResolver(receiptSchema) as any,
+  const form = useForm<ReceiptFormInput, unknown, ReceiptFormData>({
+    resolver: zodResolver(receiptSchema),
     defaultValues: {
-      receipt_type: 'REGULAR',
-      receipt_date: new Date().toISOString().split('T')[0],
+      receiptType: 'REGULAR',
+      receiptDate: new Date().toISOString().split('T')[0],
     },
   });
 
-  const receiptMode = form.watch('receipt_mode');
+  const receiptMode = form.watch('receiptMode');
 
   const onLoanSelect = (loanId: string) => {
     const loan = loanAccounts.find((l) => l.id === loanId);
     setSelectedLoan(loan || null);
-    form.setValue('loan_account_id', loanId);
+    form.setValue('loanAccountId', loanId);
   };
 
   const onSubmit = async (data: ReceiptFormData) => {
-    setIsLoading(true);
-    // API call would go here
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setShowSuccess(true);
+    const amountNum = Number(data.receiptAmount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      form.setError('receiptAmount', { message: 'Enter a positive amount' });
+      return;
+    }
+    try {
+      const response = await createReceipt.mutateAsync({
+        loanAccountId: data.loanAccountId,
+        receiptAmount: amountNum,
+        receiptDate: data.receiptDate,
+        valueDate: data.valueDate || undefined,
+        receiptType: data.receiptType || 'REGULAR',
+        receiptMode: data.receiptMode,
+        instrumentNumber: data.instrumentNumber || undefined,
+        instrumentDate: data.instrumentDate || undefined,
+        instrumentBank: data.instrumentBank || undefined,
+        remarks: data.remarks || undefined,
+      });
+      toast({
+        title: 'Receipt created',
+        description: `Receipt ${response.receiptNumber} recorded.`,
+      });
+      setCreated(response);
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
-  if (showSuccess) {
+  if (created) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <Check className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Receipt Created Successfully</h2>
-          <p className="text-muted-foreground mb-6">
-            Receipt number: <span className="font-mono">RCP/2025/00245</span>
+          <h2 className="mb-2 text-2xl font-bold">Receipt Created Successfully</h2>
+          <p className="mb-2 text-muted-foreground">
+            Receipt number: <span className="font-mono">{created.receiptNumber}</span>
           </p>
-          <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => navigate('/lending/receipts')}>
+          <p className="mb-6 text-muted-foreground">
+            Status: {created.status} · Unallocated:{' '}
+            {formatCurrency(Number(created.unallocatedAmount))}
+          </p>
+          <div className="flex justify-center gap-4">
+            <Button variant="outline" onClick={() => navigate('/admin/lending/receipts')}>
               View All Receipts
             </Button>
-            <Button onClick={() => navigate('/lending/receipts/allocate')}>
+            <Button onClick={() => navigate(`/admin/lending/receipts/${created.id}/allocate`)}>
               Allocate Receipt
             </Button>
-            <Button variant="outline" onClick={() => setShowSuccess(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCreated(null);
+                form.reset({
+                  receiptType: 'REGULAR',
+                  receiptDate: new Date().toISOString().split('T')[0],
+                });
+              }}
+            >
               Create Another
             </Button>
           </div>
@@ -146,13 +195,10 @@ export default function ReceiptCreate() {
       <PageHeader
         title="Create Receipt"
         subtitle="Record a new payment receipt"
-        breadcrumbs={[
-          { label: 'Receipts', to: '/lending/receipts' },
-          { label: 'New' },
-        ]}
+        breadcrumbs={[{ label: 'Receipts', to: '/admin/lending/receipts' }, { label: 'New' }]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Form */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -161,10 +207,10 @@ export default function ReceiptCreate() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                 <FormField
                   control={form.control}
-                  name="loan_account_id"
+                  name="loanAccountId"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Loan Account *</FormLabel>
@@ -175,6 +221,11 @@ export default function ReceiptCreate() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
+                          {isLoadingLoanAccounts && (
+                            <SelectItem value="__loading" disabled>
+                              Loading loan accounts...
+                            </SelectItem>
+                          )}
                           {loanAccounts.map((acc) => (
                             <SelectItem key={acc.id} value={acc.id}>
                               {acc.number} - {acc.entity}
@@ -190,7 +241,7 @@ export default function ReceiptCreate() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="receipt_amount"
+                    name="receiptAmount"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Receipt Amount *</FormLabel>
@@ -204,7 +255,7 @@ export default function ReceiptCreate() {
 
                   <FormField
                     control={form.control}
-                    name="receipt_type"
+                    name="receiptType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Receipt Type</FormLabel>
@@ -231,7 +282,7 @@ export default function ReceiptCreate() {
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}
-                    name="receipt_date"
+                    name="receiptDate"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Receipt Date *</FormLabel>
@@ -245,7 +296,7 @@ export default function ReceiptCreate() {
 
                   <FormField
                     control={form.control}
-                    name="value_date"
+                    name="valueDate"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Value Date</FormLabel>
@@ -261,7 +312,7 @@ export default function ReceiptCreate() {
 
                 <FormField
                   control={form.control}
-                  name="receipt_mode"
+                  name="receiptMode"
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Receipt Mode *</FormLabel>
@@ -289,7 +340,7 @@ export default function ReceiptCreate() {
                   <div className="grid grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
-                      name="instrument_number"
+                      name="instrumentNumber"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>
@@ -307,7 +358,7 @@ export default function ReceiptCreate() {
 
                     <FormField
                       control={form.control}
-                      name="instrument_date"
+                      name="instrumentDate"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Instrument Date</FormLabel>
@@ -321,7 +372,7 @@ export default function ReceiptCreate() {
 
                     <FormField
                       control={form.control}
-                      name="instrument_bank"
+                      name="instrumentBank"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Bank</FormLabel>
@@ -349,13 +400,13 @@ export default function ReceiptCreate() {
                   )}
                 />
 
-                <div className="flex gap-4 justify-end">
+                <div className="flex justify-end gap-4">
                   <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isLoading}>
-                    <Receipt className="h-4 w-4 mr-2" />
-                    {isLoading ? 'Creating...' : 'Create Receipt'}
+                  <Button type="submit" disabled={createReceipt.isPending}>
+                    <Receipt className="mr-2 h-4 w-4" />
+                    {createReceipt.isPending ? 'Creating...' : 'Create Receipt'}
                   </Button>
                 </div>
               </form>
@@ -381,36 +432,30 @@ export default function ReceiptCreate() {
 
                 <div>
                   <p className="text-sm text-muted-foreground">Total Outstanding</p>
-                  <p className="text-2xl font-bold">
-                    {formatCurrency(selectedLoan.outstanding)}
-                  </p>
+                  <p className="text-2xl font-bold">{formatCurrency(selectedLoan.outstanding)}</p>
                 </div>
 
                 {selectedLoan.overdue > 0 && (
                   <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
                     <AlertTitle>Overdue Amount</AlertTitle>
-                    <AlertDescription>
-                      {formatCurrency(selectedLoan.overdue)}
-                    </AlertDescription>
+                    <AlertDescription>{formatCurrency(selectedLoan.overdue)}</AlertDescription>
                   </Alert>
                 )}
 
                 <div className="border-t pt-4">
                   <p className="text-sm text-muted-foreground">Next EMI Due</p>
-                  <p className="font-medium">{formatCurrency(selectedLoan.next_emi)}</p>
+                  <p className="font-medium">{formatCurrency(selectedLoan.nextDue)}</p>
                   <p className="text-sm text-muted-foreground">
-                    Due on: {selectedLoan.next_due_date}
+                    Due on: {selectedLoan.nextDueDate ?? 'Not available'}
                   </p>
                 </div>
 
-                <div className="border-t pt-4 space-y-2">
+                <div className="space-y-2 border-t pt-4">
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() =>
-                      form.setValue('receipt_amount', selectedLoan.next_emi.toString())
-                    }
+                    onClick={() => form.setValue('receiptAmount', selectedLoan.nextDue.toString())}
                   >
                     Set EMI Amount
                   </Button>
@@ -419,7 +464,7 @@ export default function ReceiptCreate() {
                       variant="outline"
                       className="w-full"
                       onClick={() =>
-                        form.setValue('receipt_amount', selectedLoan.overdue.toString())
+                        form.setValue('receiptAmount', selectedLoan.overdue.toString())
                       }
                     >
                       Set Overdue Amount
@@ -430,8 +475,8 @@ export default function ReceiptCreate() {
                     className="w-full"
                     onClick={() =>
                       form.setValue(
-                        'receipt_amount',
-                        (selectedLoan.overdue + selectedLoan.next_emi).toString()
+                        'receiptAmount',
+                        (selectedLoan.overdue + selectedLoan.nextDue).toString(),
                       )
                     }
                   >
@@ -440,8 +485,8 @@ export default function ReceiptCreate() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <div className="py-8 text-center text-muted-foreground">
+                <Receipt className="mx-auto mb-4 h-12 w-12 opacity-50" />
                 <p>Select a loan account to view details</p>
               </div>
             )}

@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
+import { Calendar, Edit, Lock, MoreHorizontal, Plus, Star, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Check, Edit, Lock, MoreHorizontal, Plus, Star, Trash2 } from 'lucide-react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,7 @@ import {
 import { financialYearsApi, organizationsApi } from '@/services/api';
 import type { FinancialYear, Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function FinancialYearList() {
   const navigate = useNavigate();
   const [financialYears, setFinancialYears] = useState<FinancialYear[]>([]);
@@ -39,17 +41,7 @@ export function FinancialYearList() {
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, total: 0, totalPages: 0 });
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchFinancialYears();
-    }
-  }, [selectedOrgId]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       const data: PaginatedResponse<Organization> = response.data;
@@ -58,11 +50,11 @@ export function FinancialYearList() {
         setSelectedOrgId(data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchFinancialYears = async (page = 1) => {
+  const fetchFinancialYears = useCallback(async (page = 1) => {
     if (!selectedOrgId) return;
     try {
       setLoading(true);
@@ -76,11 +68,21 @@ export function FinancialYearList() {
       setFinancialYears(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch financial years:', error);
+      logger.error('Failed to fetch financial years:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchFinancialYears();
+    }
+  }, [fetchFinancialYears, selectedOrgId]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this financial year?')) return;
@@ -88,7 +90,7 @@ export function FinancialYearList() {
       await financialYearsApi.delete(id);
       fetchFinancialYears(pagination.page);
     } catch (error) {
-      console.error('Failed to delete financial year:', error);
+      logger.error('Failed to delete financial year:', error);
     }
   };
 
@@ -97,7 +99,7 @@ export function FinancialYearList() {
       await financialYearsApi.setCurrent(id);
       fetchFinancialYears(pagination.page);
     } catch (error) {
-      console.error('Failed to set current financial year:', error);
+      logger.error('Failed to set current financial year:', error);
     }
   };
 
@@ -107,16 +109,8 @@ export function FinancialYearList() {
       await financialYearsApi.closeYear(id);
       fetchFinancialYears(pagination.page);
     } catch (error) {
-      console.error('Failed to close financial year:', error);
+      logger.error('Failed to close financial year:', error);
     }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
   };
 
   return (
@@ -182,8 +176,8 @@ export function FinancialYearList() {
                     <TableRow key={fy.id}>
                       <TableCell className="font-medium">{fy.code}</TableCell>
                       <TableCell>{fy.name}</TableCell>
-                      <TableCell>{formatDate(fy.start_date)}</TableCell>
-                      <TableCell>{formatDate(fy.end_date)}</TableCell>
+                      <TableCell><DateDisplay date={fy.start_date} /></TableCell>
+                      <TableCell><DateDisplay date={fy.end_date} /></TableCell>
                       <TableCell>
                         <Badge
                           className={

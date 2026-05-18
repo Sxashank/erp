@@ -8,11 +8,11 @@ from uuid import UUID
 from pydantic import Field, field_validator
 import re
 
-from app.schemas.base import BaseSchema
+from app.schemas.base import BaseSchema, CamelSchema
 from app.core.constants import TDSDeducteeType, TDSChallanStatus
 
 
-class TDSEntryBase(BaseSchema):
+class TDSEntryBase(CamelSchema):
     """Base TDS Entry schema."""
 
     tds_section_id: UUID
@@ -51,7 +51,7 @@ class TDSEntryCreate(TDSEntryBase):
     pass
 
 
-class TDSEntryUpdate(BaseSchema):
+class TDSEntryUpdate(CamelSchema):
     """Schema for updating a TDS entry."""
 
     deductee_name: Optional[str] = Field(None, min_length=1, max_length=200)
@@ -79,7 +79,7 @@ class TDSEntryUpdate(BaseSchema):
     is_active: Optional[bool] = None
 
 
-class TDSEntryResponse(BaseSchema):
+class TDSEntryResponse(CamelSchema):
     """TDS Entry response schema."""
 
     id: UUID
@@ -124,7 +124,7 @@ class TDSEntryResponse(BaseSchema):
     is_active: bool = True
 
 
-class ThresholdValidationRequest(BaseSchema):
+class ThresholdValidationRequest(CamelSchema):
     """Request schema for TDS threshold validation."""
 
     organization_id: UUID
@@ -136,7 +136,7 @@ class ThresholdValidationRequest(BaseSchema):
     deductee_pan: Optional[str] = None
 
 
-class ThresholdValidationResponse(BaseSchema):
+class ThresholdValidationResponse(CamelSchema):
     """Response schema for TDS threshold validation."""
 
     tds_applicable: bool

@@ -5,10 +5,11 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+from app.schemas.base import CamelSchema
 
 
-class YearEndClosingPreviewItem(BaseModel):
+class YearEndClosingPreviewItem(CamelSchema):
     """Account item in year-end preview."""
 
     account_id: str
@@ -18,7 +19,7 @@ class YearEndClosingPreviewItem(BaseModel):
     balance_type: str  # "DR" or "CR"
 
 
-class YearEndClosingPreviewResponse(BaseModel):
+class YearEndClosingPreviewResponse(CamelSchema):
     """Preview of year-end closing process."""
 
     can_close: bool = False
@@ -34,7 +35,7 @@ class YearEndClosingPreviewResponse(BaseModel):
     warnings: List[str] = []
 
 
-class YearEndClosingRequest(BaseModel):
+class YearEndClosingRequest(CamelSchema):
     """Request to execute year-end closing."""
 
     source_financial_year_id: UUID = Field(..., description="Financial year to close")
@@ -42,7 +43,7 @@ class YearEndClosingRequest(BaseModel):
     skip_validations: bool = Field(False, description="Skip period closure validations")
 
 
-class YearEndClosingResponse(BaseModel):
+class YearEndClosingResponse(CamelSchema):
     """Response after year-end closing execution."""
 
     success: bool = False
@@ -57,13 +58,13 @@ class YearEndClosingResponse(BaseModel):
     warnings: List[str] = []
 
 
-class ReopenYearRequest(BaseModel):
+class ReopenYearRequest(CamelSchema):
     """Request to reopen a closed financial year."""
 
     reason: str = Field(..., min_length=10, max_length=500, description="Reason for reopening")
 
 
-class ReopenYearResponse(BaseModel):
+class ReopenYearResponse(CamelSchema):
     """Response after reopening a year."""
 
     success: bool = False

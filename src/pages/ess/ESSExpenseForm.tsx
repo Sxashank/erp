@@ -1,11 +1,12 @@
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Save, Send, Plus, Trash2, Upload } from 'lucide-react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -15,6 +16,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -30,8 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { ArrowLeft, Save, Send, Plus, Trash2, Upload, Receipt } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
 const expenseLineSchema = z.object({
   date: z.string().min(1, 'Date is required'),
@@ -102,7 +103,7 @@ export default function ESSExpenseForm() {
     name: 'lines',
   });
 
-  const onSubmit = (data: ExpenseFormData, submitForApproval: boolean = false) => {
+  const onSubmit = (data: ExpenseFormData, submitForApproval = false) => {
     logger.debug('Expense submitted:', { ...data, submitForApproval });
     navigate('/ess/expenses');
   };
@@ -113,20 +114,16 @@ export default function ESSExpenseForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Receipt className="h-6 w-6" />
-            {isEdit ? 'Edit Expense Claim' : 'New Expense Claim'}
-          </h1>
-          <p className="text-muted-foreground">
-            {isEdit ? 'Update expense details' : 'Submit a new expense claim for reimbursement'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Expense Claim' : 'New Expense Claim'}
+        subtitle={
+          isEdit ? 'Update expense details' : 'Submit a new expense claim for reimbursement'
+        }
+        breadcrumbs={[
+          { label: 'Expenses', to: '/ess/expenses' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <Form {...form}>
         <form className="space-y-6">
@@ -134,7 +131,7 @@ export default function ESSExpenseForm() {
             <CardHeader>
               <CardTitle>Expense Details</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <FormField
                 control={form.control}
                 name="purpose"
@@ -209,7 +206,7 @@ export default function ESSExpenseForm() {
                   })
                 }
               >
-                <Plus className="h-4 w-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 Add Item
               </Button>
             </CardHeader>
@@ -232,9 +229,7 @@ export default function ESSExpenseForm() {
                         <FormField
                           control={form.control}
                           name={`lines.${index}.date`}
-                          render={({ field }) => (
-                            <Input type="date" className="w-32" {...field} />
-                          )}
+                          render={({ field }) => <Input type="date" className="w-32" {...field} />}
                         />
                       </TableCell>
                       <TableCell>
@@ -261,9 +256,7 @@ export default function ESSExpenseForm() {
                         <FormField
                           control={form.control}
                           name={`lines.${index}.description`}
-                          render={({ field }) => (
-                            <Input placeholder="Description" {...field} />
-                          )}
+                          render={({ field }) => <Input placeholder="Description" {...field} />}
                         />
                       </TableCell>
                       <TableCell>
@@ -304,8 +297,8 @@ export default function ESSExpenseForm() {
                 </TableBody>
               </Table>
 
-              <div className="flex justify-end mt-4">
-                <div className="bg-muted p-4 rounded-lg">
+              <div className="mt-4 flex justify-end">
+                <div className="rounded-lg bg-muted p-4">
                   <div className="text-sm text-muted-foreground">Total Amount</div>
                   <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
                 </div>
@@ -322,14 +315,11 @@ export default function ESSExpenseForm() {
               variant="outline"
               onClick={form.handleSubmit((data) => onSubmit(data, false))}
             >
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               Save as Draft
             </Button>
-            <Button
-              type="button"
-              onClick={form.handleSubmit((data) => onSubmit(data, true))}
-            >
-              <Send className="h-4 w-4 mr-2" />
+            <Button type="button" onClick={form.handleSubmit((data) => onSubmit(data, true))}>
+              <Send className="mr-2 h-4 w-4" />
               Submit for Approval
             </Button>
           </div>

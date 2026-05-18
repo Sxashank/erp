@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions, get_current_user
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.year_end_service import YearEndService
 from app.schemas.finance.year_end import (
@@ -23,12 +23,12 @@ router = APIRouter()
 
 @router.get(
     "/preview/{financial_year_id}",
-    response_model=YearEndClosingPreviewResponse,
+    response_model=YearEndClosingPreviewResponse, response_model_by_alias=True,
 )
 async def get_year_end_preview(
     financial_year_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_YEAR_CLOSE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get a preview of the year-end closing process.
@@ -62,12 +62,12 @@ async def get_year_end_preview(
 
 @router.post(
     "/execute",
-    response_model=YearEndClosingResponse,
+    response_model=YearEndClosingResponse, response_model_by_alias=True,
 )
 async def execute_year_end_closing(
     request: YearEndClosingRequest,
     current_user: User = Depends(RequirePermissions("FIN_YEAR_CLOSE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Execute the year-end closing process.
@@ -108,13 +108,13 @@ async def execute_year_end_closing(
 
 @router.post(
     "/reopen/{financial_year_id}",
-    response_model=ReopenYearResponse,
+    response_model=ReopenYearResponse, response_model_by_alias=True,
 )
 async def reopen_financial_year(
     financial_year_id: UUID,
     request: ReopenYearRequest,
     current_user: User = Depends(RequirePermissions("FIN_YEAR_CLOSE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Reopen a closed financial year.

@@ -1,6 +1,6 @@
 """Form 16A certificate generation service."""
 
-from datetime import date, datetime
+from datetime import date
 from decimal import Decimal
 from typing import List, Optional, Tuple
 from uuid import UUID
@@ -10,7 +10,6 @@ from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.tds.tds_entry import TDSEntry
-from app.models.tds.tds_section import TDSSection
 from app.repositories.tds.tds_entry_repo import TDSEntryRepository
 from app.repositories.tds.tds_section_repo import TDSSectionRepository
 from app.core.constants import TDSChallanStatus
@@ -65,6 +64,13 @@ class Form16ACertificate:
 
 class Form16AService:
     """Service for generating Form 16A certificates."""
+
+    WORKING_SUMMARY_STATUS = "GENERATED_SUMMARY"
+    LEGAL_STATUS = "NOT_TRACES_ISSUED"
+    SOURCE = "SYSTEM_GENERATED_SUMMARY"
+    COMPLIANCE_NOTE = (
+        "System-generated working summary. Use TRACES-issued Form 16A as the legal certificate."
+    )
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -247,7 +253,7 @@ class Form16AService:
             entry.certificate_number = certificate_number
             entry.certificate_date = date.today()
 
-        await self.session.commit()
+        await self.session.flush()
 
         return Form16ACertificate(
             certificate_number=certificate_number,
@@ -496,6 +502,10 @@ class Form16AService:
             "total_amount_paid": sum(e.base_amount for e in entries),
             "total_tds_deducted": sum(e.total_tds for e in entries),
             "entry_count": len(entries),
+            "artifact_status": self.WORKING_SUMMARY_STATUS,
+            "legal_status": self.LEGAL_STATUS,
+            "source": self.SOURCE,
+            "compliance_note": self.COMPLIANCE_NOTE,
         }
 
     async def get_generated_certificates(
@@ -559,6 +569,10 @@ class Form16AService:
                 "total_amount_paid": row.total_amount_paid,
                 "total_tds_deducted": row.total_tds_deducted,
                 "entry_count": row.entry_count,
+                "artifact_status": self.WORKING_SUMMARY_STATUS,
+                "legal_status": self.LEGAL_STATUS,
+                "source": self.SOURCE,
+                "compliance_note": self.COMPLIANCE_NOTE,
             })
 
         return certificates

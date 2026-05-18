@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Pencil,
@@ -10,11 +8,30 @@ import {
   Percent,
   Calendar,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -31,25 +48,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
 import { paymentTermsApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -77,17 +78,7 @@ export function PaymentTermsList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchPaymentTerms();
-    }
-  }, [selectedOrgId]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -95,11 +86,11 @@ export function PaymentTermsList() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchPaymentTerms = async () => {
+  const fetchPaymentTerms = useCallback(async () => {
     try {
       setLoading(true);
       const response = await paymentTermsApi.list({
@@ -109,11 +100,21 @@ export function PaymentTermsList() {
       });
       setPaymentTerms(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch payment terms:', error);
+      logger.error('Failed to fetch payment terms:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchPaymentTerms();
+    }
+  }, [fetchPaymentTerms, selectedOrgId]);
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -121,7 +122,7 @@ export function PaymentTermsList() {
       await paymentTermsApi.delete(deleteId);
       fetchPaymentTerms();
     } catch (error) {
-      console.error('Failed to delete payment terms:', error);
+      logger.error('Failed to delete payment terms:', error);
     } finally {
       setDeleteId(null);
     }

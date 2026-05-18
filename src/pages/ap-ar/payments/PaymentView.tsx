@@ -1,8 +1,5 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
-  ArrowLeft,
   Edit,
   Send,
   Check,
@@ -16,19 +13,10 @@ import {
   FileText,
   AlertCircle,
 } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
+import { useParams, Link } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { PageHeader } from '@/components/common/PageHeader';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -39,11 +27,25 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { paymentsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface PaymentDetail {
   id: string;
   payment_number: string;
@@ -134,7 +136,6 @@ const CHEQUE_STATUS_COLORS: Record<string, string> = {
 };
 
 export function PaymentView() {
-  const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
 
@@ -143,19 +144,14 @@ export function PaymentView() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancellationReason, setCancellationReason] = useState('');
 
-  useEffect(() => {
-    if (id) {
-      loadPayment();
-    }
-  }, [id]);
-
-  const loadPayment = async () => {
+  const loadPayment = useCallback(async () => {
+    if (!id) return;
     setLoading(true);
     try {
-      const response = await paymentsApi.get(id!);
+      const response = await paymentsApi.get(id);
       setPayment(response.data);
     } catch (error) {
-      console.error('Failed to load payment:', error);
+      logger.error('Failed to load payment:', error);
       toast({
         title: 'Error',
         description: 'Failed to load payment details',
@@ -164,7 +160,11 @@ export function PaymentView() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, toast]);
+
+  useEffect(() => {
+    loadPayment();
+  }, [loadPayment]);
 
   const handleSubmit = async () => {
     if (!payment) return;
@@ -172,12 +172,8 @@ export function PaymentView() {
       await paymentsApi.submit(payment.id);
       toast({ title: 'Success', description: 'Payment submitted for approval' });
       loadPayment();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to submit payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -187,12 +183,8 @@ export function PaymentView() {
       await paymentsApi.approve(payment.id);
       toast({ title: 'Success', description: 'Payment approved and posted' });
       loadPayment();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to approve payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -204,12 +196,8 @@ export function PaymentView() {
       setCancelDialogOpen(false);
       setCancellationReason('');
       loadPayment();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to cancel payment',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     }
   };
 
@@ -242,77 +230,71 @@ export function PaymentView() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-semibold">{payment.payment_number}</h1>
-              {getStatusBadge(payment.status)}
-              {payment.is_posted && (
-                <Badge variant="outline" className="bg-green-50">
-                  Posted
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {PAYMENT_TYPES[payment.payment_type] || payment.payment_type}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex gap-2">
-          {payment.status === 'DRAFT' && (
-            <>
-              <Button variant="outline" asChild>
-                <Link to={`/admin/ap-ar/payments/${payment.id}/edit`}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit
-                </Link>
-              </Button>
-              <Button onClick={handleSubmit}>
-                <Send className="mr-2 h-4 w-4" />
-                Submit
-              </Button>
-            </>
-          )}
-          {payment.status === 'SUBMITTED' && (
-            <>
+      <PageHeader
+        title={payment.payment_number}
+        subtitle={PAYMENT_TYPES[payment.payment_type] || payment.payment_type}
+        breadcrumbs={[
+          { label: 'Payments', to: '/admin/ap-ar/payments' },
+          { label: payment.payment_number },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            {getStatusBadge(payment.status)}
+            {payment.is_posted && (
+              <Badge variant="outline" className="bg-green-50">
+                Posted
+              </Badge>
+            )}
+            {payment.status === 'DRAFT' && (
+              <>
+                <Button variant="outline" asChild>
+                  <Link to={`/admin/ap-ar/payments/${payment.id}/edit`}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Edit
+                  </Link>
+                </Button>
+                <Button onClick={handleSubmit}>
+                  <Send className="mr-2 h-4 w-4" />
+                  Submit
+                </Button>
+              </>
+            )}
+            {payment.status === 'SUBMITTED' && (
+              <>
+                <Button variant="outline" onClick={() => setCancelDialogOpen(true)}>
+                  <X className="mr-2 h-4 w-4" />
+                  Reject
+                </Button>
+                <Button onClick={handleApprove}>
+                  <Check className="mr-2 h-4 w-4" />
+                  Approve
+                </Button>
+              </>
+            )}
+            {payment.status === 'POSTED' && (
               <Button variant="outline" onClick={() => setCancelDialogOpen(true)}>
                 <X className="mr-2 h-4 w-4" />
-                Reject
+                Cancel
               </Button>
-              <Button onClick={handleApprove}>
-                <Check className="mr-2 h-4 w-4" />
-                Approve
-              </Button>
-            </>
-          )}
-          {payment.status === 'POSTED' && (
-            <Button variant="outline" onClick={() => setCancelDialogOpen(true)}>
-              <X className="mr-2 h-4 w-4" />
-              Cancel
+            )}
+            <Button variant="outline">
+              <Printer className="mr-2 h-4 w-4" />
+              Print
             </Button>
-          )}
-          <Button variant="outline">
-            <Printer className="mr-2 h-4 w-4" />
-            Print
-          </Button>
-        </div>
-      </div>
+          </div>
+        }
+      />
 
       {payment.status === 'CANCELLED' && payment.cancellation_reason && (
         <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-4">
             <div className="flex items-start gap-3">
-              <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+              <AlertCircle className="mt-0.5 h-5 w-5 text-red-600" />
               <div>
                 <p className="font-medium text-red-800">Payment Cancelled</p>
                 <p className="text-sm text-red-700">{payment.cancellation_reason}</p>
                 {payment.cancelled_at && (
-                  <p className="text-xs text-red-600 mt-1">
+                  <p className="mt-1 text-xs text-red-600">
                     Cancelled on {format(new Date(payment.cancelled_at), 'dd MMM yyyy HH:mm')}
                   </p>
                 )}
@@ -323,7 +305,7 @@ export function PaymentView() {
       )}
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Party Details */}
           <Card>
             <CardHeader>
@@ -573,9 +555,7 @@ export function PaymentView() {
                   <Separator />
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Allocated</span>
-                    <span className="font-medium">
-                      {formatCurrency(payment.allocated_amount)}
-                    </span>
+                    <span className="font-medium">{formatCurrency(payment.allocated_amount)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Unallocated</span>
@@ -657,8 +637,8 @@ export function PaymentView() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Payment</AlertDialogTitle>
             <AlertDialogDescription>
-              Please provide a reason for cancelling this payment. This action will reverse
-              any document allocations.
+              Please provide a reason for cancelling this payment. This action will reverse any
+              document allocations.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">
@@ -672,9 +652,7 @@ export function PaymentView() {
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setCancellationReason('')}>
-              Back
-            </AlertDialogCancel>
+            <AlertDialogCancel onClick={() => setCancellationReason('')}>Back</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleCancel}
               disabled={!cancellationReason.trim()}

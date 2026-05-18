@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import get_current_user, RequirePermissions
+from app.api.deps import get_current_user, RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.auth.user_service import UserService
 from app.schemas.auth.user import (
@@ -22,13 +22,13 @@ from app.schemas.base import PaginatedResponse, MessageResponse
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[UserListResponse])
+@router.get("", response_model=PaginatedResponse[UserListResponse], response_model_by_alias=True)
 async def list_users(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("USER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get paginated list of users.
@@ -58,11 +58,11 @@ async def list_users(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=UserResponse)
+@router.post("", response_model=UserResponse, response_model_by_alias=True)
 async def create_user(
     data: UserCreate,
     current_user: User = Depends(RequirePermissions("USER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a new user.
@@ -74,11 +74,11 @@ async def create_user(
     return await _user_to_response(user, db)
 
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/{user_id}", response_model=UserResponse, response_model_by_alias=True)
 async def get_user(
     user_id: UUID,
     current_user: User = Depends(RequirePermissions("USER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Get user by ID.
@@ -90,12 +90,12 @@ async def get_user(
     return await _user_to_response(user, db)
 
 
-@router.put("/{user_id}", response_model=UserResponse)
+@router.put("/{user_id}", response_model=UserResponse, response_model_by_alias=True)
 async def update_user(
     user_id: UUID,
     data: UserUpdate,
     current_user: User = Depends(RequirePermissions("USER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Update an existing user.
@@ -107,11 +107,11 @@ async def update_user(
     return await _user_to_response(user, db)
 
 
-@router.delete("/{user_id}", response_model=MessageResponse)
+@router.delete("/{user_id}", response_model=MessageResponse, response_model_by_alias=True)
 async def delete_user(
     user_id: UUID,
     current_user: User = Depends(RequirePermissions("USER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Soft delete a user (deactivate).
@@ -123,12 +123,12 @@ async def delete_user(
     return MessageResponse(message="User deleted successfully")
 
 
-@router.post("/{user_id}/roles", response_model=UserResponse)
+@router.post("/{user_id}/roles", response_model=UserResponse, response_model_by_alias=True)
 async def assign_role(
     user_id: UUID,
     data: UserRoleAssign,
     current_user: User = Depends(RequirePermissions("USER_ROLE_ASSIGN")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Assign a role to a user.
@@ -140,13 +140,13 @@ async def assign_role(
     return await _user_to_response(user, db)
 
 
-@router.delete("/{user_id}/roles/{role_id}", response_model=UserResponse)
+@router.delete("/{user_id}/roles/{role_id}", response_model=UserResponse, response_model_by_alias=True)
 async def remove_role(
     user_id: UUID,
     role_id: UUID,
     unit_id: Optional[UUID] = Query(None),
     current_user: User = Depends(RequirePermissions("USER_ROLE_ASSIGN")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Remove a role from a user.
@@ -158,11 +158,11 @@ async def remove_role(
     return await _user_to_response(user, db)
 
 
-@router.post("/{user_id}/unlock", response_model=MessageResponse)
+@router.post("/{user_id}/unlock", response_model=MessageResponse, response_model_by_alias=True)
 async def unlock_user(
     user_id: UUID,
     current_user: User = Depends(RequirePermissions("USER_UNLOCK")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Unlock a locked user account.
@@ -174,13 +174,13 @@ async def unlock_user(
     return MessageResponse(message="User account unlocked successfully")
 
 
-@router.post("/{user_id}/reset-password", response_model=MessageResponse)
+@router.post("/{user_id}/reset-password", response_model=MessageResponse, response_model_by_alias=True)
 async def reset_user_password(
     user_id: UUID,
     new_password: str = Query(..., min_length=8),
     must_change: bool = Query(True),
     current_user: User = Depends(RequirePermissions("USER_RESET_PASSWORD")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Admin reset user password.

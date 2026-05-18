@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Any, Dict, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, Header
+from fastapi import APIRouter, Depends, Request, status, Header
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from app.models.lending.aa_consent import AAConsent, AAFetchSession
 from app.models.lending.enums import AAConsentStatus, AAFetchSessionStatus
 from app.models.core.integration_config import IntegrationConfig, IntegrationType
 from app.services.lending.aa_service import AAService
+from app.core.exceptions import UnauthorizedException
 
 logger = logging.getLogger(__name__)
 
@@ -67,10 +68,7 @@ async def finvu_webhook(
 
         if not hmac.compare_digest(expected, x_finvu_signature):
             logger.warning("Invalid Finvu webhook signature")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid signature",
-            )
+            raise UnauthorizedException(detail="Invalid signature", error_code="INVALID_SIGNATURE")
 
     # Determine notification type
     notification_type = _determine_finvu_notification_type(payload)
@@ -192,10 +190,7 @@ async def setu_webhook(
 
         if not hmac.compare_digest(expected, x_setu_signature):
             logger.warning("Invalid Setu webhook signature")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid signature",
-            )
+            raise UnauthorizedException(detail="Invalid signature", error_code="INVALID_SIGNATURE")
 
     event_type = payload.get("event", payload.get("type", ""))
     data = payload.get("data", payload)
@@ -299,10 +294,7 @@ async def onemoney_webhook(
 
         if not hmac.compare_digest(expected, x_onemoney_signature):
             logger.warning("Invalid OneMoney webhook signature")
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid signature",
-            )
+            raise UnauthorizedException(detail="Invalid signature", error_code="INVALID_SIGNATURE")
 
     # OneMoney uses AA 2.0 spec format
     notification_type = _determine_onemoney_notification_type(payload)

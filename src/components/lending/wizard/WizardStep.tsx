@@ -4,8 +4,10 @@
  */
 
 import * as React from 'react';
-import { cn } from '@/lib/utils';
+
 import { useWizard, useWizardStep } from './WizardContext';
+
+import { cn } from '@/lib/utils';
 
 export interface WizardStepProps {
   stepId?: string;

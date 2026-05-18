@@ -3,19 +3,6 @@
  * Raise and track support tickets
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Plus,
   HelpCircle,
@@ -28,11 +15,29 @@ import {
   Star,
   RefreshCw,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { essHelpdeskApi } from '@/services/essApi';
+import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { HelpdeskTicket, HelpdeskCategory, TicketSummary, TicketStatus, TicketPriority } from '@/types/ess';
 
+import { logger } from "@/lib/logger";
 export default function ESSHelpdeskPage() {
   const navigate = useNavigate();
+  const accessToken = useEssAuthStore((state) => state.accessToken);
   const [loading, setLoading] = useState(true);
   const [tickets, setTickets] = useState<HelpdeskTicket[]>([]);
   const [categories, setCategories] = useState<HelpdeskCategory[]>([]);
@@ -45,13 +50,12 @@ export default function ESSHelpdeskPage() {
   const [feedbackRating, setFeedbackRating] = useState(0);
 
   useEffect(() => {
-    const token = localStorage.getItem('ess_access_token');
-    if (!token) {
+    if (!accessToken) {
       navigate('/ess/login');
       return;
     }
     fetchData();
-  }, [navigate, statusFilter]);
+  }, [accessToken, navigate, statusFilter]);
 
   const fetchData = async () => {
     try {
@@ -64,7 +68,7 @@ export default function ESSHelpdeskPage() {
       setCategories(categoriesRes.data || []);
       setSummary(summaryRes.data);
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      logger.error('Failed to fetch data:', error);
     } finally {
       setLoading(false);
     }
@@ -85,7 +89,7 @@ export default function ESSHelpdeskPage() {
       setCreateDialogOpen(false);
       fetchData();
     } catch (error) {
-      console.error('Failed to create ticket:', error);
+      logger.error('Failed to create ticket:', error);
     } finally {
       setSubmitting(false);
     }
@@ -102,7 +106,7 @@ export default function ESSHelpdeskPage() {
       const response = await essHelpdeskApi.getTicket(selectedTicket.id);
       setSelectedTicket(response.data);
     } catch (error) {
-      console.error('Failed to add comment:', error);
+      logger.error('Failed to add comment:', error);
     } finally {
       setSubmitting(false);
     }
@@ -115,7 +119,7 @@ export default function ESSHelpdeskPage() {
       setSelectedTicket(null);
       fetchData();
     } catch (error) {
-      console.error('Failed to close ticket:', error);
+      logger.error('Failed to close ticket:', error);
     }
   };
 
@@ -130,7 +134,7 @@ export default function ESSHelpdeskPage() {
       const response = await essHelpdeskApi.getTicket(selectedTicket.id);
       setSelectedTicket(response.data);
     } catch (error) {
-      console.error('Failed to reopen ticket:', error);
+      logger.error('Failed to reopen ticket:', error);
     }
   };
 
@@ -145,7 +149,7 @@ export default function ESSHelpdeskPage() {
       fetchData();
       setSelectedTicket(null);
     } catch (error) {
-      console.error('Failed to submit feedback:', error);
+      logger.error('Failed to submit feedback:', error);
     }
   };
 
@@ -343,7 +347,7 @@ export default function ESSHelpdeskPage() {
                       </div>
                       <h4 className="font-medium">{ticket.subject}</h4>
                       <p className="text-sm text-gray-500">
-                        {ticket.category_type} • Created {new Date(ticket.created_at).toLocaleDateString()}
+                        {ticket.category_type} • Created <DateDisplay date={ticket.created_at} />
                       </p>
                     </div>
                     <MessageSquare className="h-5 w-5 text-gray-400" />

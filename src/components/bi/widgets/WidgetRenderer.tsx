@@ -2,21 +2,24 @@
  * Widget Renderer - dispatches to the correct widget component based on type
  */
 
-import { useEffect, useState } from 'react';
 import { Loader2, AlertCircle } from 'lucide-react';
-import { DashboardWidget, WidgetType, WidgetConfig } from '@/types/bi';
-import { biDataSourceApi } from '@/services/biApi';
+import { useEffect, useState } from 'react';
 
+
+import { AreaChartWidget } from './AreaChartWidget';
+import { BarChartWidget } from './BarChartWidget';
+import { DataTableWidget } from './DataTableWidget';
+import { DonutChartWidget } from './DonutChartWidget';
+import { GaugeWidget } from './GaugeWidget';
 import { KPICardWidget } from './KPICardWidget';
 import { LineChartWidget } from './LineChartWidget';
-import { BarChartWidget } from './BarChartWidget';
 import { PieChartWidget } from './PieChartWidget';
-import { DonutChartWidget } from './DonutChartWidget';
-import { AreaChartWidget } from './AreaChartWidget';
-import { DataTableWidget } from './DataTableWidget';
 import { TextMarkdownWidget } from './TextMarkdownWidget';
-import { GaugeWidget } from './GaugeWidget';
 
+import { biDataSourceApi } from '@/services/biApi';
+import type { DashboardWidget, WidgetType, WidgetConfig } from '@/types/bi';
+
+import { logger } from "@/lib/logger";
 interface WidgetRendererProps {
   widget: DashboardWidget;
   autoRefresh?: boolean;
@@ -57,7 +60,7 @@ export function WidgetRenderer({
         setData(response.data.data as Record<string, unknown>);
         setError(null);
       } catch (err) {
-        console.error('Error fetching widget data:', err);
+        logger.error('Error fetching widget data:', err);
         setError('Failed to load data');
         // Fall back to mock data
         setData(getMockData(widget.widget_type));
@@ -100,32 +103,34 @@ export function WidgetRenderer({
   const config = (widget.config || {}) as WidgetConfig;
 
   switch (widget.widget_type) {
+    // Each branch narrows the union by widget_type; we cast the still-widened
+    // config to the specific shape the child widget needs.
     case 'KPI_CARD':
-      return <KPICardWidget config={config as any} data={data as Record<string, unknown>} />;
+      return <KPICardWidget config={config as Parameters<typeof KPICardWidget>[0]['config']} data={data as Record<string, unknown>} />;
 
     case 'LINE_CHART':
-      return <LineChartWidget config={config as any} data={data as Record<string, unknown>[]} />;
+      return <LineChartWidget config={config as Parameters<typeof LineChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
 
     case 'BAR_CHART':
-      return <BarChartWidget config={config as any} data={data as Record<string, unknown>[]} />;
+      return <BarChartWidget config={config as Parameters<typeof BarChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
 
     case 'PIE_CHART':
-      return <PieChartWidget config={config as any} data={data as Record<string, unknown>[]} />;
+      return <PieChartWidget config={config as Parameters<typeof PieChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
 
     case 'DONUT_CHART':
-      return <DonutChartWidget config={config as any} data={data as Record<string, unknown>[]} />;
+      return <DonutChartWidget config={config as Parameters<typeof DonutChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
 
     case 'AREA_CHART':
-      return <AreaChartWidget config={config as any} data={data as Record<string, unknown>[]} />;
+      return <AreaChartWidget config={config as Parameters<typeof AreaChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
 
     case 'DATA_TABLE':
-      return <DataTableWidget config={config as any} data={data as Record<string, unknown>[]} />;
+      return <DataTableWidget config={config as Parameters<typeof DataTableWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
 
     case 'TEXT_MARKDOWN':
-      return <TextMarkdownWidget config={config as any} />;
+      return <TextMarkdownWidget config={config as Parameters<typeof TextMarkdownWidget>[0]['config']} />;
 
     case 'GAUGE_PROGRESS':
-      return <GaugeWidget config={config as any} data={data as Record<string, unknown>} />;
+      return <GaugeWidget config={config as Parameters<typeof GaugeWidget>[0]['config']} data={data as Record<string, unknown>} />;
 
     default:
       return (

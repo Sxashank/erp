@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react';
-import { Download, FileSpreadsheet, FileText, Filter, Printer, TrendingDown, TrendingUp } from 'lucide-react';
-import { exportProfitLossToExcel, exportProfitLossToPDF } from '@/utils/exportUtils';
+import { FileSpreadsheet, FileText, Filter, Printer, TrendingDown, TrendingUp } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -15,7 +15,9 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { reportsApi, organizationsApi, financialYearsApi } from '@/services/api';
+import { exportProfitLossToExcel, exportProfitLossToPDF } from '@/utils/exportUtils';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -65,16 +67,6 @@ export function ProfitLoss() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchFinancialYears();
-    }
-  }, [selectedOrgId]);
-
-  useEffect(() => {
     if (selectedFYId) {
       const fy = financialYears.find(f => f.id === selectedFYId);
       if (fy) {
@@ -84,7 +76,7 @@ export function ProfitLoss() {
     }
   }, [selectedFYId, financialYears]);
 
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -92,11 +84,11 @@ export function ProfitLoss() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchFinancialYears = async () => {
+  const fetchFinancialYears = useCallback(async () => {
     try {
       const response = await financialYearsApi.list({ organization_id: selectedOrgId, page_size: 100 });
       setFinancialYears(response.data.items);
@@ -107,9 +99,19 @@ export function ProfitLoss() {
         setSelectedFYId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch financial years:', error);
+      logger.error('Failed to fetch financial years:', error);
     }
-  };
+  }, [selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchFinancialYears();
+    }
+  }, [fetchFinancialYears, selectedOrgId]);
 
   const generateReport = async () => {
     if (!selectedOrgId || !selectedFYId) return;
@@ -123,7 +125,7 @@ export function ProfitLoss() {
       });
       setReportData(response.data);
     } catch (error) {
-      console.error('Failed to generate report:', error);
+      logger.error('Failed to generate report:', error);
     } finally {
       setLoading(false);
     }
@@ -234,8 +236,7 @@ export function ProfitLoss() {
               <h2 className="text-xl font-bold">{reportData.organization_name}</h2>
               <h3 className="text-lg font-semibold text-slate-700">Profit & Loss Statement</h3>
               <p className="text-sm text-slate-500">
-                For the period {new Date(reportData.from_date).toLocaleDateString('en-IN')} to{' '}
-                {new Date(reportData.to_date).toLocaleDateString('en-IN')}
+                For the period <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>

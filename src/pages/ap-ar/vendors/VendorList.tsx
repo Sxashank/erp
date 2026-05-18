@@ -1,5 +1,3 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
 import {
   Plus,
   Search,
@@ -8,15 +6,33 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Building2,
-  Phone,
-  Mail,
   MapPin,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { AmountDisplay } from '@/components/common/AmountDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -32,27 +48,11 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { vendorsApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   code: string;
@@ -73,6 +73,8 @@ interface Vendor {
   current_balance_type: string | null;
   is_active: boolean;
 }
+
+type VendorListParams = Parameters<typeof vendorsApi.list>[0];
 
 const vendorTypeLabels: Record<string, string> = {
   SUPPLIER: 'Supplier',
@@ -105,17 +107,7 @@ export function VendorList() {
   const [vendorToDelete, setVendorToDelete] = useState<Vendor | null>(null);
   const pageSize = 20;
 
-  useEffect(() => {
-    loadOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      loadVendors();
-    }
-  }, [selectedOrgId, page, includeInactive, searchQuery, vendorTypeFilter]);
-
-  const loadOrganizations = async () => {
+  const loadOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page: 1, page_size: 100 });
       const orgs = response.data.items || [];
@@ -124,20 +116,20 @@ export function VendorList() {
         setSelectedOrgId(orgs[0].id);
       }
     } catch (error) {
-      console.error('Failed to load organizations:', error);
+      logger.error('Failed to load organizations:', error);
       toast({
         title: 'Error',
         description: 'Failed to load organizations',
         variant: 'destructive',
       });
     }
-  };
+  }, [toast]);
 
-  const loadVendors = async () => {
+  const loadVendors = useCallback(async () => {
     if (!selectedOrgId) return;
     setLoading(true);
     try {
-      const params: any = {
+      const params: VendorListParams = {
         organization_id: selectedOrgId,
         page,
         page_size: pageSize,
@@ -154,7 +146,7 @@ export function VendorList() {
       setTotal(response.data.total || 0);
       setTotalPages(response.data.pages || 1);
     } catch (error) {
-      console.error('Failed to load vendors:', error);
+      logger.error('Failed to load vendors:', error);
       toast({
         title: 'Error',
         description: 'Failed to load vendors',
@@ -163,7 +155,17 @@ export function VendorList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [includeInactive, page, searchQuery, selectedOrgId, toast, vendorTypeFilter]);
+
+  useEffect(() => {
+    loadOrganizations();
+  }, [loadOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      loadVendors();
+    }
+  }, [loadVendors, selectedOrgId]);
 
   const handleDelete = async () => {
     if (!vendorToDelete) return;
@@ -174,26 +176,12 @@ export function VendorList() {
         description: 'Vendor deleted successfully',
       });
       loadVendors();
-    } catch (error: any) {
-      toast({
-        title: 'Error',
-        description: error.response?.data?.detail || 'Failed to delete vendor',
-        variant: 'destructive',
-      });
+    } catch (error) {
+      showErrorToast(error, toast);
     } finally {
       setDeleteDialogOpen(false);
       setVendorToDelete(null);
     }
-  };
-
-  const formatCurrency = (amount: number, type: string | null) => {
-    const formatted = new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
-    if (amount === 0) return formatted;
-    return `${formatted} ${type || ''}`;
   };
 
   return (
@@ -336,7 +324,10 @@ export function VendorList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(vendor.current_balance, vendor.current_balance_type)}
+                    <AmountDisplay amount={Math.abs(vendor.current_balance)} />
+                    {vendor.current_balance !== 0 && vendor.current_balance_type ? (
+                      <span className="ml-1">{vendor.current_balance_type}</span>
+                    ) : null}
                   </TableCell>
                   <TableCell>
                     <Badge variant={vendor.is_active ? 'default' : 'secondary'}>
@@ -414,7 +405,7 @@ export function VendorList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Vendor</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete vendor "{vendorToDelete?.name}"? This action
+              Are you sure you want to delete vendor &quot;{vendorToDelete?.name}&quot;? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

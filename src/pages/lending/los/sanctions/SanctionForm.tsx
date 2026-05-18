@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { Save, Plus, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+
+import { PageHeader } from '@/components/common/PageHeader';
+import { AmountInput } from '@/components/lending/common/AmountInput';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -15,8 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -25,116 +26,31 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch';
-import { AmountInput } from '@/components/lending/common/AmountInput';
-import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { useSanction } from '@/hooks/lending/useSanction';
+import { useCreateSanction, useUpdateSanction } from '@/hooks/lending/useSanctionMutations';
+import { sanctionSchema, type SanctionFormData } from '@/schemas/lending/sanctionSchema';
 
-import { logger } from '@/lib/logger';
-const sanctionSchema = z.object({
-  applicationId: z.string().min(1, 'Application is required'),
-  sanctionedAmount: z.number().min(1, 'Sanctioned amount is required'),
-  interestType: z.enum(['FIXED', 'FLOATING']),
-  baseRate: z.string().optional(),
-  spreadBps: z.number().optional(),
-  fixedRate: z.number().optional(),
-  effectiveRate: z.number().min(0),
-  tenureMonths: z.number().min(1, 'Tenure is required'),
-  moratoriumMonths: z.number().default(0),
-  repaymentFrequency: z.enum(['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY', 'BULLET']),
-  repaymentMode: z.enum(['EMI', 'STRUCTURED', 'BULLET']),
-  processingFee: z.number().min(0),
-  validityDays: z.number().min(1).default(90),
-  conditions: z.array(
-    z.object({
-      conditionType: z.enum(['PRE_DISBURSEMENT', 'POST_DISBURSEMENT']),
-      condition: z.string().min(1),
-      isMandatory: z.boolean().default(true),
-    })
-  ),
-  securities: z.array(
-    z.object({
-      securityType: z.enum(['PRIMARY', 'COLLATERAL']),
-      nature: z.string(),
-      description: z.string(),
-      value: z.number().min(0),
-      margin: z.number().min(0).max(100),
-    })
-  ),
-  covenants: z.array(
-    z.object({
-      covenantType: z.string(),
-      description: z.string(),
-      frequency: z.enum(['MONTHLY', 'QUARTERLY', 'YEARLY', 'ONE_TIME']),
-      threshold: z.string().optional(),
-    })
-  ),
-  remarks: z.string().optional(),
-});
-
-type SanctionFormData = z.infer<typeof sanctionSchema>;
-
-// Mock application data
-const mockApplication = {
-  id: '1',
-  applicationNumber: 'SMFC/TL/DEL/2025/A00001',
-  entityName: 'ABC Industries Private Limited',
-  entityCode: 'ENT/2025/00001',
-  productName: 'Corporate Term Loan',
-  requestedAmount: 250000000,
-  requestedTenureMonths: 60,
-  purpose: 'Expansion of manufacturing facility',
-};
-
+// Default values for the form fields. No example/mock conditions, securities
+// or covenants — the user starts with an empty form and adds rows as needed.
 const defaultValues: Partial<SanctionFormData> = {
   interestType: 'FLOATING',
-  baseRate: 'SMFC_BR',
-  spreadBps: 200,
-  effectiveRate: 12.5,
+  spreadBps: 0,
+  effectiveRate: 0,
   repaymentFrequency: 'MONTHLY',
   repaymentMode: 'EMI',
-  processingFee: 2500000,
   validityDays: 90,
   moratoriumMonths: 0,
-  conditions: [
-    {
-      conditionType: 'PRE_DISBURSEMENT',
-      condition: 'Creation of mortgage on primary security',
-      isMandatory: true,
-    },
-    {
-      conditionType: 'PRE_DISBURSEMENT',
-      condition: 'Submission of insurance policy for assets',
-      isMandatory: true,
-    },
-    {
-      conditionType: 'POST_DISBURSEMENT',
-      condition: 'Submission of utilization certificate',
-      isMandatory: true,
-    },
-  ],
-  securities: [
-    {
-      securityType: 'PRIMARY',
-      nature: 'PROPERTY',
-      description: 'Industrial land and building',
-      value: 400000000,
-      margin: 25,
-    },
-  ],
-  covenants: [
-    {
-      covenantType: 'FINANCIAL',
-      description: 'Minimum DSCR to be maintained',
-      frequency: 'YEARLY',
-      threshold: '1.5x',
-    },
-    {
-      covenantType: 'FINANCIAL',
-      description: 'Maximum Debt-Equity ratio',
-      frequency: 'YEARLY',
-      threshold: '2:1',
-    },
-  ],
+  conditions: [],
+  securities: [],
+  covenants: [],
+};
+
+const addDays = (date: Date, days: number) => {
+  const nextDate = new Date(date);
+  nextDate.setDate(nextDate.getDate() + days);
+  return nextDate.toISOString().slice(0, 10);
 };
 
 export default function SanctionForm() {
@@ -144,6 +60,9 @@ export default function SanctionForm() {
   const applicationId = searchParams.get('applicationId');
   const isEdit = Boolean(id);
   const [activeTab, setActiveTab] = useState('terms');
+  const { data: existingSanction } = useSanction(isEdit ? id : undefined);
+  const createMutation = useCreateSanction();
+  const updateMutation = useUpdateSanction(id);
 
   const {
     register,
@@ -151,14 +70,15 @@ export default function SanctionForm() {
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isSubmitting },
   } = useForm<SanctionFormData>({
-    resolver: zodResolver(sanctionSchema) as any,
+    resolver: zodResolver(sanctionSchema),
     defaultValues: {
       ...defaultValues,
       applicationId: applicationId || '',
-      sanctionedAmount: mockApplication.requestedAmount,
-      tenureMonths: mockApplication.requestedTenureMonths,
+      sanctionedAmount: 0,
+      tenureMonths: 0,
     },
   });
 
@@ -191,64 +111,140 @@ export default function SanctionForm() {
 
   const interestType = watch('interestType');
 
+  useEffect(() => {
+    if (!existingSanction) return;
+
+    const sanctionDate = new Date(existingSanction.sanctionDate);
+    const validityDate = new Date(existingSanction.validityDate);
+    const validityDays = Math.max(
+      1,
+      Math.ceil((validityDate.getTime() - sanctionDate.getTime()) / 86_400_000),
+    );
+
+    reset({
+      applicationId: existingSanction.applicationId,
+      sanctionedAmount: Number(existingSanction.sanctionedAmount),
+      interestType: existingSanction.interestType,
+      spreadBps: existingSanction.spreadBps,
+      effectiveRate: Number(existingSanction.effectiveRate),
+      tenureMonths: existingSanction.tenureMonths,
+      moratoriumMonths: existingSanction.moratoriumMonths,
+      repaymentFrequency: existingSanction.repaymentFrequency,
+      repaymentMode:
+        existingSanction.repaymentMode === 'BALLOON' ||
+        existingSanction.repaymentMode === 'STEP_UP' ||
+        existingSanction.repaymentMode === 'STEP_DOWN'
+          ? 'STRUCTURED'
+          : existingSanction.repaymentMode,
+      validityDays,
+      conditions: [],
+      securities: [],
+      covenants: [],
+      remarks: existingSanction.remarks ?? '',
+    });
+  }, [existingSanction, reset]);
+
   const onSubmit = async (data: SanctionFormData) => {
-    logger.debug('Sanction data:', data);
-    navigate('/admin/lending/sanctions');
+    const sanctionDate = new Date().toISOString().slice(0, 10);
+    const basePayload = {
+      sanctionedAmount: data.sanctionedAmount,
+      tenureMonths: data.tenureMonths,
+      moratoriumMonths: data.moratoriumMonths,
+      interestType: data.interestType,
+      spreadBps: data.spreadBps,
+      effectiveRate: data.effectiveRate,
+      repaymentMode: data.repaymentMode,
+      repaymentFrequency: data.repaymentFrequency,
+      dayCountConvention: 'ACT_365',
+      disbursementType: 'SINGLE',
+      maxTranches: 1,
+      sanctionDate,
+      validityDate: addDays(new Date(sanctionDate), data.validityDays),
+      specialTerms: data.covenants.length
+        ? data.covenants
+            .map((covenant) => `${covenant.covenantType}: ${covenant.description}`)
+            .join('\n')
+        : undefined,
+      remarks: data.remarks,
+    };
+
+    if (isEdit) {
+      const sanction = await updateMutation.mutateAsync(basePayload);
+      navigate(`/admin/lending/sanctions/${sanction.id}`);
+      return;
+    }
+
+    const sanction = await createMutation.mutateAsync({
+      applicationId: data.applicationId,
+      ...basePayload,
+      conditions: [
+        ...data.conditions.map((condition, index) => ({
+          conditionType: condition.conditionType,
+          category: 'OPERATIONAL' as const,
+          description: condition.description,
+          isMandatory: condition.isMandatory,
+          blocksDisbursement: condition.conditionType === 'PRE_DISBURSEMENT',
+          displayOrder: index + 1,
+        })),
+        ...data.covenants.map((covenant, index) => ({
+          conditionType: 'ONGOING' as const,
+          category:
+            covenant.covenantType === 'FINANCIAL'
+              ? ('FINANCIAL' as const)
+              : ('OPERATIONAL' as const),
+          description: covenant.threshold
+            ? `${covenant.description} (Threshold: ${covenant.threshold})`
+            : covenant.description,
+          isMandatory: true,
+          blocksDisbursement: false,
+          frequency: covenant.frequency,
+          displayOrder: data.conditions.length + index + 1,
+        })),
+      ],
+      securities: data.securities.map((security) => ({
+        securityCategory: security.securityCategory,
+        securityType: security.securityType,
+        chargeType: 'FIRST',
+        description: security.description,
+        marketValue: security.acceptableValue,
+        acceptableValue: security.acceptableValue,
+        marginPercentage: security.marginPercentage,
+      })),
+    });
+
+    navigate(`/admin/lending/sanctions/${sanction.id}`);
   };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate('/admin/lending/sanctions')}>
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-semibold">
-            {isEdit ? 'Edit Sanction' : 'Create Sanction'}
-          </h1>
-          <p className="text-muted-foreground">
-            Define sanction terms, conditions, and covenants for the loan
-          </p>
-        </div>
-        <Button onClick={handleSubmit(onSubmit as any)} disabled={isSubmitting}>
-          <Save className="mr-2 h-4 w-4" />
-          {isEdit ? 'Update Sanction' : 'Create Sanction'}
-        </Button>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Sanction' : 'Create Sanction'}
+        subtitle="Define sanction terms, conditions, and covenants for the loan"
+        breadcrumbs={[
+          { label: 'Sanctions', to: '/admin/lending/sanctions' },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+        actions={
+          <Button onClick={handleSubmit(onSubmit)} disabled={isSubmitting}>
+            <Save className="mr-2 h-4 w-4" />
+            {isEdit ? 'Update Sanction' : 'Create Sanction'}
+          </Button>
+        }
+      />
 
-      {/* Application Summary */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Application Details</CardTitle>
-          <CardDescription>Sanction for application {mockApplication.applicationNumber}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-4">
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Entity</dt>
-              <dd className="font-medium">{mockApplication.entityName}</dd>
-              <dd className="text-sm text-muted-foreground">{mockApplication.entityCode}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Product</dt>
-              <dd>{mockApplication.productName}</dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Requested Amount</dt>
-              <dd>
-                <AmountDisplay amount={mockApplication.requestedAmount} showFull />
-              </dd>
-            </div>
-            <div>
-              <dt className="text-sm font-medium text-muted-foreground">Requested Tenure</dt>
-              <dd>{mockApplication.requestedTenureMonths} Months</dd>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Application context — pulled from the application referenced in the URL.
+          Detailed entity / product / requested-amount summary will be wired
+          once the per-application sanction-prefill endpoint lands. */}
+      {applicationId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Application Context</CardTitle>
+            <CardDescription>Application ID: {applicationId}</CardDescription>
+          </CardHeader>
+        </Card>
+      )}
 
-      <form onSubmit={handleSubmit(onSubmit as any)}>
+      <form onSubmit={handleSubmit(onSubmit)}>
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="terms">Sanction Terms</TabsTrigger>
@@ -258,7 +254,7 @@ export default function SanctionForm() {
           </TabsList>
 
           {/* Sanction Terms Tab */}
-          <TabsContent value="terms" className="space-y-6 mt-6">
+          <TabsContent value="terms" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Loan Amount & Tenure</CardTitle>
@@ -326,61 +322,32 @@ export default function SanctionForm() {
                   </div>
                 </div>
 
-                {interestType === 'FLOATING' ? (
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <div className="space-y-2">
-                      <Label>Base Rate *</Label>
-                      <Select
-                        value={watch('baseRate')}
-                        onValueChange={(v) => setValue('baseRate', v)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select base rate" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="SMFC_BR">SMFC Base Rate (10.50%)</SelectItem>
-                          <SelectItem value="MCLR">MCLR (9.50%)</SelectItem>
-                          <SelectItem value="REPO_LINKED">Repo Linked (6.50%)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="spreadBps">Spread (Basis Points) *</Label>
-                      <Input
-                        id="spreadBps"
-                        type="number"
-                        min={0}
-                        placeholder="e.g., 200 for 2%"
-                        {...register('spreadBps', { valueAsNumber: true })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="effectiveRate">Effective Rate (% p.a.)</Label>
-                      <Input
-                        id="effectiveRate"
-                        type="number"
-                        step="0.01"
-                        {...register('effectiveRate', { valueAsNumber: true })}
-                        readOnly
-                        className="bg-muted"
-                      />
-                    </div>
-                  </div>
-                ) : (
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
-                    <Label htmlFor="fixedRate">Fixed Interest Rate (% p.a.) *</Label>
+                    <Label htmlFor="spreadBps">Spread (Basis Points)</Label>
                     <Input
-                      id="fixedRate"
+                      id="spreadBps"
+                      type="number"
+                      min={0}
+                      placeholder="e.g., 200 for 2%"
+                      {...register('spreadBps', { valueAsNumber: true })}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="effectiveRate">Effective Rate (% p.a.) *</Label>
+                    <Input
+                      id="effectiveRate"
                       type="number"
                       step="0.01"
                       min={0}
-                      max={30}
-                      placeholder="e.g., 12.50"
-                      className="w-[200px]"
-                      {...register('fixedRate', { valueAsNumber: true })}
+                      max={100}
+                      {...register('effectiveRate', { valueAsNumber: true })}
                     />
+                    {errors.effectiveRate && (
+                      <p className="text-sm text-destructive">{errors.effectiveRate.message}</p>
+                    )}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
 
@@ -439,14 +406,6 @@ export default function SanctionForm() {
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Processing Fee</Label>
-                    <AmountInput
-                      value={watch('processingFee') || 0}
-                      onChange={(v) => setValue('processingFee', v ?? 0)}
-                      placeholder="Processing fee amount"
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <Label htmlFor="validityDays">Sanction Validity (Days)</Label>
                     <Input
                       id="validityDays"
@@ -462,7 +421,7 @@ export default function SanctionForm() {
           </TabsContent>
 
           {/* Conditions Tab */}
-          <TabsContent value="conditions" className="space-y-6 mt-6">
+          <TabsContent value="conditions" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Pre-Disbursement Conditions</CardTitle>
@@ -482,7 +441,9 @@ export default function SanctionForm() {
                   </TableHeader>
                   <TableBody>
                     {conditionFields
-                      .filter((_, i) => watch(`conditions.${i}.conditionType`) === 'PRE_DISBURSEMENT')
+                      .filter(
+                        (_, i) => watch(`conditions.${i}.conditionType`) === 'PRE_DISBURSEMENT',
+                      )
                       .map((field, displayIndex) => {
                         const actualIndex = conditionFields.findIndex((f) => f.id === field.id);
                         return (
@@ -490,7 +451,7 @@ export default function SanctionForm() {
                             <TableCell>{displayIndex + 1}</TableCell>
                             <TableCell>
                               <Textarea
-                                {...register(`conditions.${actualIndex}.condition`)}
+                                {...register(`conditions.${actualIndex}.description`)}
                                 rows={2}
                                 placeholder="Enter condition..."
                               />
@@ -525,7 +486,7 @@ export default function SanctionForm() {
                   onClick={() =>
                     appendCondition({
                       conditionType: 'PRE_DISBURSEMENT',
-                      condition: '',
+                      description: '',
                       isMandatory: true,
                     })
                   }
@@ -539,9 +500,7 @@ export default function SanctionForm() {
             <Card>
               <CardHeader>
                 <CardTitle>Post-Disbursement Conditions</CardTitle>
-                <CardDescription>
-                  Conditions to be complied with after disbursement
-                </CardDescription>
+                <CardDescription>Conditions to be complied with after disbursement</CardDescription>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -555,7 +514,9 @@ export default function SanctionForm() {
                   </TableHeader>
                   <TableBody>
                     {conditionFields
-                      .filter((_, i) => watch(`conditions.${i}.conditionType`) === 'POST_DISBURSEMENT')
+                      .filter(
+                        (_, i) => watch(`conditions.${i}.conditionType`) === 'POST_DISBURSEMENT',
+                      )
                       .map((field, displayIndex) => {
                         const actualIndex = conditionFields.findIndex((f) => f.id === field.id);
                         return (
@@ -563,7 +524,7 @@ export default function SanctionForm() {
                             <TableCell>{displayIndex + 1}</TableCell>
                             <TableCell>
                               <Textarea
-                                {...register(`conditions.${actualIndex}.condition`)}
+                                {...register(`conditions.${actualIndex}.description`)}
                                 rows={2}
                                 placeholder="Enter condition..."
                               />
@@ -598,7 +559,7 @@ export default function SanctionForm() {
                   onClick={() =>
                     appendCondition({
                       conditionType: 'POST_DISBURSEMENT',
-                      condition: '',
+                      description: '',
                       isMandatory: true,
                     })
                   }
@@ -634,7 +595,7 @@ export default function SanctionForm() {
                   <TableBody>
                     {securityFields.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                           No security added. Click "Add Security" to add collateral.
                         </TableCell>
                       </TableRow>
@@ -643,9 +604,12 @@ export default function SanctionForm() {
                         <TableRow key={field.id}>
                           <TableCell>
                             <Select
-                              value={watch(`securities.${index}.securityType`)}
+                              value={watch(`securities.${index}.securityCategory`)}
                               onValueChange={(v) =>
-                                setValue(`securities.${index}.securityType`, v as 'PRIMARY' | 'COLLATERAL')
+                                setValue(
+                                  `securities.${index}.securityCategory`,
+                                  v as 'PRIMARY' | 'COLLATERAL',
+                                )
                               }
                             >
                               <SelectTrigger className="w-[130px]">
@@ -659,8 +623,8 @@ export default function SanctionForm() {
                           </TableCell>
                           <TableCell>
                             <Select
-                              value={watch(`securities.${index}.nature`)}
-                              onValueChange={(v) => setValue(`securities.${index}.nature`, v)}
+                              value={watch(`securities.${index}.securityType`)}
+                              onValueChange={(v) => setValue(`securities.${index}.securityType`, v)}
                             >
                               <SelectTrigger className="w-[150px]">
                                 <SelectValue placeholder="Select nature" />
@@ -684,7 +648,9 @@ export default function SanctionForm() {
                           <TableCell className="text-right">
                             <Input
                               type="number"
-                              {...register(`securities.${index}.value`, { valueAsNumber: true })}
+                              {...register(`securities.${index}.acceptableValue`, {
+                                valueAsNumber: true,
+                              })}
                               placeholder="Value"
                               className="w-[150px]"
                             />
@@ -692,7 +658,9 @@ export default function SanctionForm() {
                           <TableCell className="text-right">
                             <Input
                               type="number"
-                              {...register(`securities.${index}.margin`, { valueAsNumber: true })}
+                              {...register(`securities.${index}.marginPercentage`, {
+                                valueAsNumber: true,
+                              })}
                               placeholder="%"
                               className="w-[80px]"
                             />
@@ -718,11 +686,11 @@ export default function SanctionForm() {
                   className="mt-4"
                   onClick={() =>
                     appendSecurity({
-                      securityType: 'PRIMARY',
-                      nature: '',
+                      securityCategory: 'PRIMARY',
+                      securityType: '',
                       description: '',
-                      value: 0,
-                      margin: 0,
+                      acceptableValue: 0,
+                      marginPercentage: 0,
                     })
                   }
                 >
@@ -756,7 +724,7 @@ export default function SanctionForm() {
                   <TableBody>
                     {covenantFields.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                           No covenants added. Click "Add Covenant" to define covenants.
                         </TableCell>
                       </TableRow>
@@ -766,7 +734,12 @@ export default function SanctionForm() {
                           <TableCell>
                             <Select
                               value={watch(`covenants.${index}.covenantType`)}
-                              onValueChange={(v) => setValue(`covenants.${index}.covenantType`, v)}
+                              onValueChange={(v) =>
+                                setValue(
+                                  `covenants.${index}.covenantType`,
+                                  v as SanctionFormData['covenants'][number]['covenantType'],
+                                )
+                              }
                             >
                               <SelectTrigger className="w-[130px]">
                                 <SelectValue placeholder="Type" />
@@ -791,7 +764,7 @@ export default function SanctionForm() {
                               onValueChange={(v) =>
                                 setValue(
                                   `covenants.${index}.frequency`,
-                                  v as 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'ONE_TIME'
+                                  v as 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'ONE_TIME',
                                 )
                               }
                             >

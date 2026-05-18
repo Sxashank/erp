@@ -3,8 +3,6 @@
  * Overview of document management with stats, recent documents, and quick actions
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   FileText,
   Folder,
@@ -21,15 +19,20 @@ import {
   ChevronRight,
   RefreshCw,
 } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { documentApi } from '@/services/dmsApi';
 import type { DocumentStats, DMSDocument } from '@/types/dms';
 import { formatFileSize, getFileIcon } from '@/types/dms';
 
+import { logger } from "@/lib/logger";
 export default function DMSDashboard() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DocumentStats | null>(null);
@@ -46,7 +49,7 @@ export default function DMSDashboard() {
       setStats(statsData);
       setRecentDocs(recentData);
     } catch (error) {
-      console.error('Failed to fetch DMS data:', error);
+      logger.error('Failed to fetch DMS data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -259,7 +262,7 @@ export default function DMSDashboard() {
                         v{doc.current_version}
                       </Badge>
                       <p className="text-xs text-muted-foreground mt-1">
-                        {new Date(doc.created_at).toLocaleDateString()}
+                        <DateDisplay date={doc.created_at} />
                       </p>
                     </div>
                   </div>

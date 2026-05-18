@@ -1,10 +1,19 @@
-import { useState } from 'react';
+import { Plus, Search, Eye, Receipt, IndianRupee } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -13,14 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Plus, Search, Eye, Receipt, IndianRupee } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import { essReimbursementApi } from '@/services/essApi';
 
 const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('en-IN', {
@@ -30,73 +33,19 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
-// Mock data
-const expenses = [
-  {
-    id: '1',
-    expenseNumber: 'EXP-2025-001',
-    date: '2025-01-15',
-    category: 'Travel',
-    description: 'Client visit to Mumbai',
-    amount: 12500,
-    status: 'APPROVED',
-    approvedBy: 'Rahul Sharma',
-    approvedDate: '2025-01-16',
-    paidDate: '2025-01-18',
-  },
-  {
-    id: '2',
-    expenseNumber: 'EXP-2025-002',
-    date: '2025-01-12',
-    category: 'Food & Entertainment',
-    description: 'Team lunch - Project completion',
-    amount: 3500,
-    status: 'PENDING',
-    approvedBy: null,
-    approvedDate: null,
-    paidDate: null,
-  },
-  {
-    id: '3',
-    expenseNumber: 'EXP-2025-003',
-    date: '2025-01-10',
-    category: 'Office Supplies',
-    description: 'Stationery purchase',
-    amount: 850,
-    status: 'REJECTED',
-    approvedBy: 'Rahul Sharma',
-    approvedDate: '2025-01-11',
-    rejectionReason: 'Duplicate claim',
-    paidDate: null,
-  },
-  {
-    id: '4',
-    expenseNumber: 'EXP-2025-004',
-    date: '2025-01-08',
-    category: 'Communication',
-    description: 'Mobile recharge - Work',
-    amount: 599,
-    status: 'PAID',
-    approvedBy: 'Rahul Sharma',
-    approvedDate: '2025-01-09',
-    paidDate: '2025-01-12',
-  },
-  {
-    id: '5',
-    expenseNumber: 'EXP-2025-005',
-    date: '2025-01-05',
-    category: 'Travel',
-    description: 'Cab to office - late night work',
-    amount: 450,
-    status: 'DRAFT',
-    approvedBy: null,
-    approvedDate: null,
-    paidDate: null,
-  },
-];
+interface ExpenseClaim {
+  id: string;
+  claim_number: string;
+  claim_date: string;
+  category?: string;
+  description: string;
+  claimed_amount: number;
+  approved_amount?: number | null;
+  status: string;
+}
 
 const categories = [
-  { value: '', label: 'All Categories' },
+  { value: '__all__', label: 'All Categories' },
   { value: 'Travel', label: 'Travel' },
   { value: 'Food & Entertainment', label: 'Food & Entertainment' },
   { value: 'Office Supplies', label: 'Office Supplies' },
@@ -105,32 +54,61 @@ const categories = [
 ];
 
 const statuses = [
-  { value: '', label: 'All Statuses' },
+  { value: '__all__', label: 'All Statuses' },
   { value: 'DRAFT', label: 'Draft' },
-  { value: 'PENDING', label: 'Pending Approval' },
+  { value: 'SUBMITTED', label: 'Pending Approval' },
   { value: 'APPROVED', label: 'Approved' },
   { value: 'REJECTED', label: 'Rejected' },
   { value: 'PAID', label: 'Paid' },
 ];
 
 export default function ESSExpenseList() {
+  const { toast } = useToast();
+  const [expenses, setExpenses] = useState<ExpenseClaim[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('__all__');
+  const [categoryFilter, setCategoryFilter] = useState('__all__');
 
-  const filteredExpenses = expenses.filter((exp) => {
-    const matchesSearch = exp.expenseNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  useEffect(() => {
+    let mounted = true;
+    const loadExpenses = async () => {
+      setIsLoading(true);
+      try {
+        const response = await essReimbursementApi.getClaims({ limit: 100 });
+        if (mounted) setExpenses(response.data.items || []);
+      } catch (error) {
+        if (mounted) {
+          toast({
+            title: 'Unable to load expenses',
+            description: 'Check your ESS session and reimbursement access.',
+            variant: 'destructive',
+          });
+        }
+      } finally {
+        if (mounted) setIsLoading(false);
+      }
+    };
+    loadExpenses();
+    return () => {
+      mounted = false;
+    };
+  }, [toast]);
+
+  const filteredExpenses = useMemo(() => expenses.filter((exp) => {
+    const matchesSearch = exp.claim_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       exp.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = !statusFilter || exp.status === statusFilter;
-    const matchesCategory = !categoryFilter || exp.category === categoryFilter;
+    const matchesStatus = statusFilter === '__all__' || exp.status === statusFilter;
+    const matchesCategory = categoryFilter === '__all__' || exp.category === categoryFilter;
     return matchesSearch && matchesStatus && matchesCategory;
-  });
+  }), [categoryFilter, expenses, searchTerm, statusFilter]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'DRAFT':
         return <Badge variant="outline">Draft</Badge>;
-      case 'PENDING':
+      case 'SUBMITTED':
+      case 'PENDING_APPROVAL':
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
       case 'APPROVED':
         return <Badge variant="default" className="bg-blue-500">Approved</Badge>;
@@ -143,8 +121,12 @@ export default function ESSExpenseList() {
     }
   };
 
-  const totalPending = expenses.filter(e => e.status === 'PENDING').reduce((sum, e) => sum + e.amount, 0);
-  const totalApproved = expenses.filter(e => e.status === 'APPROVED' || e.status === 'PAID').reduce((sum, e) => sum + e.amount, 0);
+  const totalPending = expenses
+    .filter((expense) => ['SUBMITTED', 'PENDING_APPROVAL'].includes(expense.status))
+    .reduce((sum, expense) => sum + expense.claimed_amount, 0);
+  const totalApproved = expenses
+    .filter((expense) => expense.status === 'APPROVED' || expense.status === 'PAID')
+    .reduce((sum, expense) => sum + (expense.approved_amount ?? expense.claimed_amount), 0);
 
   return (
     <div className="space-y-6">
@@ -209,7 +191,7 @@ export default function ESSExpenseList() {
                 <Receipt className="h-6 w-6 text-gray-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{expenses.filter(e => e.status === 'DRAFT').length}</div>
+                <div className="text-2xl font-bold">{expenses.filter((expense) => expense.status === 'DRAFT').length}</div>
                 <div className="text-sm text-muted-foreground">Drafts</div>
               </div>
             </div>
@@ -277,16 +259,28 @@ export default function ESSExpenseList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredExpenses.map((expense) => (
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    Loading expenses...
+                  </TableCell>
+                </TableRow>
+              ) : filteredExpenses.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
+                    No expense claims found.
+                  </TableCell>
+                </TableRow>
+              ) : filteredExpenses.map((expense) => (
                 <TableRow key={expense.id}>
-                  <TableCell className="font-medium">{expense.expenseNumber}</TableCell>
-                  <TableCell>{expense.date}</TableCell>
+                  <TableCell className="font-medium">{expense.claim_number}</TableCell>
+                  <TableCell>{expense.claim_date}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{expense.category}</Badge>
+                    <Badge variant="outline">{expense.category || 'Uncategorized'}</Badge>
                   </TableCell>
                   <TableCell className="max-w-xs truncate">{expense.description}</TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(expense.amount)}
+                    {formatCurrency(expense.claimed_amount)}
                   </TableCell>
                   <TableCell>{getStatusBadge(expense.status)}</TableCell>
                   <TableCell className="text-right">

@@ -1,25 +1,3 @@
-import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Progress } from '@/components/ui/progress';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import {
   Target,
   Plus,
@@ -30,88 +8,45 @@ import {
   TrendingUp,
   Calendar,
 } from 'lucide-react';
+import { useState } from 'react';
 
-// Mock data - Goals
-const goals = [
-  {
-    id: '1',
-    title: 'Complete AWS Certification',
-    description: 'Achieve AWS Solutions Architect Associate certification',
-    category: 'SKILL_DEVELOPMENT',
-    priority: 'HIGH',
-    startDate: '2025-01-01',
-    dueDate: '2025-06-30',
-    status: 'IN_PROGRESS',
-    progress: 35,
-    weight: 20,
-    milestones: [
-      { id: '1', title: 'Complete online course', completed: true, dueDate: '2025-02-28' },
-      { id: '2', title: 'Practice exams', completed: false, dueDate: '2025-04-30' },
-      { id: '3', title: 'Take certification exam', completed: false, dueDate: '2025-06-30' },
-    ],
-  },
-  {
-    id: '2',
-    title: 'Deliver Project Alpha on time',
-    description: 'Successfully deliver all milestones of Project Alpha within budget and timeline',
-    category: 'PROJECT',
-    priority: 'HIGH',
-    startDate: '2024-10-01',
-    dueDate: '2025-03-31',
-    status: 'IN_PROGRESS',
-    progress: 70,
-    weight: 30,
-    milestones: [
-      { id: '1', title: 'Phase 1 - Requirements', completed: true, dueDate: '2024-11-15' },
-      { id: '2', title: 'Phase 2 - Development', completed: true, dueDate: '2025-01-31' },
-      { id: '3', title: 'Phase 3 - Testing', completed: false, dueDate: '2025-02-28' },
-      { id: '4', title: 'Phase 4 - Deployment', completed: false, dueDate: '2025-03-31' },
-    ],
-  },
-  {
-    id: '3',
-    title: 'Mentor 2 Junior Developers',
-    description: 'Provide guidance and mentorship to junior team members',
-    category: 'LEADERSHIP',
-    priority: 'MEDIUM',
-    startDate: '2025-01-01',
-    dueDate: '2025-12-31',
-    status: 'IN_PROGRESS',
-    progress: 25,
-    weight: 15,
-    milestones: [
-      { id: '1', title: 'Weekly 1:1 sessions established', completed: true, dueDate: '2025-01-31' },
-      { id: '2', title: 'Code review sessions', completed: false, dueDate: '2025-06-30' },
-      { id: '3', title: 'Knowledge transfer complete', completed: false, dueDate: '2025-12-31' },
-    ],
-  },
-  {
-    id: '4',
-    title: 'Improve Code Quality',
-    description: 'Achieve 90%+ code coverage and reduce bugs by 30%',
-    category: 'QUALITY',
-    priority: 'MEDIUM',
-    startDate: '2025-01-01',
-    dueDate: '2025-12-31',
-    status: 'NOT_STARTED',
-    progress: 0,
-    weight: 20,
-    milestones: [],
-  },
-  {
-    id: '5',
-    title: 'Client Satisfaction Score',
-    description: 'Achieve average client satisfaction score of 4.5+',
-    category: 'CUSTOMER',
-    priority: 'HIGH',
-    startDate: '2025-01-01',
-    dueDate: '2025-12-31',
-    status: 'IN_PROGRESS',
-    progress: 50,
-    weight: 15,
-    milestones: [],
-  },
-];
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Progress } from '@/components/ui/progress';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+
+interface Goal {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  startDate: string;
+  dueDate: string;
+  status: string;
+  progress: number;
+  weight: number;
+  milestones: { id: string; title: string; completed: boolean; dueDate: string }[];
+}
+
+const goals: Goal[] = [];
 
 const categories = [
   { value: 'PROJECT', label: 'Project Delivery' },
@@ -128,7 +63,7 @@ const priorities = [
 ];
 
 export default function ESSGoals() {
-  const [selectedGoal, setSelectedGoal] = useState<typeof goals[0] | null>(null);
+  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -253,7 +188,6 @@ export default function ESSGoals() {
       <PageHeader
         title="My Goals"
         subtitle="Track your performance goals for the appraisal cycle"
-        actions={addGoalDialog}
       />
 
       {/* Summary Cards */}
@@ -314,7 +248,13 @@ export default function ESSGoals() {
 
       {/* Goals List */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {goals.map((goal) => (
+        {goals.length === 0 ? (
+          <Card className="lg:col-span-2">
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Goal data is pending ESS performance endpoints. Employee goals will appear after HRIS appraisal APIs are exposed to ESS.
+            </CardContent>
+          </Card>
+        ) : goals.map((goal) => (
           <Card key={goal.id} className="cursor-pointer hover:shadow-md transition-shadow">
             <CardContent className="pt-6">
               <div className="space-y-4">

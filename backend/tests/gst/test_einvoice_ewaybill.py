@@ -8,21 +8,21 @@ Tests cover:
 - Status transitions
 """
 
-import pytest
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from uuid import uuid4
+from types import SimpleNamespace
 
 from app.models.gst.einvoice import (
     EInvoiceProvider,
     EInvoiceRequestStatus,
-    EWayBillProvider,
     EWayBillStatus,
-    TransportMode,
-    VehicleType,
-    TransactionType,
     SubSupplyType,
+    TransportMode,
+    TransactionType,
+    VehicleType,
 )
+from app.services.gst.einvoice_service import EInvoiceService
+from app.services.gst.ewaybill_service import EWayBillService
 
 
 class TestEInvoiceEnums:
@@ -298,6 +298,76 @@ class TestEInvoicePayload:
         assert "AssAmt" in item
         assert "GstRt" in item
 
+    def test_payload_builder_uses_current_model_fields(self):
+        """Payload builder must not depend on stale GST/customer attributes."""
+        service = EInvoiceService(db=None)
+        gst_registration = SimpleNamespace(
+            gstin="29AABCT1332L1ZR",
+            legal_name="Seller Legal Name",
+            trade_name="Seller Trade",
+            address="Registered Address Line 1\nRegistered Address Line 2",
+            state_name="Karnataka",
+            state_code="29",
+            pincode="560001",
+        )
+        customer = SimpleNamespace(
+            name="Buyer Legal Name",
+            display_name="Buyer Display",
+            billing_address_line1="Buyer Address 1",
+            billing_address_line2="Buyer Address 2",
+            billing_city="Mumbai",
+            billing_pincode="400001",
+            billing_state_code="27",
+            phone="9876543210",
+            email="buyer@example.com",
+        )
+        line = SimpleNamespace(
+            description="Processing fee",
+            hsn_sac_code="9971",
+            quantity=Decimal("1"),
+            unit_price=Decimal("10000"),
+            discount_amount=Decimal("0"),
+            taxable_amount=Decimal("10000"),
+            cgst_rate=Decimal("0"),
+            sgst_rate=Decimal("0"),
+            igst_rate=Decimal("18"),
+            igst_amount=Decimal("1800"),
+            cgst_amount=Decimal("0"),
+            sgst_amount=Decimal("0"),
+            cess_rate=Decimal("0"),
+            cess_amount=Decimal("0"),
+            total_amount=Decimal("11800"),
+        )
+        invoice = SimpleNamespace(
+            supply_type=None,
+            is_reverse_charge=False,
+            customer=customer,
+            customer_gstin="27AABCU9603R1ZP",
+            place_of_supply="27",
+            lines=[line],
+            invoice_number="INV-001",
+            invoice_date=date(2026, 1, 15),
+            taxable_amount=Decimal("10000"),
+            cgst_amount=Decimal("0"),
+            sgst_amount=Decimal("0"),
+            igst_amount=Decimal("1800"),
+            cess_amount=Decimal("0"),
+            discount_amount=Decimal("0"),
+            round_off=Decimal("0"),
+            total_amount=Decimal("11800"),
+            transporter_name=None,
+            vehicle_number=None,
+        )
+
+        payload = service._build_invoice_data(invoice, gst_registration)
+
+        assert payload["seller_address1"] == "Registered Address Line 1"
+        assert payload["seller_location"] == "Karnataka"
+        assert payload["seller_pincode"] == "560001"
+        assert payload["buyer_name"] == "Buyer Display"
+        assert payload["buyer_trade_name"] == "Buyer Display"
+        assert payload["buyer_pincode"] == "400001"
+
 
 class TestEWayBillPayload:
     """Tests for E-Way Bill payload building."""
@@ -349,6 +419,14 @@ class TestEWayBillPayload:
         valid_state_codes = [1, 9, 29, 27, 37]
         for code in valid_state_codes:
             assert 1 <= code <= 37
+
+    def test_helpers_use_current_registration_and_customer_fields(self):
+        """E-Way helper methods should match current ORM fields."""
+        assert EWayBillService._split_address("Line 1\nLine 2") == "Line 1, Line 2"
+        assert EWayBillService._clean_pincode("560001") == "560001"
+        assert EWayBillService._clean_pincode(None) == "999999"
+        customer = SimpleNamespace(name="Buyer Legal", display_name=None)
+        assert EWayBillService._customer_name(customer) == "Buyer Legal"
 
 
 class TestEInvoiceCancellation:

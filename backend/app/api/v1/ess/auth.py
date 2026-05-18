@@ -3,13 +3,14 @@
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.rate_limit import portal_generic_limit, portal_login_limit
 from app.services.ess.auth_service import ESSAuthService
+from app.core.exceptions import NotFoundException, UnauthorizedException
 
 
 router = APIRouter(prefix="/auth", tags=["ESS Authentication"])
@@ -91,7 +92,7 @@ class SessionResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.post("/send-otp", response_model=SendOTPResponse)
+@router.post("/send-otp", response_model=SendOTPResponse, response_model_by_alias=True)
 @portal_login_limit()
 async def send_otp(
     request: Request,
@@ -107,9 +108,9 @@ async def send_otp(
     # Check if user exists
     ess_user = await service.get_ess_user_by_mobile(data.mobile)
     if not ess_user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No ESS account found for this mobile number"
+        raise NotFoundException(
+            detail="No ESS account found for this mobile number",
+            error_code="NO_ESS_ACCOUNT_FOUND_FOR_THIS",
         )
 
     # Send OTP
@@ -128,7 +129,7 @@ async def send_otp(
     )
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=TokenResponse, response_model_by_alias=True)
 @portal_login_limit()
 async def login(
     request: Request,
@@ -153,17 +154,14 @@ async def login(
     )
 
     if error:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error,
-        )
+        raise UnauthorizedException(detail=error, error_code="UNAUTHORIZED")
 
     await session.commit()
 
     return TokenResponse(**tokens)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh", response_model=TokenResponse, response_model_by_alias=True)
 @portal_generic_limit()
 async def refresh_token(
     request: Request,
@@ -179,10 +177,7 @@ async def refresh_token(
     tokens, error = await service.refresh_token(data.refresh_token)
 
     if error:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=error,
-        )
+        raise UnauthorizedException(detail=error, error_code="UNAUTHORIZED")
 
     await session.commit()
 
@@ -203,9 +198,9 @@ async def logout(
 ):
     """Logout current session."""
     if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
+        raise UnauthorizedException(
             detail="No authorization token provided",
+            error_code="NO_AUTHORIZATION_TOKEN_PROVIDED",
         )
 
     # Extract token from header
@@ -231,7 +226,7 @@ async def logout_all_sessions(
     return {"success": True, "message": f"Logged out from {count} sessions"}
 
 
-@router.get("/sessions", response_model=list[SessionResponse])
+@router.get("/sessions", response_model=list[SessionResponse], response_model_by_alias=True)
 async def get_active_sessions(
     ess_user_id: UUID,  # This would come from authenticated user
     session: AsyncSession = Depends(get_session),

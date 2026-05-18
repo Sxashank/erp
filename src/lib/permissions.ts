@@ -234,41 +234,41 @@ export const Permissions = {
   // ==========================================
   // LENDING - COLLECTIONS
   // ==========================================
-  COLLECTIONS_READ: 'collections:read',
-  COLLECTIONS_CREATE: 'collections:create',
-  COLLECTIONS_UPDATE: 'collections:update',
-  COLLECTIONS_APPROVE: 'collections:approve',
+  COLLECTIONS_READ: 'COLLECTIONS_READ',
+  COLLECTIONS_CREATE: 'COLLECTIONS_CREATE',
+  COLLECTIONS_UPDATE: 'COLLECTIONS_UPDATE',
+  COLLECTIONS_APPROVE: 'COLLECTIONS_APPROVE',
 
   // NPA
-  NPA_READ: 'npa:read',
-  NPA_CREATE: 'npa:create',
-  NPA_UPDATE: 'npa:update',
+  NPA_READ: 'NPA_READ',
+  NPA_CREATE: 'NPA_CREATE',
+  NPA_UPDATE: 'NPA_UPDATE',
 
   // OTS (One-Time Settlement)
-  OTS_CREATE: 'ots:create',
-  OTS_UPDATE: 'ots:update',
-  OTS_APPROVE: 'ots:approve',
+  OTS_CREATE: 'OTS_CREATE',
+  OTS_UPDATE: 'OTS_UPDATE',
+  OTS_APPROVE: 'OTS_APPROVE',
 
   // Restructure
-  RESTRUCTURE_CREATE: 'restructure:create',
-  RESTRUCTURE_UPDATE: 'restructure:update',
-  RESTRUCTURE_APPROVE: 'restructure:approve',
+  RESTRUCTURE_CREATE: 'RESTRUCTURE_CREATE',
+  RESTRUCTURE_UPDATE: 'RESTRUCTURE_UPDATE',
+  RESTRUCTURE_APPROVE: 'RESTRUCTURE_APPROVE',
 
   // Write-off
-  WRITEOFF_CREATE: 'writeoff:create',
-  WRITEOFF_APPROVE: 'writeoff:approve',
+  WRITEOFF_CREATE: 'WRITEOFF_CREATE',
+  WRITEOFF_APPROVE: 'WRITEOFF_APPROVE',
 
   // Legal
-  LEGAL_READ: 'legal:read',
-  LEGAL_CREATE: 'legal:create',
-  LEGAL_UPDATE: 'legal:update',
+  LEGAL_READ: 'LEGAL_READ',
+  LEGAL_CREATE: 'LEGAL_CREATE',
+  LEGAL_UPDATE: 'LEGAL_UPDATE',
 
   // ==========================================
   // LENDING - TREASURY
   // ==========================================
-  TREASURY_READ: 'treasury:read',
-  TREASURY_WRITE: 'treasury:write',
-  TREASURY_APPROVE: 'treasury:approve',
+  TREASURY_READ: 'TREASURY_READ',
+  TREASURY_WRITE: 'TREASURY_WRITE',
+  TREASURY_APPROVE: 'TREASURY_APPROVE',
 
   // ==========================================
   // FIXED ASSETS MODULE

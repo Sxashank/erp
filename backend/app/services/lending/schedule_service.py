@@ -1,19 +1,18 @@
 """Loan Schedule Generation Service."""
 
 import logging
-from datetime import datetime, date, timedelta
-from decimal import Decimal, ROUND_HALF_UP
-from typing import Optional, List, Dict, Any, Tuple
-from uuid import UUID
 import math
+from datetime import date
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
+from uuid import UUID
 
-from sqlalchemy import select, and_, func, delete
+from sqlalchemy import and_, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lending import (
     LoanAccount,
     LoanSchedule,
-    LoanProduct,
 )
 
 logger = logging.getLogger(__name__)
@@ -36,8 +35,8 @@ class ScheduleService:
         emi_day: int = 1,
         calculation_method: str = "reducing_balance",
         moratorium_months: int = 0,
-        user_id: Optional[UUID] = None,
-    ) -> List[LoanSchedule]:
+        user_id: UUID | None = None,
+    ) -> list[LoanSchedule]:
         """
         Generate loan repayment schedule.
 
@@ -57,9 +56,7 @@ class ScheduleService:
         """
         # Delete existing schedule
         await self.db.execute(
-            delete(LoanSchedule).where(
-                LoanSchedule.loan_account_id == loan_account_id
-            )
+            delete(LoanSchedule).where(LoanSchedule.loan_account_id == loan_account_id)
         )
 
         # Validate EMI day
@@ -68,15 +65,30 @@ class ScheduleService:
         # Calculate schedule based on method
         if calculation_method == "flat":
             entries = self._generate_flat_schedule(
-                principal, interest_rate, tenure_months, disbursement_date, emi_day, moratorium_months
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
             )
         elif calculation_method == "reducing_balance":
             entries = self._generate_reducing_balance_schedule(
-                principal, interest_rate, tenure_months, disbursement_date, emi_day, moratorium_months
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
             )
         elif calculation_method == "emi" or calculation_method == "equated":
             entries = self._generate_emi_schedule(
-                principal, interest_rate, tenure_months, disbursement_date, emi_day, moratorium_months
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
             )
         elif calculation_method == "rule_of_78":
             entries = self._generate_rule_of_78_schedule(
@@ -85,7 +97,12 @@ class ScheduleService:
         else:
             # Default to reducing balance
             entries = self._generate_reducing_balance_schedule(
-                principal, interest_rate, tenure_months, disbursement_date, emi_day, moratorium_months
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
             )
 
         # Create database records
@@ -106,7 +123,7 @@ class ScheduleService:
             self.db.add(schedule)
             schedules.append(schedule)
 
-        await self.db.commit()
+        await self.db.flush()
 
         return schedules
 
@@ -133,11 +150,19 @@ class ScheduleService:
         start_date: date,
         emi_day: int,
         moratorium: int = 0,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Generate flat interest schedule (total interest divided equally)."""
-        total_interest = (principal * annual_rate * Decimal(tenure)) / (Decimal("100") * Decimal("12"))
-        monthly_interest = (total_interest / Decimal(tenure)).quantize(Decimal("0.01"), ROUND_HALF_UP)
-        monthly_principal = (principal / Decimal(tenure - moratorium)).quantize(Decimal("0.01"), ROUND_HALF_UP) if moratorium < tenure else Decimal("0")
+        total_interest = (principal * annual_rate * Decimal(tenure)) / (
+            Decimal("100") * Decimal("12")
+        )
+        monthly_interest = (total_interest / Decimal(tenure)).quantize(
+            Decimal("0.01"), ROUND_HALF_UP
+        )
+        monthly_principal = (
+            (principal / Decimal(tenure - moratorium)).quantize(Decimal("0.01"), ROUND_HALF_UP)
+            if moratorium < tenure
+            else Decimal("0")
+        )
 
         entries = []
         balance = principal
@@ -158,15 +183,17 @@ class ScheduleService:
             opening = balance
             closing = (balance - prin).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-            entries.append({
-                "due_date": due_date,
-                "principal": prin,
-                "interest": monthly_interest,
-                "total": prin + monthly_interest,
-                "opening_balance": opening,
-                "closing_balance": max(closing, Decimal("0")),
-                "is_moratorium": is_moratorium,
-            })
+            entries.append(
+                {
+                    "due_date": due_date,
+                    "principal": prin,
+                    "interest": monthly_interest,
+                    "total": prin + monthly_interest,
+                    "opening_balance": opening,
+                    "closing_balance": max(closing, Decimal("0")),
+                    "is_moratorium": is_moratorium,
+                }
+            )
 
             balance = closing
 
@@ -180,7 +207,7 @@ class ScheduleService:
         start_date: date,
         emi_day: int,
         moratorium: int = 0,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Generate reducing balance schedule (interest on outstanding principal)."""
         monthly_rate = annual_rate / Decimal("1200")  # Annual rate to monthly
         principal_installments = tenure - moratorium
@@ -214,15 +241,17 @@ class ScheduleService:
             opening = balance
             closing = (balance - prin).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-            entries.append({
-                "due_date": due_date,
-                "principal": prin,
-                "interest": interest,
-                "total": prin + interest,
-                "opening_balance": opening,
-                "closing_balance": max(closing, Decimal("0")),
-                "is_moratorium": is_moratorium,
-            })
+            entries.append(
+                {
+                    "due_date": due_date,
+                    "principal": prin,
+                    "interest": interest,
+                    "total": prin + interest,
+                    "opening_balance": opening,
+                    "closing_balance": max(closing, Decimal("0")),
+                    "is_moratorium": is_moratorium,
+                }
+            )
 
             balance = closing
 
@@ -236,7 +265,7 @@ class ScheduleService:
         start_date: date,
         emi_day: int,
         moratorium: int = 0,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Generate EMI (Equated Monthly Installment) schedule."""
         monthly_rate = annual_rate / Decimal("1200")
         principal_tenure = tenure - moratorium
@@ -279,15 +308,17 @@ class ScheduleService:
             opening = balance
             closing = (balance - prin).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-            entries.append({
-                "due_date": due_date,
-                "principal": prin,
-                "interest": interest,
-                "total": total,
-                "opening_balance": opening,
-                "closing_balance": max(closing, Decimal("0")),
-                "is_moratorium": is_moratorium,
-            })
+            entries.append(
+                {
+                    "due_date": due_date,
+                    "principal": prin,
+                    "interest": interest,
+                    "total": total,
+                    "opening_balance": opening,
+                    "closing_balance": max(closing, Decimal("0")),
+                    "is_moratorium": is_moratorium,
+                }
+            )
 
             balance = closing
 
@@ -300,10 +331,12 @@ class ScheduleService:
         tenure: int,
         start_date: date,
         emi_day: int,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         """Generate Rule of 78 schedule (sum of digits method)."""
         # Total interest for the loan
-        total_interest = (principal * annual_rate * Decimal(tenure)) / (Decimal("100") * Decimal("12"))
+        total_interest = (principal * annual_rate * Decimal(tenure)) / (
+            Decimal("100") * Decimal("12")
+        )
 
         # Sum of digits (1 + 2 + ... + n = n*(n+1)/2)
         sum_of_digits = tenure * (tenure + 1) // 2
@@ -332,26 +365,137 @@ class ScheduleService:
             opening = balance
             closing = (balance - prin).quantize(Decimal("0.01"), ROUND_HALF_UP)
 
-            entries.append({
-                "due_date": due_date,
-                "principal": prin,
-                "interest": interest,
-                "total": prin + interest,
-                "opening_balance": opening,
-                "closing_balance": max(closing, Decimal("0")),
-                "is_moratorium": False,
-            })
+            entries.append(
+                {
+                    "due_date": due_date,
+                    "principal": prin,
+                    "interest": interest,
+                    "total": prin + interest,
+                    "opening_balance": opening,
+                    "closing_balance": max(closing, Decimal("0")),
+                    "is_moratorium": False,
+                }
+            )
 
             balance = closing
 
         return entries
+
+    def preview_schedule(
+        self,
+        principal: Decimal,
+        interest_rate: Decimal,
+        tenure_months: int,
+        disbursement_date: date,
+        emi_day: int = 1,
+        calculation_method: str = "reducing_balance",
+        moratorium_months: int = 0,
+    ) -> dict[str, Any]:
+        """
+        Compute a repayment schedule without persisting.
+
+        Pure math — no DB writes — so callers (LOS / sanction calculators,
+        borrower-facing what-if previews) can run this without an existing
+        loan account. Mirrors `generate_schedule` but returns rows + summary
+        as plain Decimals; persistence is the caller's responsibility.
+
+        Args:
+            principal: Loan principal amount
+            interest_rate: Annual interest rate (percentage)
+            tenure_months: Loan tenure in months
+            disbursement_date: First-date anchor for the schedule
+            emi_day: Day of month for EMI payment (1-28)
+            calculation_method: flat / reducing_balance / emi / rule_of_78
+            moratorium_months: Interest-only months at start
+
+        Returns:
+            Dict with `entries` (per-installment) and `summary` totals.
+        """
+        emi_day = min(max(emi_day, 1), 28)
+        method = (calculation_method or "reducing_balance").lower()
+
+        if method == "flat":
+            entries = self._generate_flat_schedule(
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
+            )
+        elif method in ("emi", "equated"):
+            entries = self._generate_emi_schedule(
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
+            )
+        elif method == "rule_of_78":
+            entries = self._generate_rule_of_78_schedule(
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+            )
+        else:  # reducing_balance (default) — matches generate_schedule
+            entries = self._generate_reducing_balance_schedule(
+                principal,
+                interest_rate,
+                tenure_months,
+                disbursement_date,
+                emi_day,
+                moratorium_months,
+            )
+
+        rows: list[dict[str, Any]] = []
+        total_principal = Decimal("0")
+        total_interest = Decimal("0")
+        for idx, entry in enumerate(entries, 1):
+            rows.append(
+                {
+                    "installment_number": idx,
+                    "due_date": entry["due_date"],
+                    "principal_amount": entry["principal"],
+                    "interest_amount": entry["interest"],
+                    "total_amount": entry["total"],
+                    "opening_balance": entry["opening_balance"],
+                    "closing_balance": entry["closing_balance"],
+                    "is_moratorium": entry.get("is_moratorium", False),
+                }
+            )
+            total_principal += entry["principal"]
+            total_interest += entry["interest"]
+
+        # Pull a representative EMI: first non-moratorium row's total.
+        emi_amount = next(
+            (r["total_amount"] for r in rows if not r["is_moratorium"]),
+            Decimal("0"),
+        )
+        last_due_date = rows[-1]["due_date"] if rows else disbursement_date
+
+        return {
+            "entries": rows,
+            "summary": {
+                "total_installments": len(rows),
+                "total_principal": total_principal.quantize(Decimal("0.01"), ROUND_HALF_UP),
+                "total_interest": total_interest.quantize(Decimal("0.01"), ROUND_HALF_UP),
+                "total_amount": (total_principal + total_interest).quantize(
+                    Decimal("0.01"), ROUND_HALF_UP
+                ),
+                "emi_amount": emi_amount,
+                "last_due_date": last_due_date,
+            },
+        }
 
     async def calculate_emi(
         self,
         principal: Decimal,
         annual_rate: Decimal,
         tenure_months: int,
-    ) -> Dict[str, Decimal]:
+    ) -> dict[str, Decimal]:
         """
         Calculate EMI amount and other details.
 
@@ -384,13 +528,13 @@ class ScheduleService:
     async def reschedule_loan(
         self,
         loan_account_id: UUID,
-        new_tenure: Optional[int] = None,
-        new_rate: Optional[Decimal] = None,
-        new_emi: Optional[Decimal] = None,
-        effective_date: Optional[date] = None,
+        new_tenure: int | None = None,
+        new_rate: Decimal | None = None,
+        new_emi: Decimal | None = None,
+        effective_date: date | None = None,
         reason: str = "",
-        user_id: Optional[UUID] = None,
-    ) -> List[LoanSchedule]:
+        user_id: UUID | None = None,
+    ) -> list[LoanSchedule]:
         """
         Reschedule a loan with new terms.
 
@@ -407,9 +551,7 @@ class ScheduleService:
             New schedule entries
         """
         # Get loan account
-        result = await self.db.execute(
-            select(LoanAccount).where(LoanAccount.id == loan_account_id)
-        )
+        result = await self.db.execute(select(LoanAccount).where(LoanAccount.id == loan_account_id))
         loan = result.scalar_one_or_none()
         if not loan:
             raise ValueError(f"Loan account {loan_account_id} not found")
@@ -453,7 +595,7 @@ class ScheduleService:
         self,
         loan_account_id: UUID,
         include_paid: bool = True,
-    ) -> List[LoanSchedule]:
+    ) -> list[LoanSchedule]:
         """Get loan schedule entries."""
         conditions = [LoanSchedule.loan_account_id == loan_account_id]
 
@@ -461,17 +603,15 @@ class ScheduleService:
             conditions.append(LoanSchedule.is_paid == False)
 
         result = await self.db.execute(
-            select(LoanSchedule)
-            .where(and_(*conditions))
-            .order_by(LoanSchedule.installment_number)
+            select(LoanSchedule).where(and_(*conditions)).order_by(LoanSchedule.installment_number)
         )
         return list(result.scalars().all())
 
     async def get_overdue_installments(
         self,
         loan_account_id: UUID,
-        as_of_date: Optional[date] = None,
-    ) -> List[LoanSchedule]:
+        as_of_date: date | None = None,
+    ) -> list[LoanSchedule]:
         """Get overdue installments for a loan."""
         if as_of_date is None:
             as_of_date = date.today()
@@ -493,13 +633,11 @@ class ScheduleService:
         payment_date: date,
         principal_paid: Decimal,
         interest_paid: Decimal,
-        receipt_id: Optional[UUID] = None,
-        user_id: Optional[UUID] = None,
+        receipt_id: UUID | None = None,
+        user_id: UUID | None = None,
     ) -> LoanSchedule:
         """Mark an installment as paid (fully or partially)."""
-        result = await self.db.execute(
-            select(LoanSchedule).where(LoanSchedule.id == schedule_id)
-        )
+        result = await self.db.execute(select(LoanSchedule).where(LoanSchedule.id == schedule_id))
         schedule = result.scalar_one_or_none()
         if not schedule:
             raise ValueError(f"Schedule entry {schedule_id} not found")
@@ -509,15 +647,13 @@ class ScheduleService:
         schedule.payment_date = payment_date
         schedule.receipt_id = receipt_id
         schedule.is_paid = (
-            principal_paid >= schedule.principal_amount and
-            interest_paid >= schedule.interest_amount
+            principal_paid >= schedule.principal_amount
+            and interest_paid >= schedule.interest_amount
         )
-        schedule.is_partial = (
-            (principal_paid > 0 or interest_paid > 0) and not schedule.is_paid
-        )
+        schedule.is_partial = (principal_paid > 0 or interest_paid > 0) and not schedule.is_paid
         schedule.updated_by = user_id
 
-        await self.db.commit()
+        await self.db.flush()
         await self.db.refresh(schedule)
 
         return schedule

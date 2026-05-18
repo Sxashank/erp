@@ -1,52 +1,34 @@
-import { useState } from 'react';
-import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import {
   Building2,
   Bell,
-  BookOpen,
   Calculator,
-  Calendar,
   ChevronDown,
   ChevronRight,
-  FileText,
-  FolderTree,
   HelpCircle,
   LayoutGrid,
   LogOut,
   Menu,
-  Receipt,
   Search,
   Settings,
-  Shield,
   Users,
   Network,
-  Briefcase,
-  Building,
   X,
   Percent,
-  FileSpreadsheet,
   BarChart3,
-  CreditCard,
   Landmark,
-  Scale,
   Wallet,
   FileCheck,
-  Banknote,
-  TrendingUp,
-  AlertTriangle,
   Gavel,
   Package,
-  Truck,
-  ClipboardCheck,
   FolderOpen,
-  PieChart,
   UserCheck,
-  DollarSign,
   GitBranch,
   HardDrive,
-  Wrench,
 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
+import { RequireModuleAccess } from '@/components/common/RequireModuleAccess';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -59,7 +41,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
+import { filterNavItemsByAccess } from '@/lib/moduleAccess';
 import { cn } from '@/lib/utils';
+import { useAuthStore } from '@/stores/authStore';
 
 interface NavItem {
   label: string;
@@ -75,48 +59,81 @@ const navItems: NavItem[] = [
     href: '/admin',
   },
   {
-    label: 'Masters',
-    icon: Building,
+    label: 'MIS & Reports',
+    icon: BarChart3,
     children: [
-      { label: 'Organizations', href: '/admin/organizations' },
-      { label: 'Units', href: '/admin/units' },
-      { label: 'Departments', href: '/admin/departments' },
-      { label: 'Designations', href: '/admin/designations' },
+      { label: 'Report Dashboard', href: '/admin/reports' },
+      { label: 'MIS Command Center', href: '/admin/reports/mis' },
+      { label: 'Regulatory Reports', href: '/admin/reports/regulatory' },
+      { label: 'Scheduled Reports', href: '/admin/reports/scheduler' },
+      { label: 'Export History', href: '/admin/reports/history' },
+      { label: 'Trial Balance', href: '/admin/reports/trial-balance' },
+      { label: 'Profit & Loss', href: '/admin/reports/profit-loss' },
+      { label: 'Balance Sheet', href: '/admin/reports/balance-sheet' },
+      { label: 'Cash Flow Statement', href: '/admin/reports/cash-flow-statement' },
+      { label: 'Account Ledger', href: '/admin/reports/account-ledger' },
+      { label: 'Day Book', href: '/admin/reports/day-book' },
+      { label: 'BI Dashboards', href: '/admin/bi/dashboards' },
     ],
   },
   {
-    label: 'Finance',
-    icon: Calculator,
+    label: 'Lending',
+    icon: Landmark,
     children: [
-      { label: 'Financial Years', href: '/admin/finance/financial-years' },
-      { label: 'Chart of Accounts', href: '/admin/finance/account-groups' },
-      { label: 'Accounts', href: '/admin/finance/accounts' },
-      { label: 'Voucher Types', href: '/admin/finance/voucher-types' },
-      { label: 'Vouchers', href: '/admin/finance/vouchers' },
-      { label: 'Voucher Templates', href: '/admin/finance/voucher-templates' },
-      { label: 'Recurring Vouchers', href: '/admin/finance/recurring-vouchers' },
-      { label: 'Year-End Closing', href: '/admin/finance/year-end-closing' },
+      { label: 'Dashboard', href: '/admin/lending' },
+      { label: 'Entities/Borrowers', href: '/admin/lending/entities' },
+      { label: 'Applications', href: '/admin/lending/applications' },
+      { label: 'Sanctions', href: '/admin/lending/sanctions' },
+      { label: 'Loan Accounts', href: '/admin/lending/accounts' },
+      { label: 'Disbursement Readiness', href: '/admin/lending/disbursement-readiness' },
+      { label: 'Disbursements', href: '/admin/lending/disbursements' },
+      { label: 'Receipts', href: '/admin/lending/receipts' },
+      { label: 'Closure & Release', href: '/admin/lending/closure-cockpit' },
+      { label: 'Reports & Analytics', href: '/admin/lending/reports' },
     ],
   },
   {
-    label: 'GST',
+    label: 'Collections & Risk',
+    icon: UserCheck,
+    children: [
+      { label: 'Collection Cockpit', href: '/admin/lending/collection-cockpit' },
+      { label: 'Follow-ups', href: '/admin/lending/collections/followups' },
+      { label: 'NPA Accounts', href: '/admin/lending/collections/npa' },
+      { label: 'Credit Risk Cockpit', href: '/admin/lending/risk-cockpit' },
+      { label: 'OTS Proposals', href: '/admin/lending/collections/ots' },
+      { label: 'Legal Cases', href: '/admin/lending/collections/legal' },
+    ],
+  },
+  {
+    label: 'Interest Subvention',
     icon: Percent,
     children: [
-      { label: 'GST Rates', href: '/admin/gst/rates' },
+      { label: 'Enrollments', href: '/admin/lending/iif/enrollments' },
+      { label: 'Claims', href: '/admin/lending/iif/claims' },
     ],
   },
   {
-    label: 'TDS/TCS',
-    icon: FileText,
+    label: 'Treasury & ALM',
+    icon: Wallet,
     children: [
-      { label: 'TDS Sections', href: '/admin/tds/sections' },
+      { label: 'Dashboard', href: '/admin/treasury' },
+      { label: 'Lenders', href: '/admin/treasury/lenders' },
+      { label: 'Borrowings', href: '/admin/treasury/borrowings' },
+      { label: 'Source of Funds', href: '/admin/treasury/source-of-funds' },
+      { label: 'ALM Dashboard', href: '/admin/treasury/alm' },
+      { label: 'Gap Analysis', href: '/admin/treasury/alm/gap' },
+      { label: 'Interest Rate Risk', href: '/admin/treasury/alm/irs' },
+      { label: 'Risk Dashboard', href: '/admin/treasury/risk-dashboard' },
+      { label: 'Investments', href: '/admin/treasury/investments' },
     ],
   },
   {
-    label: 'AP/AR',
-    icon: CreditCard,
+    label: 'Finance & Accounting',
+    icon: Calculator,
     children: [
-      { label: 'Payment Terms', href: '/admin/ap-ar/payment-terms' },
+      { label: 'Vouchers', href: '/admin/finance/vouchers' },
+      { label: 'Recurring Vouchers', href: '/admin/finance/recurring-vouchers' },
+      { label: 'Year-End Closing', href: '/admin/finance/year-end-closing' },
       { label: 'Vendors', href: '/admin/ap-ar/vendors' },
       { label: 'Customers', href: '/admin/ap-ar/customers' },
       { label: 'Purchase Bills', href: '/admin/ap-ar/purchase-bills' },
@@ -128,149 +145,64 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    label: 'Reports',
-    icon: BarChart3,
-    children: [
-      { label: 'Trial Balance', href: '/admin/reports/trial-balance' },
-      { label: 'Profit & Loss', href: '/admin/reports/profit-loss' },
-      { label: 'Balance Sheet', href: '/admin/reports/balance-sheet' },
-      { label: 'Cash Flow Statement', href: '/admin/reports/cash-flow-statement' },
-      { label: 'Account Ledger', href: '/admin/reports/account-ledger' },
-      { label: 'Day Book', href: '/admin/reports/day-book' },
-    ],
-  },
-  {
-    label: 'User Management',
-    icon: Users,
-    children: [
-      { label: 'Users', href: '/admin/users' },
-      { label: 'Roles', href: '/admin/roles' },
-    ],
-  },
-  {
-    label: 'Lending',
-    icon: Landmark,
-    children: [
-      { label: 'Dashboard', href: '/admin/lending' },
-      { label: 'Entities/Borrowers', href: '/admin/lending/entities' },
-      { label: 'Loan Products', href: '/admin/lending/products' },
-      { label: 'Applications', href: '/admin/lending/applications' },
-      { label: 'Sanctions', href: '/admin/lending/sanctions' },
-      { label: 'Loan Accounts', href: '/admin/lending/accounts' },
-      { label: 'Disbursements', href: '/admin/lending/disbursements' },
-      { label: 'Receipts', href: '/admin/lending/receipts' },
-      { label: 'Follow-ups', href: '/admin/lending/collections/followups' },
-      { label: 'NPA Accounts', href: '/admin/lending/collections/npa' },
-      { label: 'OTS Proposals', href: '/admin/lending/collections/ots' },
-      { label: 'Legal Cases', href: '/admin/lending/collections/legal' },
-      { label: 'NACH Batches', href: '/admin/lending/nach/batches' },
-      { label: 'AA Consents', href: '/admin/lending/aa/consents' },
-      { label: 'AA Fetched Data', href: '/admin/lending/aa/fetched-data' },
-      { label: 'Reports & Analytics', href: '/admin/lending/reports' },
-    ],
-  },
-  {
-    label: 'Treasury',
-    icon: Wallet,
-    children: [
-      { label: 'Dashboard', href: '/admin/treasury' },
-      { label: 'Lenders', href: '/admin/treasury/lenders' },
-      { label: 'Borrowings', href: '/admin/treasury/borrowings' },
-      { label: 'ALM Dashboard', href: '/admin/treasury/alm' },
-      { label: 'Gap Analysis', href: '/admin/treasury/alm/gap' },
-      { label: 'Interest Rate Risk', href: '/admin/treasury/alm/irs' },
-      { label: 'Risk Dashboard', href: '/admin/treasury/risk-dashboard' },
-      { label: 'Investments', href: '/admin/treasury/investments' },
-    ],
-  },
-  {
-    label: 'Regulatory',
+    label: 'Tax & Compliance',
     icon: FileCheck,
     children: [
+      { label: 'GST Dashboard', href: '/admin/gst/gstn' },
+      { label: 'GSTR-1', href: '/admin/gst/gstn/gstr1' },
+      { label: 'GSTR-3B', href: '/admin/gst/gstn/gstr3b' },
+      { label: 'ITC Reconciliation', href: '/admin/gst/gstn/itc' },
+      { label: 'TDS Entries', href: '/admin/tds/entries' },
+      { label: 'TDS Challans', href: '/admin/tds/challans' },
+      { label: 'TDS Returns', href: '/admin/tds/returns' },
+      { label: 'TDS Certificates', href: '/admin/tds/certificates' },
+      { label: 'Compliance Dashboard', href: '/admin/compliance' },
+      { label: 'Returns Calendar', href: '/admin/regulatory/returns' },
       { label: 'CRAR Dashboard', href: '/admin/regulatory/crar' },
       { label: 'Exposure Reports', href: '/admin/regulatory/exposure' },
-      { label: 'Infrastructure Ratio', href: '/admin/regulatory/infrastructure' },
-      { label: 'Returns Calendar', href: '/admin/regulatory/returns' },
     ],
   },
   {
-    label: 'Fixed Assets',
-    icon: HardDrive,
-    children: [
-      { label: 'Asset Categories', href: '/admin/fixed-assets/categories' },
-      { label: 'Asset Register', href: '/admin/fixed-assets/assets' },
-      { label: 'Depreciation Runs', href: '/admin/fixed-assets/depreciation' },
-      { label: 'Physical Verification', href: '/admin/fixed-assets/verification' },
-      { label: 'Maintenance & AMC', href: '/admin/fixed-assets/maintenance' },
-      { label: 'Insurance', href: '/admin/fixed-assets/insurance' },
-      { label: 'Disposal & Write-off', href: '/admin/fixed-assets/disposal' },
-    ],
-  },
-  {
-    label: 'HRIS',
+    label: 'HRIS & Payroll',
     icon: Users,
     children: [
-      { label: 'Dashboard', href: '/admin/hris' },
+      { label: 'HR Dashboard', href: '/admin/hris' },
       { label: 'Employees', href: '/admin/hris/employees' },
-      { label: 'Shifts', href: '/admin/hris/shifts' },
-      { label: 'Holiday Calendar', href: '/admin/hris/holidays' },
-      { label: 'Leave Types', href: '/admin/hris/leave-types' },
       { label: 'Leave Applications', href: '/admin/hris/leave-applications' },
       { label: 'Attendance', href: '/admin/hris/attendance' },
       { label: 'Separation & F&F', href: '/admin/hris/separation' },
       { label: 'Training', href: '/admin/hris/training' },
       { label: 'Performance', href: '/admin/hris/performance/cycles' },
-    ],
-  },
-  {
-    label: 'Payroll',
-    icon: DollarSign,
-    children: [
-      { label: 'Salary Components', href: '/admin/payroll/components' },
-      { label: 'Salary Structures', href: '/admin/payroll/structures' },
       { label: 'Employee Salary', href: '/admin/payroll/employee-salary' },
-      { label: 'Statutory Setup', href: '/admin/payroll/statutory' },
       { label: 'Payroll Batches', href: '/admin/payroll/batches' },
     ],
   },
   {
-    label: 'Workflow',
-    icon: GitBranch,
-    children: [
-      { label: 'Definitions', href: '/admin/workflow/definitions' },
-      { label: 'My Tasks', href: '/admin/workflow/tasks' },
-      { label: 'All Instances', href: '/admin/workflow/instances' },
-    ],
-  },
-  {
-    label: 'Inventory',
+    label: 'Procurement & Inventory',
     icon: Package,
     children: [
-      { label: 'Dashboard', href: '/admin/inventory' },
-      { label: 'Item Categories', href: '/admin/inventory/categories' },
+      { label: 'Inventory Dashboard', href: '/admin/inventory' },
       { label: 'Items', href: '/admin/inventory/items' },
-      { label: 'Warehouses', href: '/admin/inventory/warehouses' },
       { label: 'Stock In', href: '/admin/inventory/stock-in' },
       { label: 'Stock Out', href: '/admin/inventory/stock-out' },
       { label: 'Stock Transfer', href: '/admin/inventory/stock-transfer' },
       { label: 'Valuation', href: '/admin/inventory/valuation' },
-    ],
-  },
-  {
-    label: 'Procurement',
-    icon: Truck,
-    children: [
       { label: 'RFQ', href: '/admin/procurement/rfq' },
       { label: 'Purchase Orders', href: '/admin/procurement/po' },
       { label: 'GRN', href: '/admin/procurement/grn' },
     ],
   },
   {
-    label: 'Compliance',
-    icon: ClipboardCheck,
+    label: 'Fixed Assets & Deposits',
+    icon: HardDrive,
     children: [
-      { label: 'Dashboard', href: '/admin/compliance' },
-      { label: 'Compliance Items', href: '/admin/compliance/items' },
+      { label: 'Asset Register', href: '/admin/fixed-assets/assets' },
+      { label: 'Depreciation Runs', href: '/admin/fixed-assets/depreciation' },
+      { label: 'Physical Verification', href: '/admin/fixed-assets/verification' },
+      { label: 'Disposal & Write-off', href: '/admin/fixed-assets/disposal' },
+      { label: 'Fixed Asset Reports', href: '/admin/fixed-assets/reports' },
+      { label: 'FD Dashboard', href: '/admin/fixed-deposits/dashboard' },
+      { label: 'Deposits', href: '/admin/fixed-deposits' },
     ],
   },
   {
@@ -286,6 +218,15 @@ const navItems: NavItem[] = [
     ],
   },
   {
+    label: 'Workflow',
+    icon: GitBranch,
+    children: [
+      { label: 'My Tasks', href: '/admin/workflow/tasks' },
+      { label: 'All Instances', href: '/admin/workflow/instances' },
+      { label: 'Definitions', href: '/admin/workflow/definitions' },
+    ],
+  },
+  {
     label: 'DMS',
     icon: FolderOpen,
     children: [
@@ -297,21 +238,57 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    label: 'BI & Analytics',
-    icon: PieChart,
+    label: 'Portals & Notifications',
+    icon: Bell,
     children: [
-      { label: 'Dashboards', href: '/admin/bi/dashboards' },
-      { label: 'Chart Definitions', href: '/admin/bi/chart-definitions' },
-      { label: 'Data Sources', href: '/admin/bi/data-sources' },
+      { label: 'Portal Users', href: '/admin/portal/users' },
+      { label: 'Portal Registrations', href: '/admin/portal/registrations' },
+      { label: 'Notifications', href: '/admin/notifications' },
+      { label: 'Notification Logs', href: '/admin/notifications/logs' },
     ],
   },
   {
     label: 'Settings',
     icon: Network,
     children: [
+      { label: 'Organization Setup', href: '/admin/organizations' },
+      { label: 'Units', href: '/admin/units' },
+      { label: 'Departments', href: '/admin/departments' },
+      { label: 'Designations', href: '/admin/designations' },
+      { label: 'Users', href: '/admin/users' },
+      { label: 'Roles', href: '/admin/roles' },
+      { label: 'Financial Years', href: '/admin/finance/financial-years' },
+      { label: 'Chart of Accounts', href: '/admin/finance/account-groups' },
+      { label: 'Accounts', href: '/admin/finance/accounts' },
+      { label: 'Voucher Types', href: '/admin/finance/voucher-types' },
+      { label: 'Voucher Templates', href: '/admin/finance/voucher-templates' },
+      { label: 'Payment Terms', href: '/admin/ap-ar/payment-terms' },
+      { label: 'GST Rates', href: '/admin/gst/rates' },
+      { label: 'GST Registrations', href: '/admin/gst/registrations' },
+      { label: 'HSN/SAC Masters', href: '/admin/gst/hsn-sac' },
+      { label: 'TDS Sections', href: '/admin/tds/sections' },
+      { label: 'Loan Products', href: '/admin/lending/products' },
+      { label: 'Approval Checklists', href: '/admin/lending/checklist/templates' },
+      { label: 'IIF Schemes', href: '/admin/lending/iif/schemes' },
+      { label: 'IIF Categories', href: '/admin/lending/iif/categories' },
+      { label: 'Asset Categories', href: '/admin/fixed-assets/categories' },
+      { label: 'FD Products', href: '/admin/fixed-deposits/products' },
+      { label: 'FD Interest Slabs', href: '/admin/fixed-deposits/interest' },
+      { label: 'Shifts', href: '/admin/hris/shifts' },
+      { label: 'Holiday Calendar', href: '/admin/hris/holidays' },
+      { label: 'Leave Types', href: '/admin/hris/leave-types' },
+      { label: 'Salary Components', href: '/admin/payroll/components' },
+      { label: 'Salary Structures', href: '/admin/payroll/structures' },
+      { label: 'Payroll Statutory Setup', href: '/admin/payroll/statutory' },
+      { label: 'Item Categories', href: '/admin/inventory/categories' },
+      { label: 'Warehouses', href: '/admin/inventory/warehouses' },
+      { label: 'Compliance Items', href: '/admin/compliance/items' },
+      { label: 'DMS Tags', href: '/admin/dms/tags' },
+      { label: 'BI Chart Definitions', href: '/admin/bi/chart-definitions' },
+      { label: 'BI Data Sources', href: '/admin/bi/data-sources' },
       { label: 'Integrations', href: '/admin/settings/integrations' },
-      { label: 'Notifications', href: '/admin/notifications' },
-      { label: 'Templates', href: '/admin/notifications/templates' },
+      { label: 'Notification Settings', href: '/admin/notifications/settings' },
+      { label: 'Notification Templates', href: '/admin/notifications/templates' },
     ],
   },
 ];
@@ -319,18 +296,33 @@ const navItems: NavItem[] = [
 export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
+  const permissions = useAuthStore((state) => state.permissions);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const visibleNavItems = useMemo(
+    () => filterNavItemsByAccess(navItems, permissions),
+    [permissions],
+  );
 
   const toggleExpand = (label: string) => {
     setExpandedItems((prev) =>
-      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label]
+      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label],
     );
   };
 
   const isActive = (href: string) => location.pathname === href;
-  const isParentActive = (children?: { label: string; href: string }[]) =>
-    children?.some((child) => location.pathname.startsWith(child.href));
+  const isParentActive = useCallback(
+    (children?: { label: string; href: string }[]) =>
+      children?.some((child) => location.pathname.startsWith(child.href)),
+    [location.pathname],
+  );
+
+  useEffect(() => {
+    const activeParent = visibleNavItems.find((item) => isParentActive(item.children))?.label;
+    if (!activeParent) return;
+
+    setExpandedItems((prev) => (prev.includes(activeParent) ? prev : [...prev, activeParent]));
+  }, [isParentActive, visibleNavItems]);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -352,7 +344,7 @@ export function AdminLayout() {
               'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
               active
                 ? 'bg-blue-50 text-blue-700'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
             )}
           >
             <span className="flex items-center gap-2">
@@ -376,7 +368,7 @@ export function AdminLayout() {
                     'block rounded-lg px-3 py-2 text-sm transition-colors',
                     isActive(child.href)
                       ? 'bg-blue-50 font-medium text-blue-700'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
                   )}
                 >
                   {child.label}
@@ -397,7 +389,7 @@ export function AdminLayout() {
           'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
           active
             ? 'bg-blue-50 text-blue-700'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
         )}
       >
         <item.icon className="h-4 w-4" />
@@ -407,9 +399,9 @@ export function AdminLayout() {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-slate-50 text-slate-900 overflow-hidden">
+    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900">
       {/* Header - Fixed at top */}
-      <header className="flex-shrink-0 z-30 border-b border-slate-200 bg-white">
+      <header className="z-30 flex-shrink-0 border-b border-slate-200 bg-white">
         <div className="flex items-center gap-4 px-4 py-3 lg:px-6">
           <Button
             variant="ghost"
@@ -477,7 +469,9 @@ export function AdminLayout() {
       <div className="flex flex-1 overflow-hidden">
         {/* Mobile sidebar backdrop */}
         {sidebarOpen && (
-          <div
+          <button
+            type="button"
+            aria-label="Close navigation"
             className="fixed inset-0 z-40 bg-black/50 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
@@ -486,8 +480,8 @@ export function AdminLayout() {
         {/* Sidebar - Scrolls independently */}
         <aside
           className={cn(
-            'fixed top-0 left-0 z-50 h-full w-64 transform border-r border-slate-200 bg-white transition-transform lg:static lg:z-auto lg:h-auto lg:translate-x-0',
-            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+            'fixed left-0 top-0 z-50 h-full w-64 transform border-r border-slate-200 bg-white transition-transform lg:static lg:z-auto lg:h-auto lg:translate-x-0',
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
           <div className="flex h-full flex-col">
@@ -498,14 +492,16 @@ export function AdminLayout() {
               </Button>
             </div>
             <nav className="flex-1 space-y-1 overflow-y-auto p-4">
-              {navItems.map(renderNavItem)}
+              {visibleNavItems.map(renderNavItem)}
             </nav>
           </div>
         </aside>
 
         {/* Main content - Scrolls independently */}
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
-          <Outlet />
+          <RequireModuleAccess>
+            <Outlet />
+          </RequireModuleAccess>
         </main>
       </div>
     </div>

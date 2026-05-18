@@ -101,7 +101,7 @@ class MaintenanceService:
         )
 
         self.session.add(contract)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(contract)
 
         return contract
@@ -193,7 +193,7 @@ class MaintenanceService:
         contract.updated_by = updated_by
         increment_version(contract)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(contract)
 
         return contract
@@ -217,7 +217,7 @@ class MaintenanceService:
         # Set next payment date based on frequency
         contract.next_payment_date = contract.start_date
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(contract)
 
         return contract
@@ -277,7 +277,7 @@ class MaintenanceService:
         )
 
         self.session.add(new_contract)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(new_contract)
 
         return new_contract
@@ -320,7 +320,7 @@ class MaintenanceService:
             request.is_covered_under_amc = True
 
         self.session.add(request)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(request)
 
         return request
@@ -427,7 +427,7 @@ class MaintenanceService:
         request.updated_by = updated_by
         increment_version(request)
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(request)
 
         return request
@@ -468,7 +468,7 @@ class MaintenanceService:
             if amc:
                 amc.visits_completed += 1
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(request)
 
         return request
@@ -487,7 +487,7 @@ class MaintenanceService:
         request.actual_start_date = date.today()
         request.updated_by = started_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(request)
 
         return request
@@ -528,7 +528,7 @@ class MaintenanceService:
         )
 
         self.session.add(schedule)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(schedule)
 
         return schedule
@@ -611,7 +611,7 @@ class MaintenanceService:
                 today, schedule.frequency, schedule.frequency_value
             )
 
-        await self.session.commit()
+        await self.session.flush()
 
         return created_requests
 
@@ -643,7 +643,7 @@ class MaintenanceService:
         )
 
         self.session.add(warranty)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(warranty)
 
         return warranty

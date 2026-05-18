@@ -2,40 +2,40 @@
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import Field
 
-from app.models.tds.tds_return import ReturnType, ReturnStatus, Quarter
+from app.models.tds.tds_return import Quarter, ReturnStatus, ReturnType
+from app.schemas.base import CamelSchema
 
 
-class DeductorDetails(BaseModel):
+class DeductorDetails(CamelSchema):
     """Deductor details for return."""
 
     deductor_tan: str = Field(..., max_length=10)
     deductor_name: str = Field(..., max_length=200)
-    deductor_pan: Optional[str] = Field(None, max_length=10)
-    deductor_type: Optional[str] = Field(None, max_length=20)
-    deductor_category: Optional[str] = Field(None, max_length=5)
-    deductor_address: Optional[str] = None
-    deductor_city: Optional[str] = Field(None, max_length=100)
-    deductor_state: Optional[str] = Field(None, max_length=50)
-    deductor_pincode: Optional[str] = Field(None, max_length=10)
-    deductor_email: Optional[str] = Field(None, max_length=100)
-    deductor_phone: Optional[str] = Field(None, max_length=20)
+    deductor_pan: str | None = Field(None, max_length=10)
+    deductor_type: str | None = Field(None, max_length=20)
+    deductor_category: str | None = Field(None, max_length=5)
+    deductor_address: str | None = None
+    deductor_city: str | None = Field(None, max_length=100)
+    deductor_state: str | None = Field(None, max_length=50)
+    deductor_pincode: str | None = Field(None, max_length=10)
+    deductor_email: str | None = Field(None, max_length=100)
+    deductor_phone: str | None = Field(None, max_length=20)
 
 
-class ResponsiblePersonDetails(BaseModel):
+class ResponsiblePersonDetails(CamelSchema):
     """Responsible person details."""
 
-    responsible_person_name: Optional[str] = Field(None, max_length=200)
-    responsible_person_designation: Optional[str] = Field(None, max_length=100)
-    responsible_person_address: Optional[str] = None
-    responsible_person_pan: Optional[str] = Field(None, max_length=10)
+    responsible_person_name: str | None = Field(None, max_length=200)
+    responsible_person_designation: str | None = Field(None, max_length=100)
+    responsible_person_address: str | None = None
+    responsible_person_pan: str | None = Field(None, max_length=10)
 
 
-class TDSReturnCreate(BaseModel):
+class TDSReturnCreate(CamelSchema):
     """Schema for creating TDS Return."""
 
     organization_id: UUID
@@ -47,69 +47,69 @@ class TDSReturnCreate(BaseModel):
     # Deductor details
     deductor_tan: str = Field(..., max_length=10)
     deductor_name: str = Field(..., max_length=200)
-    deductor_pan: Optional[str] = Field(None, max_length=10)
-    deductor_type: Optional[str] = Field(None, max_length=20)
-    deductor_category: Optional[str] = Field(None, max_length=5)
-    deductor_address: Optional[str] = None
-    deductor_city: Optional[str] = Field(None, max_length=100)
-    deductor_state: Optional[str] = Field(None, max_length=50)
-    deductor_pincode: Optional[str] = Field(None, max_length=10)
-    deductor_email: Optional[str] = Field(None, max_length=100)
-    deductor_phone: Optional[str] = Field(None, max_length=20)
+    deductor_pan: str | None = Field(None, max_length=10)
+    deductor_type: str | None = Field(None, max_length=20)
+    deductor_category: str | None = Field(None, max_length=5)
+    deductor_address: str | None = None
+    deductor_city: str | None = Field(None, max_length=100)
+    deductor_state: str | None = Field(None, max_length=50)
+    deductor_pincode: str | None = Field(None, max_length=10)
+    deductor_email: str | None = Field(None, max_length=100)
+    deductor_phone: str | None = Field(None, max_length=20)
 
     # Responsible person
-    responsible_person_name: Optional[str] = Field(None, max_length=200)
-    responsible_person_designation: Optional[str] = Field(None, max_length=100)
-    responsible_person_address: Optional[str] = None
-    responsible_person_pan: Optional[str] = Field(None, max_length=10)
+    responsible_person_name: str | None = Field(None, max_length=200)
+    responsible_person_designation: str | None = Field(None, max_length=100)
+    responsible_person_address: str | None = None
+    responsible_person_pan: str | None = Field(None, max_length=10)
 
-    remarks: Optional[str] = None
+    remarks: str | None = None
 
 
-class TDSReturnUpdate(BaseModel):
+class TDSReturnUpdate(CamelSchema):
     """Schema for updating TDS Return."""
 
     # Deductor details
-    deductor_tan: Optional[str] = Field(None, max_length=10)
-    deductor_name: Optional[str] = Field(None, max_length=200)
-    deductor_pan: Optional[str] = Field(None, max_length=10)
-    deductor_type: Optional[str] = Field(None, max_length=20)
-    deductor_category: Optional[str] = Field(None, max_length=5)
-    deductor_address: Optional[str] = None
-    deductor_city: Optional[str] = Field(None, max_length=100)
-    deductor_state: Optional[str] = Field(None, max_length=50)
-    deductor_pincode: Optional[str] = Field(None, max_length=10)
-    deductor_email: Optional[str] = Field(None, max_length=100)
-    deductor_phone: Optional[str] = Field(None, max_length=20)
+    deductor_tan: str | None = Field(None, max_length=10)
+    deductor_name: str | None = Field(None, max_length=200)
+    deductor_pan: str | None = Field(None, max_length=10)
+    deductor_type: str | None = Field(None, max_length=20)
+    deductor_category: str | None = Field(None, max_length=5)
+    deductor_address: str | None = None
+    deductor_city: str | None = Field(None, max_length=100)
+    deductor_state: str | None = Field(None, max_length=50)
+    deductor_pincode: str | None = Field(None, max_length=10)
+    deductor_email: str | None = Field(None, max_length=100)
+    deductor_phone: str | None = Field(None, max_length=20)
 
     # Responsible person
-    responsible_person_name: Optional[str] = Field(None, max_length=200)
-    responsible_person_designation: Optional[str] = Field(None, max_length=100)
-    responsible_person_address: Optional[str] = None
-    responsible_person_pan: Optional[str] = Field(None, max_length=10)
+    responsible_person_name: str | None = Field(None, max_length=200)
+    responsible_person_designation: str | None = Field(None, max_length=100)
+    responsible_person_address: str | None = None
+    responsible_person_pan: str | None = Field(None, max_length=10)
 
-    remarks: Optional[str] = None
+    remarks: str | None = None
 
 
-class FilingDetailsUpdate(BaseModel):
+class FilingDetailsUpdate(CamelSchema):
     """Schema for updating filing details."""
 
-    provisional_receipt_number: Optional[str] = Field(None, max_length=50)
-    token_number: Optional[str] = Field(None, max_length=50)
-    acknowledgment_number: Optional[str] = Field(None, max_length=50)
-    filed_date: Optional[date] = None
+    provisional_receipt_number: str | None = Field(None, max_length=50)
+    token_number: str | None = Field(None, max_length=50)
+    acknowledgment_number: str | None = Field(None, max_length=50)
+    filed_date: date | None = None
 
 
-class ValidationError(BaseModel):
+class ValidationError(CamelSchema):
     """Validation error item."""
 
     code: str
     message: str
-    field: Optional[str] = None
-    row: Optional[int] = None
+    field: str | None = None
+    row: int | None = None
 
 
-class TDSReturnResponse(BaseModel):
+class TDSReturnResponse(CamelSchema):
     """TDS Return response schema."""
 
     id: UUID
@@ -126,26 +126,26 @@ class TDSReturnResponse(BaseModel):
     status: ReturnStatus
     is_original: bool
     revision_number: int
-    original_return_id: Optional[UUID]
+    original_return_id: UUID | None
 
     # Deductor details
     deductor_tan: str
     deductor_name: str
-    deductor_pan: Optional[str]
-    deductor_type: Optional[str]
-    deductor_category: Optional[str]
-    deductor_address: Optional[str]
-    deductor_city: Optional[str]
-    deductor_state: Optional[str]
-    deductor_pincode: Optional[str]
-    deductor_email: Optional[str]
-    deductor_phone: Optional[str]
+    deductor_pan: str | None
+    deductor_type: str | None
+    deductor_category: str | None
+    deductor_address: str | None
+    deductor_city: str | None
+    deductor_state: str | None
+    deductor_pincode: str | None
+    deductor_email: str | None
+    deductor_phone: str | None
 
     # Responsible person
-    responsible_person_name: Optional[str]
-    responsible_person_designation: Optional[str]
-    responsible_person_address: Optional[str]
-    responsible_person_pan: Optional[str]
+    responsible_person_name: str | None
+    responsible_person_designation: str | None
+    responsible_person_address: str | None
+    responsible_person_pan: str | None
 
     # Summary
     total_challans: int
@@ -157,15 +157,15 @@ class TDSReturnResponse(BaseModel):
     total_late_fee: Decimal
 
     # File generation
-    file_generated_at: Optional[datetime]
-    file_name: Optional[str]
+    file_generated_at: datetime | None
+    file_name: str | None
 
     # Filing details
-    provisional_receipt_number: Optional[str]
-    token_number: Optional[str]
-    acknowledgment_number: Optional[str]
-    filed_date: Optional[date]
-    accepted_at: Optional[datetime]
+    provisional_receipt_number: str | None
+    token_number: str | None
+    acknowledgment_number: str | None
+    filed_date: date | None
+    accepted_at: datetime | None
 
     # Due date
     due_date: date
@@ -173,20 +173,17 @@ class TDSReturnResponse(BaseModel):
     days_late: int
 
     # Validation
-    validation_errors: Optional[List[dict]]
-    validation_warnings: Optional[List[dict]]
-    last_validated_at: Optional[datetime]
+    validation_errors: list[dict] | None
+    validation_warnings: list[dict] | None
+    last_validated_at: datetime | None
 
-    remarks: Optional[str]
+    remarks: str | None
     created_at: date
-    updated_at: Optional[date]
+    updated_at: date | None
     is_active: bool
 
-    class Config:
-        from_attributes = True
 
-
-class TDSReturnListResponse(BaseModel):
+class TDSReturnListResponse(CamelSchema):
     """TDS Return list response."""
 
     id: UUID
@@ -205,27 +202,24 @@ class TDSReturnListResponse(BaseModel):
     total_tds_deposited: Decimal
     due_date: date
     is_late: bool
-    filed_date: Optional[date]
-    acknowledgment_number: Optional[str]
+    filed_date: date | None
+    acknowledgment_number: str | None
     created_at: date
 
-    class Config:
-        from_attributes = True
 
-
-class ReturnValidationResult(BaseModel):
+class ReturnValidationResult(CamelSchema):
     """Return validation result."""
 
     is_valid: bool
-    errors: List[ValidationError] = []
-    warnings: List[ValidationError] = []
+    errors: list[ValidationError] = Field(default_factory=list)
+    warnings: list[ValidationError] = Field(default_factory=list)
     total_challans: int
     total_deductees: int
     total_tds_deducted: Decimal
     total_tds_deposited: Decimal
 
 
-class ReturnFileGenerationRequest(BaseModel):
+class ReturnFileGenerationRequest(CamelSchema):
     """Request to generate return file."""
 
     include_nil_return: bool = Field(
@@ -238,34 +232,37 @@ class ReturnFileGenerationRequest(BaseModel):
     )
 
 
-class ReturnFileResponse(BaseModel):
+class ReturnFileResponse(CamelSchema):
     """Return file generation response."""
 
     file_name: str
-    file_path: str
     file_size: int
     file_hash: str
     generated_at: datetime
+    file_content: str
+    artifact_status: str
+    statutory_status: str
+    compliance_note: str
 
 
-class RevisionRequest(BaseModel):
+class RevisionRequest(CamelSchema):
     """Request to create a revision."""
 
     reason: str = Field(..., description="Reason for revision")
 
 
-class DeducteeSummary(BaseModel):
+class DeducteeSummary(CamelSchema):
     """Deductee summary for return."""
 
     deductee_name: str
-    deductee_pan: Optional[str]
+    deductee_pan: str | None
     tds_section_code: str
     total_amount_paid: Decimal
     total_tds_deducted: Decimal
     transaction_count: int
 
 
-class ChallanSummary(BaseModel):
+class ChallanSummary(CamelSchema):
     """Challan summary for return."""
 
     challan_number: str

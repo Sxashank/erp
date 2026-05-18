@@ -12,7 +12,7 @@ from decimal import Decimal
 from typing import Annotated, Optional, List, Dict, Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, status, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,8 @@ from app.models.hris.separation import (
     FnFStatus,
 )
 
+from app.api.deps import get_db_with_tenant
+from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter(prefix="/separation", tags=["Separation & FnF"])
 
 
@@ -199,25 +201,25 @@ class ClearanceChecklistResponse(BaseModel):
 # ============ Dependencies ============
 
 def get_separation_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> SeparationService:
     return SeparationService(session)
 
 
 def get_clearance_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> ClearanceService:
     return ClearanceService(session)
 
 
 def get_fnf_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> FnFService:
     return FnFService(session)
 
 
 def get_checklist_service(
-    session: Annotated[AsyncSession, Depends(get_db)],
+    session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
 ) -> ClearanceChecklistService:
     return ClearanceChecklistService(session)
 
@@ -226,7 +228,7 @@ def get_checklist_service(
 
 @router.post(
     "",
-    response_model=SeparationResponse,
+    response_model=SeparationResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Initiate employee separation",
 )
@@ -258,12 +260,12 @@ async def initiate_separation(
         )
         return _map_separation_response(separation)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/{separation_id}",
-    response_model=SeparationResponse,
+    response_model=SeparationResponse, response_model_by_alias=True,
     summary="Get separation details",
 )
 async def get_separation(
@@ -273,16 +275,16 @@ async def get_separation(
     """Get separation details by ID."""
     separation = await service.get(separation_id)
     if not separation:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"Separation {separation_id} not found",
+            error_code="SEPARATION_NOT_FOUND",
         )
     return _map_separation_response(separation)
 
 
 @router.get(
     "",
-    response_model=SeparationListResponse,
+    response_model=SeparationListResponse, response_model_by_alias=True,
     summary="List separations",
 )
 async def list_separations(
@@ -315,7 +317,7 @@ async def list_separations(
 
 @router.post(
     "/{separation_id}/approve",
-    response_model=SeparationResponse,
+    response_model=SeparationResponse, response_model_by_alias=True,
     summary="Approve separation",
 )
 async def approve_separation(
@@ -341,12 +343,12 @@ async def approve_separation(
         )
         return _map_separation_response(separation)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{separation_id}/reject",
-    response_model=SeparationResponse,
+    response_model=SeparationResponse, response_model_by_alias=True,
     summary="Reject separation",
 )
 async def reject_separation(
@@ -366,12 +368,12 @@ async def reject_separation(
         )
         return _map_separation_response(separation)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/{separation_id}/withdraw",
-    response_model=SeparationResponse,
+    response_model=SeparationResponse, response_model_by_alias=True,
     summary="Withdraw separation",
 )
 async def withdraw_separation(
@@ -391,14 +393,14 @@ async def withdraw_separation(
         )
         return _map_separation_response(separation)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============ Clearance Endpoints ============
 
 @router.get(
     "/{separation_id}/clearance",
-    response_model=ClearanceStatusResponse,
+    response_model=ClearanceStatusResponse, response_model_by_alias=True,
     summary="Get clearance status",
 )
 async def get_clearance_status(
@@ -441,14 +443,14 @@ async def update_clearance(
             "cleared_at": clearance.cleared_at,
         }
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============ FnF Endpoints ============
 
 @router.post(
     "/{separation_id}/fnf/calculate",
-    response_model=FnFResponse,
+    response_model=FnFResponse, response_model_by_alias=True,
     summary="Calculate FnF settlement",
 )
 async def calculate_fnf(
@@ -481,12 +483,12 @@ async def calculate_fnf(
         )
         return _map_fnf_response(fnf)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.get(
     "/{separation_id}/fnf",
-    response_model=FnFResponse,
+    response_model=FnFResponse, response_model_by_alias=True,
     summary="Get FnF settlement",
 )
 async def get_fnf(
@@ -496,16 +498,16 @@ async def get_fnf(
     """Get FnF settlement for a separation."""
     fnf = await service.get_by_separation(separation_id)
     if not fnf:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail=f"FnF settlement not found for separation {separation_id}",
+            error_code="FNF_SETTLEMENT_NOT_FOUND_FOR_SEPARATION",
         )
     return _map_fnf_response(fnf)
 
 
 @router.post(
     "/fnf/{fnf_id}/approve",
-    response_model=FnFResponse,
+    response_model=FnFResponse, response_model_by_alias=True,
     summary="Approve FnF settlement",
 )
 async def approve_fnf(
@@ -525,12 +527,12 @@ async def approve_fnf(
         )
         return _map_fnf_response(fnf)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 @router.post(
     "/fnf/{fnf_id}/pay",
-    response_model=FnFResponse,
+    response_model=FnFResponse, response_model_by_alias=True,
     summary="Process FnF payment",
 )
 async def process_fnf_payment(
@@ -552,14 +554,14 @@ async def process_fnf_payment(
         )
         return _map_fnf_response(fnf)
     except ValueError as e:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
 # ============ Clearance Checklist Endpoints ============
 
 @router.post(
     "/checklist",
-    response_model=ClearanceChecklistResponse,
+    response_model=ClearanceChecklistResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create clearance checklist item",
 )
@@ -587,7 +589,7 @@ async def create_checklist_item(
 
 @router.get(
     "/checklist",
-    response_model=List[ClearanceChecklistResponse],
+    response_model=List[ClearanceChecklistResponse], response_model_by_alias=True,
     summary="List clearance checklist items",
 )
 async def list_checklist_items(
@@ -602,7 +604,7 @@ async def list_checklist_items(
 
 @router.post(
     "/checklist/seed",
-    response_model=List[ClearanceChecklistResponse],
+    response_model=List[ClearanceChecklistResponse], response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Seed default checklist items",
 )

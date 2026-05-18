@@ -25,15 +25,113 @@ interface ExportOptions {
   organization?: string;
   period?: string;
   columns: TableColumn[];
-  data: Record<string, any>[];
-  totals?: Record<string, any>;
+  data: readonly unknown[];
+  totals?: Record<string, unknown>;
   generatedAt?: string;
 }
+
+// Minimal report row shapes for finance reports. Reports come from the backend
+// where field presence varies by report — we accept any object shape and pull
+// keys defensively. We use structurally-permissive types here so different
+// report response types (e.g. AccountLedgerResponse) flow in without each
+// caller needing an unsafe cast.
+type ReportRow = Record<string, unknown>;
+
+interface FinanceReportBase {
+  organization_name?: string;
+  from_date?: string;
+  to_date?: string;
+  as_on_date?: string;
+  generated_at?: string;
+}
+
+export interface TrialBalanceReport extends FinanceReportBase {
+  items: readonly unknown[];
+  total_opening_debit: number;
+  total_opening_credit: number;
+  total_period_debit: number;
+  total_period_credit: number;
+  total_closing_debit: number;
+  total_closing_credit: number;
+}
+
+export interface AccountLedgerReport extends FinanceReportBase {
+  account_code: string;
+  account_name: string;
+  entries: readonly unknown[];
+  total_debit: number;
+  total_credit: number;
+  closing_balance: number;
+  closing_balance_type: string;
+}
+
+export interface DayBookReport extends FinanceReportBase {
+  entries: readonly unknown[];
+  total_debit: number;
+  total_credit: number;
+  total_vouchers: number;
+}
+
+interface CashFlowItem {
+  label: string;
+  amount: number;
+  is_subtotal?: boolean;
+}
+
+interface CashFlowSection {
+  section_name: string;
+  items: readonly CashFlowItem[];
+  net_cash_flow: number;
+}
+
+export interface CashFlowReport extends FinanceReportBase {
+  operating_activities: CashFlowSection;
+  investing_activities: CashFlowSection;
+  financing_activities: CashFlowSection;
+  net_increase_in_cash: number;
+  opening_cash_balance: number;
+  closing_cash_balance: number;
+}
+
+interface ProfitLossItem {
+  account_group_name: string;
+  amount: number;
+}
+
+interface ProfitLossSection {
+  items: readonly ProfitLossItem[];
+  total: number;
+}
+
+export interface ProfitLossReport extends FinanceReportBase {
+  income_items: readonly ProfitLossItem[];
+  expense_items: readonly ProfitLossItem[];
+  total_income: number;
+  total_expenses: number;
+  net_profit_loss: number;
+  profit_loss_type: string;
+}
+
+export interface BalanceSheetReport extends FinanceReportBase {
+  assets: ProfitLossSection;
+  liabilities: ProfitLossSection;
+  equity: ProfitLossSection;
+  net_profit_loss: number;
+  total_liabilities_equity: number;
+  is_balanced: boolean;
+}
+
+// Helper to format a date string defensively. Returns '' for null/undefined.
+const formatDateSafe = (d: string | null | undefined): string =>
+  d == null ? '' : new Date(d).toLocaleDateString('en-IN');
+
+const formatDateTimeSafe = (d: string | null | undefined): string =>
+  d == null ? '' : new Date(d).toLocaleString('en-IN');
 
 /**
  * Format a value based on the specified format type
  */
-const formatValue = (value: any, format?: string): string => {
+const formatValue = (value: unknown, format?: string): string => {
   if (value === null || value === undefined) return '-';
 
   switch (format) {
@@ -44,7 +142,7 @@ const formatValue = (value: any, format?: string): string => {
         minimumFractionDigits: 2,
       }).format(Number(value));
     case 'date':
-      return new Date(value).toLocaleDateString('en-IN', {
+      return new Date(value as string | number | Date).toLocaleDateString('en-IN', {
         day: '2-digit',
         month: 'short',
         year: 'numeric',
@@ -126,9 +224,10 @@ export const exportToExcel = async (options: ExportOptions): Promise<void> => {
 
   // Add data rows
   data.forEach((row) => {
+    const r = (row ?? {}) as Record<string, unknown>;
     wsData.push(
       columns.map((col) => {
-        const value = row[col.key];
+        const value = r[col.key];
         if (col.format === 'currency' || col.format === 'number') {
           return typeof value === 'number' ? value : 0;
         }
@@ -216,9 +315,10 @@ export const exportToPDF = (options: ExportOptions): void => {
   const headers = columns.map((col) => col.header);
 
   // Prepare table body
-  const body = data.map((row) =>
-    columns.map((col) => formatValue(row[col.key], col.format))
-  );
+  const body = data.map((row) => {
+    const r = (row ?? {}) as Record<string, unknown>;
+    return columns.map((col) => formatValue(r[col.key], col.format));
+  });
 
   // Add totals row if provided
   if (totals) {
@@ -300,12 +400,12 @@ export const exportToPDF = (options: ExportOptions): void => {
 /**
  * Export Trial Balance to Excel
  */
-export const exportTrialBalanceToExcel = (reportData: any): Promise<void> => {
+export const exportTrialBalanceToExcel = (reportData: TrialBalanceReport): Promise<void> => {
   return exportToExcel({
     filename: `Trial_Balance_${reportData.organization_name}_${reportData.to_date}`,
     title: 'Trial Balance',
     organization: reportData.organization_name,
-    period: `For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    period: `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     columns: [
       { header: 'Code', key: 'account_code', align: 'left' },
       { header: 'Account Name', key: 'account_name', align: 'left' },
@@ -334,12 +434,12 @@ export const exportTrialBalanceToExcel = (reportData: any): Promise<void> => {
 /**
  * Export Trial Balance to PDF
  */
-export const exportTrialBalanceToPDF = (reportData: any): void => {
+export const exportTrialBalanceToPDF = (reportData: TrialBalanceReport): void => {
   exportToPDF({
     filename: `Trial_Balance_${reportData.organization_name}_${reportData.to_date}`,
     title: 'Trial Balance',
     organization: reportData.organization_name,
-    period: `For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    period: `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     columns: [
       { header: 'Code', key: 'account_code', align: 'left' },
       { header: 'Account Name', key: 'account_name', align: 'left' },
@@ -364,13 +464,13 @@ export const exportTrialBalanceToPDF = (reportData: any): void => {
 /**
  * Export Account Ledger to Excel
  */
-export const exportAccountLedgerToExcel = (reportData: any): Promise<void> => {
+export const exportAccountLedgerToExcel = (reportData: AccountLedgerReport): Promise<void> => {
   return exportToExcel({
     filename: `Account_Ledger_${reportData.account_code}_${reportData.to_date}`,
     title: 'Account Ledger',
     subtitle: `${reportData.account_code} - ${reportData.account_name}`,
     organization: reportData.organization_name,
-    period: `For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    period: `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     columns: [
       { header: 'Date', key: 'voucher_date', format: 'date', align: 'left' },
       { header: 'Voucher No.', key: 'voucher_number', align: 'left' },
@@ -396,13 +496,13 @@ export const exportAccountLedgerToExcel = (reportData: any): Promise<void> => {
 /**
  * Export Account Ledger to PDF
  */
-export const exportAccountLedgerToPDF = (reportData: any): void => {
+export const exportAccountLedgerToPDF = (reportData: AccountLedgerReport): void => {
   exportToPDF({
     filename: `Account_Ledger_${reportData.account_code}_${reportData.to_date}`,
     title: 'Account Ledger',
     subtitle: `${reportData.account_code} - ${reportData.account_name}`,
     organization: reportData.organization_name,
-    period: `For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    period: `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     columns: [
       { header: 'Date', key: 'voucher_date', format: 'date', align: 'left' },
       { header: 'Voucher No.', key: 'voucher_number', align: 'left' },
@@ -426,12 +526,12 @@ export const exportAccountLedgerToPDF = (reportData: any): void => {
 /**
  * Export Day Book to Excel
  */
-export const exportDayBookToExcel = (reportData: any): Promise<void> => {
+export const exportDayBookToExcel = (reportData: DayBookReport): Promise<void> => {
   return exportToExcel({
     filename: `Day_Book_${reportData.organization_name}_${reportData.to_date}`,
     title: 'Day Book / Journal Register',
     organization: reportData.organization_name,
-    period: `From ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    period: `From ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     columns: [
       { header: 'Date', key: 'voucher_date', format: 'date', align: 'left' },
       { header: 'Voucher No.', key: 'voucher_number', align: 'left' },
@@ -454,12 +554,12 @@ export const exportDayBookToExcel = (reportData: any): Promise<void> => {
 /**
  * Export Day Book to PDF
  */
-export const exportDayBookToPDF = (reportData: any): void => {
+export const exportDayBookToPDF = (reportData: DayBookReport): void => {
   exportToPDF({
     filename: `Day_Book_${reportData.organization_name}_${reportData.to_date}`,
     title: 'Day Book / Journal Register',
     organization: reportData.organization_name,
-    period: `From ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    period: `From ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     columns: [
       { header: 'Date', key: 'voucher_date', format: 'date', align: 'left' },
       { header: 'Voucher No.', key: 'voucher_number', align: 'left' },
@@ -481,7 +581,7 @@ export const exportDayBookToPDF = (reportData: any): void => {
 /**
  * Export Cash Flow Statement to PDF (custom format for cash flow)
  */
-export const exportCashFlowToPDF = (reportData: any): void => {
+export const exportCashFlowToPDF = (reportData: CashFlowReport): void => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -501,7 +601,7 @@ export const exportCashFlowToPDF = (reportData: any): void => {
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(reportData.organization_name, pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportData.organization_name ?? "", pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(14);
@@ -511,7 +611,7 @@ export const exportCashFlowToPDF = (reportData: any): void => {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(
-    `For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     pageWidth / 2,
     yPosition,
     { align: 'center' }
@@ -521,7 +621,7 @@ export const exportCashFlowToPDF = (reportData: any): void => {
   yPosition += 10;
 
   // Helper function to render a section
-  const renderSection = (section: any) => {
+  const renderSection = (section: CashFlowSection) => {
     doc.setFillColor(241, 245, 249); // slate-100
     doc.rect(14, yPosition - 4, pageWidth - 28, 8, 'F');
     doc.setFontSize(11);
@@ -532,7 +632,7 @@ export const exportCashFlowToPDF = (reportData: any): void => {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
 
-    section.items.forEach((item: any) => {
+    section.items.forEach((item: CashFlowItem) => {
       if (item.is_subtotal) {
         doc.setFont('helvetica', 'bold');
         doc.setFillColor(226, 232, 240); // slate-200
@@ -597,7 +697,7 @@ export const exportCashFlowToPDF = (reportData: any): void => {
   const pageHeight = doc.internal.pageSize.getHeight();
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generated on: ${new Date(reportData.generated_at).toLocaleString('en-IN')}`, 14, pageHeight - 10);
+  doc.text(`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`, 14, pageHeight - 10);
 
   doc.save(`Cash_Flow_Statement_${reportData.organization_name}_${reportData.to_date}.pdf`);
 };
@@ -605,20 +705,20 @@ export const exportCashFlowToPDF = (reportData: any): void => {
 /**
  * Export Cash Flow Statement to Excel
  */
-export const exportCashFlowToExcel = async (reportData: any): Promise<void> => {
+export const exportCashFlowToExcel = async (reportData: CashFlowReport): Promise<void> => {
   const wsData: CellValue[][] = [];
 
   // Header
   wsData.push([reportData.organization_name]);
   wsData.push(['Cash Flow Statement']);
-  wsData.push([`For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`]);
+  wsData.push([`For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`]);
   wsData.push(['(Prepared using Indirect Method)']);
   wsData.push([]);
 
   // Helper to add section
-  const addSection = (section: any) => {
+  const addSection = (section: CashFlowSection) => {
     wsData.push([section.section_name]);
-    section.items.forEach((item: any) => {
+    section.items.forEach((item: CashFlowItem) => {
       wsData.push([item.label, item.amount]);
     });
     wsData.push([`Net Cash from ${section.section_name.replace('Cash Flow from ', '')}`, section.net_cash_flow]);
@@ -635,7 +735,7 @@ export const exportCashFlowToExcel = async (reportData: any): Promise<void> => {
   wsData.push(['Opening Cash & Cash Equivalents', reportData.opening_cash_balance]);
   wsData.push(['Closing Cash & Cash Equivalents', reportData.closing_cash_balance]);
   wsData.push([]);
-  wsData.push([`Generated on: ${new Date(reportData.generated_at).toLocaleString('en-IN')}`]);
+  wsData.push([`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`]);
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Cash Flow Statement');
@@ -649,18 +749,18 @@ export const exportCashFlowToExcel = async (reportData: any): Promise<void> => {
 /**
  * Export Profit & Loss to Excel
  */
-export const exportProfitLossToExcel = async (reportData: any): Promise<void> => {
+export const exportProfitLossToExcel = async (reportData: ProfitLossReport): Promise<void> => {
   const wsData: CellValue[][] = [];
 
   // Header
   wsData.push([reportData.organization_name]);
   wsData.push(['Profit & Loss Statement']);
-  wsData.push([`For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`]);
+  wsData.push([`For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`]);
   wsData.push([]);
 
   // Income Section
   wsData.push(['INCOME']);
-  reportData.income_items.forEach((item: any) => {
+  reportData.income_items.forEach((item: ProfitLossItem) => {
     wsData.push([item.account_group_name, item.amount]);
   });
   wsData.push(['Total Income', reportData.total_income]);
@@ -668,7 +768,7 @@ export const exportProfitLossToExcel = async (reportData: any): Promise<void> =>
 
   // Expenses Section
   wsData.push(['EXPENSES']);
-  reportData.expense_items.forEach((item: any) => {
+  reportData.expense_items.forEach((item: ProfitLossItem) => {
     wsData.push([item.account_group_name, item.amount]);
   });
   wsData.push(['Total Expenses', reportData.total_expenses]);
@@ -677,7 +777,7 @@ export const exportProfitLossToExcel = async (reportData: any): Promise<void> =>
   // Net Profit/Loss
   wsData.push([`Net ${reportData.profit_loss_type === 'PROFIT' ? 'Profit' : 'Loss'}`, reportData.net_profit_loss]);
   wsData.push([]);
-  wsData.push([`Generated on: ${new Date(reportData.generated_at).toLocaleString('en-IN')}`]);
+  wsData.push([`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`]);
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Profit & Loss');
@@ -691,7 +791,7 @@ export const exportProfitLossToExcel = async (reportData: any): Promise<void> =>
 /**
  * Export Profit & Loss to PDF
  */
-export const exportProfitLossToPDF = (reportData: any): void => {
+export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -711,7 +811,7 @@ export const exportProfitLossToPDF = (reportData: any): void => {
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(reportData.organization_name, pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportData.organization_name ?? "", pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(14);
@@ -721,7 +821,7 @@ export const exportProfitLossToPDF = (reportData: any): void => {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(
-    `For the period ${new Date(reportData.from_date).toLocaleDateString('en-IN')} to ${new Date(reportData.to_date).toLocaleDateString('en-IN')}`,
+    `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     pageWidth / 2,
     yPosition,
     { align: 'center' }
@@ -740,7 +840,7 @@ export const exportProfitLossToPDF = (reportData: any): void => {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  reportData.income_items.forEach((item: any) => {
+  reportData.income_items.forEach((item: ProfitLossItem) => {
     doc.text(item.account_group_name, 20, yPosition);
     doc.text(formatCurrency(item.amount), pageWidth - 20, yPosition, { align: 'right' });
     yPosition += 5;
@@ -767,7 +867,7 @@ export const exportProfitLossToPDF = (reportData: any): void => {
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
-  reportData.expense_items.forEach((item: any) => {
+  reportData.expense_items.forEach((item: ProfitLossItem) => {
     doc.text(item.account_group_name, 20, yPosition);
     doc.text(formatCurrency(item.amount), pageWidth - 20, yPosition, { align: 'right' });
     yPosition += 5;
@@ -796,7 +896,7 @@ export const exportProfitLossToPDF = (reportData: any): void => {
   const pageHeight = doc.internal.pageSize.getHeight();
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generated on: ${new Date(reportData.generated_at).toLocaleString('en-IN')}`, 14, pageHeight - 10);
+  doc.text(`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`, 14, pageHeight - 10);
 
   doc.save(`Profit_Loss_${reportData.organization_name}_${reportData.to_date}.pdf`);
 };
@@ -804,18 +904,18 @@ export const exportProfitLossToPDF = (reportData: any): void => {
 /**
  * Export Balance Sheet to Excel
  */
-export const exportBalanceSheetToExcel = async (reportData: any): Promise<void> => {
+export const exportBalanceSheetToExcel = async (reportData: BalanceSheetReport): Promise<void> => {
   const wsData: CellValue[][] = [];
 
   // Header
   wsData.push([reportData.organization_name]);
   wsData.push(['Balance Sheet']);
-  wsData.push([`As on ${new Date(reportData.as_on_date).toLocaleDateString('en-IN')}`]);
+  wsData.push([`As on ${formatDateSafe(reportData.as_on_date)}`]);
   wsData.push([]);
 
   // Assets Section
   wsData.push(['ASSETS']);
-  reportData.assets.items.forEach((item: any) => {
+  reportData.assets.items.forEach((item: ProfitLossItem) => {
     wsData.push([item.account_group_name, item.amount]);
   });
   wsData.push(['Total Assets', reportData.assets.total]);
@@ -823,7 +923,7 @@ export const exportBalanceSheetToExcel = async (reportData: any): Promise<void> 
 
   // Liabilities Section
   wsData.push(['LIABILITIES']);
-  reportData.liabilities.items.forEach((item: any) => {
+  reportData.liabilities.items.forEach((item: ProfitLossItem) => {
     wsData.push([item.account_group_name, item.amount]);
   });
   wsData.push(['Total Liabilities', reportData.liabilities.total]);
@@ -831,7 +931,7 @@ export const exportBalanceSheetToExcel = async (reportData: any): Promise<void> 
 
   // Equity Section
   wsData.push(['EQUITY']);
-  reportData.equity.items.forEach((item: any) => {
+  reportData.equity.items.forEach((item: ProfitLossItem) => {
     wsData.push([item.account_group_name, item.amount]);
   });
   wsData.push(['Total Equity', reportData.equity.total]);
@@ -841,7 +941,7 @@ export const exportBalanceSheetToExcel = async (reportData: any): Promise<void> 
   wsData.push(['Net Profit/(Loss)', reportData.net_profit_loss]);
   wsData.push(['Total Liabilities + Equity', reportData.total_liabilities_equity]);
   wsData.push([]);
-  wsData.push([`Generated on: ${new Date(reportData.generated_at).toLocaleString('en-IN')}`]);
+  wsData.push([`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`]);
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Balance Sheet');
@@ -855,7 +955,7 @@ export const exportBalanceSheetToExcel = async (reportData: any): Promise<void> 
 /**
  * Export Balance Sheet to PDF
  */
-export const exportBalanceSheetToPDF = (reportData: any): void => {
+export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void => {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'mm',
@@ -875,7 +975,7 @@ export const exportBalanceSheetToPDF = (reportData: any): void => {
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(reportData.organization_name, pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportData.organization_name ?? "", pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(14);
@@ -885,14 +985,14 @@ export const exportBalanceSheetToPDF = (reportData: any): void => {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   doc.text(
-    `As on ${new Date(reportData.as_on_date).toLocaleDateString('en-IN')}`,
+    `As on ${formatDateSafe(reportData.as_on_date)}`,
     pageWidth / 2,
     yPosition,
     { align: 'center' }
   );
   yPosition += 10;
 
-  const renderSection = (title: string, items: any[], total: number, color: number[]) => {
+  const renderSection = (title: string, items: readonly ProfitLossItem[], total: number, color: number[]) => {
     doc.setFillColor(color[0], color[1], color[2]);
     doc.setTextColor(255, 255, 255);
     doc.rect(14, yPosition - 4, pageWidth - 28, 8, 'F');
@@ -904,7 +1004,7 @@ export const exportBalanceSheetToPDF = (reportData: any): void => {
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
-    items.forEach((item: any) => {
+    items.forEach((item: ProfitLossItem) => {
       doc.text(item.account_group_name, 20, yPosition);
       doc.text(formatCurrency(item.amount), pageWidth - 20, yPosition, { align: 'right' });
       yPosition += 5;
@@ -965,7 +1065,7 @@ export const exportBalanceSheetToPDF = (reportData: any): void => {
   const pageHeight = doc.internal.pageSize.getHeight();
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generated on: ${new Date(reportData.generated_at).toLocaleString('en-IN')}`, 14, pageHeight - 10);
+  doc.text(`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`, 14, pageHeight - 10);
 
   doc.save(`Balance_Sheet_${reportData.organization_name}_${reportData.as_on_date}.pdf`);
 };

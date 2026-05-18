@@ -2,13 +2,12 @@
  * Notification Settings Page - User preferences for notifications
  */
 
+import { ArrowLeft, Bell, Mail, MessageSquare, Smartphone, Save } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Bell, Mail, MessageSquare, Smartphone, Save } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Switch } from '@/components/ui/switch';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -16,6 +15,8 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -23,12 +24,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
 import { notificationApi } from '@/services/notificationApi';
-import { NotificationPreference, NotificationCategory } from '@/types/notification';
+import type { NotificationCategory } from '@/types/notification';
+import { NotificationPreference } from '@/types/notification';
 
 const CATEGORIES: { value: NotificationCategory; label: string; description: string }[] = [
   { value: 'system', label: 'System', description: 'System-wide notifications and updates' },

@@ -1,29 +1,22 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  Plus,
-  Search,
+  CheckCircle,
   Edit,
   Eye,
-  Trash2,
+  Plus,
+  Search,
   Settings,
-  CheckCircle,
-  XCircle,
   Users,
+  XCircle,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+import { EmptyState } from '@/components/common/EmptyState';
 import { PageHeader } from '@/components/common/PageHeader';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -32,115 +25,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatCurrency } from '@/lib/utils';
+import { approvalsApi, type ApprovalWorkflowResponse } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-// Mock data
-const approvalMatrixSummary = {
-  total_rules: 24,
-  active_rules: 20,
-  modules_covered: 8,
-  pending_approvals: 45,
-};
-
-const approvalMatrices = [
-  {
-    id: '1',
-    name: 'Loan Disbursement - Level 1',
-    module: 'LENDING',
-    transaction_type: 'DISBURSEMENT',
-    min_amount: 0,
-    max_amount: 5000000,
-    approver_role: 'Branch Manager',
-    approver_count: 1,
-    sequence: 1,
-    is_active: true,
-    created_date: '2024-01-15',
-  },
-  {
-    id: '2',
-    name: 'Loan Disbursement - Level 2',
-    module: 'LENDING',
-    transaction_type: 'DISBURSEMENT',
-    min_amount: 5000001,
-    max_amount: 25000000,
-    approver_role: 'Regional Manager',
-    approver_count: 1,
-    sequence: 2,
-    is_active: true,
-    created_date: '2024-01-15',
-  },
-  {
-    id: '3',
-    name: 'Loan Disbursement - Level 3',
-    module: 'LENDING',
-    transaction_type: 'DISBURSEMENT',
-    min_amount: 25000001,
-    max_amount: null,
-    approver_role: 'Credit Committee',
-    approver_count: 3,
-    sequence: 3,
-    is_active: true,
-    created_date: '2024-01-15',
-  },
-  {
-    id: '4',
-    name: 'Purchase Order - Level 1',
-    module: 'PROCUREMENT',
-    transaction_type: 'PURCHASE_ORDER',
-    min_amount: 0,
-    max_amount: 100000,
-    approver_role: 'Department Head',
-    approver_count: 1,
-    sequence: 1,
-    is_active: true,
-    created_date: '2024-02-10',
-  },
-  {
-    id: '5',
-    name: 'Vendor Payment - Standard',
-    module: 'AP_AR',
-    transaction_type: 'VENDOR_PAYMENT',
-    min_amount: 0,
-    max_amount: 500000,
-    approver_role: 'Finance Manager',
-    approver_count: 1,
-    sequence: 1,
-    is_active: true,
-    created_date: '2024-02-20',
-  },
-  {
-    id: '6',
-    name: 'GL Posting - Journal Entry',
-    module: 'ACCOUNTING',
-    transaction_type: 'JOURNAL_VOUCHER',
-    min_amount: 0,
-    max_amount: null,
-    approver_role: 'Chief Accountant',
-    approver_count: 1,
-    sequence: 1,
-    is_active: true,
-    created_date: '2024-03-01',
-  },
-  {
-    id: '7',
-    name: 'NPA Write-off',
-    module: 'LENDING',
-    transaction_type: 'NPA_WRITEOFF',
-    min_amount: 0,
-    max_amount: null,
-    approver_role: 'Board Committee',
-    approver_count: 5,
-    sequence: 1,
-    is_active: false,
-    created_date: '2024-03-15',
-  },
-];
-
+import { logger } from "@/lib/logger";
 const modules = [
   { value: 'LENDING', label: 'Lending' },
   { value: 'ACCOUNTING', label: 'Accounting' },
@@ -148,25 +44,64 @@ const modules = [
   { value: 'AP_AR', label: 'AP/AR' },
   { value: 'HR', label: 'Human Resources' },
   { value: 'TREASURY', label: 'Treasury' },
+  { value: 'FIXED_ASSETS', label: 'Fixed Assets' },
+  { value: 'PAYROLL', label: 'Payroll' },
 ];
+
+const getWorkflowModule = (workflowType: string) => {
+  if (workflowType.startsWith('FIN_')) return 'ACCOUNTING';
+  if (workflowType === 'PAYMENT_RELEASE') return 'AP_AR';
+  if (workflowType.startsWith('LOAN_')) return 'LENDING';
+  if (workflowType.startsWith('FA_')) return 'FIXED_ASSETS';
+  if (workflowType === 'PAYROLL_POSTING') return 'PAYROLL';
+  return 'ACCOUNTING';
+};
 
 export default function ApprovalMatrixList() {
   const navigate = useNavigate();
+  const organizationId = useActiveOrganizationId();
   const [searchTerm, setSearchTerm] = useState('');
   const [moduleFilter, setModuleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [approvalMatrices, setApprovalMatrices] = useState<ApprovalWorkflowResponse[]>([]);
 
-  const filteredMatrices = approvalMatrices.filter((m) => {
-    const matchesSearch =
-      m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      m.approver_role.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesModule = moduleFilter === 'all' || m.module === moduleFilter;
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && m.is_active) ||
-      (statusFilter === 'inactive' && !m.is_active);
-    return matchesSearch && matchesModule && matchesStatus;
-  });
+  useEffect(() => {
+    const loadRules = async () => {
+      if (!organizationId) return;
+      try {
+        const response = await approvalsApi.listWorkflows({
+          organization_id: organizationId,
+          limit: 100,
+        });
+        setApprovalMatrices(response.data.items || []);
+      } catch (error) {
+        logger.error('Failed to load approval matrix rules:', error);
+        setApprovalMatrices([]);
+      }
+    };
+    loadRules();
+  }, [organizationId]);
+
+  const filteredMatrices = useMemo(
+    () =>
+      approvalMatrices.filter((matrix) => {
+        const search = searchTerm.toLowerCase();
+        const matchesSearch =
+          matrix.workflowName.toLowerCase().includes(search) ||
+          matrix.workflowType.toLowerCase().includes(search);
+        const matchesModule =
+          moduleFilter === 'all' || getWorkflowModule(matrix.workflowType) === moduleFilter;
+        const matchesStatus =
+          statusFilter === 'all' ||
+          (statusFilter === 'active' && matrix.isActive) ||
+          (statusFilter === 'inactive' && !matrix.isActive);
+        return matchesSearch && matchesModule && matchesStatus;
+      }),
+    [approvalMatrices, moduleFilter, searchTerm, statusFilter],
+  );
+
+  const activeRules = approvalMatrices.filter((matrix) => matrix.isActive).length;
+  const modulesCovered = new Set(approvalMatrices.map((matrix) => getWorkflowModule(matrix.workflowType))).size;
 
   return (
     <div className="space-y-6">
@@ -175,12 +110,15 @@ export default function ApprovalMatrixList() {
         subtitle="Configure approval workflows and hierarchies"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/admin/accounting/pending-approvals')}>
-              <Users className="h-4 w-4 mr-2" />
-              Pending ({approvalMatrixSummary.pending_approvals})
+            <Button
+              variant="outline"
+              onClick={() => navigate('/admin/accounting/pending-approvals')}
+            >
+              <Users className="mr-2 h-4 w-4" />
+              Pending Approvals
             </Button>
-            <Button onClick={() => navigate('/admin/accounting/approval-matrix/create')}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button onClick={() => navigate('/admin/accounting/approval-matrix/new')}>
+              <Plus className="mr-2 h-4 w-4" />
               Add Rule
             </Button>
           </div>
@@ -188,26 +126,24 @@ export default function ApprovalMatrixList() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total Rules
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Rules</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{approvalMatrixSummary.total_rules}</div>
+            <div className="text-3xl font-bold">{approvalMatrices.length}</div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Active Rules</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Active Rules
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {approvalMatrixSummary.active_rules}
-            </div>
+            <div className="text-3xl font-bold text-green-600">{activeRules}</div>
           </CardContent>
         </Card>
 
@@ -218,20 +154,21 @@ export default function ApprovalMatrixList() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{approvalMatrixSummary.modules_covered}</div>
+            <div className="text-3xl font-bold">{modulesCovered}</div>
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => navigate('/admin/accounting/pending-approvals')}>
+        <Card
+          className="cursor-pointer hover:bg-muted/50"
+          onClick={() => navigate('/admin/accounting/pending-approvals')}
+        >
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
               Pending Approvals
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-500">
-              {approvalMatrixSummary.pending_approvals}
-            </div>
+            <div className="text-3xl font-bold text-orange-500">View</div>
           </CardContent>
         </Card>
       </div>
@@ -239,9 +176,9 @@ export default function ApprovalMatrixList() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap gap-4">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by name or role..."
                 className="pl-10"
@@ -297,81 +234,70 @@ export default function ApprovalMatrixList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredMatrices.map((matrix) => (
-                <TableRow key={matrix.id}>
-                  <TableCell className="font-medium">{matrix.name}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{matrix.module.replace(/_/g, '/')}</Badge>
-                  </TableCell>
-                  <TableCell>{matrix.transaction_type.replace(/_/g, ' ')}</TableCell>
-                  <TableCell className="text-right">
-                    <div className="text-sm">
-                      {formatCurrency(matrix.min_amount)} -{' '}
-                      {matrix.max_amount ? formatCurrency(matrix.max_amount) : 'Unlimited'}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <div className="font-medium">{matrix.approver_role}</div>
-                        {matrix.approver_count > 1 && (
-                          <div className="text-xs text-muted-foreground">
-                            {matrix.approver_count} approvers required
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="secondary">{matrix.sequence}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    {matrix.is_active ? (
-                      <Badge variant="default" className="bg-green-600">
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        Active
+              {filteredMatrices.map((matrix) => {
+                const firstLevel = matrix.levels[0];
+                return (
+                  <TableRow key={matrix.id}>
+                    <TableCell className="font-medium">{matrix.workflowName}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {getWorkflowModule(matrix.workflowType).replace(/_/g, '/')}
                       </Badge>
-                    ) : (
-                      <Badge variant="secondary">
-                        <XCircle className="h-3 w-3 mr-1" />
-                        Inactive
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          ...
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
+                    </TableCell>
+                    <TableCell>{matrix.workflowType.replace(/_/g, ' ')}</TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(Number(matrix.thresholdAmount))} and above
+                    </TableCell>
+                    <TableCell>{firstLevel?.levelName || '-'}</TableCell>
+                    <TableCell className="text-center">
+                      <Badge variant="secondary">{matrix.approvalLevels}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      {matrix.isActive ? (
+                        <Badge variant="default" className="bg-green-600">
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                          Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">
+                          <XCircle className="mr-1 h-3 w-3" />
+                          Inactive
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => navigate(`/admin/accounting/approval-matrix/${matrix.id}`)}
                         >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() =>
                             navigate(`/admin/accounting/approval-matrix/${matrix.id}/edit`)
                           }
                         >
-                          <Edit className="h-4 w-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))}
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
+          {filteredMatrices.length === 0 && (
+            <EmptyState
+              className="mt-4"
+              icon={Settings}
+              title="No approval matrix rules configured"
+              subtitle="Configure voucher, payment, and other finance approvals using Add Rule."
+            />
+          )}
         </CardContent>
       </Card>
     </div>

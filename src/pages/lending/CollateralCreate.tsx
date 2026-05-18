@@ -1,21 +1,13 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { Building, Check, Upload } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { ArrowLeft, Building, Check, Upload } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -25,8 +17,26 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+import { useCreateCollateral } from '@/hooks/lending/useCollateral';
+import { useLoanAccount } from '@/hooks/lending/useLoanAccount';
+import { useLoanAccounts } from '@/hooks/lending/useLoanAccounts';
+import { useToast } from '@/hooks/use-toast';
+import { logger } from '@/lib/logger';
 import { formatCurrency } from '@/lib/utils';
+import type {
+  CreateCollateralRequest,
+  SecurityCategory,
+  ChargeType,
+} from '@/services/lending/collateralApi';
 
 const collateralSchema = z.object({
   loan_account_id: z.string().min(1, 'Loan account is required'),
@@ -69,13 +79,6 @@ const collateralSchema = z.object({
 
 type CollateralFormData = z.infer<typeof collateralSchema>;
 
-// Mock data
-const loanAccounts = [
-  { id: '1', number: 'SMFC/LA/2025/00145', entity: 'Sunrise Industries', sanctioned: 15000000 },
-  { id: '2', number: 'SMFC/LA/2025/00146', entity: 'Metro Logistics', sanctioned: 25000000 },
-  { id: '3', number: 'SMFC/LA/2025/00147', entity: 'Eastern Trading', sanctioned: 10000000 },
-];
-
 const securityTypes = {
   PRIMARY: [
     { value: 'IMMOVABLE_PROPERTY', label: 'Immovable Property' },
@@ -99,21 +102,30 @@ const securityTypes = {
   ],
 };
 
-const chargeTypes = [
-  { value: 'EXCLUSIVE_CHARGE', label: 'Exclusive Charge' },
+const chargeTypes: { value: ChargeType; label: string }[] = [
+  { value: 'FIRST', label: 'First Charge / Exclusive' },
   { value: 'PARI_PASSU', label: 'Pari Passu' },
-  { value: 'SECOND_CHARGE', label: 'Second Charge' },
-  { value: 'HYPOTHECATION', label: 'Hypothecation' },
-  { value: 'PLEDGE', label: 'Pledge' },
-  { value: 'MORTGAGE', label: 'Mortgage' },
+  { value: 'SECOND', label: 'Second Charge' },
+  { value: 'SUBSERVIENT', label: 'Subservient' },
 ];
 
 export default function CollateralCreate() {
   const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedLoan, setSelectedLoan] = useState<typeof loanAccounts[0] | null>(null);
+  const { toast } = useToast();
+  const [selectedLoanId, setSelectedLoanId] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
   const [calculatedNet, setCalculatedNet] = useState<number | null>(null);
+  const [createdSecurityNumber, setCreatedSecurityNumber] = useState<number | null>(null);
+
+  const loanAccountsQuery = useLoanAccounts({ page: 1, pageSize: 100 });
+  const selectedLoanDetail = useLoanAccount(selectedLoanId ?? undefined);
+  const createMutation = useCreateCollateral();
+
+  const loanAccounts = loanAccountsQuery.data?.items ?? [];
+  const selectedLoan = useMemo(() => {
+    if (!selectedLoanId) return null;
+    return loanAccounts.find((acc) => acc.id === selectedLoanId) ?? null;
+  }, [loanAccounts, selectedLoanId]);
 
   const form = useForm<CollateralFormData>({
     resolver: zodResolver(collateralSchema),
@@ -139,34 +151,125 @@ export default function CollateralCreate() {
   };
 
   const onLoanSelect = (loanId: string) => {
-    const loan = loanAccounts.find((l) => l.id === loanId);
-    setSelectedLoan(loan || null);
+    setSelectedLoanId(loanId);
     form.setValue('loan_account_id', loanId);
   };
 
   const onSubmit = async (data: CollateralFormData) => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setIsLoading(false);
-    setShowSuccess(true);
+    // Resolve the sanction id from the selected loan account (the BE
+    // collateral endpoint is sanction-scoped, not loan-account-scoped).
+    const sanctionId = selectedLoanDetail.data?.sanctionId;
+    if (!sanctionId) {
+      toast({
+        title: 'Cannot save collateral',
+        description: 'Could not resolve the sanction for the selected loan account.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const propertyDetails =
+      data.security_type === 'IMMOVABLE_PROPERTY'
+        ? {
+            address: data.property_address,
+            areaSqft: data.property_area,
+            surveyNumber: data.survey_number,
+            type: data.property_unit,
+          }
+        : undefined;
+
+    const ownerDetails =
+      data.category === 'GUARANTEE' && data.guarantor_name
+        ? {
+            name: data.guarantor_name,
+            isThirdParty: true,
+          }
+        : undefined;
+
+    const valuationDetails = {
+      declaredValue: data.market_value,
+      marketValue: data.market_value,
+      valuationDate: data.valuation_date,
+      valuerFirm: data.valuation_agency,
+      reportPath: data.valuation_report_number,
+    };
+
+    // BE chargeType expects FIRST/SECOND/PARI_PASSU/SUBSERVIENT. The
+    // form historically exposed a richer vocabulary; map down to the BE
+    // enum and default to FIRST when unknown.
+    const chargeTypeMap: Record<string, ChargeType> = {
+      EXCLUSIVE_CHARGE: 'FIRST',
+      FIRST: 'FIRST',
+      PARI_PASSU: 'PARI_PASSU',
+      SECOND_CHARGE: 'SECOND',
+      SECOND: 'SECOND',
+      SUBSERVIENT: 'SUBSERVIENT',
+      HYPOTHECATION: 'FIRST',
+      PLEDGE: 'FIRST',
+      MORTGAGE: 'FIRST',
+    };
+
+    const payload: CreateCollateralRequest = {
+      sanctionId,
+      securityCategory: data.category as SecurityCategory,
+      securityType: data.security_type,
+      description: data.description,
+      acceptableValue: data.acceptable_value,
+      marginPercentage: data.margin_percentage,
+      chargeType: data.charge_type ? (chargeTypeMap[data.charge_type] ?? 'FIRST') : 'FIRST',
+      propertyDetails,
+      ownerDetails,
+      valuationDetails,
+    };
+
+    try {
+      const created = await createMutation.mutateAsync(payload);
+      setCreatedSecurityNumber(created.securityNumber);
+      toast({
+        title: 'Collateral added',
+        description: `Security #${created.securityNumber} recorded successfully.`,
+      });
+      setShowSuccess(true);
+    } catch (error) {
+      logger.error('Failed to create collateral', error);
+      const message =
+        (error as { response?: { data?: { message?: string; detail?: string } } }).response?.data
+          ?.message ||
+        (error as { response?: { data?: { detail?: string } } }).response?.data?.detail ||
+        'Failed to save collateral. Please try again.';
+      toast({ title: 'Save failed', description: message, variant: 'destructive' });
+    }
   };
+
+  const isSubmitting = createMutation.isPending;
 
   if (showSuccess) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh]">
+      <div className="flex min-h-[60vh] flex-col items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
             <Check className="h-8 w-8 text-green-600" />
           </div>
-          <h2 className="text-2xl font-bold mb-2">Collateral Added Successfully</h2>
-          <p className="text-muted-foreground mb-6">
-            Security Code: <span className="font-mono">SEC/2025/00156</span>
-          </p>
-          <div className="flex gap-4 justify-center">
-            <Button variant="outline" onClick={() => navigate('/lending/collaterals')}>
+          <h2 className="mb-2 text-2xl font-bold">Collateral Added Successfully</h2>
+          {createdSecurityNumber !== null && (
+            <p className="mb-6 text-muted-foreground">
+              Security #: <span className="font-mono">{createdSecurityNumber}</span>
+            </p>
+          )}
+          <div className="flex justify-center gap-4">
+            <Button variant="outline" onClick={() => navigate('/admin/lending/collaterals')}>
               View All Collaterals
             </Button>
-            <Button variant="outline" onClick={() => setShowSuccess(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowSuccess(false);
+                setCreatedSecurityNumber(null);
+                form.reset({ category: 'PRIMARY', margin_percentage: '25' });
+                setCalculatedNet(null);
+                setSelectedLoanId(null);
+              }}
+            >
               Add Another
             </Button>
           </div>
@@ -180,13 +283,10 @@ export default function CollateralCreate() {
       <PageHeader
         title="Add Collateral"
         subtitle="Register a new security or collateral"
-        breadcrumbs={[
-          { label: 'Collaterals', to: '/lending/collaterals' },
-          { label: 'New' },
-        ]}
+        breadcrumbs={[{ label: 'Collaterals', to: '/admin/lending/collaterals' }, { label: 'New' }]}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Form */}
         <Card className="lg:col-span-2">
           <CardHeader>
@@ -207,13 +307,19 @@ export default function CollateralCreate() {
                         <Select onValueChange={onLoanSelect} value={field.value}>
                           <FormControl>
                             <SelectTrigger>
-                              <SelectValue placeholder="Select loan account" />
+                              <SelectValue
+                                placeholder={
+                                  loanAccountsQuery.isLoading
+                                    ? 'Loading loan accounts...'
+                                    : 'Select loan account'
+                                }
+                              />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
                             {loanAccounts.map((acc) => (
                               <SelectItem key={acc.id} value={acc.id}>
-                                {acc.number} - {acc.entity}
+                                {acc.loanAccountNumber} - {acc.entityName ?? 'Unknown entity'}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -261,11 +367,13 @@ export default function CollateralCreate() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {(securityTypes[category as keyof typeof securityTypes] || []).map((type) => (
-                              <SelectItem key={type.value} value={type.value}>
-                                {type.label}
-                              </SelectItem>
-                            ))}
+                            {(securityTypes[category as keyof typeof securityTypes] || []).map(
+                              (type) => (
+                                <SelectItem key={type.value} value={type.value}>
+                                  {type.label}
+                                </SelectItem>
+                              ),
+                            )}
                           </SelectContent>
                         </Select>
                         <FormMessage />
@@ -318,7 +426,7 @@ export default function CollateralCreate() {
 
                 {/* Valuation Section */}
                 <div className="border-t pt-4">
-                  <h3 className="font-medium mb-4">Valuation Details</h3>
+                  <h3 className="mb-4 font-medium">Valuation Details</h3>
                   <div className="grid grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
@@ -374,7 +482,7 @@ export default function CollateralCreate() {
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="mt-4 grid grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
                       name="valuation_date"
@@ -420,9 +528,9 @@ export default function CollateralCreate() {
                 </div>
 
                 {/* Property Details - Show for immovable property */}
-                {(form.watch('security_type') === 'IMMOVABLE_PROPERTY') && (
+                {form.watch('security_type') === 'IMMOVABLE_PROPERTY' && (
                   <div className="border-t pt-4">
-                    <h3 className="font-medium mb-4">Property Details</h3>
+                    <h3 className="mb-4 font-medium">Property Details</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -496,7 +604,7 @@ export default function CollateralCreate() {
                 {/* Guarantee Details - Show for guarantees */}
                 {category === 'GUARANTEE' && (
                   <div className="border-t pt-4">
-                    <h3 className="font-medium mb-4">Guarantor Details</h3>
+                    <h3 className="mb-4 font-medium">Guarantor Details</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <FormField
                         control={form.control}
@@ -559,7 +667,7 @@ export default function CollateralCreate() {
 
                 {/* Document Details */}
                 <div className="border-t pt-4">
-                  <h3 className="font-medium mb-4">Document Details</h3>
+                  <h3 className="mb-4 font-medium">Document Details</h3>
                   <div className="grid grid-cols-3 gap-4">
                     <FormField
                       control={form.control}
@@ -631,13 +739,13 @@ export default function CollateralCreate() {
                   )}
                 />
 
-                <div className="flex gap-4 justify-end">
+                <div className="flex justify-end gap-4">
                   <Button type="button" variant="outline" onClick={() => navigate(-1)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={isLoading}>
-                    <Building className="h-4 w-4 mr-2" />
-                    {isLoading ? 'Saving...' : 'Add Collateral'}
+                  <Button type="submit" disabled={isSubmitting}>
+                    <Building className="mr-2 h-4 w-4" />
+                    {isSubmitting ? 'Saving...' : 'Add Collateral'}
                   </Button>
                 </div>
               </form>
@@ -650,7 +758,7 @@ export default function CollateralCreate() {
           <CardHeader>
             <CardTitle>Loan Summary</CardTitle>
             <CardDescription>
-              {selectedLoan ? selectedLoan.number : 'Select a loan account'}
+              {selectedLoan ? selectedLoan.loanAccountNumber : 'Select a loan account'}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -658,36 +766,39 @@ export default function CollateralCreate() {
               <div className="space-y-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Entity</p>
-                  <p className="font-medium">{selectedLoan.entity}</p>
+                  <p className="font-medium">{selectedLoan.entityName ?? '—'}</p>
                 </div>
 
                 <div>
                   <p className="text-sm text-muted-foreground">Sanctioned Amount</p>
-                  <p className="text-2xl font-bold">{formatCurrency(selectedLoan.sanctioned)}</p>
+                  <p className="text-2xl font-bold">
+                    {formatCurrency(Number(selectedLoan.sanctionedAmount))}
+                  </p>
                 </div>
 
-                {calculatedNet && (
+                {calculatedNet !== null && (
                   <div className="border-t pt-4">
                     <p className="text-sm text-muted-foreground">Net Realizable Value</p>
                     <p className="text-2xl font-bold text-green-600">
                       {formatCurrency(calculatedNet)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Coverage: {((calculatedNet / selectedLoan.sanctioned) * 100).toFixed(1)}%
+                      Coverage:{' '}
+                      {((calculatedNet / Number(selectedLoan.sanctionedAmount)) * 100).toFixed(1)}%
                     </p>
                   </div>
                 )}
 
                 <div className="border-t pt-4">
-                  <Button variant="outline" className="w-full">
-                    <Upload className="h-4 w-4 mr-2" />
+                  <Button variant="outline" className="w-full" type="button" disabled>
+                    <Upload className="mr-2 h-4 w-4" />
                     Upload Documents
                   </Button>
                 </div>
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
-                <Building className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <div className="py-8 text-center text-muted-foreground">
+                <Building className="mx-auto mb-4 h-12 w-12 opacity-50" />
                 <p>Select a loan account to view details</p>
               </div>
             )}

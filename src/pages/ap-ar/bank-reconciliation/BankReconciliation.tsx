@@ -1,20 +1,18 @@
-import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import {
   ArrowDownCircle,
-  ArrowLeft,
   ArrowUpCircle,
   Check,
-  CheckCircle,
   FileText,
   Link2,
   Link2Off,
   RefreshCw,
-  Search,
   Wand2,
 } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -34,30 +32,29 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
+import { logger } from "@/lib/logger";
 interface UnreconciledStatement {
-  statement_id: string;
-  transaction_date: string;
-  reference_number: string | null;
+  statementId: string;
+  transactionDate: string;
+  referenceNumber: string | null;
   description: string | null;
-  debit_amount: number;
-  credit_amount: number;
-  unreconciled_amount: number;
+  debitAmount: number;
+  creditAmount: number;
+  unreconciledAmount: number;
 }
 
 interface UnreconciledBookEntry {
-  voucher_id: string;
-  voucher_number: string;
-  voucher_date: string;
+  voucherId: string;
+  voucherNumber: string;
+  voucherDate: string;
   narration: string | null;
-  debit_amount: number;
-  credit_amount: number;
-  entry_type: string;
+  debitAmount: number;
+  creditAmount: number;
+  entryType: string;
 }
 
 interface BankAccount {
@@ -67,16 +64,29 @@ interface BankAccount {
 }
 
 interface WorkspaceData {
-  bank_account_id: string;
-  bank_account_name: string;
-  from_date: string;
-  to_date: string;
-  unreconciled_statements: UnreconciledStatement[];
-  unreconciled_book_entries: UnreconciledBookEntry[];
-  total_unreconciled_bank_credits: number;
-  total_unreconciled_bank_debits: number;
-  total_unreconciled_book_credits: number;
-  total_unreconciled_book_debits: number;
+  bankAccountId: string;
+  bankAccountName: string;
+  fromDate: string;
+  toDate: string;
+  unreconciledStatements: UnreconciledStatement[];
+  unreconciledBookEntries: UnreconciledBookEntry[];
+  totalUnreconciledBankCredits: number;
+  totalUnreconciledBankDebits: number;
+  totalUnreconciledBookCredits: number;
+  totalUnreconciledBookDebits: number;
+}
+
+interface ApiError {
+  response?: {
+    data?: {
+      detail?: string;
+    };
+  };
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  const apiError = error as ApiError;
+  return apiError.response?.data?.detail || fallback;
 }
 
 export function BankReconciliation() {
@@ -84,19 +94,19 @@ export function BankReconciliation() {
   const [searchParams] = useSearchParams();
   const { toast } = useToast();
 
-  const organizationId = localStorage.getItem('organization_id') || '';
+  const organizationId = useActiveOrganizationId() || '';
 
   // State
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [selectedBankAccount, setSelectedBankAccount] = useState(
-    searchParams.get('bank_account_id') || ''
+    searchParams.get('bank_account_id') || '',
   );
   const [fromDate, setFromDate] = useState(
     searchParams.get('from_date') ||
-      format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd')
+      format(new Date(new Date().getFullYear(), new Date().getMonth(), 1), 'yyyy-MM-dd'),
   );
   const [toDate, setToDate] = useState(
-    searchParams.get('to_date') || format(new Date(), 'yyyy-MM-dd')
+    searchParams.get('to_date') || format(new Date(), 'yyyy-MM-dd'),
   );
   const [loading, setLoading] = useState(false);
   const [workspaceData, setWorkspaceData] = useState<WorkspaceData | null>(null);
@@ -109,6 +119,7 @@ export function BankReconciliation() {
   // Fetch bank accounts
   useEffect(() => {
     const fetchBankAccounts = async () => {
+      if (!organizationId) return;
       try {
         const response = await accountsApi.list({
           organization_id: organizationId,
@@ -120,15 +131,15 @@ export function BankReconciliation() {
           setSelectedBankAccount(response.data.items[0].id);
         }
       } catch (error) {
-        console.error('Failed to fetch bank accounts:', error);
+        logger.error('Failed to fetch bank accounts:', error);
       }
     };
     fetchBankAccounts();
-  }, [organizationId]);
+  }, [organizationId, selectedBankAccount]);
 
   // Fetch workspace data
-  const fetchWorkspace = async () => {
-    if (!selectedBankAccount || !fromDate || !toDate) return;
+  const fetchWorkspace = useCallback(async () => {
+    if (!organizationId || !selectedBankAccount || !fromDate || !toDate) return;
 
     setLoading(true);
     try {
@@ -141,32 +152,31 @@ export function BankReconciliation() {
       setSelectedStatement(null);
       setSelectedBookEntry(null);
       setMatchAmount('');
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to fetch reconciliation data',
+        description: getErrorMessage(error, 'Failed to fetch reconciliation data'),
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [fromDate, organizationId, selectedBankAccount, toDate, toast]);
 
   useEffect(() => {
     if (selectedBankAccount) {
       fetchWorkspace();
     }
-  }, [selectedBankAccount, fromDate, toDate]);
+  }, [fetchWorkspace, selectedBankAccount]);
 
   // Handle statement selection
   const handleSelectStatement = (statement: UnreconciledStatement) => {
     setSelectedStatement(statement);
-    setMatchAmount(statement.unreconciled_amount.toFixed(2));
+    setMatchAmount(statement.unreconciledAmount.toFixed(2));
     // Try to find matching book entry
-    const amount = statement.credit_amount > 0 ? statement.credit_amount : statement.debit_amount;
-    const matchingEntry = workspaceData?.unreconciled_book_entries.find((entry) => {
-      const entryAmount =
-        statement.credit_amount > 0 ? entry.debit_amount : entry.credit_amount;
+    const amount = statement.creditAmount > 0 ? statement.creditAmount : statement.debitAmount;
+    const matchingEntry = workspaceData?.unreconciledBookEntries.find((entry) => {
+      const entryAmount = statement.creditAmount > 0 ? entry.debitAmount : entry.creditAmount;
       return Math.abs(entryAmount - amount) < 0.01;
     });
     if (matchingEntry) {
@@ -179,15 +189,14 @@ export function BankReconciliation() {
     setSelectedBookEntry(entry);
     if (!selectedStatement) {
       // Try to find matching statement
-      const amount = entry.debit_amount > 0 ? entry.debit_amount : entry.credit_amount;
-      const matchingStatement = workspaceData?.unreconciled_statements.find((stmt) => {
-        const stmtAmount =
-          entry.debit_amount > 0 ? stmt.credit_amount : stmt.debit_amount;
+      const amount = entry.debitAmount > 0 ? entry.debitAmount : entry.creditAmount;
+      const matchingStatement = workspaceData?.unreconciledStatements.find((stmt) => {
+        const stmtAmount = entry.debitAmount > 0 ? stmt.creditAmount : stmt.debitAmount;
         return Math.abs(stmtAmount - amount) < 0.01;
       });
       if (matchingStatement) {
         setSelectedStatement(matchingStatement);
-        setMatchAmount(matchingStatement.unreconciled_amount.toFixed(2));
+        setMatchAmount(matchingStatement.unreconciledAmount.toFixed(2));
       }
     }
   };
@@ -216,20 +225,20 @@ export function BankReconciliation() {
     setMatching(true);
     try {
       await bankReconciliationApi.matchStatement({
-        statement_id: selectedStatement.statement_id,
-        voucher_id: selectedBookEntry.voucher_id,
-        matched_amount: amount,
-        match_type: 'MANUAL',
+        statementId: selectedStatement.statementId,
+        voucherId: selectedBookEntry.voucherId,
+        matchedAmount: amount,
+        matchType: 'MANUAL',
       });
       toast({
         title: 'Success',
         description: 'Match created successfully',
       });
       fetchWorkspace();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to create match',
+        description: getErrorMessage(error, 'Failed to create match'),
         variant: 'destructive',
       });
     } finally {
@@ -250,13 +259,13 @@ export function BankReconciliation() {
       });
       toast({
         title: 'Auto-Match Complete',
-        description: `${response.data.matched_count} matches created`,
+        description: `${response.data.matchedCount} matches created`,
       });
       fetchWorkspace();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Auto-match failed',
+        description: getErrorMessage(error, 'Auto-match failed'),
         variant: 'destructive',
       });
     } finally {
@@ -274,29 +283,24 @@ export function BankReconciliation() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold">Bank Reconciliation</h1>
-          <p className="text-sm text-slate-500">
-            Match bank statements with book entries
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={() =>
-            navigate(
-              `/admin/ap-ar/bank-reconciliation/brs-report?bank_account_id=${selectedBankAccount}&from_date=${fromDate}&to_date=${toDate}`
-            )
-          }
-        >
-          <FileText className="mr-2 h-4 w-4" />
-          BRS Report
-        </Button>
-      </div>
+      <PageHeader
+        title="Bank Reconciliation"
+        subtitle="Match bank statements with book entries"
+        breadcrumbs={[{ label: 'AP / AR', to: '/admin/ap-ar' }, { label: 'Bank Reconciliation' }]}
+        actions={
+          <Button
+            variant="outline"
+            onClick={() =>
+              navigate(
+                `/admin/ap-ar/bank-reconciliation/brs-report?bank_account_id=${selectedBankAccount}&from_date=${fromDate}&to_date=${toDate}`,
+              )
+            }
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            BRS Report
+          </Button>
+        }
+      />
 
       {/* Filters */}
       <Card>
@@ -319,19 +323,11 @@ export function BankReconciliation() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="flex items-end gap-2">
               <Button onClick={fetchWorkspace} disabled={loading}>
@@ -360,7 +356,7 @@ export function BankReconciliation() {
                 <div>
                   <p className="text-sm text-slate-500">Bank Credits</p>
                   <p className="text-xl font-bold text-green-600">
-                    {formatAmount(workspaceData.total_unreconciled_bank_credits)}
+                    {formatAmount(workspaceData.totalUnreconciledBankCredits)}
                   </p>
                 </div>
                 <ArrowDownCircle className="h-8 w-8 text-green-200" />
@@ -373,7 +369,7 @@ export function BankReconciliation() {
                 <div>
                   <p className="text-sm text-slate-500">Bank Debits</p>
                   <p className="text-xl font-bold text-red-600">
-                    {formatAmount(workspaceData.total_unreconciled_bank_debits)}
+                    {formatAmount(workspaceData.totalUnreconciledBankDebits)}
                   </p>
                 </div>
                 <ArrowUpCircle className="h-8 w-8 text-red-200" />
@@ -386,7 +382,7 @@ export function BankReconciliation() {
                 <div>
                   <p className="text-sm text-slate-500">Book Debits</p>
                   <p className="text-xl font-bold text-blue-600">
-                    {formatAmount(workspaceData.total_unreconciled_book_debits)}
+                    {formatAmount(workspaceData.totalUnreconciledBookDebits)}
                   </p>
                 </div>
                 <FileText className="h-8 w-8 text-blue-200" />
@@ -399,7 +395,7 @@ export function BankReconciliation() {
                 <div>
                   <p className="text-sm text-slate-500">Book Credits</p>
                   <p className="text-xl font-bold text-purple-600">
-                    {formatAmount(workspaceData.total_unreconciled_book_credits)}
+                    {formatAmount(workspaceData.totalUnreconciledBookCredits)}
                   </p>
                 </div>
                 <FileText className="h-8 w-8 text-purple-200" />
@@ -421,21 +417,19 @@ export function BankReconciliation() {
                   <div className="rounded-lg bg-white p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium">{selectedStatement.reference_number}</p>
+                        <p className="font-medium">{selectedStatement.referenceNumber}</p>
                         <p className="text-sm text-slate-500">
-                          {format(new Date(selectedStatement.transaction_date), 'dd/MM/yyyy')}
+                          {format(new Date(selectedStatement.transactionDate), 'dd/MM/yyyy')}
                         </p>
                         <p className="text-sm text-slate-500">{selectedStatement.description}</p>
                       </div>
                       <div className="text-right">
                         <p
                           className={`text-lg font-bold ${
-                            selectedStatement.credit_amount > 0
-                              ? 'text-green-600'
-                              : 'text-red-600'
+                            selectedStatement.creditAmount > 0 ? 'text-green-600' : 'text-red-600'
                           }`}
                         >
-                          {formatAmount(selectedStatement.unreconciled_amount)}
+                          {formatAmount(selectedStatement.unreconciledAmount)}
                         </p>
                         <Button
                           variant="ghost"
@@ -491,24 +485,22 @@ export function BankReconciliation() {
                   <div className="rounded-lg bg-white p-4">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="font-medium">{selectedBookEntry.voucher_number}</p>
+                        <p className="font-medium">{selectedBookEntry.voucherNumber}</p>
                         <p className="text-sm text-slate-500">
-                          {format(new Date(selectedBookEntry.voucher_date), 'dd/MM/yyyy')}
+                          {format(new Date(selectedBookEntry.voucherDate), 'dd/MM/yyyy')}
                         </p>
                         <p className="text-sm text-slate-500">{selectedBookEntry.narration}</p>
                       </div>
                       <div className="text-right">
                         <p
                           className={`text-lg font-bold ${
-                            selectedBookEntry.debit_amount > 0
-                              ? 'text-blue-600'
-                              : 'text-purple-600'
+                            selectedBookEntry.debitAmount > 0 ? 'text-blue-600' : 'text-purple-600'
                           }`}
                         >
                           {formatAmount(
-                            selectedBookEntry.debit_amount > 0
-                              ? selectedBookEntry.debit_amount
-                              : selectedBookEntry.credit_amount
+                            selectedBookEntry.debitAmount > 0
+                              ? selectedBookEntry.debitAmount
+                              : selectedBookEntry.creditAmount,
                           )}
                         </p>
                         <Button
@@ -543,11 +535,9 @@ export function BankReconciliation() {
           {/* Bank Statements */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">
-                Unreconciled Bank Statements
-              </CardTitle>
+              <CardTitle className="text-lg">Unreconciled Bank Statements</CardTitle>
               <CardDescription>
-                {workspaceData.unreconciled_statements.length} items
+                {workspaceData.unreconciledStatements.length} items
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -561,24 +551,22 @@ export function BankReconciliation() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {workspaceData.unreconciled_statements.map((statement) => (
+                    {workspaceData.unreconciledStatements.map((statement) => (
                       <TableRow
-                        key={statement.statement_id}
+                        key={statement.statementId}
                         className={`cursor-pointer hover:bg-slate-50 ${
-                          selectedStatement?.statement_id === statement.statement_id
+                          selectedStatement?.statementId === statement.statementId
                             ? 'bg-blue-50'
                             : ''
                         }`}
                         onClick={() => handleSelectStatement(statement)}
                       >
                         <TableCell>
-                          {format(new Date(statement.transaction_date), 'dd/MM/yyyy')}
+                          {format(new Date(statement.transactionDate), 'dd/MM/yyyy')}
                         </TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">
-                              {statement.reference_number || '-'}
-                            </p>
+                            <p className="font-medium">{statement.referenceNumber || '-'}</p>
                             <p className="max-w-[200px] truncate text-xs text-slate-500">
                               {statement.description}
                             </p>
@@ -586,17 +574,15 @@ export function BankReconciliation() {
                         </TableCell>
                         <TableCell
                           className={`text-right font-medium ${
-                            statement.credit_amount > 0
-                              ? 'text-green-600'
-                              : 'text-red-600'
+                            statement.creditAmount > 0 ? 'text-green-600' : 'text-red-600'
                           }`}
                         >
-                          {statement.credit_amount > 0 ? '+' : '-'}
-                          {formatAmount(statement.unreconciled_amount)}
+                          {statement.creditAmount > 0 ? '+' : '-'}
+                          {formatAmount(statement.unreconciledAmount)}
                         </TableCell>
                       </TableRow>
                     ))}
-                    {workspaceData.unreconciled_statements.length === 0 && (
+                    {workspaceData.unreconciledStatements.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={3} className="text-center text-slate-500">
                           No unreconciled statements
@@ -614,7 +600,7 @@ export function BankReconciliation() {
             <CardHeader>
               <CardTitle className="text-lg">Unreconciled Book Entries</CardTitle>
               <CardDescription>
-                {workspaceData.unreconciled_book_entries.length} items
+                {workspaceData.unreconciledBookEntries.length} items
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -628,22 +614,18 @@ export function BankReconciliation() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {workspaceData.unreconciled_book_entries.map((entry) => (
+                    {workspaceData.unreconciledBookEntries.map((entry) => (
                       <TableRow
-                        key={entry.voucher_id}
+                        key={entry.voucherId}
                         className={`cursor-pointer hover:bg-slate-50 ${
-                          selectedBookEntry?.voucher_id === entry.voucher_id
-                            ? 'bg-blue-50'
-                            : ''
+                          selectedBookEntry?.voucherId === entry.voucherId ? 'bg-blue-50' : ''
                         }`}
                         onClick={() => handleSelectBookEntry(entry)}
                       >
-                        <TableCell>
-                          {format(new Date(entry.voucher_date), 'dd/MM/yyyy')}
-                        </TableCell>
+                        <TableCell>{format(new Date(entry.voucherDate), 'dd/MM/yyyy')}</TableCell>
                         <TableCell>
                           <div>
-                            <p className="font-medium">{entry.voucher_number}</p>
+                            <p className="font-medium">{entry.voucherNumber}</p>
                             <p className="max-w-[200px] truncate text-xs text-slate-500">
                               {entry.narration}
                             </p>
@@ -651,21 +633,17 @@ export function BankReconciliation() {
                         </TableCell>
                         <TableCell
                           className={`text-right font-medium ${
-                            entry.debit_amount > 0
-                              ? 'text-blue-600'
-                              : 'text-purple-600'
+                            entry.debitAmount > 0 ? 'text-blue-600' : 'text-purple-600'
                           }`}
                         >
-                          {entry.debit_amount > 0 ? 'Dr ' : 'Cr '}
+                          {entry.debitAmount > 0 ? 'Dr ' : 'Cr '}
                           {formatAmount(
-                            entry.debit_amount > 0
-                              ? entry.debit_amount
-                              : entry.credit_amount
+                            entry.debitAmount > 0 ? entry.debitAmount : entry.creditAmount,
                           )}
                         </TableCell>
                       </TableRow>
                     ))}
-                    {workspaceData.unreconciled_book_entries.length === 0 && (
+                    {workspaceData.unreconciledBookEntries.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={3} className="text-center text-slate-500">
                           No unreconciled book entries

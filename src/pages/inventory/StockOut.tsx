@@ -1,13 +1,14 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowLeft, Save, Plus, Trash2, PackageMinus } from 'lucide-react';
+import { useState } from 'react';
+import { useForm, useFieldArray } from 'react-hook-form';
+import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+
 import { PageHeader } from '@/components/common/PageHeader';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -16,6 +17,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -31,10 +33,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, Plus, Trash2, PackageMinus } from 'lucide-react';
-
+import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
+
+const NONE_OPTION_VALUE = '__none__';
 const stockOutLineSchema = z.object({
   itemId: z.string().min(1, 'Item is required'),
   itemCode: z.string(),
@@ -74,9 +76,23 @@ const departments = [
 ];
 
 const items = [
-  { id: '1', code: 'ITM-001', name: 'A4 Paper (500 sheets)', uom: 'Pack', availableQty: 150, avgCost: 250 },
+  {
+    id: '1',
+    code: 'ITM-001',
+    name: 'A4 Paper (500 sheets)',
+    uom: 'Pack',
+    availableQty: 150,
+    avgCost: 250,
+  },
   { id: '2', code: 'ITM-002', name: 'Ball Pen Blue', uom: 'Pcs', availableQty: 500, avgCost: 10 },
-  { id: '3', code: 'ITM-003', name: 'HP LaserJet Toner', uom: 'Pcs', availableQty: 25, avgCost: 3500 },
+  {
+    id: '3',
+    code: 'ITM-003',
+    name: 'HP LaserJet Toner',
+    uom: 'Pcs',
+    availableQty: 25,
+    avgCost: 3500,
+  },
   { id: '4', code: 'ITM-004', name: 'Dell Laptop', uom: 'Pcs', availableQty: 10, avgCost: 55000 },
   { id: '5', code: 'ITM-005', name: 'Office Chair', uom: 'Pcs', availableQty: 30, avgCost: 8000 },
 ];
@@ -145,7 +161,7 @@ export default function StockOut() {
     }
 
     logger.debug('Stock Out submitted:', data);
-    navigate('/inventory/dashboard');
+    navigate('/admin/inventory/dashboard');
   };
 
   const totalValue = fields.reduce((sum, field, index) => {
@@ -155,14 +171,11 @@ export default function StockOut() {
   }, 0);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Stock Out"
         subtitle="Record outgoing stock / consumption"
-        breadcrumbs={[
-          { label: 'Inventory', to: '/inventory' },
-          { label: 'Stock Out' },
-        ]}
+        breadcrumbs={[{ label: 'Inventory', to: '/admin/inventory' }, { label: 'Stock Out' }]}
       />
 
       <Form {...form}>
@@ -171,7 +184,7 @@ export default function StockOut() {
             <CardHeader>
               <CardTitle>Transaction Details</CardTitle>
             </CardHeader>
-            <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
               <FormField
                 control={form.control}
                 name="warehouseId"
@@ -254,16 +267,21 @@ export default function StockOut() {
                 control={form.control}
                 name="departmentId"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Department</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <FormItem>
+                      <FormLabel>Department</FormLabel>
+                    <Select
+                      onValueChange={(value) =>
+                        field.onChange(value === NONE_OPTION_VALUE ? '' : value)
+                      }
+                      value={field.value || NONE_OPTION_VALUE}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select department" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value={NONE_OPTION_VALUE}>None</SelectItem>
                         {departments.map((dept) => (
                           <SelectItem key={dept.id} value={dept.id}>
                             {dept.name}
@@ -327,7 +345,7 @@ export default function StockOut() {
                   </SelectContent>
                 </Select>
                 <Button type="button" onClick={addItem} disabled={!selectedItem}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
               </div>
@@ -340,8 +358,8 @@ export default function StockOut() {
                       <TableHead>Item Name</TableHead>
                       <TableHead className="text-right">Available</TableHead>
                       <TableHead className="w-24">Issue Qty</TableHead>
-                      <TableHead className="text-right w-32">Unit Cost</TableHead>
-                      <TableHead className="text-right w-32">Total Value</TableHead>
+                      <TableHead className="w-32 text-right">Unit Cost</TableHead>
+                      <TableHead className="w-32 text-right">Total Value</TableHead>
                       <TableHead className="w-16"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -413,14 +431,14 @@ export default function StockOut() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="py-8 text-center text-muted-foreground">
                   No items added. Select an item and click "Add Item" to begin.
                 </div>
               )}
 
               {fields.length > 0 && (
                 <div className="flex justify-end">
-                  <div className="bg-muted p-4 rounded-lg">
+                  <div className="rounded-lg bg-muted p-4">
                     <div className="text-sm text-muted-foreground">Total Issue Value</div>
                     <div className="text-2xl font-bold">
                       {totalValue.toLocaleString('en-IN', {
@@ -440,7 +458,7 @@ export default function StockOut() {
               Cancel
             </Button>
             <Button type="submit" disabled={fields.length === 0}>
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               Save Stock Out
             </Button>
           </div>

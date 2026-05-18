@@ -1,28 +1,28 @@
 """Credit Bureau API endpoints for credit report pulls and analysis."""
 
 from datetime import date, datetime
-from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.lending.credit_pull import CreditPullStatus
-from app.services.lending.credit_service import CreditService
 from app.schemas.lending.credit import (
-    CreditPullRequest,
+    CreditAccountResponse,
+    CreditBureauStats,
+    CreditEnquiryResponse,
     CreditPullBulkRequest,
-    CreditPullResponse,
     CreditPullListResponse,
+    CreditPullRequest,
+    CreditPullResponse,
     CreditPullSummaryResponse,
     CreditReportAnalysis,
     PaginatedCreditPullResponse,
-    CreditBureauStats,
-    CreditAccountResponse,
-    CreditEnquiryResponse,
 )
+from app.services.lending.credit_service import CreditService
+from app.core.exceptions import BadRequestException, InternalServerException, NotFoundException
 
 router = APIRouter(prefix="/credit", tags=["Credit Bureau"])
 
@@ -32,10 +32,10 @@ router = APIRouter(prefix="/credit", tags=["Credit Bureau"])
 # =============================================================================
 
 
-@router.post("/pull", response_model=CreditPullResponse)
+@router.post("/pull", response_model=CreditPullResponse, response_model_by_alias=True)
 async def initiate_credit_pull(
     request: CreditPullRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Initiate a credit bureau pull.
@@ -54,21 +54,18 @@ async def initiate_credit_pull(
         return _build_credit_pull_response(credit_pull)
 
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        raise InternalServerException(
             detail=f"Credit pull failed: {str(e)}",
+            error_code="CREDIT_PULL_FAILED",
         )
 
 
 @router.post("/pull/bulk")
 async def initiate_bulk_credit_pull(
     request: CreditPullBulkRequest,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Initiate credit pulls from multiple bureaus simultaneously.
@@ -98,19 +95,23 @@ async def initiate_bulk_credit_pull(
                 request=single_request,
                 pulled_by_id=current_user.id,
             )
-            results.append({
-                "bureau": bureau,
-                "success": True,
-                "pull_id": str(credit_pull.id),
-                "credit_score": credit_pull.credit_score,
-                "status": credit_pull.status.value,
-            })
+            results.append(
+                {
+                    "bureau": bureau,
+                    "success": True,
+                    "pull_id": str(credit_pull.id),
+                    "credit_score": credit_pull.credit_score,
+                    "status": credit_pull.status.value,
+                }
+            )
         except Exception as e:
-            errors.append({
-                "bureau": bureau,
-                "success": False,
-                "error": str(e),
-            })
+            errors.append(
+                {
+                    "bureau": bureau,
+                    "success": False,
+                    "error": str(e),
+                }
+            )
 
     return {
         "total_requested": len(request.bureaus),
@@ -121,17 +122,17 @@ async def initiate_bulk_credit_pull(
     }
 
 
-@router.get("/pulls", response_model=PaginatedCreditPullResponse)
+@router.get("/pulls", response_model=PaginatedCreditPullResponse, response_model_by_alias=True)
 async def list_credit_pulls(
-    entity_id: Optional[UUID] = None,
-    loan_application_id: Optional[UUID] = None,
-    bureau: Optional[str] = None,
-    pull_status: Optional[str] = None,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    entity_id: UUID | None = None,
+    loan_application_id: UUID | None = None,
+    bureau: str | None = None,
+    pull_status: str | None = None,
+    start_date: date | None = None,
+    end_date: date | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List credit pulls with filtering and pagination."""
@@ -143,42 +144,44 @@ async def list_credit_pulls(
         try:
             status_enum = CreditPullStatus(pull_status)
         except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
+            raise BadRequestException(
                 detail=f"Invalid status: {pull_status}",
+                error_code="INVALID_STATUS",
             )
 
-    pulls, total = await service.list_credit_pulls(
+    result = await service.list_credit_pulls(
         organization_id=current_user.organization_id,
         entity_id=entity_id,
         loan_application_id=loan_application_id,
         bureau=bureau,
-        status=status_enum,
-        start_date=start_date,
-        end_date=end_date,
+        status=status_enum.value if status_enum else None,
         page=page,
         page_size=page_size,
     )
+    pulls = result["items"]
+    total = result["total"]
 
     items = []
     for pull in pulls:
-        items.append(CreditPullListResponse(
-            id=pull.id,
-            organization_id=pull.organization_id,
-            entity_id=pull.entity_id,
-            loan_application_id=pull.loan_application_id,
-            bureau=pull.bureau.value,
-            pull_type=pull.pull_type.value,
-            status=pull.status.value,
-            customer_name=pull.customer_name,
-            pan_number=pull.pan_number,
-            credit_score=pull.credit_score,
-            score_band=pull.score_band,
-            pulled_at=pull.pulled_at,
-            expires_at=pull.expires_at,
-            is_valid=_is_pull_valid(pull),
-            created_at=pull.created_at,
-        ))
+        items.append(
+            CreditPullListResponse(
+                id=pull.id,
+                organization_id=pull.organization_id,
+                entity_id=pull.entity_id,
+                loan_application_id=pull.loan_application_id,
+                bureau=pull.bureau.value,
+                pull_type=pull.pull_type.value,
+                status=pull.status.value,
+                customer_name=pull.customer_name,
+                pan_number=pull.pan_number,
+                credit_score=pull.credit_score,
+                score_band=pull.score_band,
+                pulled_at=pull.pulled_at,
+                expires_at=pull.expires_at,
+                is_valid=_is_pull_valid(pull),
+                created_at=pull.created_at,
+            )
+        )
 
     return PaginatedCreditPullResponse(
         items=items,
@@ -189,10 +192,10 @@ async def list_credit_pulls(
     )
 
 
-@router.get("/pulls/{pull_id}", response_model=CreditPullResponse)
+@router.get("/pulls/{pull_id}", response_model=CreditPullResponse, response_model_by_alias=True)
 async def get_credit_pull(
     pull_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get credit pull details with full report data."""
@@ -200,18 +203,17 @@ async def get_credit_pull(
     pull = await service.get_credit_pull(pull_id)
 
     if not pull:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Credit pull not found",
-        )
+        raise NotFoundException(detail="Credit pull not found", error_code="CREDIT_PULL_NOT_FOUND")
 
     return _build_credit_pull_response(pull)
 
 
-@router.get("/pulls/{pull_id}/analyze", response_model=CreditReportAnalysis)
+@router.get(
+    "/pulls/{pull_id}/analyze", response_model=CreditReportAnalysis, response_model_by_alias=True
+)
 async def analyze_credit_report(
     pull_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Analyze credit report with detailed breakdown.
@@ -227,15 +229,12 @@ async def analyze_credit_report(
     pull = await service.get_credit_pull(pull_id)
 
     if not pull:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Credit pull not found",
-        )
+        raise NotFoundException(detail="Credit pull not found", error_code="CREDIT_PULL_NOT_FOUND")
 
     if pull.status != CreditPullStatus.SUCCESS:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Cannot analyze failed or pending credit pull",
+            error_code="CANNOT_ANALYZE_FAILED_OR_PENDING_CREDIT",
         )
 
     analysis = await service.analyze_report(pull_id)
@@ -247,11 +246,11 @@ async def analyze_credit_report(
 # =============================================================================
 
 
-@router.get("/summary", response_model=CreditPullSummaryResponse)
+@router.get("/summary", response_model=CreditPullSummaryResponse, response_model_by_alias=True)
 async def get_credit_summary(
-    entity_id: Optional[UUID] = None,
-    loan_application_id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db),
+    entity_id: UUID | None = None,
+    loan_application_id: UUID | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get credit summary for an entity or loan application.
@@ -259,9 +258,9 @@ async def get_credit_summary(
     Returns latest scores and pull history summary.
     """
     if not entity_id and not loan_application_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Either entity_id or loan_application_id is required",
+            error_code="EITHER_ENTITY_ID_OR_LOAN_APPLICATION_ID_IS_REQUIRED",
         )
 
     service = CreditService(db)
@@ -276,10 +275,10 @@ async def get_credit_summary(
 
 @router.get("/latest-score")
 async def get_latest_credit_score(
-    entity_id: Optional[UUID] = None,
-    pan_number: Optional[str] = None,
-    bureau: Optional[str] = None,
-    db: AsyncSession = Depends(get_db),
+    entity_id: UUID | None = None,
+    pan_number: str | None = None,
+    bureau: str | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get latest credit score for a customer.
@@ -288,9 +287,9 @@ async def get_latest_credit_score(
     otherwise indicates a new pull is needed.
     """
     if not entity_id and not pan_number:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Either entity_id or pan_number is required",
+            error_code="EITHER_ENTITY_ID_OR_PAN_NUMBER_IS_REQUIRED",
         )
 
     service = CreditService(db)
@@ -324,11 +323,11 @@ async def get_latest_credit_score(
 # =============================================================================
 
 
-@router.get("/statistics", response_model=CreditBureauStats)
+@router.get("/statistics", response_model=CreditBureauStats, response_model_by_alias=True)
 async def get_credit_bureau_statistics(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
+    start_date: date | None = None,
+    end_date: date | None = None,
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get credit bureau usage statistics.
@@ -353,11 +352,21 @@ async def get_score_band_definitions():
     """
     return {
         "bands": [
-            {"band": "EXCELLENT", "min_score": 750, "max_score": 900, "description": "Excellent credit"},
+            {
+                "band": "EXCELLENT",
+                "min_score": 750,
+                "max_score": 900,
+                "description": "Excellent credit",
+            },
             {"band": "GOOD", "min_score": 700, "max_score": 749, "description": "Good credit"},
             {"band": "FAIR", "min_score": 650, "max_score": 699, "description": "Fair credit"},
             {"band": "POOR", "min_score": 550, "max_score": 649, "description": "Poor credit"},
-            {"band": "VERY_POOR", "min_score": 300, "max_score": 549, "description": "Very poor credit"},
+            {
+                "band": "VERY_POOR",
+                "min_score": 300,
+                "max_score": 549,
+                "description": "Very poor credit",
+            },
         ],
         "note": "Score bands may vary slightly between bureaus",
     }
@@ -372,42 +381,54 @@ def _build_credit_pull_response(pull) -> CreditPullResponse:
     """Build CreditPullResponse from model."""
     accounts = []
     for acc in pull.accounts:
-        accounts.append(CreditAccountResponse(
-            id=acc.id,
-            account_number_masked=acc.account_number_masked,
-            institution_name=acc.institution_name,
-            institution_type=acc.institution_type,
-            account_type=acc.account_type.value if hasattr(acc.account_type, 'value') else acc.account_type,
-            account_status=acc.account_status.value if hasattr(acc.account_status, 'value') else acc.account_status,
-            ownership=acc.ownership.value if hasattr(acc.ownership, 'value') else acc.ownership,
-            sanctioned_amount=acc.sanctioned_amount,
-            current_balance=acc.current_balance,
-            overdue_amount=acc.overdue_amount,
-            emi_amount=acc.emi_amount,
-            credit_limit=acc.credit_limit,
-            high_credit=acc.high_credit,
-            write_off_amount=acc.write_off_amount,
-            opened_date=acc.opened_date,
-            closed_date=acc.closed_date,
-            last_payment_date=acc.last_payment_date,
-            reported_date=acc.reported_date,
-            tenure_months=acc.tenure_months,
-            remaining_tenure=acc.remaining_tenure,
-            max_dpd=acc.max_dpd,
-            dpd_history=acc.dpd_history,
-            is_secured=acc.is_secured,
-            has_dispute=acc.has_dispute,
-        ))
+        accounts.append(
+            CreditAccountResponse(
+                id=acc.id,
+                account_number_masked=acc.account_number_masked,
+                institution_name=acc.institution_name,
+                institution_type=acc.institution_type,
+                account_type=(
+                    acc.account_type.value
+                    if hasattr(acc.account_type, "value")
+                    else acc.account_type
+                ),
+                account_status=(
+                    acc.account_status.value
+                    if hasattr(acc.account_status, "value")
+                    else acc.account_status
+                ),
+                ownership=acc.ownership.value if hasattr(acc.ownership, "value") else acc.ownership,
+                sanctioned_amount=acc.sanctioned_amount,
+                current_balance=acc.current_balance,
+                overdue_amount=acc.overdue_amount,
+                emi_amount=acc.emi_amount,
+                credit_limit=acc.credit_limit,
+                high_credit=acc.high_credit,
+                write_off_amount=acc.write_off_amount,
+                opened_date=acc.opened_date,
+                closed_date=acc.closed_date,
+                last_payment_date=acc.last_payment_date,
+                reported_date=acc.reported_date,
+                tenure_months=acc.tenure_months,
+                remaining_tenure=acc.remaining_tenure,
+                max_dpd=acc.max_dpd,
+                dpd_history=acc.dpd_history,
+                is_secured=acc.is_secured,
+                has_dispute=acc.has_dispute,
+            )
+        )
 
     enquiries = []
     for enq in pull.enquiries:
-        enquiries.append(CreditEnquiryResponse(
-            id=enq.id,
-            enquiry_date=enq.enquiry_date,
-            institution_name=enq.institution_name,
-            enquiry_purpose=enq.enquiry_purpose,
-            enquiry_amount=enq.enquiry_amount,
-        ))
+        enquiries.append(
+            CreditEnquiryResponse(
+                id=enq.id,
+                enquiry_date=enq.enquiry_date,
+                institution_name=enq.institution_name,
+                enquiry_purpose=enq.enquiry_purpose,
+                enquiry_amount=enq.enquiry_amount,
+            )
+        )
 
     return CreditPullResponse(
         id=pull.id,

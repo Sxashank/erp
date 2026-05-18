@@ -1,5 +1,6 @@
 """API dependencies for dependency injection."""
 
+from dataclasses import dataclass
 from typing import Optional, Set
 from uuid import UUID
 
@@ -12,9 +13,30 @@ from app.core.security import verify_token
 from app.core.constants import TokenType
 from app.core.exceptions import UnauthorizedException, ForbiddenException
 from app.models.auth.user import User
+from app.models.ess.enums import ESSUserStatus
+from app.models.ess.ess_user import ESSUser
 from app.repositories.auth.user_repo import UserRepository
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
+
+
+@dataclass(frozen=True)
+class ESSUserContext:
+    """Authenticated ESS identity resolved from the portal access token."""
+
+    ess_user: ESSUser
+
+    @property
+    def ess_user_id(self) -> UUID:
+        return self.ess_user.id
+
+    @property
+    def employee_id(self) -> UUID:
+        return self.ess_user.employee_id
+
+    @property
+    def organization_id(self) -> UUID:
+        return self.ess_user.organization_id
 
 
 async def get_current_user(
@@ -121,4 +143,50 @@ async def get_db_with_tenant(
     """
     if current_user.organization_id:
         await set_tenant_context(db, current_user.organization_id)
+    return db
+
+
+async def get_current_ess_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> ESSUserContext:
+    """Resolve the authenticated ESS user and set tenant RLS context."""
+    if not token:
+        raise UnauthorizedException("Not authenticated")
+
+    payload = verify_token(token, TokenType.ACCESS)
+    if not payload:
+        raise UnauthorizedException("Invalid or expired token")
+
+    ess_user_id = payload.get("sub")
+    if not ess_user_id:
+        raise UnauthorizedException("Invalid token payload")
+
+    ess_user = await db.get(ESSUser, UUID(ess_user_id))
+    if not ess_user:
+        raise UnauthorizedException("ESS user not found")
+
+    if ess_user.status != ESSUserStatus.ACTIVE:
+        raise UnauthorizedException("ESS user is inactive")
+
+    token_employee_id = payload.get("employee_id")
+    token_organization_id = payload.get("organization_id")
+    if (
+        token_employee_id
+        and str(ess_user.employee_id) != str(token_employee_id)
+        or token_organization_id
+        and str(ess_user.organization_id) != str(token_organization_id)
+    ):
+        raise UnauthorizedException("Invalid token identity")
+
+    await set_tenant_context(db, ess_user.organization_id)
+    return ESSUserContext(ess_user=ess_user)
+
+
+async def get_ess_db_with_tenant(
+    db: AsyncSession = Depends(get_db),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
+) -> AsyncSession:
+    """Get database session with tenant RLS set for the authenticated ESS user."""
+    await set_tenant_context(db, ess_context.organization_id)
     return db

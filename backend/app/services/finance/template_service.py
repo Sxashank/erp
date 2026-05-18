@@ -109,7 +109,7 @@ class VoucherTemplateService:
         for key, value in update_data.items():
             setattr(template, key, value)
 
-        template.modified_by = user_id
+        template.updated_by = user_id
 
         await self.db.flush()
         await self.db.refresh(template)
@@ -121,7 +121,7 @@ class VoucherTemplateService:
         stmt = select(VoucherTemplate).where(
             and_(
                 VoucherTemplate.id == template_id,
-                VoucherTemplate.is_deleted == False,
+                VoucherTemplate.is_active == True,
             )
         )
         result = await self.db.execute(stmt)
@@ -141,7 +141,7 @@ class VoucherTemplateService:
         stmt = (
             select(VoucherTemplate)
             .where(VoucherTemplate.organization_id == organization_id)
-            .where(VoucherTemplate.is_deleted == False)
+            .where(VoucherTemplate.is_active == True)
         )
 
         if category:
@@ -235,7 +235,7 @@ class VoucherTemplateService:
             usage_count=template.usage_count,
             last_used_at=template.last_used_at,
             created_at=template.created_at,
-            updated_at=template.modified_at,
+            updated_at=template.updated_at,
         )
 
     async def toggle_favorite(
@@ -249,7 +249,7 @@ class VoucherTemplateService:
             raise ValueError(f"Voucher template {template_id} not found")
 
         template.is_favorite = not template.is_favorite
-        template.modified_by = user_id
+        template.updated_by = user_id
 
         await self.db.flush()
         return template
@@ -388,7 +388,7 @@ class VoucherTemplateService:
             .where(
                 and_(
                     VoucherTemplate.organization_id == organization_id,
-                    VoucherTemplate.is_deleted == False,
+                    VoucherTemplate.is_active == True,
                     VoucherTemplate.category.isnot(None),
                 )
             )
@@ -410,7 +410,7 @@ class VoucherTemplateService:
         total_stmt = select(func.count()).where(
             and_(
                 VoucherTemplate.organization_id == organization_id,
-                VoucherTemplate.is_deleted == False,
+                VoucherTemplate.is_active == True,
             )
         )
         total = (await self.db.execute(total_stmt)).scalar() or 0
@@ -419,7 +419,7 @@ class VoucherTemplateService:
         active_stmt = select(func.count()).where(
             and_(
                 VoucherTemplate.organization_id == organization_id,
-                VoucherTemplate.is_deleted == False,
+                VoucherTemplate.is_active == True,
                 VoucherTemplate.is_active == True,
             )
         )
@@ -429,7 +429,7 @@ class VoucherTemplateService:
         favorite_stmt = select(func.count()).where(
             and_(
                 VoucherTemplate.organization_id == organization_id,
-                VoucherTemplate.is_deleted == False,
+                VoucherTemplate.is_active == True,
                 VoucherTemplate.is_favorite == True,
             )
         )
@@ -444,7 +444,7 @@ class VoucherTemplateService:
             .where(
                 and_(
                     VoucherTemplate.organization_id == organization_id,
-                    VoucherTemplate.is_deleted == False,
+                    VoucherTemplate.is_active == True,
                     VoucherTemplate.usage_count > 0,
                 )
             )
@@ -482,9 +482,9 @@ class VoucherTemplateService:
         if not template:
             return False
 
-        template.is_deleted = True
+        template.soft_delete(user_id)
         template.is_active = False
-        template.modified_by = user_id
+        template.updated_by = user_id
 
         await self.db.flush()
         return True

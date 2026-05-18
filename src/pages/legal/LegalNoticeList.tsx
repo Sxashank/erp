@@ -3,38 +3,6 @@
  * View and manage legal notices
  */
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   FileText,
   Plus,
@@ -47,9 +15,44 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { legalNoticeApi } from '@/services/legalApi';
 import type { LegalNotice, NoticeType } from '@/types/legal';
 
+import { logger } from "@/lib/logger";
 const noticeTypes: { value: NoticeType; label: string; days: number }[] = [
   { value: 'SECTION_13_2_SARFAESI', label: 'Section 13(2) SARFAESI', days: 60 },
   { value: 'SECTION_13_4_POSSESSION', label: 'Section 13(4) Possession', days: 15 },
@@ -96,9 +99,9 @@ export default function LegalNoticeList() {
         notice_type: filterType !== 'all' ? filterType : undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
       });
-      setNotices(response.data);
+      setNotices(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch notices:', error);
+      logger.error('Failed to fetch notices:', error);
     } finally {
       setLoading(false);
     }
@@ -125,7 +128,7 @@ export default function LegalNoticeList() {
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
     } catch (error) {
-      console.error('Failed to download PDF:', error);
+      logger.error('Failed to download PDF:', error);
     }
   };
 
@@ -138,7 +141,7 @@ export default function LegalNoticeList() {
       setShowDispatchDialog(false);
       fetchNotices();
     } catch (error) {
-      console.error('Failed to record dispatch:', error);
+      logger.error('Failed to record dispatch:', error);
     } finally {
       setSubmitting(false);
     }
@@ -166,13 +169,13 @@ export default function LegalNoticeList() {
     pending: notices.filter((n) => ['DRAFT', 'DISPATCHED'].includes(n.status)).length,
     delivered: notices.filter((n) => n.status === 'DELIVERED').length,
     overdue: notices.filter(
-      (n) => n.status !== 'DELIVERED' && new Date(n.response_due_date) < new Date()
+      (n) => n.status !== 'DELIVERED' && new Date(n.response_due_date) < new Date(),
     ).length,
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -185,18 +188,18 @@ export default function LegalNoticeList() {
         subtitle="Generate and track legal notices"
         actions={
           <Button>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Generate Notice
           </Button>
         }
       />
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <FileText className="h-5 w-5 text-blue-600" />
               </div>
               <div>
@@ -209,7 +212,7 @@ export default function LegalNoticeList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
+              <div className="rounded-lg bg-yellow-100 p-2">
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
@@ -222,7 +225,7 @@ export default function LegalNoticeList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-2">
                 <Truck className="h-5 w-5 text-green-600" />
               </div>
               <div>
@@ -235,7 +238,7 @@ export default function LegalNoticeList() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
+              <div className="rounded-lg bg-red-100 p-2">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
               <div>
@@ -250,9 +253,9 @@ export default function LegalNoticeList() {
       {/* Filters */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex flex-col gap-4 md:flex-row">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               <Input
                 placeholder="Search by notice number, borrower..."
                 value={searchQuery}
@@ -338,13 +341,7 @@ export default function LegalNoticeList() {
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4 text-gray-400" />
-                        <span
-                          className={
-                            isOverdue ? 'text-red-600 font-medium' : ''
-                          }
-                        >
-                          {new Date(notice.response_due_date).toLocaleDateString()}
-                        </span>
+                        <DateDisplay date={notice.response_due_date} className={isOverdue ? 'font-medium text-red-600' : ''} />
                       </div>
                       <p className="text-xs text-gray-500">
                         {notice.statutory_period_days} days from notice
@@ -361,9 +358,7 @@ export default function LegalNoticeList() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Badge className={statusColors[notice.status]}>
-                        {notice.status}
-                      </Badge>
+                      <Badge className={statusColors[notice.status]}>{notice.status}</Badge>
                     </TableCell>
                     <TableCell>
                       <div className="flex gap-1">
@@ -395,8 +390,8 @@ export default function LegalNoticeList() {
               })}
               {filteredNotices.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-gray-500">
-                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <TableCell colSpan={8} className="py-8 text-center text-gray-500">
+                    <FileText className="mx-auto mb-4 h-12 w-12 opacity-50" />
                     <p>No notices found</p>
                   </TableCell>
                 </TableRow>
@@ -430,9 +425,7 @@ export default function LegalNoticeList() {
               <Label>Delivery Method</Label>
               <Select
                 value={dispatchData.delivery_method}
-                onValueChange={(v) =>
-                  setDispatchData({ ...dispatchData, delivery_method: v })
-                }
+                onValueChange={(v) => setDispatchData({ ...dispatchData, delivery_method: v })}
               >
                 <SelectTrigger>
                   <SelectValue />

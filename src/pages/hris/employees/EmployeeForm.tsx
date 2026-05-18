@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
 import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -15,10 +15,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
 import { hrisApi, organizationsApi, departmentsApi, designationsApi, unitsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 const GENDER_OPTIONS = [
   { value: 'MALE', label: 'Male' },
   { value: 'FEMALE', label: 'Female' },
@@ -154,7 +155,7 @@ export function EmployeeForm() {
         const response = await organizationsApi.list({ page_size: 100 });
         setOrganizations(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch organizations:', error);
+        logger.error('Failed to fetch organizations:', error);
       }
     };
     fetchOrgs();
@@ -168,7 +169,7 @@ export function EmployeeForm() {
         const response = await departmentsApi.list({ organization_id: selectedOrgId, page_size: 100 });
         setDepartments(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch departments:', error);
+        logger.error('Failed to fetch departments:', error);
       }
     };
     fetchDepts();
@@ -182,7 +183,7 @@ export function EmployeeForm() {
         const response = await designationsApi.list({ department_id: selectedDeptId, page_size: 100 });
         setDesignations(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch designations:', error);
+        logger.error('Failed to fetch designations:', error);
       }
     };
     fetchDesigs();
@@ -196,7 +197,7 @@ export function EmployeeForm() {
         const response = await unitsApi.list({ organization_id: selectedOrgId, page_size: 100 });
         setUnits(response.data.items || []);
       } catch (error) {
-        console.error('Failed to fetch units:', error);
+        logger.error('Failed to fetch units:', error);
       }
     };
     fetchUnits();
@@ -210,7 +211,7 @@ export function EmployeeForm() {
         const response = await hrisApi.listShifts({ organization_id: selectedOrgId, active_only: true });
         setShifts(response.data || []);
       } catch (error) {
-        console.error('Failed to fetch shifts:', error);
+        logger.error('Failed to fetch shifts:', error);
       }
     };
     fetchShifts();
@@ -226,9 +227,9 @@ export function EmployeeForm() {
           employment_status: 'ACTIVE',
           limit: 100,
         });
-        setManagers(response.data.items?.filter((e: any) => e.id !== id) || []);
+        setManagers(response.data.items?.filter((e: { id: string }) => e.id !== id) || []);
       } catch (error) {
-        console.error('Failed to fetch managers:', error);
+        logger.error('Failed to fetch managers:', error);
       }
     };
     fetchManagers();
@@ -281,7 +282,7 @@ export function EmployeeForm() {
           esic_number: emp.esic_number,
         });
       } catch (error) {
-        console.error('Failed to fetch employee:', error);
+        logger.error('Failed to fetch employee:', error);
       } finally {
         setLoading(false);
       }
@@ -308,7 +309,7 @@ export function EmployeeForm() {
       }
       navigate('/admin/hris/employees');
     } catch (error) {
-      console.error('Failed to save employee:', error);
+      logger.error('Failed to save employee:', error);
     } finally {
       setSubmitting(false);
     }

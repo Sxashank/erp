@@ -1,18 +1,19 @@
 import { useEffect } from 'react';
+
+import { AmountInput } from '@/components/lending/common/AmountInput';
+import { useWizard } from '@/components/lending/wizard/WizardContext';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { useWizard } from '@/components/lending/wizard/WizardContext';
-import { AmountInput } from '@/components/lending/common/AmountInput';
 
 interface StepData {
-  project_name?: string;
-  project_cost?: number;
-  promoter_contribution?: number;
-  bank_finance?: number;
-  project_start_date?: string;
-  project_end_date?: string;
-  project_description?: string;
+  projectName?: string;
+  projectCost?: number;
+  promoterContribution?: number;
+  bankFinance?: number;
+  projectStartDate?: string;
+  projectCompletionDate?: string;
+  projectDescription?: string;
 }
 
 export default function Step3ProjectDetails() {
@@ -40,41 +41,41 @@ export default function Step3ProjectDetails() {
       <div className="grid gap-6 md:grid-cols-2">
         {/* Project Name */}
         <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="project_name">Project Name</Label>
+          <Label htmlFor="projectName">Project Name</Label>
           <Input
-            id="project_name"
-            value={stepData.project_name || ''}
-            onChange={(e) => handleChange('project_name', e.target.value)}
+            id="projectName"
+            value={stepData.projectName || ''}
+            onChange={(e) => handleChange('projectName', e.target.value)}
             placeholder="Enter project name"
           />
         </div>
 
         {/* Total Project Cost */}
         <div className="space-y-2">
-          <Label htmlFor="project_cost">Total Project Cost</Label>
+          <Label htmlFor="projectCost">Total Project Cost</Label>
           <AmountInput
-            value={stepData.project_cost || 0}
-            onChange={(value) => handleChange('project_cost', value ?? 0)}
+            value={stepData.projectCost || 0}
+            onChange={(value) => handleChange('projectCost', value ?? 0)}
             placeholder="Enter total project cost"
           />
         </div>
 
         {/* Promoter Contribution */}
         <div className="space-y-2">
-          <Label htmlFor="promoter_contribution">Promoter Contribution</Label>
+          <Label htmlFor="promoterContribution">Promoter Contribution</Label>
           <AmountInput
-            value={stepData.promoter_contribution || 0}
-            onChange={(value) => handleChange('promoter_contribution', value ?? 0)}
+            value={stepData.promoterContribution || 0}
+            onChange={(value) => handleChange('promoterContribution', value ?? 0)}
             placeholder="Enter promoter contribution"
           />
         </div>
 
         {/* Bank Finance */}
         <div className="space-y-2">
-          <Label htmlFor="bank_finance">Bank Finance Required</Label>
+          <Label htmlFor="bankFinance">Bank Finance Required</Label>
           <AmountInput
-            value={stepData.bank_finance || 0}
-            onChange={(value) => handleChange('bank_finance', value ?? 0)}
+            value={stepData.bankFinance || 0}
+            onChange={(value) => handleChange('bankFinance', value ?? 0)}
             placeholder="Enter bank finance required"
           />
         </div>
@@ -82,12 +83,12 @@ export default function Step3ProjectDetails() {
         {/* Calculated Debt-Equity */}
         <div className="space-y-2">
           <Label>Debt-Equity Ratio</Label>
-          <div className="p-3 bg-muted rounded-md">
+          <div className="rounded-md bg-muted p-3">
             <span className="font-mono">
-              {stepData.project_cost && stepData.promoter_contribution
+              {stepData.projectCost && stepData.promoterContribution
                 ? `${(
-                    (stepData.project_cost - stepData.promoter_contribution) /
-                    stepData.promoter_contribution
+                    (stepData.projectCost - stepData.promoterContribution) /
+                    stepData.promoterContribution
                   ).toFixed(2)} : 1`
                 : 'N/A'}
             </span>
@@ -96,34 +97,34 @@ export default function Step3ProjectDetails() {
 
         {/* Project Start Date */}
         <div className="space-y-2">
-          <Label htmlFor="project_start_date">Expected Start Date</Label>
+          <Label htmlFor="projectStartDate">Expected Start Date</Label>
           <Input
-            id="project_start_date"
+            id="projectStartDate"
             type="date"
-            value={stepData.project_start_date || ''}
-            onChange={(e) => handleChange('project_start_date', e.target.value)}
+            value={stepData.projectStartDate || ''}
+            onChange={(e) => handleChange('projectStartDate', e.target.value)}
           />
         </div>
 
         {/* Project End Date */}
         <div className="space-y-2">
-          <Label htmlFor="project_end_date">Expected Completion Date</Label>
+          <Label htmlFor="projectCompletionDate">Expected Completion Date</Label>
           <Input
-            id="project_end_date"
+            id="projectCompletionDate"
             type="date"
-            value={stepData.project_end_date || ''}
-            onChange={(e) => handleChange('project_end_date', e.target.value)}
+            value={stepData.projectCompletionDate || ''}
+            onChange={(e) => handleChange('projectCompletionDate', e.target.value)}
           />
         </div>
       </div>
 
       {/* Project Description */}
       <div className="space-y-2">
-        <Label htmlFor="project_description">Project Description</Label>
+        <Label htmlFor="projectDescription">Project Description</Label>
         <Textarea
-          id="project_description"
-          value={stepData.project_description || ''}
-          onChange={(e) => handleChange('project_description', e.target.value)}
+          id="projectDescription"
+          value={stepData.projectDescription || ''}
+          onChange={(e) => handleChange('projectDescription', e.target.value)}
           placeholder="Describe the project details..."
           rows={4}
         />

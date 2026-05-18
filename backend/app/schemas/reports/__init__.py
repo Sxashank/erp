@@ -1,15 +1,36 @@
 """Report schemas."""
 
 from app.schemas.reports.financial_reports import (
-    TrialBalanceItem,
-    TrialBalanceResponse,
-    ProfitLossItem,
-    ProfitLossResponse,
-    BalanceSheetItem,
-    BalanceSheetSection,
-    BalanceSheetResponse,
     AccountLedgerEntry,
     AccountLedgerResponse,
+    BalanceSheetItem,
+    BalanceSheetResponse,
+    BalanceSheetSection,
+    ProfitLossItem,
+    ProfitLossResponse,
+    TrialBalanceItem,
+    TrialBalanceResponse,
+)
+from app.schemas.reports.regulatory import (
+    CapitalCompositionLine,
+    CapitalCompositionResponse,
+    CapitalSnapshotItem,
+    CrarTrendResponse,
+    InfrastructureRatioResponse,
+)
+from app.schemas.reports.mis import (
+    BranchPerformanceResponse,
+    CollectionReportResponse,
+    DashboardSummary,
+    DelinquencyReportResponse,
+    DisbursementReportResponse,
+    PortfolioSummaryResponse,
+    ProfitabilityReportResponse,
+    ReportCatalogResponse,
+    ReportRunCreate,
+    ReportRunResponse,
+    ReportScheduleCreate,
+    ReportScheduleResponse,
 )
 
 __all__ = [
@@ -22,4 +43,21 @@ __all__ = [
     "BalanceSheetResponse",
     "AccountLedgerEntry",
     "AccountLedgerResponse",
+    "CapitalCompositionLine",
+    "CapitalCompositionResponse",
+    "CapitalSnapshotItem",
+    "CrarTrendResponse",
+    "InfrastructureRatioResponse",
+    "ReportCatalogResponse",
+    "DashboardSummary",
+    "PortfolioSummaryResponse",
+    "DisbursementReportResponse",
+    "CollectionReportResponse",
+    "DelinquencyReportResponse",
+    "ProfitabilityReportResponse",
+    "BranchPerformanceResponse",
+    "ReportRunCreate",
+    "ReportRunResponse",
+    "ReportScheduleCreate",
+    "ReportScheduleResponse",
 ]

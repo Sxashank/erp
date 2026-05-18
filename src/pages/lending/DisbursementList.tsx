@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Banknote,
   Plus,
@@ -12,19 +10,20 @@ import {
   AlertTriangle,
   ArrowUpRight,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -33,116 +32,80 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-// Mock data
+// Legacy root-level disbursement list. The canonical wired view lives at
+// /pages/lending/lms/DisbursementList.tsx and consumes /lending/disbursements
+// via useDisbursements. This page is kept for legacy routes and renders empty
+// until migrated to the same hook.
 const disbursementSummary = {
-  total_disbursements: 856,
-  total_amount: 2500000000,
-  pending_approval: 12,
-  pending_amount: 45000000,
-  today_disbursements: 5,
-  today_amount: 25000000,
+  total_disbursements: 0,
+  total_amount: 0,
+  pending_approval: 0,
+  pending_amount: 0,
+  today_disbursements: 0,
+  today_amount: 0,
 };
 
-const disbursements = [
-  {
-    id: '1',
-    disbursement_number: 'SMFC/LA/2025/00145/D001',
-    loan_account: 'SMFC/LA/2025/00145',
-    entity: 'Sunrise Industries',
-    requested_amount: 5000000,
-    approved_amount: 5000000,
-    disbursed_amount: 5000000,
-    scheduled_date: '2025-01-15',
-    disbursed_date: '2025-01-15',
-    beneficiary_name: 'Sunrise Industries',
-    beneficiary_account: '1234567890',
-    disbursement_mode: 'RTGS',
-    utr_number: 'HDFCH25015RTGS001',
-    status: 'PROCESSED',
-  },
-  {
-    id: '2',
-    disbursement_number: 'SMFC/LA/2025/00146/D001',
-    loan_account: 'SMFC/LA/2025/00146',
-    entity: 'Metro Logistics',
-    requested_amount: 10000000,
-    approved_amount: 10000000,
-    disbursed_amount: null,
-    scheduled_date: '2025-01-16',
-    disbursed_date: null,
-    beneficiary_name: 'Metro Logistics',
-    beneficiary_account: '5555666677',
-    disbursement_mode: 'RTGS',
-    utr_number: null,
-    status: 'APPROVED',
-  },
-  {
-    id: '3',
-    disbursement_number: 'SMFC/LA/2025/00147/D001',
-    loan_account: 'SMFC/LA/2025/00147',
-    entity: 'Eastern Trading',
-    requested_amount: 15000000,
-    approved_amount: null,
-    disbursed_amount: null,
-    scheduled_date: '2025-01-17',
-    disbursed_date: null,
-    beneficiary_name: 'Eastern Trading Pvt Ltd',
-    beneficiary_account: '9876543210',
-    disbursement_mode: 'NEFT',
-    utr_number: null,
-    status: 'PENDING_APPROVAL',
-  },
-  {
-    id: '4',
-    disbursement_number: 'SMFC/LA/2025/00148/D001',
-    loan_account: 'SMFC/LA/2025/00148',
-    entity: 'Western Corp',
-    requested_amount: 8000000,
-    approved_amount: 6000000,
-    disbursed_amount: null,
-    scheduled_date: '2025-01-16',
-    disbursed_date: null,
-    beneficiary_name: 'Western Corp',
-    beneficiary_account: '1122334455',
-    disbursement_mode: 'RTGS',
-    utr_number: null,
-    status: 'VERIFIED',
-  },
-  {
-    id: '5',
-    disbursement_number: 'SMFC/LA/2025/00149/D001',
-    loan_account: 'SMFC/LA/2025/00149',
-    entity: 'Northern Industries',
-    requested_amount: 20000000,
-    approved_amount: null,
-    disbursed_amount: null,
-    scheduled_date: '2025-01-18',
-    disbursed_date: null,
-    beneficiary_name: 'Northern Industries',
-    beneficiary_account: '6677889900',
-    disbursement_mode: 'RTGS',
-    utr_number: null,
-    status: 'REJECTED',
-    rejection_reason: 'Documentation incomplete',
-  },
-];
+interface DisbursementRow {
+  id: string;
+  disbursement_number: string;
+  loan_account: string;
+  entity: string;
+  requested_amount: number;
+  approved_amount: number | null;
+  disbursed_amount: number | null;
+  scheduled_date: string;
+  disbursed_date: string | null;
+  beneficiary_name: string;
+  beneficiary_account: string;
+  disbursement_mode: string;
+  utr_number: string | null;
+  status: string;
+  rejection_reason?: string;
+}
+
+const disbursements: DisbursementRow[] = [];
 
 const getStatusBadge = (status: string) => {
-  const variants: Record<string, { variant: 'default' | 'secondary' | 'outline' | 'destructive'; icon: React.ReactNode; label: string }> = {
+  const variants: Record<
+    string,
+    {
+      variant: 'default' | 'secondary' | 'outline' | 'destructive';
+      icon: React.ReactNode;
+      label: string;
+    }
+  > = {
     DRAFT: { variant: 'outline', icon: <Clock className="h-3 w-3" />, label: 'Draft' },
-    PENDING_VERIFICATION: { variant: 'outline', icon: <Clock className="h-3 w-3" />, label: 'Pending Verification' },
-    VERIFIED: { variant: 'secondary', icon: <CheckCircle className="h-3 w-3" />, label: 'Verified' },
-    PENDING_APPROVAL: { variant: 'outline', icon: <AlertTriangle className="h-3 w-3" />, label: 'Pending Approval' },
+    PENDING_VERIFICATION: {
+      variant: 'outline',
+      icon: <Clock className="h-3 w-3" />,
+      label: 'Pending Verification',
+    },
+    VERIFIED: {
+      variant: 'secondary',
+      icon: <CheckCircle className="h-3 w-3" />,
+      label: 'Verified',
+    },
+    PENDING_APPROVAL: {
+      variant: 'outline',
+      icon: <AlertTriangle className="h-3 w-3" />,
+      label: 'Pending Approval',
+    },
     APPROVED: { variant: 'default', icon: <CheckCircle className="h-3 w-3" />, label: 'Approved' },
     PROCESSING: { variant: 'secondary', icon: <Clock className="h-3 w-3" />, label: 'Processing' },
-    PROCESSED: { variant: 'default', icon: <CheckCircle className="h-3 w-3" />, label: 'Processed' },
+    PROCESSED: {
+      variant: 'default',
+      icon: <CheckCircle className="h-3 w-3" />,
+      label: 'Processed',
+    },
     REJECTED: { variant: 'destructive', icon: <XCircle className="h-3 w-3" />, label: 'Rejected' },
     REVERSED: { variant: 'destructive', icon: <XCircle className="h-3 w-3" />, label: 'Reversed' },
   };
@@ -171,7 +134,7 @@ export default function DisbursementList() {
   });
 
   const pendingApproval = disbursements.filter(
-    (d) => d.status === 'PENDING_APPROVAL' || d.status === 'VERIFIED'
+    (d) => d.status === 'PENDING_APPROVAL' || d.status === 'VERIFIED',
   );
 
   return (
@@ -182,11 +145,11 @@ export default function DisbursementList() {
         actions={
           <div className="flex gap-2">
             <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
-            <Button onClick={() => navigate('/lending/disbursements/create')}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button onClick={() => navigate('/admin/lending/disbursements/create')}>
+              <Plus className="mr-2 h-4 w-4" />
               New Request
             </Button>
           </div>
@@ -194,7 +157,7 @@ export default function DisbursementList() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -225,9 +188,12 @@ export default function DisbursementList() {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => navigate('/lending/disbursements/approval')}>
+        <Card
+          className="cursor-pointer hover:bg-muted/50"
+          onClick={() => navigate('/admin/lending/disbursements/approval')}
+        >
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
               Pending Approval
               <ArrowUpRight className="h-4 w-4" />
             </CardTitle>
@@ -250,7 +216,11 @@ export default function DisbursementList() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold">
-              {formatCurrency(disbursementSummary.total_amount / disbursementSummary.total_disbursements)}
+              {formatCurrency(
+                disbursementSummary.total_disbursements > 0
+                  ? disbursementSummary.total_amount / disbursementSummary.total_disbursements
+                  : 0,
+              )}
             </div>
             <p className="text-xs text-muted-foreground">Per transaction</p>
           </CardContent>
@@ -263,17 +233,22 @@ export default function DisbursementList() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="h-10 w-10 rounded-full bg-orange-100 flex items-center justify-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-100">
                   <AlertTriangle className="h-5 w-5 text-orange-600" />
                 </div>
                 <div>
-                  <p className="font-medium">{pendingApproval.length} disbursements pending approval</p>
+                  <p className="font-medium">
+                    {pendingApproval.length} disbursements pending approval
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    Total amount: {formatCurrency(pendingApproval.reduce((sum, d) => sum + d.requested_amount, 0))}
+                    Total amount:{' '}
+                    {formatCurrency(
+                      pendingApproval.reduce((sum, d) => sum + d.requested_amount, 0),
+                    )}
                   </p>
                 </div>
               </div>
-              <Button onClick={() => navigate('/lending/disbursements/approval')}>
+              <Button onClick={() => navigate('/admin/lending/disbursements/approval')}>
                 Review Now
               </Button>
             </div>
@@ -284,9 +259,9 @@ export default function DisbursementList() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap gap-4">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by disbursement number, entity, or loan account..."
                 className="pl-10"
@@ -350,14 +325,16 @@ export default function DisbursementList() {
             <TableBody>
               {filteredDisbursements.map((disbursement) => (
                 <TableRow key={disbursement.id}>
-                  <TableCell className="font-mono text-sm">{disbursement.disbursement_number}</TableCell>
+                  <TableCell className="font-mono text-sm">
+                    {disbursement.disbursement_number}
+                  </TableCell>
                   <TableCell>
                     <div className="font-medium">{disbursement.entity}</div>
                     <div className="text-xs text-muted-foreground">{disbursement.loan_account}</div>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">{disbursement.beneficiary_name}</div>
-                    <div className="text-xs text-muted-foreground font-mono">
+                    <div className="font-mono text-xs text-muted-foreground">
                       {disbursement.beneficiary_account}
                     </div>
                   </TableCell>
@@ -382,7 +359,7 @@ export default function DisbursementList() {
                   <TableCell>
                     <div className="text-sm">{disbursement.disbursement_mode}</div>
                     {disbursement.utr_number && (
-                      <div className="text-xs text-muted-foreground font-mono">
+                      <div className="font-mono text-xs text-muted-foreground">
                         {disbursement.utr_number}
                       </div>
                     )}
@@ -397,24 +374,31 @@ export default function DisbursementList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => navigate(`/lending/disbursements/${disbursement.id}`)}
+                          onClick={() =>
+                            navigate(`/admin/lending/disbursements/${disbursement.id}`)
+                          }
                         >
-                          <Eye className="h-4 w-4 mr-2" />
+                          <Eye className="mr-2 h-4 w-4" />
                           View Details
                         </DropdownMenuItem>
-                        {(disbursement.status === 'PENDING_APPROVAL' || disbursement.status === 'VERIFIED') && (
+                        {(disbursement.status === 'PENDING_APPROVAL' ||
+                          disbursement.status === 'VERIFIED') && (
                           <DropdownMenuItem
-                            onClick={() => navigate(`/lending/disbursements/${disbursement.id}/approve`)}
+                            onClick={() =>
+                              navigate(`/admin/lending/disbursements/${disbursement.id}/approve`)
+                            }
                           >
-                            <CheckCircle className="h-4 w-4 mr-2" />
+                            <CheckCircle className="mr-2 h-4 w-4" />
                             Approve
                           </DropdownMenuItem>
                         )}
                         {disbursement.status === 'APPROVED' && (
                           <DropdownMenuItem
-                            onClick={() => navigate(`/lending/disbursements/${disbursement.id}/process`)}
+                            onClick={() =>
+                              navigate(`/admin/lending/disbursements/${disbursement.id}/process`)
+                            }
                           >
-                            <Banknote className="h-4 w-4 mr-2" />
+                            <Banknote className="mr-2 h-4 w-4" />
                             Process
                           </DropdownMenuItem>
                         )}

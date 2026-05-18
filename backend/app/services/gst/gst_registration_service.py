@@ -36,7 +36,7 @@ class GSTRegistrationService:
             created_by=created_by,
         )
         self.session.add(registration)
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(registration)
         return registration
 
@@ -60,7 +60,7 @@ class GSTRegistrationService:
 
         registration.updated_by = updated_by
 
-        await self.session.commit()
+        await self.session.flush()
         await self.session.refresh(registration)
         return registration
 
@@ -100,4 +100,4 @@ class GSTRegistrationService:
         if not registration:
             raise NotFoundException("GST registration not found")
         registration.soft_delete(deleted_by)
-        await self.session.commit()
+        await self.session.flush()

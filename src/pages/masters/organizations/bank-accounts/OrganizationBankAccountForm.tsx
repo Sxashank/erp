@@ -1,8 +1,9 @@
+import { Loader2, Save } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
-import { ArrowLeft, Loader2, Save } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -17,6 +18,7 @@ import {
 } from '@/components/ui/select';
 import { organizationsApi } from '@/services/api';
 import { STATUS_OPTIONS } from '@/types';
+import { logger } from "@/lib/logger";
 import type {
   Organization,
   OrganizationBankAccount,
@@ -68,7 +70,7 @@ export function OrganizationBankAccountForm() {
       const response = await organizationsApi.get(orgId);
       setOrganization(response.data);
     } catch (error) {
-      console.error('Failed to fetch organization:', error);
+      logger.error('Failed to fetch organization:', error);
     }
   };
 
@@ -93,7 +95,7 @@ export function OrganizationBankAccountForm() {
         status: account.status,
       });
     } catch (error) {
-      console.error('Failed to fetch bank account:', error);
+      logger.error('Failed to fetch bank account:', error);
     } finally {
       setLoading(false);
     }
@@ -110,7 +112,7 @@ export function OrganizationBankAccountForm() {
       }
       navigate(`/admin/organizations/${orgId}/bank-accounts`);
     } catch (error) {
-      console.error('Failed to save bank account:', error);
+      logger.error('Failed to save bank account:', error);
     } finally {
       setSubmitting(false);
     }
@@ -126,23 +128,16 @@ export function OrganizationBankAccountForm() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => navigate(`/admin/organizations/${orgId}/bank-accounts`)}
-        >
-          <ArrowLeft className="h-5 w-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {isEdit ? 'Edit Bank Account' : 'New Bank Account'}
-          </h1>
-          <p className="text-sm text-slate-500">
-            {organization?.name} - {isEdit ? 'Update bank account details' : 'Add a new bank account'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title={isEdit ? 'Edit Bank Account' : 'New Bank Account'}
+        subtitle={`${organization?.name ?? ''} - ${isEdit ? 'Update bank account details' : 'Add a new bank account'}`}
+        breadcrumbs={[
+          { label: 'Organizations', to: '/admin/organizations' },
+          { label: organization?.name ?? '...', to: `/admin/organizations/${orgId}` },
+          { label: 'Bank Accounts', to: `/admin/organizations/${orgId}/bank-accounts` },
+          { label: isEdit ? 'Edit' : 'New' },
+        ]}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Account Details */}
@@ -318,7 +313,9 @@ export function OrganizationBankAccountForm() {
                 onCheckedChange={(checked) => setValue('allow_payments', checked as boolean)}
               />
               <Label htmlFor="allow_payments">Allow Payments</Label>
-              <span className="text-sm text-slate-500">(Use this account for outgoing payments)</span>
+              <span className="text-sm text-slate-500">
+                (Use this account for outgoing payments)
+              </span>
             </div>
 
             <div className="flex items-center space-x-2">
@@ -328,7 +325,9 @@ export function OrganizationBankAccountForm() {
                 onCheckedChange={(checked) => setValue('allow_receipts', checked as boolean)}
               />
               <Label htmlFor="allow_receipts">Allow Receipts</Label>
-              <span className="text-sm text-slate-500">(Use this account for incoming receipts)</span>
+              <span className="text-sm text-slate-500">
+                (Use this account for incoming receipts)
+              </span>
             </div>
           </CardContent>
         </Card>

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.gst.gst_registration_service import GSTRegistrationService
 from app.schemas.gst.gst_registration import (
@@ -44,30 +44,29 @@ def _to_response(reg) -> GSTRegistrationResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[GSTRegistrationResponse])
+@router.get("", response_model=PaginatedResponse[GSTRegistrationResponse], response_model_by_alias=True)
 async def list_gst_registrations(
-    organization_id: UUID = Query(...),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get GST registrations for an organization."""
     service = GSTRegistrationService(db)
     skip = (page - 1) * page_size
     regs, total = await service.get_by_organization(
-        organization_id, skip, page_size, include_inactive
+        current_user.organization_id, skip, page_size, include_inactive
     )
     items = [_to_response(r) for r in regs]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.post("", response_model=GSTRegistrationResponse)
+@router.post("", response_model=GSTRegistrationResponse, response_model_by_alias=True)
 async def create_gst_registration(
     data: GSTRegistrationCreate,
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new GST registration."""
     service = GSTRegistrationService(db)
@@ -75,11 +74,11 @@ async def create_gst_registration(
     return _to_response(reg)
 
 
-@router.get("/{registration_id}", response_model=GSTRegistrationResponse)
+@router.get("/{registration_id}", response_model=GSTRegistrationResponse, response_model_by_alias=True)
 async def get_gst_registration(
     registration_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get GST registration by ID."""
     service = GSTRegistrationService(db)
@@ -87,11 +86,11 @@ async def get_gst_registration(
     return _to_response(reg)
 
 
-@router.get("/gstin/{gstin}", response_model=GSTRegistrationResponse)
+@router.get("/gstin/{gstin}", response_model=GSTRegistrationResponse, response_model_by_alias=True)
 async def get_by_gstin(
     gstin: str,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get GST registration by GSTIN."""
     service = GSTRegistrationService(db)
@@ -99,12 +98,12 @@ async def get_by_gstin(
     return _to_response(reg)
 
 
-@router.put("/{registration_id}", response_model=GSTRegistrationResponse)
+@router.put("/{registration_id}", response_model=GSTRegistrationResponse, response_model_by_alias=True)
 async def update_gst_registration(
     registration_id: UUID,
     data: GSTRegistrationUpdate,
     current_user: User = Depends(RequirePermissions("FIN_COA_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a GST registration."""
     service = GSTRegistrationService(db)
@@ -116,7 +115,7 @@ async def update_gst_registration(
 async def delete_gst_registration(
     registration_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a GST registration."""
     service = GSTRegistrationService(db)

@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Search,
@@ -14,27 +12,15 @@ import {
   Send,
   Trash2,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Dialog,
   DialogContent,
@@ -44,7 +30,23 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { useToast } from '@/hooks/use-toast';
 import { formatDate } from '@/lib/utils';
 
 type NominationStatus = 'NOMINATED' | 'CONFIRMED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED';
@@ -71,66 +73,21 @@ interface AvailableEmployee {
   email: string;
 }
 
-// Mock program data
-const programDetails = {
-  id: '1',
-  program_code: 'TRN-2024-001',
-  title: 'Leadership Excellence Program',
-  start_date: '2025-01-15',
-  end_date: '2025-01-17',
-  duration_hours: 24,
-  location: 'Training Center - Mumbai',
-  max_participants: 25,
-  trainer_name: 'Dr. Anand Verma',
-};
+interface ProgramDetails {
+  id: string;
+  program_code: string;
+  title: string;
+  start_date: string;
+  end_date: string;
+  duration_hours: number;
+  location: string;
+  max_participants: number;
+  trainer_name: string;
+}
 
-// Mock nominations
-const nominations: Nomination[] = [
-  {
-    id: '1',
-    employee_id: 'emp-001',
-    employee_code: 'EMP001',
-    employee_name: 'Rahul Sharma',
-    department: 'Engineering',
-    designation: 'Team Lead',
-    nominated_by: 'HR Admin',
-    nominated_on: '2024-12-20',
-    status: 'CONFIRMED',
-    attendance_marked: false,
-  },
-  {
-    id: '2',
-    employee_id: 'emp-002',
-    employee_code: 'EMP002',
-    employee_name: 'Priya Patel',
-    department: 'Finance',
-    designation: 'Senior Accountant',
-    nominated_by: 'Manager',
-    nominated_on: '2024-12-21',
-    status: 'NOMINATED',
-    attendance_marked: false,
-  },
-  {
-    id: '3',
-    employee_id: 'emp-003',
-    employee_code: 'EMP003',
-    employee_name: 'Amit Kumar',
-    department: 'Operations',
-    designation: 'Assistant Manager',
-    nominated_by: 'Self',
-    nominated_on: '2024-12-22',
-    status: 'CONFIRMED',
-    attendance_marked: false,
-  },
-];
-
-// Mock available employees
-const availableEmployees: AvailableEmployee[] = [
-  { id: 'emp-004', employee_code: 'EMP004', full_name: 'Sneha Reddy', department: 'HR', designation: 'Executive', email: 'sneha@company.com' },
-  { id: 'emp-005', employee_code: 'EMP005', full_name: 'Vikram Singh', department: 'Sales', designation: 'Manager', email: 'vikram@company.com' },
-  { id: 'emp-006', employee_code: 'EMP006', full_name: 'Anita Desai', department: 'Marketing', designation: 'Lead', email: 'anita@company.com' },
-  { id: 'emp-007', employee_code: 'EMP007', full_name: 'Rajesh Gupta', department: 'IT', designation: 'Architect', email: 'rajesh@company.com' },
-];
+const getProgramDetails = (): ProgramDetails | null => null;
+const nominations: Nomination[] = [];
+const availableEmployees: AvailableEmployee[] = [];
 
 const getStatusBadge = (status: NominationStatus) => {
   const config: Record<NominationStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
@@ -147,12 +104,34 @@ const getStatusBadge = (status: NominationStatus) => {
 export default function TrainingNomination() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { toast } = useToast();
+  const programDetails = getProgramDetails();
   const [nominationList, setNominationList] = useState(nominations);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
+
+  if (!programDetails) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Training Nominations"
+          subtitle={id ? `Program ${id}` : 'Program details unavailable'}
+          breadcrumbs={[
+            { label: 'Training', to: '/admin/hris/training' },
+            { label: 'Nominations' },
+          ]}
+        />
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Training nomination data is pending backend HRIS training endpoints.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const filteredNominations = nominationList.filter((n) => {
     const matchesSearch =
@@ -209,7 +188,7 @@ export default function TrainingNomination() {
 
   const handleSendReminders = () => {
     // API call to send reminder emails
-    alert('Reminders sent to all confirmed participants');
+    toast({ title: 'Reminders queued for confirmed participants' });
   };
 
   const enrolledCount = nominationList.filter(

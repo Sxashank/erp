@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import {
   AlertCircle,
   ArrowRight,
@@ -18,11 +17,12 @@ import {
   Trash2,
   Wallet,
 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -38,6 +38,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import { integrationsApi, organizationsApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
+import { getErrorMessage } from "@/lib/errorMessage";
 interface IntegrationType {
   type: string;
   label: string;
@@ -131,7 +133,7 @@ export function IntegrationSettings() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
   };
 
@@ -143,7 +145,7 @@ export function IntegrationSettings() {
         setActiveTab(response.data[0].type);
       }
     } catch (error) {
-      console.error('Failed to fetch integration types:', error);
+      logger.error('Failed to fetch integration types:', error);
     }
   };
 
@@ -156,7 +158,7 @@ export function IntegrationSettings() {
       });
       setConfigs(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch configs:', error);
+      logger.error('Failed to fetch configs:', error);
     } finally {
       setLoading(false);
     }
@@ -214,7 +216,7 @@ export function IntegrationSettings() {
       const err = error as { response?: { data?: { detail?: string } } };
       toast({
         title: 'Error',
-        description: err.response?.data?.detail || 'Failed to save configuration',
+        description: getErrorMessage(err, 'Failed to save configuration'),
         variant: 'destructive',
       });
     } finally {
@@ -256,7 +258,7 @@ export function IntegrationSettings() {
       const err = error as { response?: { data?: { detail?: string } } };
       toast({
         title: 'Test Failed',
-        description: err.response?.data?.detail || 'Failed to test connection',
+        description: getErrorMessage(err, 'Failed to test connection'),
         variant: 'destructive',
       });
     } finally {
@@ -285,7 +287,7 @@ export function IntegrationSettings() {
       const err = error as { response?: { data?: { detail?: string } } };
       toast({
         title: 'Error',
-        description: err.response?.data?.detail || 'Failed to delete configuration',
+        description: getErrorMessage(err, 'Failed to delete configuration'),
         variant: 'destructive',
       });
     }

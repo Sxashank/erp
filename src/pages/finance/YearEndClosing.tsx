@@ -1,5 +1,3 @@
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlertCircle,
   AlertTriangle,
@@ -13,12 +11,16 @@ import {
   RefreshCw,
   XCircle,
 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { PageHeader } from '@/components/common/PageHeader';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { PageHeader } from '@/components/common/PageHeader';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -35,9 +37,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Checkbox } from '@/components/ui/checkbox';
 import { organizationsApi, financialYearsApi, yearEndApi } from '@/services/api';
 
+import { logger } from "@/lib/logger";
 interface Organization {
   id: string;
   name: string;
@@ -104,17 +106,7 @@ export function YearEndClosing() {
   const [loading, setLoading] = useState(false);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchFinancialYears();
-    }
-  }, [selectedOrgId]);
-
-  const fetchOrganizations = async () => {
+  const fetchOrganizations = useCallback(async () => {
     try {
       const response = await organizationsApi.list({ page_size: 100 });
       setOrganizations(response.data.items);
@@ -122,18 +114,28 @@ export function YearEndClosing() {
         setSelectedOrgId(response.data.items[0].id);
       }
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     }
-  };
+  }, []);
 
-  const fetchFinancialYears = async () => {
+  const fetchFinancialYears = useCallback(async () => {
     try {
       const response = await financialYearsApi.list({ organization_id: selectedOrgId, page_size: 100 });
       setFinancialYears(response.data.items);
     } catch (error) {
-      console.error('Failed to fetch financial years:', error);
+      logger.error('Failed to fetch financial years:', error);
     }
-  };
+  }, [selectedOrgId]);
+
+  useEffect(() => {
+    fetchOrganizations();
+  }, [fetchOrganizations]);
+
+  useEffect(() => {
+    if (selectedOrgId) {
+      fetchFinancialYears();
+    }
+  }, [fetchFinancialYears, selectedOrgId]);
 
   const handleGeneratePreview = async () => {
     if (!sourceYearId) return;
@@ -143,7 +145,7 @@ export function YearEndClosing() {
       setPreview(response.data);
       setStep('preview');
     } catch (error) {
-      console.error('Failed to generate preview:', error);
+      logger.error('Failed to generate preview:', error);
     } finally {
       setPreviewLoading(false);
     }
@@ -160,7 +162,7 @@ export function YearEndClosing() {
       });
       setResult(response.data);
       setStep('result');
-    } catch (error: any) {
+    } catch (error) {
       setResult({
         success: false,
         message: 'Failed to execute year-end closing',
@@ -170,7 +172,7 @@ export function YearEndClosing() {
         closing_voucher_number: null,
         accounts_carried_forward: 0,
         new_year_id: null,
-        errors: [error.response?.data?.detail || 'An unexpected error occurred'],
+        errors: [error instanceof Error ? error.message : 'An unexpected error occurred'],
         warnings: [],
       });
       setStep('result');
@@ -289,8 +291,7 @@ export function YearEndClosing() {
                   <div>
                     <span className="text-slate-500">Period:</span>
                     <p className="font-medium">
-                      {new Date(sourceYear.start_date).toLocaleDateString('en-IN')} -{' '}
-                      {new Date(sourceYear.end_date).toLocaleDateString('en-IN')}
+                      <DateDisplay date={sourceYear.start_date} /> - <DateDisplay date={sourceYear.end_date} />
                     </p>
                   </div>
                   <div>

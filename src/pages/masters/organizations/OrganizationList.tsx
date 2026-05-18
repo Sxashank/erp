@@ -1,11 +1,11 @@
+import { Building2, CreditCard, Edit, MapPin, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Building2, CreditCard, Edit, MapPin, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 
+import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { PageHeader } from '@/components/common/PageHeader';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,6 +23,7 @@ import {
 import { organizationsApi } from '@/services/api';
 import type { Organization, PaginatedResponse } from '@/types';
 
+import { logger } from "@/lib/logger";
 export function OrganizationList() {
   const navigate = useNavigate();
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -37,7 +38,7 @@ export function OrganizationList() {
       setOrganizations(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
     } catch (error) {
-      console.error('Failed to fetch organizations:', error);
+      logger.error('Failed to fetch organizations:', error);
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ export function OrganizationList() {
       await organizationsApi.delete(id);
       fetchOrganizations(pagination.page);
     } catch (error) {
-      console.error('Failed to delete organization:', error);
+      logger.error('Failed to delete organization:', error);
     }
   };
 

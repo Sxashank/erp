@@ -5,10 +5,10 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.schemas.finance.cost_center import (
     CostCenterCreate,
@@ -21,18 +21,19 @@ from app.schemas.finance.cost_center import (
     BulkCostCenterCreate,
 )
 from app.services.finance.cost_center_service import CostCenterService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
 
 
-@router.get("", response_model=dict)
+@router.get("", response_model=dict, response_model_by_alias=True)
 async def list_cost_centers(
     organization_id: UUID,
     include_inactive: bool = False,
     parent_id: Optional[UUID] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List cost centers for an organization."""
@@ -53,10 +54,10 @@ async def list_cost_centers(
     }
 
 
-@router.get("/tree", response_model=List[CostCenterTreeNode])
+@router.get("/tree", response_model=List[CostCenterTreeNode], response_model_by_alias=True)
 async def get_cost_center_tree(
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get cost center hierarchy as tree."""
@@ -64,10 +65,10 @@ async def get_cost_center_tree(
     return await service.get_tree(organization_id)
 
 
-@router.get("/root", response_model=List[CostCenterListResponse])
+@router.get("/root", response_model=List[CostCenterListResponse], response_model_by_alias=True)
 async def get_root_cost_centers(
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get root level cost centers."""
@@ -76,10 +77,10 @@ async def get_root_cost_centers(
     return [service.to_list_response(cc) for cc in items]
 
 
-@router.get("/allocatable", response_model=List[CostCenterListResponse])
+@router.get("/allocatable", response_model=List[CostCenterListResponse], response_model_by_alias=True)
 async def get_allocatable_cost_centers(
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get cost centers that can have expenses allocated."""
@@ -88,10 +89,10 @@ async def get_allocatable_cost_centers(
     return [service.to_list_response(cc) for cc in items]
 
 
-@router.get("/with-budgets", response_model=List[CostCenterListResponse])
+@router.get("/with-budgets", response_model=List[CostCenterListResponse], response_model_by_alias=True)
 async def get_cost_centers_with_budgets(
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get cost centers with budget tracking enabled."""
@@ -100,12 +101,12 @@ async def get_cost_centers_with_budgets(
     return [service.to_list_response(cc) for cc in items]
 
 
-@router.get("/search", response_model=List[CostCenterListResponse])
+@router.get("/search", response_model=List[CostCenterListResponse], response_model_by_alias=True)
 async def search_cost_centers(
     organization_id: UUID,
     q: str = Query(..., min_length=1),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Search cost centers by code or name."""
@@ -114,28 +115,25 @@ async def search_cost_centers(
     return [service.to_list_response(cc) for cc in items]
 
 
-@router.get("/by-code/{code}", response_model=CostCenterResponse)
+@router.get("/by-code/{code}", response_model=CostCenterResponse, response_model_by_alias=True)
 async def get_cost_center_by_code(
     code: str,
     organization_id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get cost center by code."""
     service = CostCenterService(db)
     cost_center = await service.get_by_code(organization_id, code)
     if not cost_center:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cost center not found",
-        )
+        raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
     return service.to_response(cost_center)
 
 
-@router.post("", response_model=CostCenterResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=CostCenterResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def create_cost_center(
     data: CostCenterCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new cost center."""
@@ -144,16 +142,13 @@ async def create_cost_center(
         cost_center = await service.create(data, current_user.id)
         return service.to_response(cost_center)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/bulk", response_model=List[CostCenterResponse], status_code=status.HTTP_201_CREATED)
+@router.post("/bulk", response_model=List[CostCenterResponse], response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 async def bulk_create_cost_centers(
     data: BulkCostCenterCreate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create multiple cost centers at once."""
@@ -162,33 +157,27 @@ async def bulk_create_cost_centers(
         cost_centers = await service.bulk_create(data, current_user.id)
         return [service.to_response(cc) for cc in cost_centers]
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/{id}", response_model=CostCenterResponse)
+@router.get("/{id}", response_model=CostCenterResponse, response_model_by_alias=True)
 async def get_cost_center(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get cost center by ID."""
     service = CostCenterService(db)
     cost_center = await service.get(id)
     if not cost_center:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cost center not found",
-        )
+        raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
     return service.to_response(cost_center)
 
 
-@router.get("/{id}/children", response_model=List[CostCenterListResponse])
+@router.get("/{id}/children", response_model=List[CostCenterListResponse], response_model_by_alias=True)
 async def get_cost_center_children(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get child cost centers."""
@@ -197,12 +186,12 @@ async def get_cost_center_children(
     return [service.to_list_response(cc) for cc in children]
 
 
-@router.get("/{id}/expense-summary", response_model=CostCenterExpenseSummary)
+@router.get("/{id}/expense-summary", response_model=CostCenterExpenseSummary, response_model_by_alias=True)
 async def get_cost_center_expense_summary(
     id: UUID,
     from_date: date,
     to_date: date,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get expense summary for a cost center."""
@@ -210,18 +199,15 @@ async def get_cost_center_expense_summary(
     try:
         return await service.get_expense_summary(id, from_date, to_date)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e),
-        )
+        raise NotFoundException(detail=str(e), error_code="NOT_FOUND")
 
 
-@router.get("/{id}/budget-summary", response_model=CostCenterBudgetSummary)
+@router.get("/{id}/budget-summary", response_model=CostCenterBudgetSummary, response_model_by_alias=True)
 async def get_cost_center_budget_summary(
     id: UUID,
     financial_year_start: date,
     as_of_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get budget vs actual summary for a cost center."""
@@ -229,17 +215,14 @@ async def get_cost_center_budget_summary(
     try:
         return await service.get_budget_summary(id, financial_year_start, as_of_date)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/{id}", response_model=CostCenterResponse)
+@router.put("/{id}", response_model=CostCenterResponse, response_model_by_alias=True)
 async def update_cost_center(
     id: UUID,
     data: CostCenterUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update a cost center."""
@@ -247,25 +230,19 @@ async def update_cost_center(
     try:
         cost_center = await service.update(id, data, current_user.id)
         if not cost_center:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Cost center not found",
-            )
+            raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
         return service.to_response(cost_center)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/{id}/budget", response_model=CostCenterResponse)
+@router.put("/{id}/budget", response_model=CostCenterResponse, response_model_by_alias=True)
 async def update_cost_center_budget(
     id: UUID,
     annual_budget: Decimal,
     has_budget: bool = True,
     variance_threshold: Optional[Decimal] = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update budget settings for a cost center."""
@@ -274,51 +251,42 @@ async def update_cost_center_budget(
         id, annual_budget, has_budget, variance_threshold
     )
     if not cost_center:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cost center not found",
-        )
+        raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
     return service.to_response(cost_center)
 
 
-@router.post("/{id}/activate", response_model=CostCenterResponse)
+@router.post("/{id}/activate", response_model=CostCenterResponse, response_model_by_alias=True)
 async def activate_cost_center(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Activate a cost center."""
     service = CostCenterService(db)
     cost_center = await service.activate(id)
     if not cost_center:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cost center not found",
-        )
+        raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
     return service.to_response(cost_center)
 
 
-@router.post("/{id}/deactivate", response_model=CostCenterResponse)
+@router.post("/{id}/deactivate", response_model=CostCenterResponse, response_model_by_alias=True)
 async def deactivate_cost_center(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Deactivate a cost center."""
     service = CostCenterService(db)
     cost_center = await service.deactivate(id)
     if not cost_center:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Cost center not found",
-        )
+        raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
     return service.to_response(cost_center)
 
 
 @router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_cost_center(
     id: UUID,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a cost center."""
@@ -326,12 +294,6 @@ async def delete_cost_center(
     try:
         deleted = await service.delete(id)
         if not deleted:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Cost center not found",
-            )
+            raise NotFoundException(detail="Cost center not found", error_code="COST_CENTER_NOT_FOUND")
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")

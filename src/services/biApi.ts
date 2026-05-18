@@ -2,8 +2,7 @@
  * BI/Analytics API service
  */
 
-import api from './api';
-import {
+import type {
   Dashboard,
   DashboardCreate,
   DashboardUpdate,
@@ -29,6 +28,8 @@ import {
   DataSourceFetchResponse,
   BIModule,
 } from '../types/bi';
+
+import api from './api';
 
 // ==========================================
 // DASHBOARDS

@@ -5,13 +5,12 @@ from decimal import Decimal
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from app.schemas.base import CamelSchema
 
 
-class TrialBalanceItem(BaseModel):
+class TrialBalanceItem(CamelSchema):
     """Single item in trial balance report."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     account_id: UUID
     account_code: str
@@ -26,10 +25,9 @@ class TrialBalanceItem(BaseModel):
     closing_credit: Decimal = Decimal("0")
 
 
-class TrialBalanceResponse(BaseModel):
+class TrialBalanceResponse(CamelSchema):
     """Trial Balance report response."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     organization_id: UUID
     organization_name: str
@@ -48,10 +46,9 @@ class TrialBalanceResponse(BaseModel):
     generated_at: datetime
 
 
-class ProfitLossItem(BaseModel):
+class ProfitLossItem(CamelSchema):
     """Single item in P&L statement."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     account_group_code: str
     account_group_name: str
@@ -61,10 +58,9 @@ class ProfitLossItem(BaseModel):
     children: Optional[List["ProfitLossItem"]] = None
 
 
-class ProfitLossResponse(BaseModel):
+class ProfitLossResponse(CamelSchema):
     """Profit & Loss statement response."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     organization_id: UUID
     organization_name: str
@@ -82,10 +78,9 @@ class ProfitLossResponse(BaseModel):
     generated_at: datetime
 
 
-class BalanceSheetItem(BaseModel):
+class BalanceSheetItem(CamelSchema):
     """Single item in balance sheet."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     account_group_code: str
     account_group_name: str
@@ -95,10 +90,9 @@ class BalanceSheetItem(BaseModel):
     children: Optional[List["BalanceSheetItem"]] = None
 
 
-class BalanceSheetSection(BaseModel):
+class BalanceSheetSection(CamelSchema):
     """Section of balance sheet (Assets/Liabilities/Equity)."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     section_name: str
     items: List[BalanceSheetItem]
@@ -106,10 +100,9 @@ class BalanceSheetSection(BaseModel):
     previous_total: Optional[Decimal] = None
 
 
-class BalanceSheetResponse(BaseModel):
+class BalanceSheetResponse(CamelSchema):
     """Balance Sheet report response."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     organization_id: UUID
     organization_name: str
@@ -125,10 +118,9 @@ class BalanceSheetResponse(BaseModel):
     generated_at: datetime
 
 
-class AccountLedgerEntry(BaseModel):
+class AccountLedgerEntry(CamelSchema):
     """Single entry in account ledger."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     voucher_id: UUID
     voucher_number: str
@@ -141,10 +133,9 @@ class AccountLedgerEntry(BaseModel):
     balance_type: str  # "DR" or "CR"
 
 
-class AccountLedgerResponse(BaseModel):
+class AccountLedgerResponse(CamelSchema):
     """Account ledger response."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     account_id: UUID
     account_code: str
@@ -166,30 +157,27 @@ class AccountLedgerResponse(BaseModel):
 
 # Cash Flow Statement Schemas
 
-class CashFlowItem(BaseModel):
+class CashFlowItem(CamelSchema):
     """Single item in cash flow section."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     label: str
     amount: Decimal
     is_subtotal: bool = False
 
 
-class CashFlowSection(BaseModel):
+class CashFlowSection(CamelSchema):
     """Section of cash flow statement (Operating/Investing/Financing)."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     section_name: str
     items: List[CashFlowItem]
     net_cash_flow: Decimal
 
 
-class CashFlowStatementResponse(BaseModel):
+class CashFlowStatementResponse(CamelSchema):
     """Cash Flow Statement response (Indirect Method)."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     organization_id: UUID
     organization_name: str
@@ -217,10 +205,9 @@ class CashFlowStatementResponse(BaseModel):
 
 # Day Book / Journal Register Schemas
 
-class DayBookEntry(BaseModel):
+class DayBookEntry(CamelSchema):
     """Single voucher entry in day book."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     voucher_id: UUID
     voucher_number: str
@@ -234,10 +221,9 @@ class DayBookEntry(BaseModel):
     status: str
 
 
-class DayBookResponse(BaseModel):
+class DayBookResponse(CamelSchema):
     """Day Book / Journal Register response."""
 
-    model_config = ConfigDict(from_attributes=True)
 
     organization_id: UUID
     organization_name: str

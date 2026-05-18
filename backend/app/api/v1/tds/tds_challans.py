@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.tds.tds_challan import ChallanStatus
 from app.services.tds.tds_challan_service import TDSChallanService
@@ -128,9 +128,8 @@ class CancelRequest(BaseModel):
     reason: str
 
 
-@router.get("", response_model=PaginatedResponse[TDSChallanListResponse])
+@router.get("", response_model=PaginatedResponse[TDSChallanListResponse], response_model_by_alias=True)
 async def list_challans(
-    organization_id: UUID = Query(...),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     status: Optional[ChallanStatus] = Query(None),
@@ -139,13 +138,13 @@ async def list_challans(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS challans for an organization."""
     service = TDSChallanService(db)
     skip = (page - 1) * page_size
     challans, total = await service.get_by_organization(
-        organization_id,
+        current_user.organization_id,
         from_date,
         to_date,
         status,
@@ -158,35 +157,33 @@ async def list_challans(
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/summary", response_model=ChallanSummary)
+@router.get("/summary", response_model=ChallanSummary, response_model_by_alias=True)
 async def get_summary(
-    organization_id: UUID = Query(...),
     financial_year_id: Optional[UUID] = Query(None),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get challan summary statistics."""
     service = TDSChallanService(db)
-    return await service.get_summary(organization_id, financial_year_id)
+    return await service.get_summary(current_user.organization_id, financial_year_id)
 
 
-@router.get("/due", response_model=List[TDSChallanListResponse])
+@router.get("/due", response_model=List[TDSChallanListResponse], response_model_by_alias=True)
 async def get_due_challans(
-    organization_id: UUID = Query(...),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get challans due for payment."""
     service = TDSChallanService(db)
-    challans = await service.get_due_for_payment(organization_id)
+    challans = await service.get_due_for_payment(current_user.organization_id)
     return [_to_list_response(c) for c in challans]
 
 
-@router.post("", response_model=TDSChallanResponse)
+@router.post("", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def create_challan(
     data: TDSChallanCreate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new TDS challan."""
     service = TDSChallanService(db)
@@ -194,11 +191,11 @@ async def create_challan(
     return _to_response(challan)
 
 
-@router.post("/generate", response_model=List[TDSChallanResponse])
+@router.post("/generate", response_model=List[TDSChallanResponse], response_model_by_alias=True)
 async def generate_challans(
     data: ChallanAggregationRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Auto-generate challans for a period.
 
@@ -209,12 +206,12 @@ async def generate_challans(
     return [_to_response(c) for c in challans]
 
 
-@router.get("/{challan_id}", response_model=TDSChallanResponse)
+@router.get("/{challan_id}", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def get_challan(
     challan_id: UUID,
     include_entries: bool = Query(False),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS challan by ID."""
     service = TDSChallanService(db)
@@ -225,12 +222,12 @@ async def get_challan(
     return _to_response(challan, include_entries)
 
 
-@router.put("/{challan_id}", response_model=TDSChallanResponse)
+@router.put("/{challan_id}", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def update_challan(
     challan_id: UUID,
     data: TDSChallanUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a TDS challan."""
     service = TDSChallanService(db)
@@ -238,12 +235,12 @@ async def update_challan(
     return _to_response(challan)
 
 
-@router.post("/{challan_id}/entries", response_model=TDSChallanResponse)
+@router.post("/{challan_id}/entries", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def add_entries(
     challan_id: UUID,
     data: AddEntriesToChallanRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add TDS entries to a challan."""
     service = TDSChallanService(db)
@@ -251,12 +248,12 @@ async def add_entries(
     return _to_response(challan, include_entries=True)
 
 
-@router.delete("/{challan_id}/entries", response_model=TDSChallanResponse)
+@router.delete("/{challan_id}/entries", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def remove_entries(
     challan_id: UUID,
     data: RemoveEntriesFromChallanRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Remove TDS entries from a challan."""
     service = TDSChallanService(db)
@@ -264,11 +261,11 @@ async def remove_entries(
     return _to_response(challan, include_entries=True)
 
 
-@router.post("/{challan_id}/finalize", response_model=TDSChallanResponse)
+@router.post("/{challan_id}/finalize", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def finalize_challan(
     challan_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Finalize a challan (move from DRAFT to PENDING)."""
     service = TDSChallanService(db)
@@ -276,12 +273,12 @@ async def finalize_challan(
     return _to_response(challan)
 
 
-@router.post("/{challan_id}/payment", response_model=TDSChallanResponse)
+@router.post("/{challan_id}/payment", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def record_payment(
     challan_id: UUID,
     data: TDSChallanPaymentUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Record payment details for a challan."""
     service = TDSChallanService(db)
@@ -289,12 +286,12 @@ async def record_payment(
     return _to_response(challan)
 
 
-@router.post("/{challan_id}/verify-oltas", response_model=TDSChallanResponse)
+@router.post("/{challan_id}/verify-oltas", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def verify_oltas(
     challan_id: UUID,
     data: TDSChallanOLTASUpdate,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update OLTAS verification status."""
     service = TDSChallanService(db)
@@ -302,12 +299,12 @@ async def verify_oltas(
     return _to_response(challan)
 
 
-@router.post("/{challan_id}/cancel", response_model=TDSChallanResponse)
+@router.post("/{challan_id}/cancel", response_model=TDSChallanResponse, response_model_by_alias=True)
 async def cancel_challan(
     challan_id: UUID,
     data: CancelRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel a challan."""
     service = TDSChallanService(db)
@@ -319,7 +316,7 @@ async def cancel_challan(
 async def delete_challan(
     challan_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete a TDS challan."""
     service = TDSChallanService(db)

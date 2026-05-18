@@ -2,13 +2,22 @@
  * Compliance Item List Page
  */
 
+import { Plus, Edit, Trash2, Search } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Edit, Trash2, Search } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -17,18 +26,10 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import complianceService, { ComplianceItem } from '@/services/complianceService';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type { ComplianceItem } from '@/services/complianceService';
+import complianceService from '@/services/complianceService';
 
 const REGULATORY_BODIES = [
   { value: 'RBI', label: 'RBI' },
@@ -59,6 +60,8 @@ const PRIORITY_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 
   MEDIUM: 'default',
   LOW: 'outline',
 };
+
+const ALL_FILTER_VALUE = '__ALL__';
 
 export default function ComplianceItemList() {
   const navigate = useNavigate();
@@ -121,11 +124,11 @@ export default function ComplianceItemList() {
   const filteredItems = items.filter(
     (item) =>
       item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.item_code.toLowerCase().includes(searchTerm.toLowerCase())
+      item.item_code.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Compliance Items"
         subtitle="Manage compliance requirements and configurations"
@@ -139,9 +142,9 @@ export default function ComplianceItemList() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <div className="flex flex-col justify-between gap-4 md:flex-row">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search items..."
                 value={searchTerm}
@@ -150,12 +153,15 @@ export default function ComplianceItemList() {
               />
             </div>
             <div className="flex gap-2">
-              <Select value={bodyFilter} onValueChange={setBodyFilter}>
+              <Select
+                value={bodyFilter || ALL_FILTER_VALUE}
+                onValueChange={(value) => setBodyFilter(value === ALL_FILTER_VALUE ? '' : value)}
+              >
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="All Bodies" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Bodies</SelectItem>
+                  <SelectItem value={ALL_FILTER_VALUE}>All Bodies</SelectItem>
                   {REGULATORY_BODIES.map((body) => (
                     <SelectItem key={body.value} value={body.value}>
                       {body.label}
@@ -163,12 +169,17 @@ export default function ComplianceItemList() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={frequencyFilter} onValueChange={setFrequencyFilter}>
+              <Select
+                value={frequencyFilter || ALL_FILTER_VALUE}
+                onValueChange={(value) =>
+                  setFrequencyFilter(value === ALL_FILTER_VALUE ? '' : value)
+                }
+              >
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="All Frequencies" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Frequencies</SelectItem>
+                  <SelectItem value={ALL_FILTER_VALUE}>All Frequencies</SelectItem>
                   {FREQUENCIES.map((freq) => (
                     <SelectItem key={freq.value} value={freq.value}>
                       {freq.label}
@@ -196,13 +207,13 @@ export default function ComplianceItemList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={8} className="py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8">
+                  <TableCell colSpan={8} className="py-8 text-center">
                     No items found
                   </TableCell>
                 </TableRow>
@@ -216,12 +227,12 @@ export default function ComplianceItemList() {
                     </TableCell>
                     <TableCell>{item.frequency}</TableCell>
                     <TableCell>
-                      {item.due_day ? `${item.due_day}${item.due_month ? ` (${item.due_month})` : ''}` : '-'}
+                      {item.due_day
+                        ? `${item.due_day}${item.due_month ? ` (${item.due_month})` : ''}`
+                        : '-'}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={PRIORITY_COLORS[item.priority]}>
-                        {item.priority}
-                      </Badge>
+                      <Badge variant={PRIORITY_COLORS[item.priority]}>{item.priority}</Badge>
                     </TableCell>
                     <TableCell>{item.form_name || '-'}</TableCell>
                     <TableCell className="text-right">
@@ -229,17 +240,11 @@ export default function ComplianceItemList() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() =>
-                            navigate(`/admin/compliance/items/${item.id}/edit`)
-                          }
+                          onClick={() => navigate(`/admin/compliance/items/${item.id}/edit`)}
                         >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleDelete(item.id)}
-                        >
+                        <Button variant="ghost" size="icon" onClick={() => handleDelete(item.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       </div>

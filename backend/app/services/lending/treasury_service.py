@@ -2,58 +2,62 @@
 
 from datetime import date, datetime, timedelta
 from decimal import Decimal
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BadRequestException, NotFoundException
+from app.models.lending.enums import InterestType, LoanAccountStatus
+from app.models.lending.loan_account import LoanAccount
 from app.models.lending.treasury import (
-    Lender,
-    Borrowing,
-    BorrowingTranche,
-    BorrowingSchedule,
-    BorrowingPayment,
-    BorrowingCovenant,
-    ALMPosition,
-    ALMAsset,
     ALMLiability,
-    IRSAnalysis,
+    ALMPosition,
+    Borrowing,
+    BorrowingCovenant,
+    BorrowingPayment,
+    BorrowingSchedule,
+    BorrowingTranche,
     ExposureLimit,
-    ExposureTracking,
+    IRSAnalysis,
+    Lender,
 )
 from app.repositories.lending.treasury_repo import (
-    LenderRepository,
-    BorrowingRepository,
-    BorrowingTrancheRepository,
-    BorrowingScheduleRepository,
-    BorrowingPaymentRepository,
-    BorrowingCovenantRepository,
-    ALMPositionRepository,
     ALMAssetRepository,
     ALMLiabilityRepository,
-    IRSAnalysisRepository,
+    ALMPositionRepository,
+    BorrowingCovenantRepository,
+    BorrowingPaymentRepository,
+    BorrowingRepository,
+    BorrowingScheduleRepository,
+    BorrowingTrancheRepository,
     ExposureLimitRepository,
     ExposureTrackingRepository,
+    IRSAnalysisRepository,
+    LenderRepository,
 )
 from app.schemas.lending.treasury import (
-    LenderCreate,
-    LenderUpdate,
-    BorrowingCreate,
-    BorrowingUpdate,
-    BorrowingTrancheCreate,
-    BorrowingTrancheDisbursement,
-    BorrowingPaymentCreate,
+    ALMGapAnalysis,
+    ALMPositionGenerate,
+    ALMSummary,
     BorrowingCovenantCreate,
     BorrowingCovenantUpdate,
-    ALMPositionGenerate,
-    IRSAnalysisGenerate,
+    BorrowingCreate,
+    BorrowingPaymentCreate,
+    BorrowingSummary,
+    BorrowingTrancheCreate,
+    BorrowingTrancheDisbursement,
+    BorrowingUpdate,
     ExposureLimitCreate,
     ExposureLimitUpdate,
-    BorrowingSummary,
-    ALMSummary,
-    ALMGapAnalysis,
     ExposureSummary,
+    IRSAnalysisGenerate,
+    IRSPreviewResponse,
+    IRSPreviewSummary,
+    IRSShockBucket,
+    LenderCreate,
+    LenderUpdate,
     TreasurySummary,
 )
 
@@ -98,7 +102,7 @@ class TreasuryService:
         self,
         organization_id: UUID,
         data: LenderCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> Lender:
         """Create a new lender."""
         lender_code = await self.lender_repo.generate_lender_code(organization_id)
@@ -120,7 +124,7 @@ class TreasuryService:
         self,
         lender_id: UUID,
         data: LenderUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> Lender:
         """Update a lender."""
         lender = await self.lender_repo.get(lender_id)
@@ -145,15 +149,13 @@ class TreasuryService:
     async def list_lenders(
         self,
         organization_id: UUID,
-        lender_type: Optional[str] = None,
+        lender_type: str | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> Tuple[List[Lender], int]:
+    ) -> tuple[list[Lender], int]:
         """List lenders with optional filters."""
         if lender_type:
-            return await self.lender_repo.get_by_type(
-                organization_id, lender_type, skip, limit
-            )
+            return await self.lender_repo.get_by_type(organization_id, lender_type, skip, limit)
         return await self.lender_repo.get_active_lenders(organization_id, skip, limit)
 
     # =========================================================================
@@ -164,7 +166,7 @@ class TreasuryService:
         self,
         organization_id: UUID,
         data: BorrowingCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> Borrowing:
         """Create a new borrowing facility."""
         # Validate lender exists
@@ -193,7 +195,7 @@ class TreasuryService:
         self,
         borrowing_id: UUID,
         data: BorrowingUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> Borrowing:
         """Update a borrowing."""
         borrowing = await self.borrowing_repo.get(borrowing_id)
@@ -225,18 +227,18 @@ class TreasuryService:
     async def list_borrowings(
         self,
         organization_id: UUID,
-        lender_id: Optional[UUID] = None,
-        status: Optional[str] = None,
+        lender_id: UUID | None = None,
+        status: str | None = None,
         skip: int = 0,
         limit: int = 100,
-    ) -> Tuple[List[Borrowing], int]:
-        """List borrowings with optional filters."""
-        if lender_id:
-            return await self.borrowing_repo.get_by_lender(
-                organization_id, lender_id, skip, limit
-            )
-        return await self.borrowing_repo.get_active_borrowings(
-            organization_id, skip, limit
+    ) -> tuple[list[Borrowing], int]:
+        """List borrowings with optional filters.
+
+        Returns ALL borrowings (regardless of status) when no status filter
+        is given. Use ``status="ACTIVE"`` etc. to narrow.
+        """
+        return await self.borrowing_repo.list_for_org(
+            organization_id, lender_id, status, skip, limit
         )
 
     # =========================================================================
@@ -246,7 +248,7 @@ class TreasuryService:
     async def create_tranche(
         self,
         data: BorrowingTrancheCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> BorrowingTranche:
         """Create a drawdown request."""
         borrowing = await self.borrowing_repo.get(data.borrowing_id)
@@ -281,7 +283,7 @@ class TreasuryService:
         self,
         tranche_id: UUID,
         approved_by: UUID,
-        remarks: Optional[str] = None,
+        remarks: str | None = None,
     ) -> BorrowingTranche:
         """Approve a drawdown request."""
         tranche = await self.tranche_repo.get(tranche_id)
@@ -303,7 +305,7 @@ class TreasuryService:
         self,
         tranche_id: UUID,
         data: BorrowingTrancheDisbursement,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> BorrowingTranche:
         """Process tranche disbursement."""
         tranche = await self.tranche_repo.get(tranche_id)
@@ -346,7 +348,7 @@ class TreasuryService:
     async def record_payment(
         self,
         data: BorrowingPaymentCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> BorrowingPayment:
         """Record a borrowing payment."""
         borrowing = await self.borrowing_repo.get(data.borrowing_id)
@@ -398,8 +400,10 @@ class TreasuryService:
                 schedule.interest_paid += data.interest_amount
                 schedule.total_paid += total_amount
                 schedule.paid_date = data.payment_date
-                if (schedule.principal_paid >= schedule.principal_due and
-                        schedule.interest_paid >= schedule.interest_due):
+                if (
+                    schedule.principal_paid >= schedule.principal_due
+                    and schedule.interest_paid >= schedule.interest_due
+                ):
                     schedule.status = "PAID"
                 elif schedule.total_paid > 0:
                     schedule.status = "PARTIALLY_PAID"
@@ -412,7 +416,7 @@ class TreasuryService:
         borrowing_id: UUID,
         skip: int = 0,
         limit: int = 100,
-    ) -> Tuple[List[BorrowingPayment], int]:
+    ) -> tuple[list[BorrowingPayment], int]:
         """List payments for a borrowing."""
         return await self.payment_repo.get_by_borrowing(borrowing_id, skip, limit)
 
@@ -423,8 +427,8 @@ class TreasuryService:
     async def generate_schedule(
         self,
         borrowing_id: UUID,
-        created_by: Optional[UUID] = None,
-    ) -> List[BorrowingSchedule]:
+        created_by: UUID | None = None,
+    ) -> list[BorrowingSchedule]:
         """Generate repayment schedule for a borrowing."""
         borrowing = await self.borrowing_repo.get(borrowing_id)
         if not borrowing:
@@ -479,7 +483,7 @@ class TreasuryService:
         borrowing_id: UUID,
         skip: int = 0,
         limit: int = 100,
-    ) -> Tuple[List[BorrowingSchedule], int]:
+    ) -> tuple[list[BorrowingSchedule], int]:
         """Get repayment schedule for a borrowing."""
         return await self.schedule_repo.get_by_borrowing(borrowing_id, skip, limit)
 
@@ -490,7 +494,7 @@ class TreasuryService:
     async def create_covenant(
         self,
         data: BorrowingCovenantCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> BorrowingCovenant:
         """Create a borrowing covenant."""
         borrowing = await self.borrowing_repo.get(data.borrowing_id)
@@ -510,7 +514,7 @@ class TreasuryService:
         self,
         covenant_id: UUID,
         data: BorrowingCovenantUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> BorrowingCovenant:
         """Update a covenant."""
         covenant = await self.covenant_repo.get(covenant_id)
@@ -529,7 +533,7 @@ class TreasuryService:
         self,
         covenant_id: UUID,
         current_value: Decimal,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> BorrowingCovenant:
         """Test a covenant and update status."""
         covenant = await self.covenant_repo.get(covenant_id)
@@ -547,8 +551,7 @@ class TreasuryService:
             is_compliant = current_value <= covenant.threshold_value
         elif covenant.threshold_type == "RANGE":
             is_compliant = (
-                current_value >= covenant.threshold_min and
-                current_value <= covenant.threshold_max
+                current_value >= covenant.threshold_min and current_value <= covenant.threshold_max
             )
 
         covenant.status = "COMPLIANT" if is_compliant else "NON_COMPLIANT"
@@ -565,13 +568,11 @@ class TreasuryService:
         self,
         organization_id: UUID,
         data: ALMPositionGenerate,
-        generated_by: Optional[UUID] = None,
+        generated_by: UUID | None = None,
     ) -> ALMPosition:
         """Generate ALM position snapshot."""
         # Check if position already exists
-        existing = await self.alm_position_repo.get_by_date(
-            organization_id, data.position_date
-        )
+        existing = await self.alm_position_repo.get_by_date(organization_id, data.position_date)
         if existing:
             # Delete existing assets and liabilities for regeneration
             await self.alm_asset_repo.delete_by_position(existing.position_id)
@@ -595,9 +596,7 @@ class TreasuryService:
         bucket_analysis = {}
 
         # Generate liabilities from borrowings
-        borrowings, _ = await self.borrowing_repo.get_active_borrowings(
-            organization_id, 0, 1000
-        )
+        borrowings, _ = await self.borrowing_repo.get_active_borrowings(organization_id, 0, 1000)
 
         for borrowing in borrowings:
             days_to_maturity = (borrowing.maturity_date - data.position_date).days
@@ -608,8 +607,16 @@ class TreasuryService:
                 liability_type="BORROWINGS_BANK",
                 alm_bucket=bucket,
                 book_value=borrowing.principal_outstanding,
-                rate_sensitive_amount=borrowing.principal_outstanding if borrowing.rate_type == "FLOATING" else Decimal("0"),
-                non_rate_sensitive_amount=borrowing.principal_outstanding if borrowing.rate_type == "FIXED" else Decimal("0"),
+                rate_sensitive_amount=(
+                    borrowing.principal_outstanding
+                    if borrowing.rate_type == "FLOATING"
+                    else Decimal("0")
+                ),
+                non_rate_sensitive_amount=(
+                    borrowing.principal_outstanding
+                    if borrowing.rate_type == "FIXED"
+                    else Decimal("0")
+                ),
                 weighted_avg_rate=borrowing.effective_rate,
                 weighted_avg_maturity_days=days_to_maturity,
                 source_type="BORROWING",
@@ -628,8 +635,7 @@ class TreasuryService:
         for bucket in self.ALM_BUCKETS.keys():
             if bucket in bucket_analysis:
                 bucket_analysis[bucket]["gap"] = (
-                    bucket_analysis[bucket]["assets"] -
-                    bucket_analysis[bucket]["liabilities"]
+                    bucket_analysis[bucket]["assets"] - bucket_analysis[bucket]["liabilities"]
                 )
                 cumulative_gap += Decimal(str(bucket_analysis[bucket]["gap"]))
                 bucket_analysis[bucket]["cumulative_gap"] = float(cumulative_gap)
@@ -660,9 +666,7 @@ class TreasuryService:
             raise NotFoundException("ALM position not found")
         return position
 
-    async def get_latest_alm_position(
-        self, organization_id: UUID
-    ) -> Optional[ALMPosition]:
+    async def get_latest_alm_position(self, organization_id: UUID) -> ALMPosition | None:
         """Get latest ALM position."""
         return await self.alm_position_repo.get_latest(organization_id)
 
@@ -674,21 +678,17 @@ class TreasuryService:
         self,
         organization_id: UUID,
         data: IRSAnalysisGenerate,
-        generated_by: Optional[UUID] = None,
+        generated_by: UUID | None = None,
     ) -> IRSAnalysis:
         """Generate Interest Rate Sensitivity analysis."""
         # Get latest ALM position
-        position = await self.alm_position_repo.get_by_date(
-            organization_id, data.analysis_date
-        )
+        position = await self.alm_position_repo.get_by_date(organization_id, data.analysis_date)
 
         # Calculate rate sensitive amounts (simplified)
         rsa = Decimal("0")  # Rate Sensitive Assets
         rsl = Decimal("0")  # Rate Sensitive Liabilities
 
-        borrowings, _ = await self.borrowing_repo.get_active_borrowings(
-            organization_id, 0, 1000
-        )
+        borrowings, _ = await self.borrowing_repo.get_active_borrowings(organization_id, 0, 1000)
 
         for borrowing in borrowings:
             if borrowing.rate_type in ["FLOATING", "MCLR_LINKED", "REPO_LINKED"]:
@@ -722,6 +722,100 @@ class TreasuryService:
         await self.session.flush()
         return analysis
 
+    # Default shock buckets for the dashboard preview (basis points).
+    _DEFAULT_IRS_SHOCK_BUCKETS_BPS = (-200, -100, -50, 50, 100, 200)
+
+    async def preview_irs_analysis(
+        self,
+        organization_id: UUID,
+        as_of_date: date | None = None,
+        shock_bps_buckets: list[int] | None = None,
+    ) -> IRSPreviewResponse:
+        """Compute Interest Rate Sensitivity (IRS) preview without persisting.
+
+        For each rate-shock bucket (basis points), returns the projected impact
+        on Net Interest Income (NII) given current rate-sensitive assets (RSA)
+        and rate-sensitive liabilities (RSL). Used by the IRS dashboard view —
+        no rows are written to `trs_irs_analysis`.
+
+        - RSA = principal_outstanding of active loans with InterestType.FLOATING.
+        - RSL = principal_outstanding of active borrowings whose rate_type is
+          FLOATING / MCLR_LINKED / REPO_LINKED.
+        - Gap = RSA - RSL.
+        - NII impact = Gap * (shock_bps / 10_000).
+        - NII impact % = NII impact / RSL * 100 (0 if RSL == 0).
+        """
+        analysis_date = as_of_date or date.today()
+        buckets_bps = list(shock_bps_buckets or self._DEFAULT_IRS_SHOCK_BUCKETS_BPS)
+
+        # --- Rate-sensitive assets: active FLOATING loan accounts --------------
+        rsa_query = select(func.coalesce(func.sum(LoanAccount.principal_outstanding), 0)).where(
+            LoanAccount.organization_id == organization_id,
+            LoanAccount.interest_type == InterestType.FLOATING,
+            LoanAccount.status == LoanAccountStatus.ACTIVE,
+            LoanAccount.is_active == True,  # noqa: E712
+        )
+        rsa_result = await self.session.execute(rsa_query)
+        rsa = Decimal(str(rsa_result.scalar() or 0))
+
+        # Total assets across all active loans (for gap-to-total-assets ratio).
+        total_assets_query = select(
+            func.coalesce(func.sum(LoanAccount.principal_outstanding), 0)
+        ).where(
+            LoanAccount.organization_id == organization_id,
+            LoanAccount.status == LoanAccountStatus.ACTIVE,
+            LoanAccount.is_active == True,  # noqa: E712
+        )
+        total_assets_result = await self.session.execute(total_assets_query)
+        total_assets = Decimal(str(total_assets_result.scalar() or 0))
+
+        # --- Rate-sensitive liabilities: floating-rate borrowings --------------
+        borrowings, _ = await self.borrowing_repo.get_active_borrowings(organization_id, 0, 1000)
+        rsl = Decimal("0")
+        for borrowing in borrowings:
+            if borrowing.rate_type in ("FLOATING", "MCLR_LINKED", "REPO_LINKED"):
+                rsl += borrowing.principal_outstanding
+
+        gap = rsa - rsl
+
+        # --- Build per-shock impact rows --------------------------------------
+        shock_buckets: list[IRSShockBucket] = []
+        for shock_bps in buckets_bps:
+            shock_rate = Decimal(str(shock_bps)) / Decimal("10000")
+            nii_impact = (gap * shock_rate).quantize(Decimal("0.01"))
+            nii_impact_percent = Decimal("0")
+            if rsl > 0:
+                nii_impact_percent = ((nii_impact / rsl) * 100).quantize(Decimal("0.0001"))
+            shock_buckets.append(
+                IRSShockBucket(
+                    shock_bps=shock_bps,
+                    rsa=rsa,
+                    rsl=rsl,
+                    gap=gap,
+                    nii_impact=nii_impact,
+                    nii_impact_percent=nii_impact_percent,
+                )
+            )
+
+        # --- Summary block -----------------------------------------------------
+        gap_to_total_assets_percent = Decimal("0")
+        if total_assets > 0:
+            gap_to_total_assets_percent = ((gap / total_assets) * 100).quantize(Decimal("0.0001"))
+
+        summary = IRSPreviewSummary(
+            rsa=rsa,
+            rsl=rsl,
+            gap=gap,
+            total_assets=total_assets,
+            gap_to_total_assets_percent=gap_to_total_assets_percent,
+        )
+
+        return IRSPreviewResponse(
+            as_of_date=analysis_date,
+            summary=summary,
+            shocks=shock_buckets,
+        )
+
     # =========================================================================
     # Exposure Limit Operations
     # =========================================================================
@@ -730,7 +824,7 @@ class TreasuryService:
         self,
         organization_id: UUID,
         data: ExposureLimitCreate,
-        created_by: Optional[UUID] = None,
+        created_by: UUID | None = None,
     ) -> ExposureLimit:
         """Create an exposure limit."""
         # Check if limit already exists
@@ -756,7 +850,7 @@ class TreasuryService:
         self,
         limit_id: UUID,
         data: ExposureLimitUpdate,
-        updated_by: Optional[UUID] = None,
+        updated_by: UUID | None = None,
     ) -> ExposureLimit:
         """Update an exposure limit."""
         limit = await self.exposure_limit_repo.get(limit_id)
@@ -777,7 +871,7 @@ class TreasuryService:
         limit_type: str,
         limit_key: str,
         additional_exposure: Decimal,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Check if additional exposure would breach limit."""
         limit = await self.exposure_limit_repo.get_by_type_key(
             organization_id, limit_type, limit_key
@@ -831,9 +925,7 @@ class TreasuryService:
     # Summary Operations
     # =========================================================================
 
-    async def get_borrowing_summary(
-        self, organization_id: UUID
-    ) -> BorrowingSummary:
+    async def get_borrowing_summary(self, organization_id: UUID) -> BorrowingSummary:
         """Get borrowing summary."""
         borrowings, count = await self.borrowing_repo.get_active_borrowings(
             organization_id, 0, 1000
@@ -872,9 +964,7 @@ class TreasuryService:
             upcoming_maturities_90d=len(maturing),
         )
 
-    async def get_alm_summary(
-        self, organization_id: UUID
-    ) -> Optional[ALMSummary]:
+    async def get_alm_summary(self, organization_id: UUID) -> ALMSummary | None:
         """Get ALM summary."""
         position = await self.alm_position_repo.get_latest(organization_id)
         if not position:
@@ -883,14 +973,16 @@ class TreasuryService:
         gap_analysis = []
         if position.bucket_analysis:
             for bucket, data in position.bucket_analysis.items():
-                gap_analysis.append(ALMGapAnalysis(
-                    bucket=bucket,
-                    assets=Decimal(str(data.get("assets", 0))),
-                    liabilities=Decimal(str(data.get("liabilities", 0))),
-                    gap=Decimal(str(data.get("gap", 0))),
-                    cumulative_gap=Decimal(str(data.get("cumulative_gap", 0))),
-                    gap_percent=Decimal("0"),  # Calculate if needed
-                ))
+                gap_analysis.append(
+                    ALMGapAnalysis(
+                        bucket=bucket,
+                        assets=Decimal(str(data.get("assets", 0))),
+                        liabilities=Decimal(str(data.get("liabilities", 0))),
+                        gap=Decimal(str(data.get("gap", 0))),
+                        cumulative_gap=Decimal(str(data.get("cumulative_gap", 0))),
+                        gap_percent=Decimal("0"),  # Calculate if needed
+                    )
+                )
 
         return ALMSummary(
             position_date=position.position_date,
@@ -902,13 +994,20 @@ class TreasuryService:
             gap_analysis=gap_analysis,
         )
 
-    async def get_exposure_summary(
-        self, organization_id: UUID
-    ) -> ExposureSummary:
+    async def get_exposure_summary(self, organization_id: UUID) -> ExposureSummary:
         """Get exposure summary."""
-        limits, total = await self.exposure_limit_repo.get_all(
-            organization_id, skip=0, limit=1000
+        # Org-scoped fetch — `get_all` on the base is unscoped, so we query
+        # directly via the same session.
+        from sqlalchemy import select as _select
+
+        result = await self.exposure_limit_repo.session.execute(
+            _select(ExposureLimit).where(
+                ExposureLimit.organization_id == organization_id,
+                ExposureLimit.is_active == True,  # noqa: E712
+            )
         )
+        limits = list(result.scalars().all())
+        total = len(limits)
 
         within_limit = sum(1 for l in limits if l.status == "WITHIN_LIMIT")
         near_limit = sum(1 for l in limits if l.status == "NEAR_LIMIT")
@@ -916,9 +1015,7 @@ class TreasuryService:
         total_exposure = sum(l.current_exposure for l in limits)
 
         # Get top exposures
-        top_exposures = sorted(
-            limits, key=lambda l: l.current_exposure, reverse=True
-        )[:5]
+        top_exposures = sorted(limits, key=lambda l: l.current_exposure, reverse=True)[:5]
 
         return ExposureSummary(
             total_limits=total,
@@ -937,9 +1034,7 @@ class TreasuryService:
             ],
         )
 
-    async def get_treasury_summary(
-        self, organization_id: UUID
-    ) -> TreasurySummary:
+    async def get_treasury_summary(self, organization_id: UUID) -> TreasurySummary:
         """Get complete treasury summary."""
         borrowing_summary = await self.get_borrowing_summary(organization_id)
         alm_summary = await self.get_alm_summary(organization_id)

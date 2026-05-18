@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 # from app.core.permissions import RequirePermissions
 from app.models.auth.user import User
 from app.services.ap_ar.aging_report_service import AgingReportService
@@ -23,7 +23,7 @@ async def get_ap_aging_summary(
     organization_id: UUID,
     as_of_date: Optional[date] = None,
     vendor_id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db)) -> dict:
+    db: AsyncSession = Depends(get_db_with_tenant)) -> dict:
     """Get AP (Accounts Payable) aging summary by vendor."""
     if not as_of_date:
         as_of_date = date.today()
@@ -43,7 +43,7 @@ async def get_ar_aging_summary(
     organization_id: UUID,
     as_of_date: Optional[date] = None,
     customer_id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_db)) -> dict:
+    db: AsyncSession = Depends(get_db_with_tenant)) -> dict:
     """Get AR (Accounts Receivable) aging summary by customer."""
     if not as_of_date:
         as_of_date = date.today()
@@ -63,7 +63,7 @@ async def get_ap_aging_detail(
     vendor_id: UUID,
     organization_id: UUID,
     as_of_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db)) -> dict:
+    db: AsyncSession = Depends(get_db_with_tenant)) -> dict:
     """Get detailed AP aging for a specific vendor."""
     if not as_of_date:
         as_of_date = date.today()
@@ -83,7 +83,7 @@ async def get_ar_aging_detail(
     customer_id: UUID,
     organization_id: UUID,
     as_of_date: Optional[date] = None,
-    db: AsyncSession = Depends(get_db)) -> dict:
+    db: AsyncSession = Depends(get_db_with_tenant)) -> dict:
     """Get detailed AR aging for a specific customer."""
     if not as_of_date:
         as_of_date = date.today()

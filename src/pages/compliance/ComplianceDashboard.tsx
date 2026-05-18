@@ -2,8 +2,6 @@
  * Compliance Dashboard
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Calendar,
   AlertTriangle,
@@ -14,10 +12,13 @@ import {
   Settings,
   RefreshCw,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -33,12 +34,14 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import complianceService, {
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type {
   ComplianceSummary,
   UpcomingCompliance,
   ComplianceCalendarItem,
 } from '@/services/complianceService';
-import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import complianceService from '@/services/complianceService';
+import { getErrorMessage } from "@/lib/errorMessage";
 
 const REGULATORY_BODY_COLORS: Record<string, string> = {
   RBI: 'bg-blue-100 text-blue-800',
@@ -117,10 +120,10 @@ export default function ComplianceDashboard() {
         description: result.message,
       });
       loadData();
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: 'Error',
-        description: error.response?.data?.detail || 'Failed to generate instances',
+        description: getErrorMessage(error, 'Failed to generate instances'),
         variant: 'destructive',
       });
     }
@@ -139,7 +142,7 @@ export default function ComplianceDashboard() {
         <div>
           <p className="font-medium">{item.item_name}</p>
           <p className="text-sm text-muted-foreground">
-            Due: {new Date(item.due_date).toLocaleDateString()}
+            Due: <DateDisplay date={item.due_date} />
           </p>
         </div>
       </div>

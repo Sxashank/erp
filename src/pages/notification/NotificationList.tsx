@@ -2,8 +2,6 @@
  * Notification List Page
  */
 
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Bell,
   BellOff,
@@ -17,10 +15,12 @@ import {
   Clock,
   RefreshCw,
 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Card,
   CardContent,
@@ -28,13 +28,6 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
@@ -43,9 +36,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { notificationApi } from '@/services/notificationApi';
-import { Notification, NotificationCategory } from '@/types/notification';
+import type { Notification, NotificationCategory } from '@/types/notification';
 
 const CATEGORY_OPTIONS: { value: NotificationCategory | 'all'; label: string }[] = [
   { value: 'all', label: 'All Categories' },

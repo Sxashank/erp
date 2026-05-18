@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Receipt,
   Plus,
@@ -13,19 +11,20 @@ import {
   Upload,
   Filter,
 } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
 import { PageHeader } from '@/components/common/PageHeader';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
@@ -34,103 +33,50 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { formatCurrency, formatDate } from '@/lib/utils';
 
-// Mock data
+// Legacy root-level receipt list. Canonical wired view lives at
+// /pages/lending/lms/ReceiptList.tsx and consumes /lending/receipts via
+// useReceipts. This page renders empty until migrated to the same hook.
 const receiptSummary = {
-  total_receipts: 1245,
-  total_amount: 125000000,
-  today_receipts: 45,
-  today_amount: 5600000,
-  pending_allocation: 23,
-  pending_amount: 2300000,
+  total_receipts: 0,
+  total_amount: 0,
+  today_receipts: 0,
+  today_amount: 0,
+  pending_allocation: 0,
+  pending_amount: 0,
 };
 
-const receipts = [
-  {
-    id: '1',
-    receipt_number: 'RCP/2025/00245',
-    loan_account: 'SMFC/LA/2024/00125',
-    entity: 'ABC Trading Co.',
-    receipt_date: '2025-01-15',
-    value_date: '2025-01-15',
-    amount: 450000,
-    receipt_type: 'REGULAR',
-    receipt_mode: 'NEFT',
-    instrument_number: 'UTR123456789',
-    status: 'ALLOCATED',
-    allocated_amount: 450000,
-    unallocated_amount: 0,
-  },
-  {
-    id: '2',
-    receipt_number: 'RCP/2025/00244',
-    loan_account: 'SMFC/LA/2024/00089',
-    entity: 'XYZ Industries',
-    receipt_date: '2025-01-15',
-    value_date: '2025-01-15',
-    amount: 750000,
-    receipt_type: 'PREPAYMENT',
-    receipt_mode: 'RTGS',
-    instrument_number: 'UTR987654321',
-    status: 'PARTIAL',
-    allocated_amount: 500000,
-    unallocated_amount: 250000,
-  },
-  {
-    id: '3',
-    receipt_number: 'RCP/2025/00243',
-    loan_account: 'SMFC/LA/2024/00156',
-    entity: 'Metro Logistics',
-    receipt_date: '2025-01-14',
-    value_date: '2025-01-14',
-    amount: 320000,
-    receipt_type: 'REGULAR',
-    receipt_mode: 'CHEQUE',
-    instrument_number: 'CHQ456789',
-    status: 'PENDING',
-    allocated_amount: 0,
-    unallocated_amount: 320000,
-  },
-  {
-    id: '4',
-    receipt_number: 'RCP/2025/00242',
-    loan_account: 'SMFC/LA/2024/00178',
-    entity: 'Eastern Corp',
-    receipt_date: '2025-01-14',
-    value_date: '2025-01-14',
-    amount: 150000,
-    receipt_type: 'BOUNCE_RECOVERY',
-    receipt_mode: 'CASH',
-    instrument_number: null,
-    status: 'ALLOCATED',
-    allocated_amount: 150000,
-    unallocated_amount: 0,
-  },
-  {
-    id: '5',
-    receipt_number: 'RCP/2025/00241',
-    loan_account: 'SMFC/LA/2024/00125',
-    entity: 'ABC Trading Co.',
-    receipt_date: '2025-01-13',
-    value_date: '2025-01-13',
-    amount: 450000,
-    receipt_type: 'REGULAR',
-    receipt_mode: 'NACH',
-    instrument_number: 'NACH001234',
-    status: 'REVERSED',
-    allocated_amount: 0,
-    unallocated_amount: 0,
-  },
-];
+interface ReceiptRow {
+  id: string;
+  receipt_number: string;
+  loan_account: string;
+  entity: string;
+  receipt_date: string;
+  value_date: string;
+  amount: number;
+  receipt_type: string;
+  receipt_mode: string;
+  instrument_number: string | null;
+  status: string;
+  allocated_amount: number;
+  unallocated_amount: number;
+}
+
+const receipts: ReceiptRow[] = [];
 
 const getStatusBadge = (status: string) => {
-  const variants: Record<string, { variant: 'default' | 'secondary' | 'outline' | 'destructive'; icon: React.ReactNode }> = {
+  const variants: Record<
+    string,
+    { variant: 'default' | 'secondary' | 'outline' | 'destructive'; icon: React.ReactNode }
+  > = {
     ALLOCATED: { variant: 'default', icon: <CheckCircle className="h-3 w-3" /> },
     PARTIAL: { variant: 'secondary', icon: <Clock className="h-3 w-3" /> },
     PENDING: { variant: 'outline', icon: <Clock className="h-3 w-3" /> },
@@ -180,16 +126,19 @@ export default function ReceiptList() {
         subtitle="Manage loan payment receipts"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/lending/receipts/bulk-upload')}>
-              <Upload className="h-4 w-4 mr-2" />
+            <Button
+              variant="outline"
+              onClick={() => navigate('/admin/lending/receipts/bulk-upload')}
+            >
+              <Upload className="mr-2 h-4 w-4" />
               Bulk Upload
             </Button>
             <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
-            <Button onClick={() => navigate('/lending/receipts/create')}>
-              <Plus className="h-4 w-4 mr-2" />
+            <Button onClick={() => navigate('/admin/lending/receipts/create')}>
+              <Plus className="mr-2 h-4 w-4" />
               New Receipt
             </Button>
           </div>
@@ -197,7 +146,7 @@ export default function ReceiptList() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -219,9 +168,7 @@ export default function ReceiptList() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {receiptSummary.today_receipts}
-            </div>
+            <div className="text-3xl font-bold text-green-600">{receiptSummary.today_receipts}</div>
             <p className="text-xs text-muted-foreground">
               {formatCurrency(receiptSummary.today_amount)}
             </p>
@@ -262,9 +209,9 @@ export default function ReceiptList() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap gap-4">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Search by receipt number, entity, or loan account..."
                 className="pl-10"
@@ -353,7 +300,7 @@ export default function ReceiptList() {
                   <TableCell>
                     <div className="text-sm">{receipt.receipt_mode}</div>
                     {receipt.instrument_number && (
-                      <div className="text-xs text-muted-foreground font-mono">
+                      <div className="font-mono text-xs text-muted-foreground">
                         {receipt.instrument_number}
                       </div>
                     )}
@@ -379,24 +326,28 @@ export default function ReceiptList() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem
-                          onClick={() => navigate(`/lending/receipts/${receipt.id}`)}
+                          onClick={() => navigate(`/admin/lending/receipts/${receipt.id}`)}
                         >
-                          <Eye className="h-4 w-4 mr-2" />
+                          <Eye className="mr-2 h-4 w-4" />
                           View Details
                         </DropdownMenuItem>
                         {receipt.status === 'PENDING' || receipt.status === 'PARTIAL' ? (
                           <DropdownMenuItem
-                            onClick={() => navigate(`/lending/receipts/${receipt.id}/allocate`)}
+                            onClick={() =>
+                              navigate(`/admin/lending/receipts/${receipt.id}/allocate`)
+                            }
                           >
-                            <Receipt className="h-4 w-4 mr-2" />
+                            <Receipt className="mr-2 h-4 w-4" />
                             Allocate
                           </DropdownMenuItem>
                         ) : null}
                         {receipt.status !== 'REVERSED' && (
                           <DropdownMenuItem
-                            onClick={() => navigate(`/lending/receipts/${receipt.id}/reverse`)}
+                            onClick={() =>
+                              navigate(`/admin/lending/receipts/${receipt.id}/reverse`)
+                            }
                           >
-                            <RotateCcw className="h-4 w-4 mr-2" />
+                            <RotateCcw className="mr-2 h-4 w-4" />
                             Reverse
                           </DropdownMenuItem>
                         )}

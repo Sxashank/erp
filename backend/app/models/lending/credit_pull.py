@@ -106,13 +106,13 @@ class CreditPull(Base, TimestampMixin):
     # Link to entity or loan application
     entity_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("lending_entity.id"),
+        ForeignKey("los_entity.id"),
         nullable=True,
         index=True,
     )
     loan_application_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("lending_loan_application.id"),
+        ForeignKey("los_loan_application.id"),
         nullable=True,
         index=True,
     )
@@ -191,7 +191,7 @@ class CreditPull(Base, TimestampMixin):
     # Audit
     pulled_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id"),
+        ForeignKey("mst_user.id"),
         nullable=True,
     )
     purpose: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)

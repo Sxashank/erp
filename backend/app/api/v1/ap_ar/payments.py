@@ -6,7 +6,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_user, get_db, get_db_with_tenant
 # from app.core.permissions import RequirePermissions
 from app.core.responses import PaginatedResponse
 from app.models.auth.user import User
@@ -131,10 +131,9 @@ def _to_detail_response(payment) -> PaymentDetailResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[PaymentListResponse])
+@router.get("", response_model=PaginatedResponse[PaymentListResponse], response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_VIEW")
 async def list_payments(
-    organization_id: UUID = Query(...),
     search: Optional[str] = Query(None),
     payment_type: Optional[PaymentType] = Query(None),
     party_type: Optional[PartyType] = Query(None),
@@ -149,13 +148,13 @@ async def list_payments(
     unit_id: Optional[UUID] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List payments with filters and pagination."""
     service = PaymentService(db)
     payments, total = await service.list_payments(
-        organization_id,
+        current_user.organization_id,
         search=search,
         payment_type=payment_type,
         party_type=party_type,
@@ -185,33 +184,31 @@ async def list_payments(
 @router.get("/generate-number")
 # @RequirePermissions("APAR_PAYMENT_CREATE")
 async def generate_payment_number(
-    organization_id: UUID = Query(...),
     payment_type: PaymentType = Query(...),
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Generate next payment number."""
     service = PaymentService(db)
-    number = await service.generate_payment_number(organization_id, payment_type)
+    number = await service.generate_payment_number(current_user.organization_id, payment_type)
     return {"payment_number": number}
 
 
-@router.get("/pending-cheques", response_model=PaginatedResponse[PendingChequeResponse])
+@router.get("/pending-cheques", response_model=PaginatedResponse[PendingChequeResponse], response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_VIEW")
 async def list_pending_cheques(
-    organization_id: UUID = Query(...),
     party_type: Optional[PartyType] = Query(None),
     from_date: Optional[date] = Query(None),
     to_date: Optional[date] = Query(None),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """List pending (uncleared) cheques."""
     service = PaymentService(db)
     payments, total = await service.get_pending_cheques(
-        organization_id,
+        current_user.organization_id,
         party_type=party_type,
         from_date=from_date,
         to_date=to_date,
@@ -247,28 +244,27 @@ async def list_pending_cheques(
     )
 
 
-@router.get("/outstanding/{party_type}/{party_id}", response_model=list[OutstandingDocumentResponse])
+@router.get("/outstanding/{party_type}/{party_id}", response_model=list[OutstandingDocumentResponse], response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_VIEW")
 async def get_outstanding_documents(
     party_type: PartyType,
     party_id: UUID,
-    organization_id: UUID = Query(...),
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get outstanding documents for allocation."""
     service = PaymentService(db)
     documents = await service.get_outstanding_documents(
-        party_type, party_id, organization_id
+        party_type, party_id, current_user.organization_id
     )
     return [OutstandingDocumentResponse(**doc) for doc in documents]
 
 
-@router.get("/{payment_id}", response_model=PaymentDetailResponse)
+@router.get("/{payment_id}", response_model=PaymentDetailResponse, response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_VIEW")
 async def get_payment(
     payment_id: UUID,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Get payment details with allocations."""
@@ -277,11 +273,11 @@ async def get_payment(
     return _to_detail_response(payment)
 
 
-@router.post("", response_model=PaymentDetailResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=PaymentDetailResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
 # @RequirePermissions("APAR_PAYMENT_CREATE")
 async def create_payment(
     data: PaymentCreate,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new payment entry."""
@@ -290,12 +286,12 @@ async def create_payment(
     return _to_detail_response(payment)
 
 
-@router.put("/{payment_id}", response_model=PaymentDetailResponse)
+@router.put("/{payment_id}", response_model=PaymentDetailResponse, response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_UPDATE")
 async def update_payment(
     payment_id: UUID,
     data: PaymentUpdate,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update a draft payment."""
@@ -304,11 +300,11 @@ async def update_payment(
     return _to_detail_response(payment)
 
 
-@router.post("/{payment_id}/submit", response_model=PaymentResponse)
+@router.post("/{payment_id}/submit", response_model=PaymentResponse, response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_UPDATE")
 async def submit_payment(
     payment_id: UUID,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Submit payment for approval."""
@@ -317,11 +313,11 @@ async def submit_payment(
     return _to_response(payment)
 
 
-@router.post("/{payment_id}/approve", response_model=PaymentResponse)
+@router.post("/{payment_id}/approve", response_model=PaymentResponse, response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_APPROVE")
 async def approve_payment(
     payment_id: UUID,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Approve and post payment."""
@@ -330,12 +326,12 @@ async def approve_payment(
     return _to_response(payment)
 
 
-@router.post("/{payment_id}/cancel", response_model=PaymentResponse)
+@router.post("/{payment_id}/cancel", response_model=PaymentResponse, response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_UPDATE")
 async def cancel_payment(
     payment_id: UUID,
     reason: str = Query(..., min_length=3),
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Cancel a payment."""
@@ -344,12 +340,12 @@ async def cancel_payment(
     return _to_response(payment)
 
 
-@router.post("/{payment_id}/cheque-status", response_model=PaymentResponse)
+@router.post("/{payment_id}/cheque-status", response_model=PaymentResponse, response_model_by_alias=True)
 # @RequirePermissions("APAR_PAYMENT_UPDATE")
 async def update_cheque_status(
     payment_id: UUID,
     data: ChequeStatusUpdate,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Update cheque status (cleared/bounced/etc)."""
@@ -362,7 +358,7 @@ async def update_cheque_status(
 # @RequirePermissions("APAR_PAYMENT_DELETE")
 async def delete_payment(
     payment_id: UUID,
-    db=Depends(get_db),
+    db=Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
     """Delete a draft payment."""

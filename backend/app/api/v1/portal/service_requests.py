@@ -5,14 +5,15 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
+from fastapi import APIRouter, Depends, status, Query, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
+from app.api.deps import get_db, get_db_with_tenant
 from app.api.v1.portal.auth import get_portal_user
 from app.models.portal.enums import ServiceRequestType, ServiceRequestStatus
 from app.services.portal.service_request_service import PortalServiceRequestService
+from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter(prefix="/service-requests", tags=["Portal Service Requests"])
 
@@ -116,14 +117,14 @@ class PaginatedResponse(BaseModel):
 
 @router.post(
     "",
-    response_model=ServiceRequestResponse,
+    response_model=ServiceRequestResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create Service Request",
 )
 async def create_request(
     request: ServiceRequestCreate,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new service request."""
     service = PortalServiceRequestService(db)
@@ -149,7 +150,7 @@ async def create_request(
 
 @router.get(
     "",
-    response_model=PaginatedResponse,
+    response_model=PaginatedResponse, response_model_by_alias=True,
     summary="Get Service Requests",
 )
 async def get_requests(
@@ -159,7 +160,7 @@ async def get_requests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get service requests."""
     service = PortalServiceRequestService(db)
@@ -183,22 +184,22 @@ async def get_requests(
 
 @router.get(
     "/{request_id}",
-    response_model=ServiceRequestDetails,
+    response_model=ServiceRequestDetails, response_model_by_alias=True,
     summary="Get Service Request Details",
 )
 async def get_request_details(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get detailed service request information."""
     service = PortalServiceRequestService(db)
     details = await service.get_request_details(request_id, user.id)
 
     if not details:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Service request not found",
+            error_code="SERVICE_REQUEST_NOT_FOUND",
         )
 
     return ServiceRequestDetails(**details)
@@ -206,13 +207,13 @@ async def get_request_details(
 
 @router.post(
     "/{request_id}/submit",
-    response_model=ServiceRequestResponse,
+    response_model=ServiceRequestResponse, response_model_by_alias=True,
     summary="Submit Service Request",
 )
 async def submit_request(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Submit a draft service request."""
     service = PortalServiceRequestService(db)
@@ -221,10 +222,7 @@ async def submit_request(
         sr = await service.submit_request(request_id, user.id)
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return ServiceRequestResponse(
         id=str(sr.id),
@@ -247,7 +245,7 @@ async def cancel_request(
     request_id: UUID,
     reason: str = "Customer requested",
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Cancel a service request."""
     service = PortalServiceRequestService(db)
@@ -255,9 +253,9 @@ async def cancel_request(
     await db.commit()
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Request not found or cannot be cancelled",
+            error_code="REQUEST_NOT_FOUND_OR_CANNOT_BE",
         )
 
     return {"message": "Request cancelled"}
@@ -275,7 +273,7 @@ async def cancel_request(
 async def create_prepayment_request(
     request: PrepaymentRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a prepayment request with quote.
@@ -307,7 +305,7 @@ async def create_prepayment_request(
 async def create_foreclosure_request(
     request: ForeclosureRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Create a foreclosure request with quote.
@@ -333,14 +331,14 @@ async def create_foreclosure_request(
 
 @router.post(
     "/emi-date-change",
-    response_model=ServiceRequestResponse,
+    response_model=ServiceRequestResponse, response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Request EMI Date Change",
 )
 async def create_emi_date_change_request(
     request: EMIDateChangeRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Request change in EMI deduction date.
@@ -361,10 +359,7 @@ async def create_emi_date_change_request(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return ServiceRequestResponse(
         id=str(sr.id),
@@ -394,7 +389,7 @@ async def upload_document(
     file: UploadFile = File(...),
     description: Optional[str] = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
     Upload a document for a service request.
@@ -406,16 +401,16 @@ async def upload_document(
     content = await file.read()
 
     if len(content) > max_size:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="File size exceeds 5MB limit",
+            error_code="FILE_SIZE_EXCEEDS_MB_LIMIT",
         )
 
     allowed_types = ["application/pdf", "image/jpeg", "image/png"]
     if file.content_type not in allowed_types:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+        raise BadRequestException(
             detail="Invalid file type. Allowed: PDF, JPG, PNG",
+            error_code="INVALID_FILE_TYPE_ALLOWED_PDF_JPG",
         )
 
     # Save file (placeholder - would save to S3/storage)
@@ -436,10 +431,7 @@ async def upload_document(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     return {
         "document_id": str(document.id),
@@ -461,7 +453,7 @@ async def submit_feedback(
     request_id: UUID,
     feedback: FeedbackRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Submit feedback for a completed service request."""
     service = PortalServiceRequestService(db)
@@ -475,15 +467,12 @@ async def submit_feedback(
         )
         await db.commit()
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e),
-        )
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
     if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+        raise NotFoundException(
             detail="Request not found or not completed",
+            error_code="REQUEST_NOT_FOUND_OR_NOT_COMPLETED",
         )
 
     return {"message": "Feedback submitted successfully"}
