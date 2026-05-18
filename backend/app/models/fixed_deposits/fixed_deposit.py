@@ -84,7 +84,7 @@ class FixedDeposit(BaseModel):
     # Customer reference
     customer_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("lending_entity.id"),
+        ForeignKey("los_entity.id"),
         nullable=False,
         index=True,
     )

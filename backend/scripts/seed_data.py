@@ -3638,21 +3638,25 @@ async def seed_roles(session, permission_map: dict) -> dict:
 
 
 async def seed_organization(session):
-    """Seed SMFC organization."""
+    """Seed SMFC organization (overridable via SEED_ORG_* env vars for E2E)."""
     print("\nSeeding organization...")
 
-    result = await session.execute(select(Organization).where(Organization.code == "SMFC"))
+    org_code = os.getenv("SEED_ORG_CODE", "SMFC")
+    org_name = os.getenv("SEED_ORG_NAME", "SMFC Ltd")
+    org_legal_name = os.getenv("SEED_ORG_LEGAL_NAME", "SMFC Financial Corporation Limited")
+
+    result = await session.execute(select(Organization).where(Organization.code == org_code))
     existing = result.scalar_one_or_none()
 
     if existing:
-        print("  - Organization 'SMFC' already exists")
+        print(f"  - Organization '{org_code}' already exists")
         return existing
 
     org = Organization(
-        code="SMFC",
-        name="SMFC Ltd",
-        legal_name="SMFC Financial Corporation Limited",
-        short_name="SMFC",
+        code=org_code,
+        name=org_name,
+        legal_name=org_legal_name,
+        short_name=org_code[:20],
         description="State Micro Finance Corporation - Enterprise NBFC Management System",
         pan="AABCS1234A",
         cin="U65100MH2020PTC123456",

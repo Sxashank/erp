@@ -74,7 +74,7 @@ class TicketCategoryMaster(BaseModel):
     auto_assign: Mapped[bool] = mapped_column(Boolean, default=False)
     default_assignee_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     assignment_queue: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
@@ -84,7 +84,7 @@ class TicketCategoryMaster(BaseModel):
     escalation_after_hours: Mapped[int] = mapped_column(Integer, default=24)
     escalate_to_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -163,7 +163,7 @@ class HelpdeskTicket(BaseModel):
     # Assignment
     assigned_to: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     assigned_date: Mapped[Optional[datetime]] = mapped_column(
@@ -193,7 +193,7 @@ class HelpdeskTicket(BaseModel):
     )
     resolved_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -214,7 +214,7 @@ class HelpdeskTicket(BaseModel):
     is_escalated: Mapped[bool] = mapped_column(Boolean, default=False)
     escalated_to: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     escalated_at: Mapped[Optional[datetime]] = mapped_column(
@@ -279,7 +279,7 @@ class TicketComment(BaseModel):
     )
     user_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -325,7 +325,7 @@ class TicketHistory(BaseModel):
     )
     user_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
 

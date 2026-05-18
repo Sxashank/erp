@@ -10,8 +10,9 @@ from sqlalchemy import Boolean, Date, Enum, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants import BalanceType
 from app.models.base import BaseModel
-from app.models.ap_ar.vendor import GSTRegistrationType, PaymentModePreference, BalanceType, MSMEType
+from app.models.ap_ar.vendor import GSTRegistrationType, PaymentModePreference, MSMEType
 
 
 class CustomerType(str, enum.Enum):

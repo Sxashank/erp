@@ -83,7 +83,7 @@ class ReimbursementCategory(BaseModel):
     # Accounting
     gl_account_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("fin_chart_of_account.id", ondelete="SET NULL"),
+        ForeignKey("mst_account.id", ondelete="SET NULL"),
         nullable=True,
     )
 
@@ -176,7 +176,7 @@ class ReimbursementClaim(BaseModel):
     # Approval
     approved_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     approved_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
@@ -286,7 +286,7 @@ class ReimbursementApproval(BaseModel):
     approval_level: Mapped[int] = mapped_column(Integer, nullable=False)
     approver_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="CASCADE"),
+        ForeignKey("mst_user.id", ondelete="CASCADE"),
         nullable=False,
     )
 
@@ -303,7 +303,7 @@ class ReimbursementApproval(BaseModel):
     # Forwarded To (if forwarded)
     forwarded_to: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
 

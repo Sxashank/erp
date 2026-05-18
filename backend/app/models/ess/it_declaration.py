@@ -186,7 +186,7 @@ class ITDeclaration(BaseModel):
     # Verification
     verified_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     verified_date: Mapped[Optional[datetime]] = mapped_column(
@@ -356,7 +356,7 @@ class AttendanceRegularization(BaseModel):
     # Approval
     approved_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     approved_date: Mapped[Optional[datetime]] = mapped_column(

@@ -29,6 +29,12 @@ backend/**/__pycache__
 # runtime/user uploads
 backend/uploads/
 
+# local SSH keys and server credentials
+.ssh/
+*.ppk
+*.pem
+*.key
+
 # production deployment runtime
 deploy/production.env
 deploy/runtime/

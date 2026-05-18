@@ -3,6 +3,7 @@
 import asyncio
 from logging.config import fileConfig
 
+import sqlalchemy as sa
 from sqlalchemy import pool, text
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
@@ -50,12 +51,17 @@ def do_run_migrations(connection: Connection) -> None:
     # repository's descriptive revision identifiers (for example
     # `zza2_add_scheme_portal_dms_linkage`). Widen it before running any
     # migration so fresh and existing databases can advance safely.
+    # `version_table_pk_type` propagates the same width to the CREATE TABLE
+    # path that `alembic stamp head` takes on a brand-new DB — without it,
+    # stamp creates the table at the alembic default (VARCHAR(32)) and the
+    # insert of the head revision id then fails.
     connection.execute(
         text("ALTER TABLE IF EXISTS alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)")
     )
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
+        version_table_pk_type=sa.String(128),
     )
 
     with context.begin_transaction():

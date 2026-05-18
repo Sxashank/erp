@@ -11,8 +11,17 @@ import { defineConfig, devices } from '@playwright/test';
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5176';
 const useBuilt = process.env.PLAYWRIGHT_USE_BUILD === '1';
 
+// `globalSetup` connects to the E2E Postgres DB and asserts the seeded org +
+// admin user are present. Only opt in for the real-user suite (run via
+// `pnpm test:e2e:real`) — otherwise the smoke + visual specs don't need the
+// dedicated DB.
+const e2eGlobalSetup = process.env.PLAYWRIGHT_E2E === '1'
+  ? require.resolve('./playwright/tests/e2e/globalSetup.ts')
+  : undefined;
+
 export default defineConfig({
   testDir: './playwright/tests',
+  globalSetup: e2eGlobalSetup,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

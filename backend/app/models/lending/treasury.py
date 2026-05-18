@@ -17,6 +17,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -45,7 +46,7 @@ class Lender(BaseModel):
     )
 
     lender_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     organization_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -107,7 +108,7 @@ class Borrowing(BaseModel):
     )
 
     borrowing_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     organization_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -212,7 +213,7 @@ class BorrowingTranche(BaseModel):
     )
 
     tranche_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     borrowing_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -258,7 +259,7 @@ class BorrowingSchedule(BaseModel):
     )
 
     schedule_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     borrowing_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -305,7 +306,7 @@ class BorrowingPayment(BaseModel):
     )
 
     payment_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     borrowing_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -355,7 +356,7 @@ class BorrowingCovenant(BaseModel):
     )
 
     covenant_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     borrowing_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -477,7 +478,7 @@ class ALMPosition(BaseModel):
     )
 
     position_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     organization_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -526,7 +527,7 @@ class ALMAsset(BaseModel):
     )
 
     asset_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     position_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -567,7 +568,7 @@ class ALMLiability(BaseModel):
     )
 
     liability_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     position_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -607,7 +608,7 @@ class IRSAnalysis(BaseModel):
     )
 
     analysis_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     organization_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -668,7 +669,7 @@ class ExposureLimit(BaseModel):
     )
 
     limit_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     organization_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
@@ -720,7 +721,7 @@ class ExposureTracking(BaseModel):
     )
 
     tracking_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()"
+        PGUUID(as_uuid=True), nullable=False, server_default=func.gen_random_uuid()
     )
     limit_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),

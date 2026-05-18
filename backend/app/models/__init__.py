@@ -1,4 +1,26 @@
-"""SQLAlchemy models."""
+"""SQLAlchemy models.
+
+This package is the registration point for every ORM model in the system. Any
+module that defines a `BaseModel` subclass must be imported here (directly or
+transitively) so `Base.metadata` carries its table before
+`Base.metadata.create_all()` runs in the fresh-DB bootstrap path
+(`scripts/reset_db.py` and `scripts/seed_e2e.sh`).
+
+The block at the bottom of this file pulls in every leaf package that is not
+already imported by a named symbol above, so that registration is exhaustive
+even when no concrete class needs to be re-exported.
+"""
+
+# Side-effect imports — keep these eager. Each submodule registers its tables
+# on `Base.metadata` at import time.
+from app.models import (  # noqa: F401
+    approval,
+    compliance,
+    ess,
+    fixed_deposits,
+    inventory,
+    vendor_portal,
+)
 
 from app.models.ap_ar.bank_reconciliation import (
     BankReconciliation,

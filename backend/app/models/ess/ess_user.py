@@ -310,7 +310,7 @@ class ProfileUpdateRequest(BaseModel):
     # Approval
     reviewed_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
-        ForeignKey("auth_user.id", ondelete="SET NULL"),
+        ForeignKey("mst_user.id", ondelete="SET NULL"),
         nullable=True,
     )
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(

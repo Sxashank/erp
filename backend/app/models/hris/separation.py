@@ -26,6 +26,7 @@ from sqlalchemy import (
     Enum as SQLEnum,
     UniqueConstraint,
     Index,
+    func,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -110,7 +111,7 @@ class Separation(Base, AuditMixin, VersionedMixin):
         Index("ix_hris_separation_employee", "employee_id"),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     organization_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("mst_organization.id"), nullable=False)
     employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("hris_employee.id"), nullable=False)
 
@@ -194,7 +195,7 @@ class ClearanceChecklist(Base, AuditMixin, VersionedMixin):
         UniqueConstraint("organization_id", "checklist_code", name="uq_clearance_checklist_code"),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     organization_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("mst_organization.id"), nullable=False)
 
     checklist_code: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -229,7 +230,7 @@ class SeparationClearance(Base, AuditMixin, VersionedMixin):
         UniqueConstraint("separation_id", "checklist_id", name="uq_separation_clearance_item"),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     separation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("hris_separation.id"), nullable=False)
     checklist_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("hris_clearance_checklist.id"), nullable=False)
 
@@ -263,7 +264,7 @@ class FnFSettlement(Base, AuditMixin, VersionedMixin):
         Index("ix_hris_fnf_settlement_employee", "employee_id"),
     )
 
-    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default="gen_random_uuid()")
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     separation_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("hris_separation.id"), nullable=False, unique=True)
     employee_id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), ForeignKey("hris_employee.id"), nullable=False)
 

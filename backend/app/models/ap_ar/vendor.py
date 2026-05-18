@@ -10,6 +10,7 @@ from sqlalchemy import ForeignKey, Numeric, String, Integer, Boolean, Text, Enum
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.constants import BalanceType
 from app.models.base import BaseModel
 
 if TYPE_CHECKING:
@@ -52,12 +53,6 @@ class PaymentModePreference(str, enum.Enum):
     RTGS = "RTGS"
     UPI = "UPI"
     CASH = "CASH"
-
-
-class BalanceType(str, enum.Enum):
-    """Balance type enumeration."""
-    DR = "DR"
-    CR = "CR"
 
 
 class Vendor(BaseModel):

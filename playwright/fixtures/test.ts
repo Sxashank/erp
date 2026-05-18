@@ -14,6 +14,8 @@
 
 import { expect, test as base, type ConsoleMessage, type Page, type Response } from '@playwright/test';
 
+import { dbConnect, type DbHelper } from './db';
+
 interface ConsoleGate {
   allowError: (pattern: RegExp | string) => void;
   allowStatus: (status: number, urlSubstring?: string) => void;
@@ -24,6 +26,12 @@ interface ConsoleGate {
 interface AuthFixtures {
   consoleGate: ConsoleGate;
   authedPage: Page;
+  /**
+   * Direct-Postgres helper scoped to the E2E DB and the E2E org's RLS
+   * context. Opened lazily — specs that don't destructure `{ db }` pay no
+   * connection cost. See `./db.ts`.
+   */
+  db: DbHelper;
 }
 
 export const test = base.extend<AuthFixtures>({
@@ -112,6 +120,15 @@ export const test = base.extend<AuthFixtures>({
       window.localStorage.setItem('smfc-organization', JSON.stringify(seededOrg));
     });
     await use(page);
+  },
+
+  db: async ({}, use) => {
+    const helper = await dbConnect();
+    try {
+      await use(helper);
+    } finally {
+      await helper.end();
+    }
   },
 });
 

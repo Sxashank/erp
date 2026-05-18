@@ -28,6 +28,26 @@ sudo_if_needed() {
   fi
 }
 
+os_id() {
+  if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    printf '%s' "${ID:-}"
+  fi
+}
+
+install_packages() {
+  if command -v dnf >/dev/null 2>&1; then
+    sudo_if_needed dnf install -y "$@"
+  elif command -v yum >/dev/null 2>&1; then
+    sudo_if_needed yum install -y "$@"
+  elif command -v apt-get >/dev/null 2>&1; then
+    sudo_if_needed apt-get update
+    sudo_if_needed apt-get install -y "$@"
+  else
+    fail "No supported package manager found. Install packages manually: $*"
+  fi
+}
+
 random_secret() {
   if command -v openssl >/dev/null 2>&1; then
     openssl rand -hex 32
@@ -110,6 +130,50 @@ validate_env() {
   fi
 }
 
+install_compose_plugin_binary() {
+  if docker compose version >/dev/null 2>&1 || sudo docker compose version >/dev/null 2>&1; then
+    return
+  fi
+
+  local arch
+  case "$(uname -m)" in
+    x86_64 | amd64) arch="x86_64" ;;
+    aarch64 | arm64) arch="aarch64" ;;
+    *) fail "Unsupported CPU architecture for Docker Compose plugin: $(uname -m)" ;;
+  esac
+
+  local version="${DOCKER_COMPOSE_VERSION:-v2.29.7}"
+  local plugin_dir="/usr/local/lib/docker/cli-plugins"
+  local plugin_path="$plugin_dir/docker-compose"
+
+  log "Installing Docker Compose plugin $version"
+  sudo_if_needed mkdir -p "$plugin_dir"
+  sudo_if_needed curl -fsSL \
+    "https://github.com/docker/compose/releases/download/$version/docker-compose-linux-$arch" \
+    -o "$plugin_path"
+  sudo_if_needed chmod +x "$plugin_path"
+}
+
+install_docker_on_amazon_linux() {
+  log "Installing Docker on Amazon Linux"
+
+  install_packages ca-certificates curl
+
+  if command -v dnf >/dev/null 2>&1; then
+    sudo_if_needed dnf install -y docker docker-cli || sudo_if_needed dnf install -y docker
+    sudo_if_needed dnf install -y docker-compose-plugin || true
+  elif command -v amazon-linux-extras >/dev/null 2>&1; then
+    sudo_if_needed amazon-linux-extras install -y docker
+  else
+    sudo_if_needed yum install -y docker
+    sudo_if_needed yum install -y docker-compose-plugin || true
+  fi
+
+  sudo_if_needed systemctl enable --now docker
+  sudo_if_needed usermod -aG docker "${SUDO_USER:-$USER}" || true
+  install_compose_plugin_binary
+}
+
 install_docker_if_missing() {
   if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
     log "Docker and Docker Compose plugin are installed"
@@ -122,12 +186,16 @@ install_docker_if_missing() {
   fi
 
   if ! command -v curl >/dev/null 2>&1; then
-    sudo_if_needed apt-get update
-    sudo_if_needed apt-get install -y ca-certificates curl
+    install_packages ca-certificates curl
   fi
 
-  curl -fsSL https://get.docker.com | sudo_if_needed sh
-  sudo_if_needed usermod -aG docker "${SUDO_USER:-$USER}" || true
+  if [ "$(os_id)" = "amzn" ]; then
+    install_docker_on_amazon_linux
+  else
+    curl -fsSL https://get.docker.com | sudo_if_needed sh
+    sudo_if_needed usermod -aG docker "${SUDO_USER:-$USER}" || true
+    install_compose_plugin_binary
+  fi
 
   if ! docker compose version >/dev/null 2>&1 && ! sudo docker compose version >/dev/null 2>&1; then
     fail "Docker installed, but Compose plugin is unavailable. Log out/in or install docker-compose-plugin, then rerun."
