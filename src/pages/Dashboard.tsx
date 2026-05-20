@@ -121,7 +121,7 @@ export function Dashboard() {
 
   const loadOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ include_inactive: false });
+      const response = await organizationsApi.list({ includeInactive: false });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0) {
@@ -144,12 +144,12 @@ export function Dashboard() {
     try {
       const [summaryRes, apRes, arRes, cashflowRes, trendsRes, activityRes] =
         await Promise.all([
-          dashboardApi.getSummary({ organization_id: selectedOrg }).catch(() => ({ data: null })),
-          dashboardApi.getAPSummary({ organization_id: selectedOrg }).catch(() => ({ data: null })),
-          dashboardApi.getARSummary({ organization_id: selectedOrg }).catch(() => ({ data: null })),
-          dashboardApi.getCashflow({ organization_id: selectedOrg }).catch(() => ({ data: null })),
-          dashboardApi.getTrends({ organization_id: selectedOrg, months: 6 }).catch(() => ({ data: null })),
-          dashboardApi.getRecentActivity({ organization_id: selectedOrg, limit: 10 }).catch(() => ({ data: [] })),
+          dashboardApi.getSummary().catch(() => ({ data: null })),
+          dashboardApi.getAPSummary().catch(() => ({ data: null })),
+          dashboardApi.getARSummary().catch(() => ({ data: null })),
+          dashboardApi.getCashflow().catch(() => ({ data: null })),
+          dashboardApi.getTrends({ months: 6 }).catch(() => ({ data: null })),
+          dashboardApi.getRecentActivity({ limit: 10 }).catch(() => ({ data: [] })),
         ]);
 
       setSummary(summaryRes.data);
@@ -211,31 +211,31 @@ export function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Total Revenue (MTD)"
-          value={formatCurrency(summary?.total_revenue_mtd || 0)}
-          change={summary?.revenue_change}
+          value={formatCurrency(summary?.totalRevenueMtd || 0)}
+          change={summary?.revenueChange}
           changeLabel="vs last month"
-          trend={summary?.revenue_change > 0 ? 'up' : summary?.revenue_change < 0 ? 'down' : 'neutral'}
+          trend={summary?.revenueChange > 0 ? 'up' : summary?.revenueChange < 0 ? 'down' : 'neutral'}
           icon={<TrendingUp className="h-5 w-5 text-green-500" />}
         />
         <KPICard
           title="Total Expenses (MTD)"
-          value={formatCurrency(summary?.total_expenses_mtd || 0)}
-          change={summary?.expenses_change}
+          value={formatCurrency(summary?.totalExpensesMtd || 0)}
+          change={summary?.expensesChange}
           changeLabel="vs last month"
-          trend={summary?.expenses_change > 0 ? 'down' : summary?.expenses_change < 0 ? 'up' : 'neutral'}
+          trend={summary?.expensesChange > 0 ? 'down' : summary?.expensesChange < 0 ? 'up' : 'neutral'}
           icon={<TrendingDown className="h-5 w-5 text-red-500" />}
         />
         <KPICard
           title="Net Profit (MTD)"
-          value={formatCurrency(summary?.net_profit_mtd || 0)}
-          subtitle={`${((summary?.net_profit_mtd || 0) / (summary?.total_revenue_mtd || 1) * 100).toFixed(1)}% margin`}
+          value={formatCurrency(summary?.netProfitMtd || 0)}
+          subtitle={`${((summary?.netProfitMtd || 0) / (summary?.totalRevenueMtd || 1) * 100).toFixed(1)}% margin`}
           icon={<Receipt className="h-5 w-5 text-purple-500" />}
-          valueClassName={summary?.net_profit_mtd >= 0 ? 'text-green-600' : 'text-red-600'}
+          valueClassName={summary?.netProfitMtd >= 0 ? 'text-green-600' : 'text-red-600'}
         />
         <KPICard
           title="Pending Approvals"
-          value={summary?.total_pending_approvals || 0}
-          subtitle={`${summary?.total_vendors || 0} vendors, ${summary?.total_customers || 0} customers`}
+          value={summary?.totalPendingApprovals || 0}
+          subtitle={`${summary?.totalVendors || 0} vendors, ${summary?.totalCustomers || 0} customers`}
           icon={<Clock className="h-5 w-5 text-orange-500" />}
         />
       </div>
@@ -249,7 +249,7 @@ export function Dashboard() {
                 <Building2 className="h-5 w-5 text-orange-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{summary?.total_vendors || 0}</p>
+                <p className="text-2xl font-bold">{summary?.totalVendors || 0}</p>
                 <p className="text-sm text-muted-foreground">Active Vendors</p>
               </div>
             </CardContent>
@@ -262,7 +262,7 @@ export function Dashboard() {
                 <Users className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{summary?.total_customers || 0}</p>
+                <p className="text-2xl font-bold">{summary?.totalCustomers || 0}</p>
                 <p className="text-sm text-muted-foreground">Active Customers</p>
               </div>
             </CardContent>
@@ -275,7 +275,7 @@ export function Dashboard() {
                 <FileText className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatCompact(apSummary?.total_outstanding || 0)}</p>
+                <p className="text-2xl font-bold">{formatCompact(apSummary?.totalOutstanding || 0)}</p>
                 <p className="text-sm text-muted-foreground">AP Outstanding</p>
               </div>
             </CardContent>
@@ -288,7 +288,7 @@ export function Dashboard() {
                 <Receipt className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatCompact(arSummary?.total_outstanding || 0)}</p>
+                <p className="text-2xl font-bold">{formatCompact(arSummary?.totalOutstanding || 0)}</p>
                 <p className="text-sm text-muted-foreground">AR Outstanding</p>
               </div>
             </CardContent>
@@ -302,25 +302,25 @@ export function Dashboard() {
         <div className="space-y-6">
           {apSummary && (
             <APSummaryWidget
-              totalOutstanding={apSummary.total_outstanding || 0}
-              totalOverdue={apSummary.total_overdue || 0}
-              overdueCount={apSummary.overdue_count || 0}
-              dueThisWeek={apSummary.due_this_week || 0}
-              dueThisWeekCount={apSummary.due_this_week_count || 0}
-              agingBuckets={apSummary.aging_buckets || []}
-              topVendors={apSummary.top_vendors || []}
+              totalOutstanding={apSummary.totalOutstanding || 0}
+              totalOverdue={apSummary.totalOverdue || 0}
+              overdueCount={apSummary.overdueCount || 0}
+              dueThisWeek={apSummary.dueThisWeek || 0}
+              dueThisWeekCount={apSummary.dueThisWeekCount || 0}
+              agingBuckets={apSummary.agingBuckets || []}
+              topVendors={apSummary.topVendors || []}
             />
           )}
           {arSummary && (
             <ARSummaryWidget
-              totalOutstanding={arSummary.total_outstanding || 0}
-              totalOverdue={arSummary.total_overdue || 0}
-              overdueCount={arSummary.overdue_count || 0}
-              dueThisWeek={arSummary.due_this_week || 0}
-              dueThisWeekCount={arSummary.due_this_week_count || 0}
-              agingBuckets={arSummary.aging_buckets || []}
-              topCustomers={arSummary.top_customers || []}
-              collectionRate={arSummary.collection_rate}
+              totalOutstanding={arSummary.totalOutstanding || 0}
+              totalOverdue={arSummary.totalOverdue || 0}
+              overdueCount={arSummary.overdueCount || 0}
+              dueThisWeek={arSummary.dueThisWeek || 0}
+              dueThisWeekCount={arSummary.dueThisWeekCount || 0}
+              agingBuckets={arSummary.agingBuckets || []}
+              topCustomers={arSummary.topCustomers || []}
+              collectionRate={arSummary.collectionRate}
             />
           )}
         </div>
@@ -329,18 +329,18 @@ export function Dashboard() {
         <div className="space-y-6">
           {cashflow && (
             <CashFlowWidget
-              totalBankBalance={cashflow.total_bank_balance || 0}
-              receiptsToday={cashflow.receipts_today || 0}
-              paymentsToday={cashflow.payments_today || 0}
-              netToday={cashflow.net_today || 0}
-              receiptsWeek={cashflow.receipts_week || 0}
-              paymentsWeek={cashflow.payments_week || 0}
-              netWeek={cashflow.net_week || 0}
-              receiptsMonth={cashflow.receipts_month || 0}
-              paymentsMonth={cashflow.payments_month || 0}
-              netMonth={cashflow.net_month || 0}
-              pendingChequeReceipts={cashflow.pending_cheque_receipts}
-              pendingChequePayments={cashflow.pending_cheque_payments}
+              totalBankBalance={cashflow.totalBankBalance || 0}
+              receiptsToday={cashflow.receiptsToday || 0}
+              paymentsToday={cashflow.paymentsToday || 0}
+              netToday={cashflow.netToday || 0}
+              receiptsWeek={cashflow.receiptsWeek || 0}
+              paymentsWeek={cashflow.paymentsWeek || 0}
+              netWeek={cashflow.netWeek || 0}
+              receiptsMonth={cashflow.receiptsMonth || 0}
+              paymentsMonth={cashflow.paymentsMonth || 0}
+              netMonth={cashflow.netMonth || 0}
+              pendingChequeReceipts={cashflow.pendingChequeReceipts}
+              pendingChequePayments={cashflow.pendingChequePayments}
             />
           )}
           {trends && (
@@ -349,7 +349,7 @@ export function Dashboard() {
               expenses={trends.expenses || []}
               collections={trends.collections || []}
               payments={trends.payments || []}
-              netProfit={trends.net_profit || []}
+              netProfit={trends.netProfit || []}
             />
           )}
         </div>
@@ -363,10 +363,10 @@ export function Dashboard() {
               number: String(a.number ?? ''),
               description: String(a.description ?? ''),
               amount: Number(a.amount ?? 0),
-              partyName: a.party_name as string | undefined,
+              partyName: a.partyName as string | undefined,
               status: String(a.status ?? ''),
-              createdAt: String(a.created_at ?? ''),
-              createdByName: a.created_by_name as string | undefined,
+              createdAt: String(a.createdAt ?? ''),
+              createdByName: a.createdByName as string | undefined,
             }))}
           />
 
@@ -412,8 +412,8 @@ export function Dashboard() {
       <PageHeader
         title="Dashboard"
         subtitle={
-          summary?.current_financial_year
-            ? `Financial Year: ${summary.current_financial_year}`
+          summary?.currentFinancialYear
+            ? `Financial Year: ${summary.currentFinancialYear}`
             : 'Welcome to SMFC ERP'
         }
         actions={
@@ -476,8 +476,8 @@ export function Dashboard() {
               ) : selectedDashboardData ? (
                 <ResponsiveDashboardGrid
                   widgets={selectedDashboardData.widgets || []}
-                  autoRefresh={selectedDashboardData.auto_refresh}
-                  refreshInterval={selectedDashboardData.refresh_interval_seconds * 1000}
+                  autoRefresh={selectedDashboardData.autoRefresh}
+                  refreshInterval={selectedDashboardData.refreshIntervalSeconds * 1000}
                 />
               ) : (
                 <div className="text-center py-12 text-muted-foreground">

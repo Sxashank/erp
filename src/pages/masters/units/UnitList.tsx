@@ -9,7 +9,7 @@ import {
   Plus,
   Trash2,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -38,10 +38,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { unitsApi, organizationsApi } from '@/services/api';
-import type { Unit, UnitTreeNode, Organization, PaginatedResponse } from '@/types';
+import { logger } from '@/lib/logger';
+import { organizationsApi, unitsApi } from '@/services/api';
+import type { Organization, PaginatedResponse, Unit, UnitTreeNode } from '@/types';
 
-import { logger } from "@/lib/logger";
 // Tree node component
 function TreeNode({
   node,
@@ -75,7 +75,7 @@ function TreeNode({
   return (
     <div className="select-none">
       <div
-        className={`flex items-center gap-2 rounded-lg border p-3 mb-2 ${
+        className={`mb-2 flex items-center gap-2 rounded-lg border p-3 ${
           node.status === 'ACTIVE' ? 'bg-white' : 'bg-slate-50 opacity-60'
         }`}
         style={{ marginLeft: `${level * 24}px` }}
@@ -83,7 +83,7 @@ function TreeNode({
         {/* Expand/Collapse button */}
         <button
           onClick={() => setExpanded(!expanded)}
-          className={`p-1 rounded hover:bg-slate-100 ${!hasChildren ? 'invisible' : ''}`}
+          className={`rounded p-1 hover:bg-slate-100 ${!hasChildren ? 'invisible' : ''}`}
         >
           {expanded ? (
             <ChevronDown className="h-4 w-4 text-slate-500" />
@@ -93,22 +93,20 @@ function TreeNode({
         </button>
 
         {/* Icon */}
-        <div className={`p-2 rounded-lg ${getUnitTypeColor(node.unit_type)}`}>
+        <div className={`rounded-lg p-2 ${getUnitTypeColor(node.unitType)}`}>
           <Building2 className="h-4 w-4" />
         </div>
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="font-medium text-slate-900">{node.name}</span>
             <span className="text-xs text-slate-500">({node.code})</span>
-            {node.is_head_office && (
-              <Badge className="bg-blue-100 text-blue-700 text-xs">HQ</Badge>
-            )}
+            {node.isHeadOffice && <Badge className="bg-blue-100 text-xs text-blue-700">HQ</Badge>}
           </div>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="mt-1 flex items-center gap-2">
             <Badge variant="outline" className="text-xs">
-              {node.unit_type.replace(/_/g, ' ')}
+              {node.unitType.replace(/_/g, ' ')}
             </Badge>
             <span className="text-xs text-slate-400">Level {node.level}</span>
           </div>
@@ -177,7 +175,7 @@ export function UnitList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -188,29 +186,32 @@ export function UnitList() {
       }
     };
     fetchOrganizations();
-  }, []);
+  }, [selectedOrgId]);
 
   // Fetch units (table view)
-  const fetchUnits = async (page = 1) => {
-    try {
-      setLoading(true);
-      const params: Record<string, unknown> = { page, page_size: 10, include_inactive: true };
-      if (selectedOrgId) {
-        params.organization_id = selectedOrgId;
+  const fetchUnits = useCallback(
+    async (page = 1) => {
+      try {
+        setLoading(true);
+        const params: Record<string, unknown> = { page, pageSize: 10, includeInactive: true };
+        if (selectedOrgId) {
+          params.organizationId = selectedOrgId;
+        }
+        const response = await unitsApi.list(params);
+        const data: PaginatedResponse<Unit> = response.data;
+        setUnits(data.items);
+        setPagination({ page: data.page, total: data.total, totalPages: data.totalPages });
+      } catch (error) {
+        logger.error('Failed to fetch units:', error);
+      } finally {
+        setLoading(false);
       }
-      const response = await unitsApi.list(params);
-      const data: PaginatedResponse<Unit> = response.data;
-      setUnits(data.items);
-      setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
-    } catch (error) {
-      logger.error('Failed to fetch units:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+    [selectedOrgId],
+  );
 
   // Fetch tree data
-  const fetchTree = async () => {
+  const fetchTree = useCallback(async () => {
     if (!selectedOrgId) {
       setTreeData([]);
       return;
@@ -225,7 +226,7 @@ export function UnitList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedOrgId]);
 
   // Effect to fetch data when view or org changes
   useEffect(() => {
@@ -234,7 +235,7 @@ export function UnitList() {
     } else {
       fetchTree();
     }
-  }, [viewMode, selectedOrgId]);
+  }, [fetchTree, fetchUnits, viewMode]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this unit?')) return;
@@ -311,7 +312,9 @@ export function UnitList() {
             // Tree View
             !selectedOrgId ? (
               <div className="flex flex-col items-center justify-center py-8">
-                <p className="text-sm text-slate-500">Please select an organization to view the hierarchy</p>
+                <p className="text-sm text-slate-500">
+                  Please select an organization to view the hierarchy
+                </p>
               </div>
             ) : treeData.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8">
@@ -323,115 +326,110 @@ export function UnitList() {
             ) : (
               <div className="space-y-2">
                 {treeData.map((node) => (
-                  <TreeNode
-                    key={node.id}
-                    node={node}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                  />
+                  <TreeNode key={node.id} node={node} onEdit={handleEdit} onDelete={handleDelete} />
                 ))}
               </div>
             )
+          ) : // Table View
+          units.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <p className="text-sm text-slate-500">No units found</p>
+              <Button variant="link" onClick={() => navigate('/admin/units/new')}>
+                Create your first unit
+              </Button>
+            </div>
           ) : (
-            // Table View
-            units.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-8">
-                <p className="text-sm text-slate-500">No units found</p>
-                <Button variant="link" onClick={() => navigate('/admin/units/new')}>
-                  Create your first unit
-                </Button>
-              </div>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Code</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Organization</TableHead>
-                      <TableHead>Parent Unit</TableHead>
-                      <TableHead>City</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="w-[70px]">Actions</TableHead>
+            <>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Code</TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Organization</TableHead>
+                    <TableHead>Parent Unit</TableHead>
+                    <TableHead>City</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-[70px]">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {units.map((unit) => (
+                    <TableRow key={unit.id}>
+                      <TableCell className="font-medium">{unit.code}</TableCell>
+                      <TableCell>{unit.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{unit.unitType.replace(/_/g, ' ')}</Badge>
+                      </TableCell>
+                      <TableCell>{unit.organizationName || '-'}</TableCell>
+                      <TableCell>{unit.parentUnitName || '-'}</TableCell>
+                      <TableCell>{unit.city || '-'}</TableCell>
+                      <TableCell>
+                        <Badge
+                          className={
+                            unit.status === 'ACTIVE'
+                              ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-50'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-100'
+                          }
+                        >
+                          {unit.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => navigate(`/admin/units/${unit.id}/edit`)}
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDelete(unit.id)}
+                              className="text-red-600"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {units.map((unit) => (
-                      <TableRow key={unit.id}>
-                        <TableCell className="font-medium">{unit.code}</TableCell>
-                        <TableCell>{unit.name}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{unit.unit_type.replace(/_/g, ' ')}</Badge>
-                        </TableCell>
-                        <TableCell>{unit.organization_name || '-'}</TableCell>
-                        <TableCell>{unit.parent_unit_name || '-'}</TableCell>
-                        <TableCell>{unit.city || '-'}</TableCell>
-                        <TableCell>
-                          <Badge
-                            className={
-                              unit.status === 'ACTIVE'
-                                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-50'
-                                : 'bg-slate-100 text-slate-600 hover:bg-slate-100'
-                            }
-                          >
-                            {unit.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => navigate(`/admin/units/${unit.id}/edit`)}>
-                                <Edit className="mr-2 h-4 w-4" />
-                                Edit
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() => handleDelete(unit.id)}
-                                className="text-red-600"
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                  ))}
+                </TableBody>
+              </Table>
 
-                {pagination.totalPages > 1 && (
-                  <div className="mt-4 flex items-center justify-between">
-                    <p className="text-sm text-slate-500">
-                      Showing {units.length} of {pagination.total} units
-                    </p>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pagination.page <= 1}
-                        onClick={() => fetchUnits(pagination.page - 1)}
-                      >
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pagination.page >= pagination.totalPages}
-                        onClick={() => fetchUnits(pagination.page + 1)}
-                      >
-                        Next
-                      </Button>
-                    </div>
+              {pagination.totalPages > 1 && (
+                <div className="mt-4 flex items-center justify-between">
+                  <p className="text-sm text-slate-500">
+                    Showing {units.length} of {pagination.total} units
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pagination.page <= 1}
+                      onClick={() => fetchUnits(pagination.page - 1)}
+                    >
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={pagination.page >= pagination.totalPages}
+                      onClick={() => fetchUnits(pagination.page + 1)}
+                    >
+                      Next
+                    </Button>
                   </div>
-                )}
-              </>
-            )
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>

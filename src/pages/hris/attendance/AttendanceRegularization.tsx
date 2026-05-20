@@ -42,24 +42,24 @@ import { hrisApi, organizationsApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface Regularization {
   id: string;
-  employee_id: string;
-  employee_name?: string;
-  employee_code?: string;
-  attendance_date: string;
-  request_type: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  attendanceDate: string;
+  requestType: string;
   reason: string;
-  original_first_in?: string;
-  original_last_out?: string;
-  original_status?: string;
-  requested_first_in?: string;
-  requested_last_out?: string;
-  requested_status?: string;
+  originalFirstIn?: string;
+  originalLastOut?: string;
+  originalStatus?: string;
+  requestedFirstIn?: string;
+  requestedLastOut?: string;
+  requestedStatus?: string;
   status: string;
-  approved_at?: string;
-  approver_remarks?: string;
-  rejected_at?: string;
-  rejection_reason?: string;
-  created_at: string;
+  approvedAt?: string;
+  approverRemarks?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
 }
 
 interface Organization {
@@ -117,7 +117,7 @@ export function AttendanceRegularization() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -135,7 +135,6 @@ export function AttendanceRegularization() {
     try {
       setLoading(true);
       const params: Record<string, unknown> = {
-        organization_id: selectedOrgId,
         skip,
         limit: pagination.limit,
       };
@@ -252,26 +251,26 @@ export function AttendanceRegularization() {
                     <TableRow key={request.id}>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{request.employee_name}</p>
-                          <p className="text-xs text-slate-500">{request.employee_code}</p>
+                          <p className="font-medium">{request.employeeName}</p>
+                          <p className="text-xs text-slate-500">{request.employeeCode}</p>
                         </div>
                       </TableCell>
-                      <TableCell><DateDisplay date={request.attendance_date} /></TableCell>
+                      <TableCell><DateDisplay date={request.attendanceDate} /></TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {REQUEST_TYPE_LABELS[request.request_type] || request.request_type}
+                          {REQUEST_TYPE_LABELS[request.requestType] || request.requestType}
                         </Badge>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <p>In: {formatTime(request.original_first_in)}</p>
-                          <p>Out: {formatTime(request.original_last_out)}</p>
+                          <p>In: {formatTime(request.originalFirstIn)}</p>
+                          <p>Out: {formatTime(request.originalLastOut)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div className="text-sm">
-                          <p>In: {formatTime(request.requested_first_in)}</p>
-                          <p>Out: {formatTime(request.requested_last_out)}</p>
+                          <p>In: {formatTime(request.requestedFirstIn)}</p>
+                          <p>Out: {formatTime(request.requestedLastOut)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
@@ -279,7 +278,7 @@ export function AttendanceRegularization() {
                           {request.status}
                         </Badge>
                       </TableCell>
-                      <TableCell><DateDisplay date={request.created_at} /></TableCell>
+                      <TableCell><DateDisplay date={request.createdAt} /></TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

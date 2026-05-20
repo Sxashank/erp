@@ -49,12 +49,15 @@ from app.models.lending.iif.loan_subvention_enrollment import (
     LoanSubventionEnrollment,
 )
 from app.models.lending.iif.subvention_claim import SubventionClaim
+from app.models.lending.iif.subvention_fund_transaction import SubventionFundTransaction
 from app.models.lending.iif.subvention_scheme import SubventionScheme
 from app.models.lending.loan_account import (
+    Disbursement,
     LoanAccount,
     LoanReceipt,
     ReceiptAllocation,
 )
+from app.models.lending.sanction import LoanSanction
 from app.services.audit import record_financial_action
 from app.schemas.lending.iif import (
     ClaimAccountStatus,
@@ -66,6 +69,13 @@ from app.schemas.lending.iif import (
     InterestCalculationLine,
     RepaymentRecordLine,
     SubventionClaimDocumentInput,
+)
+from app.core.iif_rules import (
+    CALCULATION_PERCENT_OF_INTEREST_PAID,
+    calculation_rules,
+    eligibility_rules,
+    fund_rules,
+    missing_required_documents,
 )
 
 # ---------------------------------------------------------------------------
@@ -304,8 +314,8 @@ class SubventionClaimService:
         enrollment_id: UUID,
         period_start: date,
         period_end: date,
-    ) -> tuple[Decimal, Decimal, Decimal]:
-        """Compute (interest_paid, rate, applicable_subvention).
+    ) -> tuple[Decimal, Decimal, Decimal, str, Decimal]:
+        """Compute (interest_paid, rate, applicable_subvention, method, base).
 
         Sums ``ReceiptAllocation.allocated_amount`` where
         ``allocation_component == INTEREST`` over receipts whose
@@ -313,8 +323,10 @@ class SubventionClaimService:
         receipt belongs to the enrolment's loan account. Bounced /
         reversed receipts are excluded.
 
-        Applies ``rate / 100`` and quantises to 2dp HALF_UP at the end —
-        keeps intermediate precision.
+        The default IIF method applies a 3 percentage-point annual incentive
+        on principal-days, capped by actual interest paid in the period. A
+        legacy ``PERCENT_OF_INTEREST_PAID`` method remains configurable for
+        non-IIF schemes.
         """
         if period_end < period_start:
             raise BadRequestException(
@@ -325,6 +337,7 @@ class SubventionClaimService:
         enrollment = await self._get_enrollment(organization_id, enrollment_id)
         scheme = enrollment.scheme
         loan_account_id = enrollment.loan_account_id
+        loan = enrollment.loan_account
 
         stmt = (
             select(
@@ -351,12 +364,26 @@ class SubventionClaimService:
         interest_paid = Decimal(interest_paid_raw or 0)
 
         rate = scheme.subvention_rate_percent
-        # interest_paid × rate / 100 with intermediate precision.
-        applicable = interest_paid * rate / Decimal("100")
+        rules = calculation_rules(scheme)
+        method = str(rules.get("method") or "")
+        if method == CALCULATION_PERCENT_OF_INTEREST_PAID:
+            eligible_base = interest_paid
+            applicable = interest_paid * rate / Decimal("100")
+        else:
+            eligible_base = await self._eligible_principal_years(
+                loan=loan,
+                period_start=period_start,
+                period_end=period_end,
+            )
+            applicable = eligible_base * rate / Decimal("100")
+            if rules.get("cap_by_actual_interest_paid", True):
+                applicable = min(applicable, interest_paid)
+
         applicable = applicable.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         interest_paid = interest_paid.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        eligible_base = eligible_base.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        return interest_paid, rate, applicable
+        return interest_paid, rate, applicable, method, eligible_base
 
     # =========================================================================
     # Lifecycle
@@ -405,7 +432,9 @@ class SubventionClaimService:
                 error_code="CLAIM_EXISTS",
             )
 
-        interest_paid, _rate, applicable = await self.compute_claim(
+        await self._validate_claim_account_eligibility(enrollment, stage="claim creation")
+
+        interest_paid, _rate, applicable, _method, _base = await self.compute_claim(
             organization_id, enrollment_id, period_start, period_end
         )
 
@@ -489,6 +518,18 @@ class SubventionClaimService:
                 f"Cannot submit claim in status {claim.status}",
                 error_code="INVALID_TRANSITION",
             )
+        enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
+        await self._validate_claim_account_eligibility(enrollment, stage="claim submission")
+        missing_docs = missing_required_documents(
+            enrollment.scheme,
+            claim.documents or [],
+            stage="CLAIM_SUBMISSION",
+        )
+        if missing_docs:
+            raise BadRequestException(
+                "Required IIF claim documents are missing: " + "; ".join(missing_docs),
+                error_code="IIF_REQUIRED_DOCUMENTS_MISSING",
+            )
         claim.status = SubventionClaimStatus.SUBMITTED.value
         claim.submitted_date = date.today()
         claim.declaration_signed_by = current_user.id
@@ -496,7 +537,6 @@ class SubventionClaimService:
         claim.updated_by = current_user.id
         claim.version = (claim.version or 1) + 1
         # Roll the enrolment's running total up.
-        enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
         enrollment.total_claimed_to_date = (
             enrollment.total_claimed_to_date or Decimal("0")
         ) + claim.applicable_subvention_amount
@@ -522,6 +562,8 @@ class SubventionClaimService:
                 error_code="INVALID_TRANSITION",
             )
         if decision == "APPROVE":
+            enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
+            await self._validate_claim_account_eligibility(enrollment, stage="claim verification")
             claim.status = SubventionClaimStatus.VERIFIED.value
             claim.verified_date = date.today()
         elif decision == "REJECT":
@@ -562,6 +604,8 @@ class SubventionClaimService:
                 f"Cannot initiate release in status {claim.status}",
                 error_code="INVALID_TRANSITION",
             )
+        enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
+        await self._validate_claim_account_eligibility(enrollment, stage="release initiation")
         claim.status = SubventionClaimStatus.RELEASE_IN_PROGRESS.value
         claim.release_initiated_date = release_initiated_date or date.today()
         claim.release_instruction_reference = release_instruction_reference.strip()
@@ -588,6 +632,8 @@ class SubventionClaimService:
                 f"Cannot mark released in status {claim.status}",
                 error_code="INVALID_TRANSITION",
             )
+        enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
+        await self._validate_claim_account_eligibility(enrollment, stage="release")
 
         before_snapshot = {
             "status": claim.status,
@@ -601,7 +647,6 @@ class SubventionClaimService:
         claim.utr_reference = release_reference.strip()
         claim.updated_by = current_user.id
         claim.version = (claim.version or 1) + 1
-        enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
         enrollment.total_paid_to_date = (
             enrollment.total_paid_to_date or Decimal("0")
         ) + claim.applicable_subvention_amount
@@ -609,6 +654,22 @@ class SubventionClaimService:
         enrollment.version = (enrollment.version or 1) + 1
         await self.session.flush()
         await self.session.refresh(claim)
+
+        if fund_rules(enrollment.scheme).get("dedicated_bank_account_required", True):
+            self.session.add(
+                SubventionFundTransaction(
+                    organization_id=organization_id,
+                    scheme_id=enrollment.scheme_id,
+                    claim_id=claim.id,
+                    transaction_type="CLAIM_RELEASE",
+                    transaction_date=claim.paid_date or date.today(),
+                    amount=-claim.applicable_subvention_amount,
+                    reference_number=claim.utr_reference,
+                    notes="Interest incentive released to borrower loan account",
+                    created_by=current_user.id,
+                )
+            )
+            await self.session.flush()
 
         # Domain audit: IIF subvention claim released — §8.5.
         # Captures the released amount + UTR + paid_date for the auditor trail.
@@ -639,6 +700,89 @@ class SubventionClaimService:
         )
 
         return claim
+
+    async def _eligible_principal_years(
+        self,
+        *,
+        loan: LoanAccount,
+        period_start: date,
+        period_end: date,
+    ) -> Decimal:
+        """Return principal-years eligible for annual-rate incentive.
+
+        Uses actual disbursement tranches when present. When legacy data lacks
+        tranche rows, falls back to current outstanding for the period.
+        """
+        stmt = (
+            select(Disbursement)
+            .where(
+                Disbursement.loan_account_id == loan.id,
+                Disbursement.deleted_at.is_(None),
+                Disbursement.disbursed_amount.is_not(None),
+                Disbursement.disbursement_date.is_not(None),
+            )
+            .order_by(Disbursement.disbursement_number.asc())
+        )
+        disbursements = list((await self.session.execute(stmt)).scalars().all())
+        principal_days = Decimal("0")
+        for disbursement in disbursements:
+            start = max(disbursement.disbursement_date, period_start)
+            if start > period_end:
+                continue
+            days = (period_end - start).days + 1
+            principal_days += (disbursement.disbursed_amount or Decimal("0")) * Decimal(days)
+
+        if principal_days == 0:
+            days = (period_end - period_start).days + 1
+            principal_days = (loan.principal_outstanding or Decimal("0")) * Decimal(days)
+
+        return principal_days / Decimal("365")
+
+    async def _validate_claim_account_eligibility(
+        self,
+        enrollment: LoanSubventionEnrollment,
+        *,
+        stage: str,
+    ) -> None:
+        """Re-check continuous-assistance conditions at claim/release time."""
+        scheme = enrollment.scheme
+        loan = enrollment.loan_account
+        rules = eligibility_rules(scheme)
+        max_dpd = int(scheme.npa_disqualification_dpd_days or 30)
+        reasons: list[str] = []
+
+        if rules.get("exclude_overdue_or_npa", True):
+            if int(loan.days_past_due or 0) > max_dpd:
+                reasons.append(f"DPD {loan.days_past_due} exceeds allowed {max_dpd}")
+            asset_class = (
+                loan.asset_classification.value
+                if hasattr(loan.asset_classification, "value")
+                else str(loan.asset_classification)
+            )
+            if asset_class.upper() != "STANDARD":
+                reasons.append(f"Loan asset classification is {asset_class}, not STANDARD")
+            if (loan.principal_overdue or Decimal("0")) > 0 or (
+                loan.interest_overdue or Decimal("0")
+            ) > 0:
+                reasons.append("Loan has principal or interest overdue")
+
+        if rules.get("exclude_refinance_takeover_restructure", True):
+            sanction = await self.session.get(LoanSanction, loan.sanction_id)
+            extra = {}
+            if sanction is not None:
+                from app.models.lending.application import LoanApplication
+
+                application = await self.session.get(LoanApplication, sanction.application_id)
+                extra = dict(getattr(application, "extra_data", None) or {})
+            for key in ("is_refinance", "is_takeover", "is_restructure", "is_restructured"):
+                if extra.get(key) is True:
+                    reasons.append(f"Loan application is flagged {key}=true")
+
+        if reasons:
+            raise BadRequestException(
+                f"IIF {stage} is not allowed: " + "; ".join(reasons),
+                error_code="IIF_CONTINUOUS_ASSISTANCE_BLOCKED",
+            )
 
     async def mark_paid(
         self,
@@ -904,11 +1048,12 @@ class SubventionClaimService:
 
         # Total interest in the claim period — used to apportion per
         # tranche when we don't have a tranche-level interest accrual
-        # source. We weight by ``disbursed_amount`` × days outstanding
-        # in the period (a defensible approximation when the upstream
-        # accrual table doesn't tag tranche).
+        # source. The IIF incentive itself is computed on principal-days
+        # by default, not as a percentage of interest paid.
         total_interest = claim.interest_paid_in_period
         rate = scheme.subvention_rate_percent
+        rules = calculation_rules(scheme)
+        method = str(rules.get("method") or "")
 
         weights: list[Decimal] = []
         for d in disbursements:
@@ -923,18 +1068,36 @@ class SubventionClaimService:
             days = (end - start).days + 1
             weights.append(d.disbursed_amount * Decimal(days))
         weight_sum = sum(weights, start=Decimal("0"))
+        uncapped_subventions: list[Decimal] = []
+        for w in weights:
+            if method == CALCULATION_PERCENT_OF_INTEREST_PAID:
+                if weight_sum > 0 and w > 0:
+                    tranche_interest = total_interest * w / weight_sum
+                    uncapped_subventions.append(tranche_interest * rate / Decimal("100"))
+                else:
+                    uncapped_subventions.append(Decimal("0"))
+            else:
+                principal_years = w / Decimal("365")
+                uncapped_subventions.append(principal_years * rate / Decimal("100"))
+        uncapped_total = sum(uncapped_subventions, start=Decimal("0"))
+        cap_factor = Decimal("1")
+        if (
+            method != CALCULATION_PERCENT_OF_INTEREST_PAID
+            and rules.get("cap_by_actual_interest_paid", True)
+            and uncapped_total > 0
+            and uncapped_total > total_interest
+        ):
+            cap_factor = total_interest / uncapped_total
 
         calc_lines: list[InterestCalculationLine] = []
-        for d, w in zip(disbursements, weights):
+        for d, w, raw_subv in zip(disbursements, weights, uncapped_subventions):
             if weight_sum > 0 and w > 0:
                 tranche_interest = (total_interest * w / weight_sum).quantize(
                     Decimal("0.01"), rounding=ROUND_HALF_UP
                 )
             else:
                 tranche_interest = Decimal("0.00")
-            tranche_subv = (tranche_interest * rate / Decimal("100")).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
+            tranche_subv = (raw_subv * cap_factor).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             calc_lines.append(
                 InterestCalculationLine(
                     tranche_number=d.disbursement_number,
@@ -1001,6 +1164,14 @@ class SubventionClaimService:
         summary: dict[str, Any] = {
             "total_interest_paid": str(claim.interest_paid_in_period),
             "subvention_rate_percent": str(rate),
+            "calculation_method": method,
+            "eligible_base_amount": str(
+                (uncapped_total * Decimal("100") / rate).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+                if rate > 0
+                else Decimal("0.00")
+            ),
             "applicable_subvention_amount": str(claim.applicable_subvention_amount),
             "tranche_interest_check": str(total_tranche_interest),
             "tranche_subvention_check": str(total_eligible),

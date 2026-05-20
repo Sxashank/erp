@@ -75,6 +75,7 @@ async def create_voucher(
     Requires FIN_VOUCHER_CREATE permission.
     """
     service = VoucherService(db)
+    data = data.model_copy(update={"organization_id": current_user.organization_id})
     voucher = await service.create(data, current_user.id)
 
     # Reload with all relationships

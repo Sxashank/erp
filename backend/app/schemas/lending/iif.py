@@ -20,6 +20,13 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from app.schemas.base import CamelSchema, PaginatedResponse
+from app.core.iif_rules import (
+    DEFAULT_CALCULATION_RULES,
+    DEFAULT_ELIGIBILITY_RULES,
+    DEFAULT_FUND_RULES,
+    DEFAULT_REQUIRED_DOCUMENTS,
+    DEFAULT_WORKFLOW_RULES,
+)
 
 # =============================================================================
 # Subvention Scheme
@@ -49,6 +56,14 @@ class SubventionSchemeCreate(CamelSchema):
     claim_frequency: str = Field(..., max_length=20)
     npa_disqualification_dpd_days: int = Field(default=30, ge=0)
 
+    calculation_rules: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_CALCULATION_RULES))
+    eligibility_rules: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_ELIGIBILITY_RULES))
+    required_documents: list[dict[str, Any]] = Field(
+        default_factory=lambda: list(DEFAULT_REQUIRED_DOCUMENTS)
+    )
+    workflow_rules: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_WORKFLOW_RULES))
+    fund_rules: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_FUND_RULES))
+
     description: str | None = None
 
 
@@ -73,6 +88,11 @@ class SubventionSchemeUpdate(CamelSchema):
 
     claim_frequency: str | None = Field(None, max_length=20)
     npa_disqualification_dpd_days: int | None = Field(None, ge=0)
+    calculation_rules: dict[str, Any] | None = None
+    eligibility_rules: dict[str, Any] | None = None
+    required_documents: list[dict[str, Any]] | None = None
+    workflow_rules: dict[str, Any] | None = None
+    fund_rules: dict[str, Any] | None = None
     description: str | None = None
     is_active: bool | None = None
 
@@ -102,6 +122,11 @@ class SubventionSchemeResponse(CamelSchema):
 
     claim_frequency: str
     npa_disqualification_dpd_days: int
+    calculation_rules: dict[str, Any] = Field(default_factory=dict)
+    eligibility_rules: dict[str, Any] = Field(default_factory=dict)
+    required_documents: list[dict[str, Any]] = Field(default_factory=list)
+    workflow_rules: dict[str, Any] = Field(default_factory=dict)
+    fund_rules: dict[str, Any] = Field(default_factory=dict)
     description: str | None = None
 
     is_active: bool
@@ -392,6 +417,8 @@ class SubventionClaimComputeResponse(CamelSchema):
     interest_paid_in_period: Decimal
     subvention_rate_percent: Decimal
     applicable_subvention_amount: Decimal
+    calculation_method: str | None = None
+    eligible_base_amount: Decimal | None = None
 
 
 class EligibleClaimPeriod(CamelSchema):

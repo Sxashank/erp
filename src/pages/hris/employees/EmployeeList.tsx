@@ -43,18 +43,18 @@ import { hrisApi, organizationsApi, departmentsApi, designationsApi } from '@/se
 import { logger } from "@/lib/logger";
 interface Employee {
   id: string;
-  employee_code: string;
-  first_name: string;
-  middle_name?: string;
-  last_name: string;
-  full_name: string;
-  personal_mobile: string;
-  official_email?: string;
-  department_name?: string;
-  designation_name?: string;
-  employment_type: string;
-  employment_status: string;
-  date_of_joining: string;
+  employeeCode: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  fullName: string;
+  personalMobile: string;
+  officialEmail?: string;
+  departmentName?: string;
+  designationName?: string;
+  employmentType: string;
+  employmentStatus: string;
+  dateOfJoining: string;
 }
 
 interface Organization {
@@ -131,7 +131,7 @@ export function EmployeeList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -152,7 +152,7 @@ export function EmployeeList() {
         return;
       }
       try {
-        const response = await departmentsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+        const response = await departmentsApi.list({ pageSize: 100 });
         setDepartments(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch departments:', error);
@@ -169,7 +169,7 @@ export function EmployeeList() {
         return;
       }
       try {
-        const response = await designationsApi.list({ department_id: selectedDeptId, page_size: 100 });
+        const response = await designationsApi.list({ departmentId: selectedDeptId, pageSize: 100 });
         setDesignations(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch designations:', error);
@@ -184,7 +184,6 @@ export function EmployeeList() {
     try {
       setLoading(true);
       const params: Record<string, unknown> = {
-        organization_id: selectedOrgId,
         skip,
         limit: pagination.limit,
       };
@@ -362,22 +361,22 @@ export function EmployeeList() {
                 <TableBody>
                   {employees.map((emp) => (
                     <TableRow key={emp.id}>
-                      <TableCell className="font-medium">{emp.employee_code}</TableCell>
+                      <TableCell className="font-medium">{emp.employeeCode}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{emp.full_name}</p>
-                          <p className="text-xs text-slate-500">{emp.official_email || emp.personal_mobile}</p>
+                          <p className="font-medium">{emp.fullName}</p>
+                          <p className="text-xs text-slate-500">{emp.officialEmail || emp.personalMobile}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{emp.department_name || '-'}</TableCell>
-                      <TableCell>{emp.designation_name || '-'}</TableCell>
+                      <TableCell>{emp.departmentName || '-'}</TableCell>
+                      <TableCell>{emp.designationName || '-'}</TableCell>
                       <TableCell>
-                        <Badge variant="outline">{emp.employment_type}</Badge>
+                        <Badge variant="outline">{emp.employmentType}</Badge>
                       </TableCell>
-                      <TableCell><DateDisplay date={emp.date_of_joining} /></TableCell>
+                      <TableCell><DateDisplay date={emp.dateOfJoining} /></TableCell>
                       <TableCell>
-                        <Badge className={getStatusBadgeColor(emp.employment_status)}>
-                          {emp.employment_status}
+                        <Badge className={getStatusBadgeColor(emp.employmentStatus)}>
+                          {emp.employmentStatus}
                         </Badge>
                       </TableCell>
                       <TableCell>

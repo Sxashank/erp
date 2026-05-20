@@ -99,13 +99,12 @@ export function TDSEntryForm() {
   const form = useForm<TDSEntryFormValues, unknown, TDSEntryFormInput>({
     resolver: zodResolver(tdsEntrySchema),
     defaultValues: {
-      ...defaultValues,
-      organizationId: activeOrganizationId ?? '',
+      ...defaultValues ?? '',
     },
   });
 
   const organizationId = form.watch('organizationId');
-  const financialYearsQuery = useFinancialYears(organizationId || activeOrganizationId || undefined);
+  const financialYearsQuery = useFinancialYears();
   const selectedSectionId = form.watch('tdsSectionId');
   const [baseAmount, tdsRate, surcharge, cess] = useWatch({
     control: form.control,

@@ -3,6 +3,8 @@ export interface PaginatedResponse<T> {
   items: T[];
   total: number;
   page: number;
+  pageSize: number;
+  totalPages: number;
   page_size: number;
   total_pages: number;
 }
@@ -219,7 +221,7 @@ export interface OrganizationUpdate {
 // Organization Bank Account types
 export interface OrganizationBankAccount {
   id: string;
-  organization_id: string;
+  organization_id?: string;
   account_name: string;
   account_number: string;
   ifsc_code: string;
@@ -328,6 +330,21 @@ export interface Unit {
   id: string;
   code: string;
   name: string;
+  unitType: string;
+  organizationId: string;
+  parentUnitId?: string | null;
+  isSeparateAccounting: boolean;
+  gstStateCode?: string | null;
+  addressLine1?: string | null;
+  addressLine2?: string | null;
+  stateCode?: string | null;
+  managerName?: string | null;
+  isHeadOffice: boolean;
+  createdAt: string;
+  updatedAt?: string | null;
+  isActive: boolean;
+  organizationName?: string | null;
+  parentUnitName?: string | null;
   short_name?: string;
   description?: string;
   unit_type: string;
@@ -509,8 +526,10 @@ export interface UnitTreeNode {
   id: string;
   code: string;
   name: string;
+  unitType: string;
   unit_type: string;
   level: number;
+  isHeadOffice: boolean;
   is_head_office: boolean;
   status: string;
   children: UnitTreeNode[];
@@ -729,7 +748,15 @@ export interface AccountUpdate {
 }
 
 // Voucher Type
-export type VoucherClass = 'JOURNAL' | 'PAYMENT' | 'RECEIPT' | 'CONTRA' | 'SALES' | 'PURCHASE' | 'DEBIT_NOTE' | 'CREDIT_NOTE';
+export type VoucherClass =
+  | 'JOURNAL'
+  | 'PAYMENT'
+  | 'RECEIPT'
+  | 'CONTRA'
+  | 'SALES'
+  | 'PURCHASE'
+  | 'DEBIT_NOTE'
+  | 'CREDIT_NOTE';
 
 export interface VoucherType {
   id: string;
@@ -780,7 +807,13 @@ export interface VoucherTypeUpdate {
 }
 
 // Voucher
-export type VoucherStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'POSTED' | 'REJECTED' | 'CANCELLED';
+export type VoucherStatus =
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'POSTED'
+  | 'REJECTED'
+  | 'CANCELLED';
 export type ApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 
 export interface VoucherLine {
@@ -861,7 +894,7 @@ export interface VoucherCreate {
   reference_number?: string;
   reference_date?: string;
   narration?: string;
-  organization_id: string;
+  organization_id?: string;
   unit_id?: string;
   lines: VoucherLineCreate[];
 }

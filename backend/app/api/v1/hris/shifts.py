@@ -7,9 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
 from app.core.constants import Permissions
-from app.core.permissions import RequirePermissions
 from app.models.auth.user import User
 from app.schemas.hris.shift import (
     ShiftCreate,
@@ -34,14 +33,13 @@ router = APIRouter()
 # Shifts
 # ============================================
 @router.get("/shifts", response_model=PaginatedResponse[ShiftResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_SHIFT_VIEW])
 async def list_shifts(
     organization_id: UUID,
     active_only: bool = True,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_SHIFT_VIEW)),
 ):
     """List shifts for organization."""
     service = ShiftService(db)
@@ -50,11 +48,10 @@ async def list_shifts(
 
 
 @router.post("/shifts", response_model=ShiftResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_SHIFT_CREATE])
 async def create_shift(
     data: ShiftCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_SHIFT_CREATE)),
 ):
     """Create a new shift."""
     service = ShiftService(db)
@@ -72,11 +69,10 @@ async def create_shift(
 
 
 @router.get("/shifts/{shift_id}", response_model=ShiftResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_SHIFT_VIEW])
 async def get_shift(
     shift_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_SHIFT_VIEW)),
 ):
     """Get shift by ID."""
     service = ShiftService(db)
@@ -87,12 +83,11 @@ async def get_shift(
 
 
 @router.put("/shifts/{shift_id}", response_model=ShiftResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_SHIFT_UPDATE])
 async def update_shift(
     shift_id: UUID,
     data: ShiftUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_SHIFT_UPDATE)),
 ):
     """Update shift."""
     service = ShiftService(db)
@@ -103,11 +98,10 @@ async def update_shift(
 
 
 @router.delete("/shifts/{shift_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_SHIFT_DELETE])
 async def delete_shift(
     shift_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_SHIFT_DELETE)),
 ):
     """Delete (deactivate) shift."""
     service = ShiftService(db)
@@ -120,13 +114,12 @@ async def delete_shift(
 # Holiday Calendars
 # ============================================
 @router.get("/holiday-calendars", response_model=List[HolidayCalendarResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_VIEW])
 async def list_holiday_calendars(
     organization_id: UUID,
     year: Optional[int] = None,
     active_only: bool = True,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_VIEW)),
 ):
     """List holiday calendars for organization."""
     service = HolidayService(db)
@@ -135,11 +128,10 @@ async def list_holiday_calendars(
 
 
 @router.post("/holiday-calendars", response_model=HolidayCalendarResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_CREATE])
 async def create_holiday_calendar(
     data: HolidayCalendarCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_CREATE)),
 ):
     """Create a new holiday calendar."""
     service = HolidayService(db)
@@ -148,12 +140,11 @@ async def create_holiday_calendar(
 
 
 @router.get("/holiday-calendars/{calendar_id}", response_model=HolidayCalendarResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_VIEW])
 async def get_holiday_calendar(
     calendar_id: UUID,
     include_holidays: bool = True,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_VIEW)),
 ):
     """Get holiday calendar by ID."""
     service = HolidayService(db)
@@ -167,12 +158,11 @@ async def get_holiday_calendar(
 
 
 @router.put("/holiday-calendars/{calendar_id}", response_model=HolidayCalendarResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_UPDATE])
 async def update_holiday_calendar(
     calendar_id: UUID,
     data: HolidayCalendarUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_UPDATE)),
 ):
     """Update holiday calendar."""
     service = HolidayService(db)
@@ -186,11 +176,10 @@ async def update_holiday_calendar(
 
 
 @router.delete("/holiday-calendars/{calendar_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_DELETE])
 async def delete_holiday_calendar(
     calendar_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_DELETE)),
 ):
     """Delete (deactivate) holiday calendar."""
     service = HolidayService(db)
@@ -206,13 +195,12 @@ async def delete_holiday_calendar(
 # Holidays
 # ============================================
 @router.get("/holidays", response_model=List[HolidayResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_VIEW])
 async def list_holidays(
     calendar_id: UUID,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_VIEW)),
 ):
     """List holidays for a calendar."""
     service = HolidayService(db)
@@ -221,11 +209,10 @@ async def list_holidays(
 
 
 @router.post("/holidays", response_model=HolidayResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_CREATE])
 async def create_holiday(
     data: HolidayCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_CREATE)),
 ):
     """Create a new holiday."""
     service = HolidayService(db)
@@ -234,11 +221,10 @@ async def create_holiday(
 
 
 @router.post("/holidays/bulk", response_model=List[HolidayResponse], response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_CREATE])
 async def bulk_create_holidays(
     data: HolidayBulkCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_CREATE)),
 ):
     """Bulk create holidays."""
     service = HolidayService(db)
@@ -247,11 +233,10 @@ async def bulk_create_holidays(
 
 
 @router.get("/holidays/{holiday_id}", response_model=HolidayResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_VIEW])
 async def get_holiday(
     holiday_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_VIEW)),
 ):
     """Get holiday by ID."""
     service = HolidayService(db)
@@ -262,12 +247,11 @@ async def get_holiday(
 
 
 @router.put("/holidays/{holiday_id}", response_model=HolidayResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_UPDATE])
 async def update_holiday(
     holiday_id: UUID,
     data: HolidayUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_UPDATE)),
 ):
     """Update holiday."""
     service = HolidayService(db)
@@ -278,11 +262,10 @@ async def update_holiday(
 
 
 @router.delete("/holidays/{holiday_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_DELETE])
 async def delete_holiday(
     holiday_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_DELETE)),
 ):
     """Delete holiday."""
     service = HolidayService(db)
@@ -295,13 +278,12 @@ async def delete_holiday(
 # Utility Endpoints
 # ============================================
 @router.get("/check-holiday", response_model=Optional[HolidayResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_HOLIDAY_VIEW])
 async def check_holiday(
     organization_id: UUID,
     check_date: date,
     unit_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_HOLIDAY_VIEW)),
 ):
     """Check if a date is a holiday."""
     service = HolidayService(db)

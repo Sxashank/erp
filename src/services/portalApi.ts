@@ -368,6 +368,44 @@ export interface PortalFundUtilizationLine {
   remarks?: string | null;
 }
 
+export interface PortalFundingSourceLine {
+  sourceCode: string;
+  sourceLabel: string;
+  amount: string;
+  remarks?: string | null;
+}
+
+export interface PortalLenderLoanLine {
+  loanType: string;
+  loanAmount: string;
+  lenderName: string;
+  lenderCategory?: string | null;
+  lenderContact?: string | null;
+  lenderEmail?: string | null;
+  lenderAddress?: string | null;
+  lenderState?: string | null;
+  lenderDistrict?: string | null;
+  lenderPincode?: string | null;
+  sanctionReference?: string | null;
+  sanctionDate?: string | null;
+  interestRatePercent?: string | null;
+  emiPeriodicity?: string | null;
+  interestDebitingPeriodicity?: string | null;
+  loanAccountNumber?: string | null;
+  ifscCode?: string | null;
+  securityType?: string | null;
+  disbursementCallType?: string | null;
+  emiAmount?: string | null;
+  emiDueDate?: string | null;
+}
+
+export interface PortalLenderLoanDetail extends PortalLenderLoanLine {
+  id: string;
+  lenderValidationStatus: string;
+  lenderValidationRemarks?: string | null;
+  lenderValidatedAt?: string | null;
+}
+
 export interface PortalApplication {
   id: string;
   applicationNumber: string;
@@ -406,6 +444,8 @@ export interface PortalApplicationDetail extends PortalApplication {
     approvedAmount?: string | null;
     remarks?: string | null;
   }[];
+  fundingSources?: (PortalFundingSourceLine & { id: string })[];
+  lenderLoans?: PortalLenderLoanDetail[];
   documentRequirements?: {
     code: string;
     name: string;
@@ -438,6 +478,8 @@ export interface CreatePortalApplicationRequest {
   sanctionReference?: string | null;
   declarationAccepted: boolean;
   fundUtilization: PortalFundUtilizationLine[];
+  fundingSources?: PortalFundingSourceLine[];
+  lenderLoans?: PortalLenderLoanLine[];
 }
 
 export type UpdatePortalApplicationRequest = Partial<
@@ -695,11 +737,13 @@ export const portalUtilizationCategoriesApi = {
 
 export const portalDashboardApi = {
   getDashboard: () => portalApiClient.get('/portal/dashboard'),
-  getLoans: () => portalApiClient.get('/portal/loans'),
-  getLoan: (loanId: string) => portalApiClient.get(`/portal/loans/${loanId}`),
-  getLoanSchedule: (loanId: string) => portalApiClient.get(`/portal/loans/${loanId}/schedule`),
-  getLoanPayments: (loanId: string) => portalApiClient.get(`/portal/loans/${loanId}/payments`),
-  getUpcomingDues: () => portalApiClient.get('/portal/upcoming-dues'),
+  getLoans: () => portalApiClient.get('/portal/dashboard/loans'),
+  getLoan: (loanId: string) => portalApiClient.get(`/portal/dashboard/loans/${loanId}`),
+  getLoanSchedule: (loanId: string) =>
+    portalApiClient.get(`/portal/dashboard/loans/${loanId}/schedule`),
+  getLoanPayments: (loanId: string) =>
+    portalApiClient.get(`/portal/dashboard/loans/${loanId}/payments`),
+  getUpcomingDues: () => portalApiClient.get('/portal/dashboard/upcoming-dues'),
 };
 
 export const portalPaymentApi = {
@@ -753,7 +797,7 @@ export const portalDocumentApi = {
       responseType: 'blob',
     }),
 
-  getTdsCertificate: (data: { financial_year: string }) =>
+  getTdsCertificate: (data: { loan_account_id: string; financial_year: string; quarter: string }) =>
     portalApiClient.get('/portal/documents/tds-cert', {
       params: data,
       responseType: 'blob',
@@ -997,6 +1041,16 @@ export const portalClaimsApi = {
     portalApiClient.get<Blob>(`/portal/claims/${claimId}/report.csv`, {
       responseType: 'blob',
     }),
+
+  downloadClaimXlsx: (claimId: string) =>
+    portalApiClient.get<Blob>(`/portal/claims/${claimId}/report.xlsx`, {
+      responseType: 'blob',
+    }),
+
+  downloadClaimPdf: (claimId: string) =>
+    portalApiClient.get<Blob>(`/portal/claims/${claimId}/report.pdf`, {
+      responseType: 'blob',
+    }),
 };
 
 export const portalSubsidyApi = {
@@ -1013,13 +1067,13 @@ export const portalSubsidyApi = {
 
 export const portalScheduleApi = {
   getFailed: (loanId: string) =>
-    portalApiClient.get<FailedScheduleItem[]>(`/portal/loans/${loanId}/schedule/failed`),
+    portalApiClient.get<FailedScheduleItem[]>(`/portal/dashboard/loans/${loanId}/schedule/failed`),
 
   getMissed: (loanId: string) =>
-    portalApiClient.get<MissedScheduleItem[]>(`/portal/loans/${loanId}/schedule/missed`),
+    portalApiClient.get<MissedScheduleItem[]>(`/portal/dashboard/loans/${loanId}/schedule/missed`),
 
   downloadCsv: (loanId: string) =>
-    portalApiClient.get<Blob>(`/portal/loans/${loanId}/schedule.csv`, {
+    portalApiClient.get<Blob>(`/portal/dashboard/loans/${loanId}/schedule.csv`, {
       responseType: 'blob',
     }),
 };

@@ -33,7 +33,7 @@ export function DesignationList() {
   const fetchDesignations = async (page = 1) => {
     try {
       setLoading(true);
-      const response = await designationsApi.list({ page, page_size: 10, include_inactive: true });
+      const response = await designationsApi.list({ page, pageSize: 10, includeInactive: true });
       const data: PaginatedResponse<Designation> = response.data;
       setDesignations(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });

@@ -29,6 +29,14 @@ CLAIM_RELEASE_ROLES: frozenset[str] = frozenset(
     }
 )
 
+CLAIM_SUBMITTER_ROLES: frozenset[str] = frozenset(
+    {
+        PortalActorRole.SCHEME_BORROWER.value,
+        PortalActorRole.SCHEME_LENDER.value,
+        PortalActorRole.SCHEME_ADMIN.value,
+    }
+)
+
 APPLICATION_LENDER_ROLES: frozenset[str] = frozenset(
     {
         PortalActorRole.SCHEME_LENDER.value,

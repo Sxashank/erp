@@ -161,7 +161,7 @@ export function DepartmentList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -201,7 +201,7 @@ export function DepartmentList() {
     }
     try {
       setLoading(true);
-      const response = await departmentsApi.getTree(selectedOrgId);
+      const response = await departmentsApi.getTree();
       setTreeData(response.data);
     } catch (error) {
       logger.error('Failed to fetch department tree:', error);

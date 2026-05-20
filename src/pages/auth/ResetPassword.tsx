@@ -51,8 +51,8 @@ export function ResetPassword() {
       setError('');
       await authApi.resetPassword({
         token,
-        new_password: data.new_password,
-        confirm_password: data.confirm_password,
+        newPassword: data.new_password,
+        confirmPassword: data.confirm_password,
       });
       setSuccess(true);
     } catch (err: unknown) {

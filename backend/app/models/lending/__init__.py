@@ -207,10 +207,13 @@ from app.models.lending.enums import (
 
 # Interest Incentivization Fund (IIF) Models
 from app.models.lending.iif import (
+    ApplicationFundingSource,
+    ApplicationLenderLoan,
     ApplicationUtilization,
     FundUtilizationCategory,
     LoanSubventionEnrollment,
     SubventionClaim,
+    SubventionFundTransaction,
     SubventionScheme,
 )
 
@@ -532,8 +535,11 @@ __all__ = [
     "SubventionScheme",
     "FundUtilizationCategory",
     "ApplicationUtilization",
+    "ApplicationFundingSource",
+    "ApplicationLenderLoan",
     "LoanSubventionEnrollment",
     "SubventionClaim",
+    "SubventionFundTransaction",
     # IIF Enums
     "IIFLoanType",
     "ClaimFrequency",

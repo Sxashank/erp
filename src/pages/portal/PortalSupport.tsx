@@ -417,12 +417,15 @@ export default function PortalSupport() {
             </div>
             <div className="space-y-2">
               <Label>Loan Account (Optional)</Label>
-              <Select value={requestLoan} onValueChange={setRequestLoan}>
+              <Select
+                value={requestLoan || '__none__'}
+                onValueChange={(v) => setRequestLoan(v === '__none__' ? '' : v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select loan if applicable" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Not Applicable</SelectItem>
+                  <SelectItem value="__none__">Not Applicable</SelectItem>
                   {loans.map((loan) => (
                     <SelectItem key={loan.id} value={loan.id}>
                       {loan.loan_account_number}
@@ -497,12 +500,15 @@ export default function PortalSupport() {
             </div>
             <div className="space-y-2">
               <Label>Related Loan (Optional)</Label>
-              <Select value={ticketLoan} onValueChange={setTicketLoan}>
+              <Select
+                value={ticketLoan || '__none__'}
+                onValueChange={(v) => setTicketLoan(v === '__none__' ? '' : v)}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="Select loan if applicable" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Not Applicable</SelectItem>
+                  <SelectItem value="__none__">Not Applicable</SelectItem>
                   {loans.map((loan) => (
                     <SelectItem key={loan.id} value={loan.id}>
                       {loan.loan_account_number}

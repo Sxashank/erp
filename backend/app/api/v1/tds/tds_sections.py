@@ -45,10 +45,12 @@ def _to_response(section) -> TDSSectionResponse:
 
 @router.get("", response_model=PaginatedResponse[TDSSectionResponse], response_model_by_alias=True)
 async def list_tds_sections(
-    return_form: Optional[str] = Query(None, description="Filter by return form (24Q, 26Q, etc.)"),
+    return_form: Optional[str] = Query(
+        None, alias="returnForm", description="Filter by return form (24Q, 26Q, etc.)"
+    ),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -62,10 +64,10 @@ async def list_tds_sections(
 
 @router.get("/active", response_model=PaginatedResponse[TDSSectionResponse], response_model_by_alias=True)
 async def list_active_tds_sections(
-    as_of_date: Optional[date] = Query(None),
-    is_tcs: bool = Query(False, description="Get TCS sections instead of TDS"),
+    as_of_date: Optional[date] = Query(None, alias="asOfDate"),
+    is_tcs: bool = Query(False, alias="isTcs", description="Get TCS sections instead of TDS"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

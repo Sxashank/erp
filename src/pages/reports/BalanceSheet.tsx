@@ -82,7 +82,7 @@ export function BalanceSheet() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -94,7 +94,7 @@ export function BalanceSheet() {
 
   const fetchFinancialYears = useCallback(async () => {
     try {
-      const response = await financialYearsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await financialYearsApi.list({ pageSize: 100 });
       setFinancialYears(response.data.items);
       const currentFY = response.data.items.find((fy: FinancialYear) => fy.is_current);
       if (currentFY) {
@@ -122,7 +122,6 @@ export function BalanceSheet() {
     try {
       setLoading(true);
       const response = await reportsApi.getBalanceSheet({
-        organization_id: selectedOrgId,
         financial_year_id: selectedFYId,
         as_on_date: asOnDate,
       });

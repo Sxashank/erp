@@ -39,16 +39,16 @@ import { hrisApi, organizationsApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface Shift {
   id: string;
-  shift_code: string;
-  shift_name: string;
-  shift_type: string;
-  start_time: string;
-  end_time: string;
-  break_duration_minutes: number;
-  working_hours: number;
-  grace_period_minutes: number;
-  is_night_shift: boolean;
-  is_active: boolean;
+  shiftCode: string;
+  shiftName: string;
+  shiftType: string;
+  startTime: string;
+  endTime: string;
+  breakDurationMinutes: number;
+  workingHours: number;
+  gracePeriodMinutes: number;
+  isNightShift: boolean;
+  isActive: boolean;
 }
 
 interface Organization {
@@ -77,7 +77,7 @@ export function ShiftList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -95,7 +95,7 @@ export function ShiftList() {
       if (!selectedOrgId) return;
       try {
         setLoading(true);
-        const response = await hrisApi.listShifts({ organization_id: selectedOrgId });
+        const response = await hrisApi.listShifts({});
         setShifts(response.data.items || response.data || []);
       } catch (error) {
         logger.error('Failed to fetch shifts:', error);
@@ -186,23 +186,23 @@ export function ShiftList() {
               <TableBody>
                 {shifts.map((shift) => (
                   <TableRow key={shift.id}>
-                    <TableCell className="font-medium">{shift.shift_code}</TableCell>
-                    <TableCell>{shift.shift_name}</TableCell>
+                    <TableCell className="font-medium">{shift.shiftCode}</TableCell>
+                    <TableCell>{shift.shiftName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{shift.shift_type}</Badge>
+                      <Badge variant="outline">{shift.shiftType}</Badge>
                     </TableCell>
-                    <TableCell>{formatTime(shift.start_time)}</TableCell>
-                    <TableCell>{formatTime(shift.end_time)}</TableCell>
-                    <TableCell>{shift.working_hours} hrs</TableCell>
-                    <TableCell>{shift.break_duration_minutes}</TableCell>
+                    <TableCell>{formatTime(shift.startTime)}</TableCell>
+                    <TableCell>{formatTime(shift.endTime)}</TableCell>
+                    <TableCell>{shift.workingHours} hrs</TableCell>
+                    <TableCell>{shift.breakDurationMinutes}</TableCell>
                     <TableCell>
-                      <Badge variant={shift.is_night_shift ? 'default' : 'secondary'}>
-                        {shift.is_night_shift ? 'Yes' : 'No'}
+                      <Badge variant={shift.isNightShift ? 'default' : 'secondary'}>
+                        {shift.isNightShift ? 'Yes' : 'No'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={shift.is_active ? 'default' : 'secondary'}>
-                        {shift.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant={shift.isActive ? 'default' : 'secondary'}>
+                        {shift.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell>

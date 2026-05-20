@@ -39,14 +39,14 @@ import { hrisApi, organizationsApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface LeaveType {
   id: string;
-  leave_code: string;
-  leave_name: string;
+  leaveCode: string;
+  leaveName: string;
   category: string;
-  annual_quota: number;
-  carry_forward_allowed: boolean;
-  encashment_allowed: boolean;
-  is_paid: boolean;
-  is_active: boolean;
+  annualQuota: number;
+  carryForwardAllowed: boolean;
+  encashmentAllowed: boolean;
+  isPaid: boolean;
+  isActive: boolean;
 }
 
 interface Organization {
@@ -87,7 +87,7 @@ export function LeaveTypeList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -105,7 +105,7 @@ export function LeaveTypeList() {
       if (!selectedOrgId) return;
       try {
         setLoading(true);
-        const response = await hrisApi.listLeaveTypes({ organization_id: selectedOrgId });
+        const response = await hrisApi.listLeaveTypes({});
         setLeaveTypes(response.data.items || response.data || []);
       } catch (error) {
         logger.error('Failed to fetch leave types:', error);
@@ -195,32 +195,32 @@ export function LeaveTypeList() {
               <TableBody>
                 {leaveTypes.map((leaveType) => (
                   <TableRow key={leaveType.id}>
-                    <TableCell className="font-medium">{leaveType.leave_code}</TableCell>
-                    <TableCell>{leaveType.leave_name}</TableCell>
+                    <TableCell className="font-medium">{leaveType.leaveCode}</TableCell>
+                    <TableCell>{leaveType.leaveName}</TableCell>
                     <TableCell>
                       <Badge className={getCategoryBadgeColor(leaveType.category)}>
                         {leaveType.category}
                       </Badge>
                     </TableCell>
-                    <TableCell>{leaveType.annual_quota} days</TableCell>
+                    <TableCell>{leaveType.annualQuota} days</TableCell>
                     <TableCell>
-                      <Badge variant={leaveType.carry_forward_allowed ? 'default' : 'secondary'}>
-                        {leaveType.carry_forward_allowed ? 'Yes' : 'No'}
+                      <Badge variant={leaveType.carryForwardAllowed ? 'default' : 'secondary'}>
+                        {leaveType.carryForwardAllowed ? 'Yes' : 'No'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={leaveType.encashment_allowed ? 'default' : 'secondary'}>
-                        {leaveType.encashment_allowed ? 'Yes' : 'No'}
+                      <Badge variant={leaveType.encashmentAllowed ? 'default' : 'secondary'}>
+                        {leaveType.encashmentAllowed ? 'Yes' : 'No'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={leaveType.is_paid ? 'default' : 'secondary'}>
-                        {leaveType.is_paid ? 'Paid' : 'Unpaid'}
+                      <Badge variant={leaveType.isPaid ? 'default' : 'secondary'}>
+                        {leaveType.isPaid ? 'Paid' : 'Unpaid'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={leaveType.is_active ? 'default' : 'secondary'}>
-                        {leaveType.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant={leaveType.isActive ? 'default' : 'secondary'}>
+                        {leaveType.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell>

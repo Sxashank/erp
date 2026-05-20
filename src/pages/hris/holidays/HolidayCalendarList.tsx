@@ -41,11 +41,11 @@ import { hrisApi, organizationsApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface HolidayCalendar {
   id: string;
-  calendar_name: string;
+  calendarName: string;
   year: number;
-  is_default: boolean;
-  is_active: boolean;
-  holiday_count?: number;
+  isDefault: boolean;
+  isActive: boolean;
+  holidayCount?: number;
 }
 
 interface Organization {
@@ -68,7 +68,7 @@ export function HolidayCalendarList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -87,7 +87,6 @@ export function HolidayCalendarList() {
       try {
         setLoading(true);
         const response = await hrisApi.listHolidayCalendars({
-          organization_id: selectedOrgId,
           year: parseInt(selectedYear, 10),
         });
         setCalendars(response.data.items || response.data || []);
@@ -190,17 +189,17 @@ export function HolidayCalendarList() {
               <TableBody>
                 {calendars.map((calendar) => (
                   <TableRow key={calendar.id}>
-                    <TableCell className="font-medium">{calendar.calendar_name}</TableCell>
+                    <TableCell className="font-medium">{calendar.calendarName}</TableCell>
                     <TableCell>{calendar.year}</TableCell>
-                    <TableCell>{calendar.holiday_count || 0} holidays</TableCell>
+                    <TableCell>{calendar.holidayCount || 0} holidays</TableCell>
                     <TableCell>
-                      <Badge variant={calendar.is_default ? 'default' : 'secondary'}>
-                        {calendar.is_default ? 'Yes' : 'No'}
+                      <Badge variant={calendar.isDefault ? 'default' : 'secondary'}>
+                        {calendar.isDefault ? 'Yes' : 'No'}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={calendar.is_active ? 'default' : 'secondary'}>
-                        {calendar.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant={calendar.isActive ? 'default' : 'secondary'}>
+                        {calendar.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell>

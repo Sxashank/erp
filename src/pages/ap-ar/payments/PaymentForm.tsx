@@ -212,7 +212,7 @@ export function PaymentForm() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ include_inactive: false });
+      const response = await organizationsApi.list({ includeInactive: false });
       setOrganizations(response.data.items || []);
       if (response.data.items?.length > 0 && !formData.organizationId) {
         setFormData(prev => ({ ...prev, organizationId: response.data.items[0].id }));
@@ -227,15 +227,13 @@ export function PaymentForm() {
     try {
       // Load bank accounts
       const bankResponse = await accountsApi.list({
-        organization_id: formData.organizationId,
-        account_type: 'BANK',
+        accountType: 'BANK',
       });
       setBankAccounts(bankResponse.data.items || []);
 
       // Load cash accounts
       const cashResponse = await accountsApi.list({
-        organization_id: formData.organizationId,
-        account_type: 'CASH',
+        accountType: 'CASH',
       });
       setCashAccounts(cashResponse.data.items || []);
     } catch (error) {
@@ -246,7 +244,7 @@ export function PaymentForm() {
   const loadVendors = useCallback(async () => {
     if (!formData.organizationId) return;
     try {
-      const response = await vendorsApi.getActive({ organization_id: formData.organizationId });
+      const response = await vendorsApi.getActive({});
       setVendors(response.data || []);
     } catch (error) {
       logger.error('Failed to load vendors:', error);
@@ -256,7 +254,7 @@ export function PaymentForm() {
   const loadCustomers = useCallback(async () => {
     if (!formData.organizationId) return;
     try {
-      const response = await customersApi.getActive({ organization_id: formData.organizationId });
+      const response = await customersApi.getActive({});
       setCustomers(response.data || []);
     } catch (error) {
       logger.error('Failed to load customers:', error);
@@ -265,7 +263,7 @@ export function PaymentForm() {
 
   const loadTdsSections = useCallback(async () => {
     try {
-      const response = await tdsSectionsApi.getActive({ is_tcs: false });
+      const response = await tdsSectionsApi.getActive({ isTcs: false });
       setTdsSections(response.data || []);
     } catch (error) {
       logger.error('Failed to load TDS sections:', error);
@@ -277,11 +275,7 @@ export function PaymentForm() {
     if (!partyId) return;
 
     try {
-      const response = await paymentsApi.getOutstandingDocuments(
-        formData.partyType,
-        partyId,
-        { organization_id: formData.organizationId }
-      );
+      const response = await paymentsApi.getOutstandingDocuments(formData.partyType, partyId);
       setOutstandingDocs((response.data || []).map((doc: OutstandingDocument) => ({
         ...doc,
         selected: false,
@@ -495,7 +489,6 @@ export function PaymentForm() {
     setSaving(true);
     try {
       const payload = {
-        organizationId: formData.organizationId,
         paymentType: formData.paymentType,
         paymentDate: formData.paymentDate,
         partyType: formData.partyType,

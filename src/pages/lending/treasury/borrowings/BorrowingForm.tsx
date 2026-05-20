@@ -281,7 +281,7 @@ export default function BorrowingForm() {
                     <FormItem>
                       <FormLabel>Sanction Date *</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <Input type="date" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -311,6 +311,7 @@ export default function BorrowingForm() {
                           type="number"
                           placeholder="Sanctioned amount"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }
@@ -420,6 +421,7 @@ export default function BorrowingForm() {
                             step="0.01"
                             placeholder="e.g., 8.50"
                             {...field}
+                            value={field.value ?? ''}
                             onChange={(e) =>
                               field.onChange(e.target.value ? Number(e.target.value) : undefined)
                             }
@@ -440,6 +442,7 @@ export default function BorrowingForm() {
                             type="number"
                             placeholder="e.g., 75"
                             {...field}
+                            value={field.value ?? ''}
                             onChange={(e) =>
                               field.onChange(e.target.value ? Number(e.target.value) : 0)
                             }
@@ -466,6 +469,7 @@ export default function BorrowingForm() {
                           step="0.01"
                           placeholder="e.g., 9.25"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }
@@ -548,6 +552,7 @@ export default function BorrowingForm() {
                           type="number"
                           placeholder="e.g., 60"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }
@@ -568,6 +573,7 @@ export default function BorrowingForm() {
                           type="number"
                           placeholder="e.g., 6"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : 0)
                           }
@@ -585,7 +591,7 @@ export default function BorrowingForm() {
                     <FormItem>
                       <FormLabel>Maturity Date *</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <Input type="date" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -625,7 +631,7 @@ export default function BorrowingForm() {
                     <FormItem>
                       <FormLabel>First Interest Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <Input type="date" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -638,7 +644,7 @@ export default function BorrowingForm() {
                     <FormItem>
                       <FormLabel>First Principal Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} />
+                        <Input type="date" {...field} value={field.value ?? ''} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -692,6 +698,7 @@ export default function BorrowingForm() {
                           step="0.01"
                           placeholder="e.g., 1.25 for 125%"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }
@@ -743,6 +750,7 @@ export default function BorrowingForm() {
                           step="0.01"
                           placeholder="e.g., 0.50"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }
@@ -764,6 +772,7 @@ export default function BorrowingForm() {
                           step="0.01"
                           placeholder="e.g., 0.25"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }
@@ -786,6 +795,7 @@ export default function BorrowingForm() {
                           step="0.01"
                           placeholder="e.g., 2.00"
                           {...field}
+                          value={field.value ?? ''}
                           onChange={(e) =>
                             field.onChange(e.target.value ? Number(e.target.value) : undefined)
                           }

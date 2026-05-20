@@ -54,7 +54,7 @@ export function AttendanceProcess() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -75,12 +75,10 @@ export function AttendanceProcess() {
       setResult(null);
 
       const params: Record<string, unknown> = {
-        organization_id: selectedOrgId,
       };
 
       if (processMode === 'single') {
         const response = await hrisApi.processDailyAttendance({
-          organization_id: selectedOrgId,
           attendance_date: processDate,
         });
         setResult(response.data);
@@ -102,7 +100,6 @@ export function AttendanceProcess() {
         for (let d = new Date(from); d <= to; d.setDate(d.getDate() + 1)) {
           try {
             const response = await hrisApi.processDailyAttendance({
-              organization_id: selectedOrgId,
               attendance_date: d.toISOString().split('T')[0],
             });
             totalResult.processed_count += response.data.processed_count || 0;
@@ -143,7 +140,6 @@ export function AttendanceProcess() {
       setResult(null);
 
       const response = await hrisApi.processDailyAttendance({
-        organization_id: selectedOrgId,
         attendance_date: processDate,
       });
       setResult(response.data);

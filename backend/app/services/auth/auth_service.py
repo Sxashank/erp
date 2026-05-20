@@ -152,17 +152,15 @@ class AuthService:
         # Update session last used
         session.last_used_at = datetime.now(timezone.utc)
 
-        # Get user permissions
+        # Get user permissions for the response body only. Do not embed the
+        # full permission set in the JWT: enterprise roles can carry hundreds
+        # of permissions, which makes Authorization headers exceed proxy limits.
         roles = await self._get_valid_role_codes(user.id)
         permissions = set(await self.user_repo.get_user_permissions(user.id)) | set(roles)
 
         # Create new access token
         access_token = create_access_token(
             subject=str(user.id),
-            additional_claims={
-                "roles": roles,
-                "permissions": sorted(permissions),
-            },
         )
 
         return Token(
@@ -314,13 +312,11 @@ class AuthService:
         roles = await self._get_valid_role_codes(user.id)
         permissions = set(await self.user_repo.get_user_permissions(user.id)) | set(roles)
 
-        # Create access token
+        # Create access token. Keep authorization claims out of the JWT and
+        # resolve permissions server-side from the user id on each protected
+        # request. This keeps headers small and avoids stale permission grants.
         access_token = create_access_token(
             subject=str(user.id),
-            additional_claims={
-                "roles": roles,
-                "permissions": sorted(permissions),
-            },
         )
 
         # Create refresh token

@@ -39,14 +39,14 @@ import { getErrorMessage } from "@/lib/errorMessage";
 
 interface ComponentLine {
   id?: string;
-  component_id: string;
+  componentId: string;
   component?: SalaryComponent;
-  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA';
-  default_value: string;
-  percentage_of: string;
-  percentage_value: string;
+  calculationType: 'FIXED' | 'PERCENTAGE' | 'FORMULA';
+  defaultValue: string;
+  percentageOf: string;
+  percentageValue: string;
   formula: string;
-  is_mandatory: boolean;
+  isMandatory: boolean;
 }
 
 export default function SalaryStructureForm() {
@@ -62,17 +62,16 @@ export default function SalaryStructureForm() {
   const organizationId = useRequiredActiveOrganizationId();
 
   const [formData, setFormData] = useState({
-    organization_id: organizationId,
-    structure_code: '',
-    structure_name: '',
+    structureCode: '',
+    structureName: '',
     description: '',
-    effective_from: new Date().toISOString().split('T')[0],
-    effective_to: '',
-    payment_mode: 'BANK',
-    pay_frequency: 'MONTHLY',
-    ctc_from: '',
-    ctc_to: '',
-    is_active: true,
+    effectiveFrom: new Date().toISOString().split('T')[0],
+    effectiveTo: '',
+    paymentMode: 'BANK',
+    payFrequency: 'MONTHLY',
+    ctcFrom: '',
+    ctcTo: '',
+    isActive: true,
   });
 
   const [componentLines, setComponentLines] = useState<ComponentLine[]>([]);
@@ -87,8 +86,7 @@ export default function SalaryStructureForm() {
   const loadComponents = async () => {
     try {
       const response = await payrollService.listComponents({
-        organization_id: organizationId,
-        active_only: true,
+        activeOnly: true,
         limit: 500,
       });
       setComponents(response.items);
@@ -106,33 +104,32 @@ export default function SalaryStructureForm() {
       setLoading(true);
       const data = await payrollService.getStructure(structureId);
       setFormData({
-        organization_id: data.organization_id,
-        structure_code: data.structure_code,
-        structure_name: data.structure_name,
+        structureCode: data.structureCode,
+        structureName: data.structureName,
         description: data.description || '',
-        effective_from: data.effective_from,
-        effective_to: data.effective_to || '',
-        payment_mode: data.payment_mode || 'BANK',
-        pay_frequency: data.pay_frequency || 'MONTHLY',
-        ctc_from: data.ctc_from?.toString() || '',
-        ctc_to: data.ctc_to?.toString() || '',
-        is_active: data.is_active,
+        effectiveFrom: data.effectiveFrom,
+        effectiveTo: data.effectiveTo || '',
+        paymentMode: data.paymentMode || 'BANK',
+        payFrequency: data.payFrequency || 'MONTHLY',
+        ctcFrom: data.ctcFrom?.toString() || '',
+        ctcTo: data.ctcTo?.toString() || '',
+        isActive: data.isActive,
       });
 
       if (data.components) {
         setComponentLines(
           data.components.map((c) => ({
             id: c.id,
-            component_id: c.component_id,
+            componentId: c.componentId,
             component: c.component,
-            calculation_type: c.calculation_type === 'FIXED' || c.calculation_type === 'FORMULA'
-              ? c.calculation_type
+            calculationType: c.calculationType === 'FIXED' || c.calculationType === 'FORMULA'
+              ? c.calculationType
               : 'PERCENTAGE',
-            default_value: c.default_value?.toString() || '',
-            percentage_of: c.percentage_of || '',
-            percentage_value: c.percentage_value?.toString() || '',
+            defaultValue: c.defaultValue?.toString() || '',
+            percentageOf: c.percentageOf || '',
+            percentageValue: c.percentageValue?.toString() || '',
             formula: c.formula || '',
-            is_mandatory: c.is_mandatory,
+            isMandatory: c.isMandatory,
           })),
         );
       }
@@ -152,13 +149,13 @@ export default function SalaryStructureForm() {
     setComponentLines([
       ...componentLines,
       {
-        component_id: '',
-        calculation_type: 'FIXED',
-        default_value: '',
-        percentage_of: '',
-        percentage_value: '',
+        componentId: '',
+        calculationType: 'FIXED',
+        defaultValue: '',
+        percentageOf: '',
+        percentageValue: '',
         formula: '',
-        is_mandatory: false,
+        isMandatory: false,
       },
     ]);
   };
@@ -172,7 +169,7 @@ export default function SalaryStructureForm() {
     updated[index] = { ...updated[index], [field]: value };
 
     // If component changed, update the component object too
-    if (field === 'component_id') {
+    if (field === 'componentId') {
       updated[index].component = components.find((c) => c.id === value);
     }
 
@@ -182,7 +179,7 @@ export default function SalaryStructureForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.structure_code || !formData.structure_name) {
+    if (!formData.structureCode || !formData.structureName) {
       toast({
         title: 'Validation Error',
         description: 'Code and name are required',
@@ -191,7 +188,7 @@ export default function SalaryStructureForm() {
       return;
     }
 
-    if (!formData.effective_from) {
+    if (!formData.effectiveFrom) {
       toast({
         title: 'Validation Error',
         description: 'Effective from date is required',
@@ -210,7 +207,7 @@ export default function SalaryStructureForm() {
     }
 
     // Validate all component lines have a component selected
-    const invalidLines = componentLines.filter((line) => !line.component_id);
+    const invalidLines = componentLines.filter((line) => !line.componentId);
     if (invalidLines.length > 0) {
       toast({
         title: 'Validation Error',
@@ -225,17 +222,17 @@ export default function SalaryStructureForm() {
 
       const payload = {
         ...formData,
-        effective_to: formData.effective_to || undefined,
-        ctc_from: formData.ctc_from ? parseFloat(formData.ctc_from) : undefined,
-        ctc_to: formData.ctc_to ? parseFloat(formData.ctc_to) : undefined,
+        effectiveTo: formData.effectiveTo || undefined,
+        ctcFrom: formData.ctcFrom ? parseFloat(formData.ctcFrom) : undefined,
+        ctcTo: formData.ctcTo ? parseFloat(formData.ctcTo) : undefined,
         components: componentLines.map((line) => ({
-          component_id: line.component_id,
-          calculation_type: line.calculation_type,
-          default_value: line.default_value ? parseFloat(line.default_value) : undefined,
-          percentage_of: line.percentage_of || undefined,
-          percentage_value: line.percentage_value ? parseFloat(line.percentage_value) : undefined,
+          componentId: line.componentId,
+          calculationType: line.calculationType,
+          defaultValue: line.defaultValue ? parseFloat(line.defaultValue) : undefined,
+          percentageOf: line.percentageOf || undefined,
+          percentageValue: line.percentageValue ? parseFloat(line.percentageValue) : undefined,
           formula: line.formula || undefined,
-          is_mandatory: line.is_mandatory,
+          isMandatory: line.isMandatory,
         })),
       };
 
@@ -293,14 +290,14 @@ export default function SalaryStructureForm() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="structure_code">Structure Code *</Label>
+                  <Label htmlFor="structureCode">Structure Code *</Label>
                   <Input
-                    id="structure_code"
-                    value={formData.structure_code}
+                    id="structureCode"
+                    value={formData.structureCode}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        structure_code: e.target.value.toUpperCase(),
+                        structureCode: e.target.value.toUpperCase(),
                       })
                     }
                     placeholder="e.g., STD-01, MGR-01"
@@ -308,11 +305,11 @@ export default function SalaryStructureForm() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="structure_name">Structure Name *</Label>
+                  <Label htmlFor="structureName">Structure Name *</Label>
                   <Input
-                    id="structure_name"
-                    value={formData.structure_name}
-                    onChange={(e) => setFormData({ ...formData, structure_name: e.target.value })}
+                    id="structureName"
+                    value={formData.structureName}
+                    onChange={(e) => setFormData({ ...formData, structureName: e.target.value })}
                     placeholder="e.g., Standard Structure, Manager Structure"
                   />
                 </div>
@@ -331,22 +328,22 @@ export default function SalaryStructureForm() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="ctc_from">CTC Range From</Label>
+                  <Label htmlFor="ctcFrom">CTC Range From</Label>
                   <Input
-                    id="ctc_from"
+                    id="ctcFrom"
                     type="number"
-                    value={formData.ctc_from}
-                    onChange={(e) => setFormData({ ...formData, ctc_from: e.target.value })}
+                    value={formData.ctcFrom}
+                    onChange={(e) => setFormData({ ...formData, ctcFrom: e.target.value })}
                     placeholder="Minimum CTC"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="ctc_to">CTC Range To</Label>
+                  <Label htmlFor="ctcTo">CTC Range To</Label>
                   <Input
-                    id="ctc_to"
+                    id="ctcTo"
                     type="number"
-                    value={formData.ctc_to}
-                    onChange={(e) => setFormData({ ...formData, ctc_to: e.target.value })}
+                    value={formData.ctcTo}
+                    onChange={(e) => setFormData({ ...formData, ctcTo: e.target.value })}
                     placeholder="Maximum CTC"
                   />
                 </div>
@@ -354,31 +351,31 @@ export default function SalaryStructureForm() {
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="effective_from">Effective From *</Label>
+                  <Label htmlFor="effectiveFrom">Effective From *</Label>
                   <Input
-                    id="effective_from"
+                    id="effectiveFrom"
                     type="date"
-                    value={formData.effective_from}
-                    onChange={(e) => setFormData({ ...formData, effective_from: e.target.value })}
+                    value={formData.effectiveFrom}
+                    onChange={(e) => setFormData({ ...formData, effectiveFrom: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="effective_to">Effective To</Label>
+                  <Label htmlFor="effectiveTo">Effective To</Label>
                   <Input
-                    id="effective_to"
+                    id="effectiveTo"
                     type="date"
-                    value={formData.effective_to}
-                    onChange={(e) => setFormData({ ...formData, effective_to: e.target.value })}
+                    value={formData.effectiveTo}
+                    onChange={(e) => setFormData({ ...formData, effectiveTo: e.target.value })}
                   />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="payment_mode">Payment Mode</Label>
+                  <Label htmlFor="paymentMode">Payment Mode</Label>
                   <Select
-                    value={formData.payment_mode}
-                    onValueChange={(value) => setFormData({ ...formData, payment_mode: value })}
+                    value={formData.paymentMode}
+                    onValueChange={(value) => setFormData({ ...formData, paymentMode: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -391,10 +388,10 @@ export default function SalaryStructureForm() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pay_frequency">Pay Frequency</Label>
+                  <Label htmlFor="payFrequency">Pay Frequency</Label>
                   <Select
-                    value={formData.pay_frequency}
-                    onValueChange={(value) => setFormData({ ...formData, pay_frequency: value })}
+                    value={formData.payFrequency}
+                    onValueChange={(value) => setFormData({ ...formData, payFrequency: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -410,13 +407,13 @@ export default function SalaryStructureForm() {
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="is_active"
-                  checked={formData.is_active}
+                  id="isActive"
+                  checked={formData.isActive}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, is_active: checked as boolean })
+                    setFormData({ ...formData, isActive: checked as boolean })
                   }
                 />
-                <Label htmlFor="is_active">Active</Label>
+                <Label htmlFor="isActive">Active</Label>
               </div>
             </CardContent>
           </Card>
@@ -455,9 +452,9 @@ export default function SalaryStructureForm() {
                       <TableRow key={index}>
                         <TableCell>
                           <Select
-                            value={line.component_id}
+                            value={line.componentId}
                             onValueChange={(value) =>
-                              updateComponentLine(index, 'component_id', value)
+                              updateComponentLine(index, 'componentId', value)
                             }
                           >
                             <SelectTrigger>
@@ -466,7 +463,7 @@ export default function SalaryStructureForm() {
                             <SelectContent>
                               {components.map((comp) => (
                                 <SelectItem key={comp.id} value={comp.id}>
-                                  {comp.component_name} ({comp.component_type})
+                                  {comp.componentName} ({comp.componentType})
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -474,9 +471,9 @@ export default function SalaryStructureForm() {
                         </TableCell>
                         <TableCell>
                           <Select
-                            value={line.calculation_type}
+                            value={line.calculationType}
                             onValueChange={(value) =>
-                              updateComponentLine(index, 'calculation_type', value)
+                              updateComponentLine(index, 'calculationType', value)
                             }
                           >
                             <SelectTrigger className="w-[130px]">
@@ -490,30 +487,30 @@ export default function SalaryStructureForm() {
                           </Select>
                         </TableCell>
                         <TableCell>
-                          {line.calculation_type === 'FIXED' && (
+                          {line.calculationType === 'FIXED' && (
                             <Input
                               type="number"
-                              value={line.default_value}
+                              value={line.defaultValue}
                               onChange={(e) =>
-                                updateComponentLine(index, 'default_value', e.target.value)
+                                updateComponentLine(index, 'defaultValue', e.target.value)
                               }
                               placeholder="Amount"
                               className="w-[120px]"
                             />
                           )}
-                          {line.calculation_type === 'PERCENTAGE' && (
+                          {line.calculationType === 'PERCENTAGE' && (
                             <Input
                               type="number"
                               step="0.01"
-                              value={line.percentage_value}
+                              value={line.percentageValue}
                               onChange={(e) =>
-                                updateComponentLine(index, 'percentage_value', e.target.value)
+                                updateComponentLine(index, 'percentageValue', e.target.value)
                               }
                               placeholder="%"
                               className="w-[100px]"
                             />
                           )}
-                          {line.calculation_type === 'FORMULA' && (
+                          {line.calculationType === 'FORMULA' && (
                             <Input
                               value={line.formula}
                               onChange={(e) =>
@@ -525,11 +522,11 @@ export default function SalaryStructureForm() {
                           )}
                         </TableCell>
                         <TableCell>
-                          {line.calculation_type === 'PERCENTAGE' && (
+                          {line.calculationType === 'PERCENTAGE' && (
                             <Input
-                              value={line.percentage_of}
+                              value={line.percentageOf}
                               onChange={(e) =>
-                                updateComponentLine(index, 'percentage_of', e.target.value)
+                                updateComponentLine(index, 'percentageOf', e.target.value)
                               }
                               placeholder="BASIC"
                               className="w-[100px]"
@@ -538,9 +535,9 @@ export default function SalaryStructureForm() {
                         </TableCell>
                         <TableCell>
                           <Checkbox
-                            checked={line.is_mandatory}
+                            checked={line.isMandatory}
                             onCheckedChange={(checked) =>
-                              updateComponentLine(index, 'is_mandatory', checked)
+                              updateComponentLine(index, 'isMandatory', checked)
                             }
                           />
                         </TableCell>

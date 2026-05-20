@@ -63,15 +63,15 @@ interface Vendor {
   id: string;
   code: string;
   name: string;
-  display_name: string | null;
-  vendor_type: string;
+  displayName: string | null;
+  vendorType: string;
   gstin: string | null;
   pan: string | null;
   city: string | null;
-  state_code: string | null;
-  current_balance: number;
-  current_balance_type: string | null;
-  is_active: boolean;
+  stateCode: string | null;
+  currentBalance: number;
+  currentBalanceType: string | null;
+  isActive: boolean;
 }
 
 type VendorListParams = Parameters<typeof vendorsApi.list>[0];
@@ -109,7 +109,7 @@ export function VendorList() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page: 1, page_size: 100 });
+      const response = await organizationsApi.list({ page: 1, pageSize: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0) {
@@ -130,7 +130,6 @@ export function VendorList() {
     setLoading(true);
     try {
       const params: VendorListParams = {
-        organization_id: selectedOrgId,
         page,
         page_size: pageSize,
         include_inactive: includeInactive,
@@ -298,40 +297,40 @@ export function VendorList() {
                   <TableCell>
                     <div>
                       <div className="font-medium">{vendor.name}</div>
-                      {vendor.display_name && vendor.display_name !== vendor.name && (
-                        <div className="text-sm text-slate-500">{vendor.display_name}</div>
+                      {vendor.displayName && vendor.displayName !== vendor.name && (
+                        <div className="text-sm text-slate-500">{vendor.displayName}</div>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      className={vendorTypeColors[vendor.vendor_type] || 'bg-gray-100'}
+                      className={vendorTypeColors[vendor.vendorType] || 'bg-gray-100'}
                     >
-                      {vendorTypeLabels[vendor.vendor_type] || vendor.vendor_type}
+                      {vendorTypeLabels[vendor.vendorType] || vendor.vendorType}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-sm">{vendor.gstin || '-'}</TableCell>
                   <TableCell className="font-mono text-sm">{vendor.pan || '-'}</TableCell>
                   <TableCell>
-                    {vendor.city || vendor.state_code ? (
+                    {vendor.city || vendor.stateCode ? (
                       <div className="flex items-center gap-1 text-sm text-slate-600">
                         <MapPin className="h-3 w-3" />
-                        {[vendor.city, vendor.state_code].filter(Boolean).join(', ')}
+                        {[vendor.city, vendor.stateCode].filter(Boolean).join(', ')}
                       </div>
                     ) : (
                       '-'
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    <AmountDisplay amount={Math.abs(vendor.current_balance)} />
-                    {vendor.current_balance !== 0 && vendor.current_balance_type ? (
-                      <span className="ml-1">{vendor.current_balance_type}</span>
+                    <AmountDisplay amount={Math.abs(vendor.currentBalance)} />
+                    {vendor.currentBalance !== 0 && vendor.currentBalanceType ? (
+                      <span className="ml-1">{vendor.currentBalanceType}</span>
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={vendor.is_active ? 'default' : 'secondary'}>
-                      {vendor.is_active ? 'Active' : 'Inactive'}
+                    <Badge variant={vendor.isActive ? 'default' : 'secondary'}>
+                      {vendor.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
                   <TableCell>

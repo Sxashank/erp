@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -38,6 +39,7 @@ interface FormData {
 export function PaymentTermsForm() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { toast } = useToast();
   const isEdit = !!id;
 
   const [organizations, setOrganizations] = useState<Organization[]>([]);
@@ -58,7 +60,7 @@ export function PaymentTermsForm() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (!isEdit && response.data.items.length > 0) {
         setFormData((prev) => ({
@@ -135,6 +137,10 @@ export function PaymentTermsForm() {
           organization_id: formData.organization_id,
         });
       }
+      toast({
+        title: isEdit ? 'Payment terms updated' : 'Payment terms created',
+        description: 'Changes saved successfully.',
+      });
       navigate('/admin/ap-ar/payment-terms');
     } catch (error: unknown) {
       logger.error('Failed to save payment terms:', error);
@@ -145,9 +151,12 @@ export function PaymentTermsForm() {
         typeof (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail === 'string'
           ? (error as { response: { data: { detail: string } } }).response.data.detail
           : 'Failed to save payment terms';
-      setError(
-        message
-      );
+      setError(message);
+      toast({
+        title: 'Save failed',
+        description: message,
+        variant: 'destructive',
+      });
     } finally {
       setSaving(false);
     }

@@ -40,21 +40,21 @@ import { hrisApi, organizationsApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface LeaveApplication {
   id: string;
-  application_number: string;
-  employee_id: string;
-  employee_name?: string;
-  employee_code?: string;
-  leave_type_id: string;
-  leave_type_name?: string;
-  from_date: string;
-  to_date: string;
-  total_days: number;
-  working_days: number;
-  is_half_day: boolean;
-  half_day_type?: string;
+  applicationNumber: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  leaveTypeId: string;
+  leaveTypeName?: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  workingDays: number;
+  isHalfDay: boolean;
+  halfDayType?: string;
   reason: string;
   status: string;
-  created_at: string;
+  createdAt: string;
 }
 
 interface Organization {
@@ -99,7 +99,7 @@ export function LeaveApplicationList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -117,7 +117,6 @@ export function LeaveApplicationList() {
     try {
       setLoading(true);
       const params: Record<string, unknown> = {
-        organization_id: selectedOrgId,
         skip,
         limit: pagination.limit,
       };
@@ -235,26 +234,26 @@ export function LeaveApplicationList() {
                 <TableBody>
                   {applications.map((app) => (
                     <TableRow key={app.id}>
-                      <TableCell className="font-medium">{app.application_number}</TableCell>
+                      <TableCell className="font-medium">{app.applicationNumber}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{app.employee_name}</p>
-                          <p className="text-xs text-slate-500">{app.employee_code}</p>
+                          <p className="font-medium">{app.employeeName}</p>
+                          <p className="text-xs text-slate-500">{app.employeeCode}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{app.leave_type_name}</TableCell>
-                      <TableCell><DateDisplay date={app.from_date} /></TableCell>
-                      <TableCell><DateDisplay date={app.to_date} /></TableCell>
+                      <TableCell>{app.leaveTypeName}</TableCell>
+                      <TableCell><DateDisplay date={app.fromDate} /></TableCell>
+                      <TableCell><DateDisplay date={app.toDate} /></TableCell>
                       <TableCell>
-                        {app.working_days}
-                        {app.is_half_day && <span className="text-xs text-slate-500 ml-1">({app.half_day_type})</span>}
+                        {app.workingDays}
+                        {app.isHalfDay && <span className="text-xs text-slate-500 ml-1">({app.halfDayType})</span>}
                       </TableCell>
                       <TableCell>
                         <Badge className={getStatusBadgeColor(app.status)}>
                           {app.status}
                         </Badge>
                       </TableCell>
-                      <TableCell><DateDisplay date={app.created_at} /></TableCell>
+                      <TableCell><DateDisplay date={app.createdAt} /></TableCell>
                       <TableCell>
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>

@@ -21,48 +21,46 @@ describe('payrollService', () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: {
         id: 'component-1',
-        organization_id: 'org-1',
-        component_code: 'HRA',
-        component_name: 'House Rent Allowance',
-        component_type: 'EARNING',
+        componentCode: 'HRA',
+        componentName: 'House Rent Allowance',
+        componentType: 'EARNING',
         category: 'ALLOWANCE',
-        calculation_type: 'PERCENTAGE_OF_BASIC',
-        default_value: 40,
-        is_taxable: true,
-        is_pro_rated: true,
-        affects_pf: false,
-        affects_esi: false,
-        affects_pt: false,
-        display_order: 1,
-        is_active: true,
-        created_at: '2026-04-01T00:00:00Z',
+        calculationType: 'PERCENTAGE_OF_BASIC',
+        defaultValue: 40,
+        isTaxable: true,
+        isProRated: true,
+        affectsPf: false,
+        affectsEsi: false,
+        affectsPt: false,
+        displayOrder: 1,
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00Z',
       },
     });
 
     const result = await payrollService.createComponent({
-      organization_id: 'org-1',
-      component_code: 'HRA',
-      component_name: 'House Rent Allowance',
-      component_type: 'EARNING',
+      componentCode: 'HRA',
+      componentName: 'House Rent Allowance',
+      componentType: 'EARNING',
       category: 'ALLOWANCE',
-      calculation_type: 'PERCENTAGE',
-      percentage_of: 'BASIC',
-      percentage_value: 40,
+      calculationType: 'PERCENTAGE',
+      percentageOf: 'BASIC',
+      percentageValue: 40,
     });
 
     expect(api.post).toHaveBeenCalledWith(
       '/payroll/components',
       expect.objectContaining({
-        calculation_type: 'PERCENTAGE_OF_BASIC',
-        default_value: 40,
-        percentage_of: undefined,
-        percentage_value: undefined,
+        calculationType: 'PERCENTAGE_OF_BASIC',
+        defaultValue: 40,
+        percentageOf: undefined,
+        percentageValue: undefined,
       }),
     );
     expect(result).toMatchObject({
-      calculation_type: 'PERCENTAGE',
-      percentage_of: 'BASIC',
-      percentage_value: 40,
+      calculationType: 'PERCENTAGE',
+      percentageOf: 'BASIC',
+      percentageValue: 40,
     });
   });
 
@@ -70,41 +68,39 @@ describe('payrollService', () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: {
         id: 'structure-1',
-        organization_id: 'org-1',
-        structure_code: 'STD',
-        structure_name: 'Standard Structure',
-        effective_from: '2026-04-01',
-        payment_mode: 'BANK',
-        pay_frequency: 'MONTHLY',
-        is_active: true,
-        created_at: '2026-04-01T00:00:00Z',
+        structureCode: 'STD',
+        structureName: 'Standard Structure',
+        effectiveFrom: '2026-04-01',
+        paymentMode: 'BANK',
+        payFrequency: 'MONTHLY',
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00Z',
         components: [
           {
             id: 'line-1',
-            component_id: 'component-1',
-            calculation_type: 'PERCENTAGE_OF_BASIC',
+            componentId: 'component-1',
+            calculationType: 'PERCENTAGE_OF_BASIC',
             value: 50,
-            is_mandatory: true,
+            isMandatory: true,
           },
         ],
       },
     });
 
     const result = await payrollService.createStructure({
-      organization_id: 'org-1',
-      structure_code: 'STD',
-      structure_name: 'Standard Structure',
-      effective_from: '2026-04-01',
-      payment_mode: 'BANK',
-      pay_frequency: 'MONTHLY',
-      is_active: true,
+      structureCode: 'STD',
+      structureName: 'Standard Structure',
+      effectiveFrom: '2026-04-01',
+      paymentMode: 'BANK',
+      payFrequency: 'MONTHLY',
+      isActive: true,
       components: [
         {
-          component_id: 'component-1',
-          calculation_type: 'PERCENTAGE',
-          percentage_of: 'BASIC',
-          percentage_value: 50,
-          is_mandatory: true,
+          componentId: 'component-1',
+          calculationType: 'PERCENTAGE',
+          percentageOf: 'BASIC',
+          percentageValue: 50,
+          isMandatory: true,
         },
       ],
     });
@@ -112,21 +108,21 @@ describe('payrollService', () => {
     expect(api.post).toHaveBeenCalledWith(
       '/payroll/structures',
       expect.objectContaining({
-        effective_from: '2026-04-01',
+        effectiveFrom: '2026-04-01',
         components: [
           expect.objectContaining({
-            component_id: 'component-1',
-            calculation_type: 'PERCENTAGE_OF_BASIC',
+            componentId: 'component-1',
+            calculationType: 'PERCENTAGE_OF_BASIC',
             value: 50,
           }),
         ],
       }),
     );
     expect(result.components?.[0]).toMatchObject({
-      calculation_type: 'PERCENTAGE',
-      percentage_of: 'BASIC',
-      percentage_value: 50,
-      default_value: 50,
+      calculationType: 'PERCENTAGE',
+      percentageOf: 'BASIC',
+      percentageValue: 50,
+      defaultValue: 50,
     });
   });
 
@@ -134,46 +130,44 @@ describe('payrollService', () => {
     vi.mocked(api.post).mockResolvedValueOnce({
       data: {
         id: 'setup-1',
-        organization_id: 'org-1',
-        statutory_type: 'PF',
-        pf_employer_rate: 12,
-        pf_employee_rate: 12,
-        pf_admin_charge_rate: 0.5,
-        pf_wage_ceiling: 15000,
-        effective_from: '2026-04-01',
-        is_active: true,
-        created_at: '2026-04-01T00:00:00Z',
+        statutoryType: 'PF',
+        pfEmployerRate: 12,
+        pfEmployeeRate: 12,
+        pfAdminChargeRate: 0.5,
+        pfWageCeiling: 15000,
+        effectiveFrom: '2026-04-01',
+        isActive: true,
+        createdAt: '2026-04-01T00:00:00Z',
       },
     });
 
     const result = await payrollService.createStatutorySetup({
-      organization_id: 'org-1',
-      statutory_type: 'PF',
-      employer_contribution_pct: 12,
-      employee_contribution_pct: 12,
-      admin_charges_pct: 0.5,
-      wage_ceiling: 15000,
-      effective_from: '2026-04-01',
-      is_applicable: true,
+      statutoryType: 'PF',
+      employerContributionPct: 12,
+      employeeContributionPct: 12,
+      adminChargesPct: 0.5,
+      wageCeiling: 15000,
+      effectiveFrom: '2026-04-01',
+      isApplicable: true,
     });
 
     expect(api.post).toHaveBeenCalledWith(
       '/payroll/statutory-setup',
       expect.objectContaining({
-        statutory_type: 'PF',
-        pf_employer_rate: 12,
-        pf_employee_rate: 12,
-        pf_admin_charge_rate: 0.5,
-        pf_wage_ceiling: 15000,
-        is_active: true,
+        statutoryType: 'PF',
+        pfEmployerRate: 12,
+        pfEmployeeRate: 12,
+        pfAdminChargeRate: 0.5,
+        pfWageCeiling: 15000,
+        isActive: true,
       }),
     );
     expect(result).toMatchObject({
-      employer_contribution_pct: 12,
-      employee_contribution_pct: 12,
-      admin_charges_pct: 0.5,
-      wage_ceiling: 15000,
-      is_applicable: true,
+      employerContributionPct: 12,
+      employeeContributionPct: 12,
+      adminChargesPct: 0.5,
+      wageCeiling: 15000,
+      isApplicable: true,
     });
   });
 });

@@ -255,7 +255,7 @@ export function PurchaseBillForm() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0 && !isEdit) {
@@ -270,7 +270,7 @@ export function PurchaseBillForm() {
   const loadUnits = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
-      const response = await unitsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await unitsApi.list({ pageSize: 100 });
       setUnits(response.data.items || []);
     } catch (error) {
       logger.error('Failed to load units:', error);
@@ -280,7 +280,7 @@ export function PurchaseBillForm() {
   const loadVendors = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
-      const response = await vendorsApi.getActive({ organization_id: selectedOrgId });
+      const response = await vendorsApi.getActive({});
       setVendors(response.data || []);
     } catch (error) {
       logger.error('Failed to load vendors:', error);
@@ -300,8 +300,7 @@ export function PurchaseBillForm() {
     if (!selectedOrgId) return;
     try {
       const response = await accountsApi.list({
-        organization_id: selectedOrgId,
-        page_size: 100,
+        pageSize: 100,
       });
       // Filter for expense accounts (nature = EXPENSES)
       const accounts = response.data.items || [];
@@ -550,7 +549,6 @@ export function PurchaseBillForm() {
         vendorInvoiceDate: vendorInvoiceDate || undefined,
         billDate,
         dueDate,
-        organizationId: selectedOrgId,
         unitId: unitId || undefined,
         placeOfSupply: placeOfSupply || undefined,
         isReverseCharge,

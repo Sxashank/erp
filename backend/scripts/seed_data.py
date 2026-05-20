@@ -3806,7 +3806,20 @@ async def seed_users(session, org, role_map, unit_map):
     admin = result.scalar_one_or_none()
 
     if admin:
-        print(f"  - Admin user '{ADMIN_USER['username']}' already exists")
+        updated = False
+        if admin.organization_id != org.id:
+            admin.organization_id = org.id
+            updated = True
+        if head_office and admin.default_unit_id != head_office.id:
+            admin.default_unit_id = head_office.id
+            updated = True
+        if updated:
+            print(
+                f"  ~ Admin user '{ADMIN_USER['username']}' already exists; "
+                "aligned organization and default unit"
+            )
+        else:
+            print(f"  - Admin user '{ADMIN_USER['username']}' already exists")
     else:
         password_hash = get_password_hash(ADMIN_USER["password"])
         password_expires_at = datetime.now(UTC) + timedelta(days=settings.PASSWORD_EXPIRY_DAYS)
@@ -3845,7 +3858,20 @@ async def seed_users(session, org, role_map, unit_map):
         existing = result.scalar_one_or_none()
 
         if existing:
-            print(f"  - User '{user_data['username']}' already exists")
+            updated = False
+            if existing.organization_id != org.id:
+                existing.organization_id = org.id
+                updated = True
+            if head_office and existing.default_unit_id != head_office.id:
+                existing.default_unit_id = head_office.id
+                updated = True
+            if updated:
+                print(
+                    f"  ~ User '{user_data['username']}' already exists; "
+                    "aligned organization and default unit"
+                )
+            else:
+                print(f"  - User '{user_data['username']}' already exists")
             continue
 
         password_hash = get_password_hash("Password123!")
@@ -4648,12 +4674,10 @@ async def seed_lending_masters(session, org):
                 IIFLoanType.TERM_LOAN_CAPEX.value,
                 IIFLoanType.WORKING_CAPITAL.value,
             ],
-            max_tenure_term_loan_months=120,
-            max_tenure_working_capital_months=36,
-            scheme_start_date=datetime.now(UTC).date().replace(month=4, day=1),
-            scheme_end_date=datetime.now(UTC)
-            .date()
-            .replace(year=datetime.now(UTC).year + 1, month=3, day=31),
+            max_tenure_term_loan_months=180,
+            max_tenure_working_capital_months=60,
+            scheme_start_date=date(2025, 9, 24),
+            scheme_end_date=date(2036, 3, 31),
             eligibility_window_months=36,
             claim_frequency=ClaimFrequency.QUARTERLY.value,
             npa_disqualification_dpd_days=30,

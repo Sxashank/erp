@@ -9,7 +9,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
-from app.models.base import BaseModel, AuditMixin
+from app.models.base import AuditMixin, BaseModel, VersionedMixin
 
 if TYPE_CHECKING:
     from app.models.auth.user import User
@@ -119,7 +119,7 @@ class Role(BaseModel):
         return f"<Role(code={self.code})>"
 
 
-class RolePermission(Base, AuditMixin):
+class RolePermission(Base, AuditMixin, VersionedMixin):
     """Junction table for Role-Permission many-to-many relationship."""
 
     __tablename__ = "map_role_permission"
@@ -155,7 +155,7 @@ class RolePermission(Base, AuditMixin):
     )
 
 
-class UserRole(Base, AuditMixin):
+class UserRole(Base, AuditMixin, VersionedMixin):
     """Junction table for User-Role many-to-many relationship with unit scope."""
 
     __tablename__ = "map_user_role"

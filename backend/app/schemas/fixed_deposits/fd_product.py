@@ -2,7 +2,7 @@
 Fixed Deposit Product Schemas
 """
 
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
@@ -54,7 +54,7 @@ class FDInterestSlabResponse(FDInterestSlabBase):
 
     id: UUID
     product_id: UUID
-    created_at: date
+    created_at: datetime
 
 
 # Product Schemas
@@ -142,7 +142,7 @@ class FDProductResponse(FDProductBase):
     id: UUID
     organization_id: UUID
     interest_slabs: List[FDInterestSlabResponse] = []
-    created_at: date
+    created_at: datetime
 
 
 class FDProductListResponse(CamelSchema):

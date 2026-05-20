@@ -33,7 +33,7 @@ export function OrganizationList() {
   const fetchOrganizations = async (page = 1) => {
     try {
       setLoading(true);
-      const response = await organizationsApi.list({ page, page_size: 10, include_inactive: true });
+      const response = await organizationsApi.list({ page, pageSize: 10, includeInactive: true });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });

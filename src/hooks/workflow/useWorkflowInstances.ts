@@ -29,13 +29,7 @@ export const workflowInstanceHistoryQueryKey = (id: string) =>
 export function useWorkflowInstances(filters?: InstanceListFilters) {
   return useQuery<PaginatedResponse<WorkflowInstanceResponse>>({
     queryKey: workflowInstancesQueryKey(filters),
-    queryFn: () => {
-      if (!filters?.organization_id) {
-        throw new Error('organization_id is required');
-      }
-      return instancesApi.list(filters);
-    },
-    enabled: Boolean(filters?.organization_id),
+    queryFn: () => instancesApi.list(filters ?? {}),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });

@@ -62,11 +62,11 @@ interface PaymentTerms {
   name: string;
   description: string | null;
   days: number;
-  discount_days: number;
-  discount_percent: number;
-  organization_id: string;
-  is_active: boolean;
-  created_at: string;
+  discountDays: number;
+  discountPercent: number;
+  organizationId: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export function PaymentTermsList() {
@@ -80,7 +80,7 @@ export function PaymentTermsList() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -94,7 +94,6 @@ export function PaymentTermsList() {
     try {
       setLoading(true);
       const response = await paymentTermsApi.list({
-        organization_id: selectedOrgId,
         page_size: 100,
         include_inactive: true,
       });
@@ -229,14 +228,14 @@ export function PaymentTermsList() {
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      {term.discount_percent > 0 ? (
+                      {term.discountPercent > 0 ? (
                         <div className="flex flex-col items-center">
                           <Badge variant="secondary" className="text-xs">
                             <Percent className="mr-1 h-3 w-3" />
-                            {term.discount_percent}%
+                            {term.discountPercent}%
                           </Badge>
                           <span className="text-xs text-slate-500">
-                            within {term.discount_days} days
+                            within {term.discountDays} days
                           </span>
                         </div>
                       ) : (
@@ -245,14 +244,14 @@ export function PaymentTermsList() {
                     </TableCell>
                     <TableCell>
                       <Badge
-                        variant={term.is_active ? 'default' : 'secondary'}
+                        variant={term.isActive ? 'default' : 'secondary'}
                         className={
-                          term.is_active
+                          term.isActive
                             ? 'bg-emerald-100 text-emerald-700'
                             : 'bg-slate-100 text-slate-600'
                         }
                       >
-                        {term.is_active ? 'Active' : 'Inactive'}
+                        {term.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell>

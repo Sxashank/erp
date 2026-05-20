@@ -408,8 +408,8 @@ export default function CRARDashboard() {
               onRetry={() => void compositionQuery.refetch()}
             />
           ) : !compositionQuery.data ||
-            (compositionQuery.data.tier_1_lines.length === 0 &&
-              compositionQuery.data.tier_2_lines.length === 0) ? (
+            (compositionQuery.data.tier1Lines.length === 0 &&
+              compositionQuery.data.tier2Lines.length === 0) ? (
             <EmptyState
               title="No capital composition data"
               subtitle="Once the COA is seeded with equity / reserves / sub-debt account groups the composition will populate automatically."
@@ -423,15 +423,15 @@ export default function CRARDashboard() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {compositionQuery.data.tier_1_lines.map(
+                {compositionQuery.data.tier1Lines.map(
                   (line: CapitalCompositionLine, idx: number) => (
                     <TableRow key={`t1-${idx}-${line.label}`}>
-                      <TableCell className={line.is_subtotal ? 'border-t font-semibold' : ''}>
+                      <TableCell className={line.isSubtotal ? 'border-t font-semibold' : ''}>
                         {line.label}
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${
-                          line.is_subtotal ? 'border-t font-semibold' : ''
+                          line.isSubtotal ? 'border-t font-semibold' : ''
                         }`}
                       >
                         <AmountDisplay amount={toNumber(line.amount)} abbreviated />
@@ -443,20 +443,20 @@ export default function CRARDashboard() {
                   <TableCell>Tier-I Sub-total</TableCell>
                   <TableCell className="text-right tabular-nums">
                     <AmountDisplay
-                      amount={toNumber(compositionQuery.data.tier_1_total)}
+                      amount={toNumber(compositionQuery.data.tier1Total)}
                       abbreviated
                     />
                   </TableCell>
                 </TableRow>
-                {compositionQuery.data.tier_2_lines.map(
+                {compositionQuery.data.tier2Lines.map(
                   (line: CapitalCompositionLine, idx: number) => (
                     <TableRow key={`t2-${idx}-${line.label}`}>
-                      <TableCell className={line.is_subtotal ? 'border-t font-semibold' : ''}>
+                      <TableCell className={line.isSubtotal ? 'border-t font-semibold' : ''}>
                         {line.label}
                       </TableCell>
                       <TableCell
                         className={`text-right tabular-nums ${
-                          line.is_subtotal ? 'border-t font-semibold' : ''
+                          line.isSubtotal ? 'border-t font-semibold' : ''
                         }`}
                       >
                         <AmountDisplay amount={toNumber(line.amount)} abbreviated />
@@ -468,7 +468,7 @@ export default function CRARDashboard() {
                   <TableCell>Tier-II Sub-total</TableCell>
                   <TableCell className="text-right tabular-nums">
                     <AmountDisplay
-                      amount={toNumber(compositionQuery.data.tier_2_total)}
+                      amount={toNumber(compositionQuery.data.tier2Total)}
                       abbreviated
                     />
                   </TableCell>
@@ -477,7 +477,7 @@ export default function CRARDashboard() {
                   <TableCell>Total Capital</TableCell>
                   <TableCell className="text-right tabular-nums">
                     <AmountDisplay
-                      amount={toNumber(compositionQuery.data.total_capital)}
+                      amount={toNumber(compositionQuery.data.totalCapital)}
                       abbreviated
                     />
                   </TableCell>
@@ -516,13 +516,13 @@ export default function CRARDashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart
                   data={trendQuery.data.snapshots.map((s) => ({
-                    snapshot_date: s.snapshot_date,
+                    snapshotDate: s.snapshotDate,
                     crar: toNumber(s.crar),
-                    tier_1_ratio: toNumber(s.tier_1_ratio),
+                    tier1Ratio: toNumber(s.tier1Ratio),
                   }))}
                 >
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="snapshot_date" tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="snapshotDate" tick={{ fontSize: 10 }} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <RechartsTooltip />
                   <Legend />
@@ -536,7 +536,7 @@ export default function CRARDashboard() {
                   />
                   <Line
                     type="monotone"
-                    dataKey="tier_1_ratio"
+                    dataKey="tier1Ratio"
                     name="Tier-I %"
                     stroke="#2563eb"
                     strokeWidth={2}
@@ -571,17 +571,17 @@ export default function CRARDashboard() {
               error={infraRatioQuery.error}
               onRetry={() => void infraRatioQuery.refetch()}
             />
-          ) : !infraRatioQuery.data || toNumber(infraRatioQuery.data.total_loans_amount) === 0 ? (
+          ) : !infraRatioQuery.data || toNumber(infraRatioQuery.data.totalLoansAmount) === 0 ? (
             <EmptyState
               title="No active loan book"
               subtitle="Once active loans exist the infrastructure ratio will be computed automatically."
             />
           ) : (
             (() => {
-              const infraRatio = toNumber(infraRatioQuery.data.infrastructure_ratio_percent);
-              const minRequired = toNumber(infraRatioQuery.data.minimum_required_percent);
-              const infraAmount = toNumber(infraRatioQuery.data.infrastructure_loans_amount);
-              const totalAmount = toNumber(infraRatioQuery.data.total_loans_amount);
+              const infraRatio = toNumber(infraRatioQuery.data.infrastructureRatioPercent);
+              const minRequired = toNumber(infraRatioQuery.data.minimumRequiredPercent);
+              const infraAmount = toNumber(infraRatioQuery.data.infrastructureLoansAmount);
+              const totalAmount = toNumber(infraRatioQuery.data.totalLoansAmount);
               const status = infraRatioQuery.data.status;
               const statusClass = statusBadgeClass(
                 status === 'QUALIFIED' ? 'COMPLIANT' : status === 'AT_RISK' ? 'WARNING' : 'BREACH',

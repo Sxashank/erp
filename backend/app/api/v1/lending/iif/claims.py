@@ -4,13 +4,8 @@ The largest of the IIF routers — covers lifecycle (create / submit /
 verify / initiate-release / mark-released / cancel), compute previews, eligible-period
 discovery, and the claim report (structured JSON + CSV streams).
 
-Binary PDF / XLSX output is intentionally NOT included here — neither
-``reportlab`` nor ``openpyxl`` is in the backend's pinned deps. The
-structured ``ClaimReportResponse`` exposes the entire payload, and the
-frontend's existing ``jspdf`` / ``xlsx`` (now ``exceljs``) machinery is
-the canonical render path (CLAUDE.md §4.19). A CSV stream is provided
-as the lowest-common-denominator export when an "Excel" tab is
-clicked.
+Binary PDF / XLSX output is generated from the same structured
+``ClaimReportResponse`` payload as CSV using dependency-free exporters.
 """
 
 from __future__ import annotations
@@ -46,6 +41,7 @@ from app.schemas.lending.iif import (
     SubventionClaimVerifyRequest,
 )
 from app.services.lending.iif import SubventionClaimService
+from app.utils.simple_exports import build_text_pdf, build_xlsx
 
 router = APIRouter()
 
@@ -142,7 +138,7 @@ async def compute_claim(
     """
     org_id = _require_org(current_user)
     service = SubventionClaimService(db)
-    interest_paid, rate, applicable = await service.compute_claim(
+    interest_paid, rate, applicable, method, eligible_base = await service.compute_claim(
         org_id, data.enrollment_id, data.period_start, data.period_end
     )
     return SubventionClaimComputeResponse(
@@ -152,6 +148,8 @@ async def compute_claim(
         interest_paid_in_period=interest_paid,
         subvention_rate_percent=rate,
         applicable_subvention_amount=applicable,
+        calculation_method=method,
+        eligible_base_amount=eligible_base,
     )
 
 
@@ -585,6 +583,23 @@ def _report_to_csv(payload: ClaimReportResponse) -> str:
     return buf.getvalue()
 
 
+def _report_rows(payload: ClaimReportResponse) -> list[list[str]]:
+    """Return report rows shared by CSV, XLSX, and PDF renderers."""
+    return list(csv.reader(io.StringIO(_report_to_csv(payload))))
+
+
+def _report_to_xlsx(payload: ClaimReportResponse) -> bytes:
+    """Render the claim report as a native XLSX workbook."""
+    return build_xlsx(_report_rows(payload), sheet_name="Claim Report")
+
+
+def _report_to_pdf(payload: ClaimReportResponse) -> bytes:
+    """Render the claim report as a simple text PDF."""
+    lines = [" | ".join(row) for row in _report_rows(payload)]
+    title = f"Interest Subvention Claim Report - {payload.footer.claim_reference}"
+    return build_text_pdf(title, lines)
+
+
 @router.get(
     "/{claim_id}/report.csv",
     dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
@@ -603,5 +618,47 @@ async def get_claim_report_csv(
     return StreamingResponse(
         iter([csv_text]),
         media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{claim_id}/report.xlsx",
+    dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
+)
+async def get_claim_report_xlsx(
+    claim_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Render the report as a native XLSX file stream."""
+    org_id = _require_org(current_user)
+    service = SubventionClaimService(db)
+    payload = await service.generate_claim_report(org_id, claim_id)
+    filename = f"{payload.footer.claim_reference.replace('/', '_')}.xlsx"
+    return StreamingResponse(
+        iter([_report_to_xlsx(payload)]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{claim_id}/report.pdf",
+    dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
+)
+async def get_claim_report_pdf(
+    claim_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+) -> StreamingResponse:
+    """Render the report as a PDF file stream."""
+    org_id = _require_org(current_user)
+    service = SubventionClaimService(db)
+    payload = await service.generate_claim_report(org_id, claim_id)
+    filename = f"{payload.footer.claim_reference.replace('/', '_')}.pdf"
+    return StreamingResponse(
+        iter([_report_to_pdf(payload)]),
+        media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

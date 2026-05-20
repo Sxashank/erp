@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ import { logger } from "@/lib/logger";
 export function DepartmentForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const isEdit = Boolean(id);
 
   const [loading, setLoading] = useState(false);
@@ -60,7 +62,7 @@ export function DepartmentForm() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch organizations:', error);
@@ -69,7 +71,7 @@ export function DepartmentForm() {
 
   const fetchParentDepartments = async (orgId: string) => {
     try {
-      const response = await departmentsApi.list({ organization_id: orgId, page_size: 100 });
+      const response = await departmentsApi.list({ pageSize: 100 });
       setParentDepartments(response.data.items.filter((d: Department) => d.id !== id));
     } catch (error) {
       logger.error('Failed to fetch parent departments:', error);
@@ -104,18 +106,28 @@ export function DepartmentForm() {
   const onSubmit = async (data: DepartmentCreate | DepartmentUpdate) => {
     try {
       setSubmitting(true);
-      const cleanData = {
-        ...data,
-        parent_dept_id: data.parent_dept_id || undefined,
-      };
+      // Strip empty/whitespace strings so the BE Pydantic schema doesn't 422
+      // on optional EmailStr / typed fields (CLAUDE.md §5.3).
+      const cleanData: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === 'string' && value.trim() === '') continue;
+        cleanData[key] = value;
+      }
       if (isEdit && id) {
         await departmentsApi.update(id, cleanData);
+        toast({ title: 'Department updated', description: 'Changes saved successfully.' });
       } else {
         await departmentsApi.create(cleanData);
+        toast({ title: 'Department created', description: 'The department was created successfully.' });
       }
       navigate('/admin/departments');
     } catch (error) {
       logger.error('Failed to save department:', error);
+      toast({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Could not save the department.',
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }

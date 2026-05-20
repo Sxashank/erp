@@ -34,10 +34,6 @@ export function DashboardCreate() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
-
-  // Get organization ID (simplified - in real app, get from auth context)
-  const organizationId = localStorage.getItem('organization_id') || '';
-
   const {
     register,
     handleSubmit,
@@ -64,7 +60,6 @@ export function DashboardCreate() {
 
       const payload: DashboardCreateType = {
         ...data,
-        organization_id: organizationId,
       };
 
       const response = await biDashboardApi.create(payload);

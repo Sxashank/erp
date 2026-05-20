@@ -506,7 +506,6 @@ export interface TDSCertificateDetail {
 }
 
 export interface TDSCertificateGenerateInput {
-  organizationId: string;
   deducteePan: string;
   tdsSectionId: string;
   financialYear: string;
@@ -1094,7 +1093,6 @@ function mapCertificateDetail(value: unknown): TDSCertificateDetail {
 
 function certificateGenerateToApi(input: TDSCertificateGenerateInput) {
   return {
-    organization_id: input.organizationId,
     deductee_pan: input.deducteePan,
     tds_section_id: input.tdsSectionId,
     financial_year: input.financialYear,
@@ -1102,9 +1100,8 @@ function certificateGenerateToApi(input: TDSCertificateGenerateInput) {
   };
 }
 
-function certificateBulkToApi(organizationId: string, financialYear: string, quarter: string) {
+function certificateBulkToApi(financialYear: string, quarter: string) {
   return {
-    organization_id: organizationId,
     financial_year: financialYear,
     quarter,
   };
@@ -1117,7 +1114,11 @@ function normalizeTdsReturnFileName(fileName: string): string {
 export function useOrganizations() {
   return useQuery({
     queryKey: ['tax-organizations'],
-    queryFn: async () => normalizePage((await organizationsApi.list({ page_size: 100, include_inactive: false })).data, mapLookup),
+    queryFn: async () =>
+      normalizePage(
+        (await organizationsApi.list({ pageSize: 100, includeInactive: false })).data,
+        mapLookup,
+      ),
   });
 }
 
@@ -1128,21 +1129,20 @@ export function useUnits(organizationId?: string) {
     queryFn: async () =>
       normalizePage(
         (
-          await unitsApi.list({ organization_id: organizationId, page_size: 100, include_inactive: false })
+          await unitsApi.list({ organizationId, pageSize: 100, includeInactive: false })
         ).data,
         mapLookup,
       ),
   });
 }
 
-export function useFinancialYears(organizationId?: string) {
+export function useFinancialYears() {
   return useQuery({
-    queryKey: ['tax-financial-years', organizationId],
-    enabled: !!organizationId,
+    queryKey: ['tax-financial-years'],
     queryFn: async () =>
       normalizePage(
         (
-          await financialYearsApi.list({ organization_id: organizationId!, page_size: 100, include_inactive: false })
+          await financialYearsApi.list({ pageSize: 100, includeInactive: false })
         ).data,
         mapFinancialYear,
       ),
@@ -1155,8 +1155,8 @@ export function useGSTRates(params?: { page?: number; pageSize?: number; include
     queryFn: async () => {
       const response = await gstRatesApi.list({
         page: params?.page ?? 1,
-        page_size: params?.pageSize ?? 50,
-        include_inactive: params?.includeInactive ?? true,
+        pageSize: params?.pageSize ?? 50,
+        includeInactive: params?.includeInactive ?? true,
       });
       return normalizePage(response.data, mapGstRate);
     },
@@ -1198,17 +1198,15 @@ export function useDeleteGSTRate() {
   });
 }
 
-export function useGSTRegistrations(params: { organizationId?: string; pageSize?: number; includeInactive?: boolean }) {
+export function useGSTRegistrations(params: { pageSize?: number; includeInactive?: boolean } = {}) {
   return useQuery({
     queryKey: ['gst-registrations', params],
-    enabled: !!params.organizationId,
     queryFn: async () =>
       normalizePage(
         (
           await gstRegistrationsApi.list({
-            organization_id: params.organizationId,
-            page_size: params.pageSize ?? 100,
-            include_inactive: params.includeInactive ?? true,
+            pageSize: params.pageSize ?? 100,
+            includeInactive: params.includeInactive ?? true,
           })
         ).data,
         mapGSTRegistration,
@@ -1259,8 +1257,8 @@ export function useHSNSAC(params?: { search?: string; hsnSacType?: string; pageS
         (
           await hsnSacApi.list({
             search: params?.search ?? '',
-            hsn_sac_type: params?.hsnSacType,
-            page_size: params?.pageSize ?? 100,
+            hsnSacType: params?.hsnSacType,
+            pageSize: params?.pageSize ?? 100,
           })
         ).data,
         mapHsnSac,
@@ -1314,9 +1312,9 @@ export function useTDSSections(params?: {
     queryFn: async () => {
       const response = await tdsSectionsApi.list({
         page: params?.page ?? 1,
-        page_size: params?.pageSize ?? 50,
-        include_inactive: params?.includeInactive ?? true,
-        ...(params?.returnForm && params.returnForm !== 'all' ? { return_form: params.returnForm } : {}),
+        pageSize: params?.pageSize ?? 50,
+        includeInactive: params?.includeInactive ?? true,
+        ...(params?.returnForm && params.returnForm !== 'all' ? { returnForm: params.returnForm } : {}),
       });
       return normalizePage(response.data, mapTdsSection);
     },
@@ -1358,19 +1356,17 @@ export function useDeleteTDSSection() {
   });
 }
 
-export function useTDSEntries(params: { organizationId?: string; fromDate?: string; toDate?: string; challanStatus?: string; pageSize?: number }) {
+export function useTDSEntries(params: { fromDate?: string; toDate?: string; challanStatus?: string; pageSize?: number }) {
   return useQuery({
     queryKey: ['tds-entries', params],
-    enabled: !!params.organizationId,
     queryFn: async () =>
       normalizePage(
         (
           await tdsEntriesApi.list({
-            organization_id: params.organizationId!,
             from_date: params.fromDate,
             to_date: params.toDate,
             challan_status: params.challanStatus,
-            page_size: params.pageSize ?? 100,
+            pageSize: params.pageSize ?? 100,
           })
         ).data,
         mapTdsEntry,
@@ -1411,7 +1407,6 @@ export function useValidateTDSThreshold() {
     }) =>
       tdsEntriesApi
         .validateThreshold({
-          organizationId: data.organizationId,
           vendorId: data.vendorId || undefined,
           tdsSectionId: data.tdsSectionId,
           baseAmount: data.baseAmount,
@@ -1451,20 +1446,18 @@ export function useDeleteTDSEntry() {
   });
 }
 
-export function useTDSReturns(params: { organizationId?: string; returnType?: string; financialYearId?: string; quarter?: string; status?: string; pageSize?: number }) {
+export function useTDSReturns(params: { returnType?: string; financialYearId?: string; quarter?: string; status?: string; pageSize?: number }) {
   return useQuery({
     queryKey: ['tds-returns', params],
-    enabled: !!params.organizationId,
     queryFn: async () =>
       normalizePage(
         (
           await tdsReturnsApi.list({
-            organization_id: params.organizationId!,
             return_type: params.returnType,
             financial_year_id: params.financialYearId,
             quarter: params.quarter,
             status: params.status,
-            page_size: params.pageSize ?? 100,
+            pageSize: params.pageSize ?? 100,
           })
         ).data,
         mapTdsReturn,
@@ -1552,21 +1545,19 @@ export function useReviseTDSReturn(id: string) {
   });
 }
 
-export function useTDSChallans(params: { organizationId?: string; fromDate?: string; toDate?: string; status?: string; tdsSectionId?: string; financialYearId?: string; pageSize?: number }) {
+export function useTDSChallans(params: { fromDate?: string; toDate?: string; status?: string; tdsSectionId?: string; financialYearId?: string; pageSize?: number }) {
   return useQuery({
     queryKey: ['tds-challans', params],
-    enabled: !!params.organizationId,
     queryFn: async () =>
       normalizePage(
         (
           await tdsChallansApi.list({
-            organization_id: params.organizationId!,
             from_date: params.fromDate,
             to_date: params.toDate,
             status: params.status,
             tds_section_id: params.tdsSectionId,
             financial_year_id: params.financialYearId,
-            page_size: params.pageSize ?? 100,
+            pageSize: params.pageSize ?? 100,
           })
         ).data,
         mapTdsChallan,
@@ -1660,24 +1651,23 @@ export function useRemoveEntriesFromTDSChallan(id: string) {
   });
 }
 
-export function useTDSCertificateCandidates(organizationId?: string, financialYear?: string, quarter?: string) {
+export function useTDSCertificateCandidates(financialYear?: string, quarter?: string) {
   return useQuery({
-    queryKey: ['tds-certificate-candidates', organizationId, financialYear, quarter],
-    enabled: !!organizationId && !!financialYear && !!quarter,
+    queryKey: ['tds-certificate-candidates', financialYear, quarter],
+    enabled: !!financialYear && !!quarter,
     queryFn: async () => {
-      const response = await tdsForm16AApi.getDeductees({ organization_id: organizationId!, financial_year: financialYear!, quarter: quarter! });
+      const response = await tdsForm16AApi.getDeductees({ financial_year: financialYear!, quarter: quarter! });
       return (Array.isArray(response.data) ? response.data : []).map(mapCertificateCandidate);
     },
   });
 }
 
-export function useTDSCertificates(organizationId?: string, financialYear?: string, quarter?: string) {
+export function useTDSCertificates(financialYear?: string, quarter?: string) {
   return useQuery({
-    queryKey: ['tds-certificates', organizationId, financialYear, quarter],
-    enabled: !!organizationId && !!financialYear,
+    queryKey: ['tds-certificates', financialYear, quarter],
+    enabled: !!financialYear,
     queryFn: async () => {
       const response = await tdsForm16AApi.listCertificates({
-        organization_id: organizationId!,
         financial_year: financialYear!,
         quarter,
       });
@@ -1686,11 +1676,11 @@ export function useTDSCertificates(organizationId?: string, financialYear?: stri
   });
 }
 
-export function useTDSCertificate(certificateNumber?: string, organizationId?: string) {
+export function useTDSCertificate(certificateNumber?: string) {
   return useQuery({
-    queryKey: ['tds-certificate', certificateNumber, organizationId],
-    enabled: !!certificateNumber && !!organizationId,
-    queryFn: async () => mapCertificateInfo((await tdsForm16AApi.get(certificateNumber!, { organization_id: organizationId! })).data),
+    queryKey: ['tds-certificate', certificateNumber],
+    enabled: !!certificateNumber,
+    queryFn: async () => mapCertificateInfo((await tdsForm16AApi.get(certificateNumber!)).data),
   });
 }
 
@@ -1699,8 +1689,8 @@ export function useGenerateTDSCertificate() {
   return useMutation({
     mutationFn: async (input: TDSCertificateGenerateInput) => mapCertificateDetail((await tdsForm16AApi.generate(certificateGenerateToApi(input))).data),
     onSuccess: (_, input) => {
-      queryClient.invalidateQueries({ queryKey: ['tds-certificates', input.organizationId, input.financialYear] });
-      queryClient.invalidateQueries({ queryKey: ['tds-certificate-candidates', input.organizationId, input.financialYear, input.quarter] });
+      queryClient.invalidateQueries({ queryKey: ['tds-certificates', input.financialYear] });
+      queryClient.invalidateQueries({ queryKey: ['tds-certificate-candidates', input.financialYear, input.quarter] });
     },
   });
 }
@@ -1708,13 +1698,13 @@ export function useGenerateTDSCertificate() {
 export function useGenerateBulkTDSCertificates() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { organizationId: string; financialYear: string; quarter: string }) => {
-      const response = await tdsForm16AApi.generateBulk(certificateBulkToApi(input.organizationId, input.financialYear, input.quarter));
+    mutationFn: async (input: { financialYear: string; quarter: string }) => {
+      const response = await tdsForm16AApi.generateBulk(certificateBulkToApi(input.financialYear, input.quarter));
       return (Array.isArray(response.data) ? response.data : []).map(mapCertificateDetail);
     },
     onSuccess: (_, input) => {
-      queryClient.invalidateQueries({ queryKey: ['tds-certificates', input.organizationId, input.financialYear] });
-      queryClient.invalidateQueries({ queryKey: ['tds-certificate-candidates', input.organizationId, input.financialYear, input.quarter] });
+      queryClient.invalidateQueries({ queryKey: ['tds-certificates', input.financialYear] });
+      queryClient.invalidateQueries({ queryKey: ['tds-certificate-candidates', input.financialYear, input.quarter] });
     },
   });
 }

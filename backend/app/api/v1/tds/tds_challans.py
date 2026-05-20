@@ -136,7 +136,7 @@ async def list_challans(
     tds_section_id: Optional[UUID] = Query(None),
     financial_year_id: Optional[UUID] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

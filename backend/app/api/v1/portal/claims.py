@@ -9,9 +9,9 @@ from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.lending.iif.claims import _report_to_csv
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.lending.iif.claims import _report_to_csv, _report_to_pdf, _report_to_xlsx
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.core.exceptions import BadRequestException
 from app.core.upload_validation import DOCUMENT_MIME_TYPES, validate_upload
 from app.schemas.lending.iif import (
@@ -55,7 +55,7 @@ def _require_idempotency_key(key: str | None) -> None:
 )
 async def claim_workbench(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimsWorkbenchResponse:
     service = PortalClaimService(db)
     return await service.get_workbench(user)
@@ -69,7 +69,7 @@ async def claim_workbench(
 )
 async def list_enrollments(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimEnrollmentListResponse:
     service = PortalClaimService(db)
     return await service.list_enrollments(user)
@@ -84,7 +84,7 @@ async def list_enrollments(
 async def list_eligible_periods(
     enrollment_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerEligibleClaimPeriodsResponse:
     service = PortalClaimService(db)
     return await service.eligible_periods(user, enrollment_id)
@@ -102,7 +102,7 @@ async def list_claims(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200, alias="pageSize"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimListResponse:
     service = PortalClaimService(db)
     return await service.list_claims(
@@ -123,7 +123,7 @@ async def list_claims(
 async def get_claim(
     claim_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     service = PortalClaimService(db)
     return await service.get_claim(user, claim_id)
@@ -139,7 +139,7 @@ async def create_claim(
     payload: BorrowerClaimCreateRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
@@ -161,7 +161,7 @@ async def upload_claim_document(
     document_category: str = Form(default="BORROWER_CLAIM_SUPPORTING_DOCUMENT"),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     raw = await file.read()
@@ -197,7 +197,7 @@ async def submit_claim(
     payload: BorrowerClaimSubmitRequest | None = None,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
@@ -217,7 +217,7 @@ async def verify_claim(
     payload: SubventionClaimVerifyRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
@@ -242,7 +242,7 @@ async def initiate_release(
     payload: SubventionClaimInitiateReleaseRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
@@ -268,7 +268,7 @@ async def mark_released(
     payload: SubventionClaimMarkReleasedRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
@@ -293,7 +293,7 @@ async def mark_paid_alias(
     payload: SubventionClaimMarkPaidRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimItem:
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
@@ -314,7 +314,7 @@ async def mark_paid_alias(
 async def claim_report_csv(
     claim_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> StreamingResponse:
     portal_service = PortalClaimService(db)
     claim = await portal_service.get_claim_record(user, claim_id)
@@ -334,6 +334,50 @@ async def claim_report_csv(
 
 
 @router.get(
+    "/{claim_id}/report.xlsx",
+    summary="Download the borrower claim report as XLSX",
+)
+async def claim_report_xlsx(
+    claim_id: UUID,
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
+) -> StreamingResponse:
+    portal_service = PortalClaimService(db)
+    claim = await portal_service.get_claim_record(user, claim_id)
+
+    service = SubventionClaimService(db)
+    payload = await service.generate_claim_report(claim.organization_id, claim.id)
+    filename = f"IIF-{claim.claim_reference.replace('/', '_')}.xlsx"
+    return StreamingResponse(
+        iter([_report_to_xlsx(payload)]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
+    "/{claim_id}/report.pdf",
+    summary="Download the borrower claim report as PDF",
+)
+async def claim_report_pdf(
+    claim_id: UUID,
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
+) -> StreamingResponse:
+    portal_service = PortalClaimService(db)
+    claim = await portal_service.get_claim_record(user, claim_id)
+
+    service = SubventionClaimService(db)
+    payload = await service.generate_claim_report(claim.organization_id, claim.id)
+    filename = f"IIF-{claim.claim_reference.replace('/', '_')}.pdf"
+    return StreamingResponse(
+        iter([_report_to_pdf(payload)]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get(
     "/{claim_id}/documents/{document_id}/download",
     summary="Download one borrower claim document",
 )
@@ -341,7 +385,7 @@ async def download_claim_document(
     claim_id: UUID,
     document_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> FileResponse:
     service = PortalClaimService(db)
     claim = await service.get_claim_record(user, claim_id)

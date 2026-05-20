@@ -576,7 +576,7 @@ export function WidgetEdit() {
                         <SelectValue placeholder="Select a chart" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {charts.map((chart) => (
                           <SelectItem key={chart.id} value={chart.id}>
                             {chart.name}
@@ -596,7 +596,7 @@ export function WidgetEdit() {
                         <SelectValue placeholder="Select a data source" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {dataSources.map((ds) => (
                           <SelectItem key={ds.id} value={ds.id}>
                             {ds.name}

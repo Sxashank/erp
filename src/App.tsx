@@ -646,6 +646,13 @@ const PortalLogin = lazy(() => import('./pages/portal').then((m) => ({ default: 
 const PortalLayout = lazy(() =>
   import('./pages/portal').then((m) => ({ default: m.PortalLayout })),
 );
+const PortalLoans = lazy(() => import('./pages/portal').then((m) => ({ default: m.PortalLoans })));
+const PortalLoanDetail = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalLoanDetail })),
+);
+const PortalDocuments = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalDocuments })),
+);
 const PortalReports = lazy(() =>
   import('./pages/portal').then((m) => ({ default: m.PortalReports })),
 );
@@ -1802,8 +1809,8 @@ export default function App() {
             <Route index element={<Navigate to="/portal/workbench" replace />} />
             <Route path="workbench" element={<PortalWorkbench />} />
             <Route path="dashboard" element={<Navigate to="/portal/workbench" replace />} />
-            <Route path="loans" element={<Navigate to="/portal/workbench" replace />} />
-            <Route path="loans/:loanId" element={<Navigate to="/portal/workbench" replace />} />
+            <Route path="loans" element={<PortalLoans />} />
+            <Route path="loans/:loanId" element={<PortalLoanDetail />} />
             <Route path="applications" element={<PortalApplications />} />
             <Route path="applications/new" element={<PortalApplicationNew />} />
             <Route path="applications/:id" element={<PortalApplicationDetail />} />
@@ -1811,7 +1818,7 @@ export default function App() {
             <Route path="reports" element={<PortalReports />} />
             <Route path="payments" element={<Navigate to="/portal/workbench" replace />} />
             <Route path="pay/coming-soon" element={<Navigate to="/portal/workbench" replace />} />
-            <Route path="documents" element={<Navigate to="/portal/applications" replace />} />
+            <Route path="documents" element={<PortalDocuments />} />
             <Route path="claims" element={<PortalSubsidyReports />} />
             <Route path="subsidy-reports" element={<Navigate to="/portal/claims" replace />} />
             <Route path="support" element={<Navigate to="/portal/workbench" replace />} />

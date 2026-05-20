@@ -65,8 +65,7 @@ export interface FDInterestSlab {
 
 export interface FDProduct {
   id: string;
-  organization_id: string;
-  product_code: string;
+    product_code: string;
   product_name: string;
   description?: string;
   min_tenure_days: number;
@@ -146,8 +145,7 @@ export interface FDInterestAccrual {
 
 export interface FixedDeposit {
   id: string;
-  organization_id: string;
-  fd_number: string;
+    fd_number: string;
   certificate_number?: string;
   product_id: string;
   product_code?: string;
@@ -331,8 +329,7 @@ class FixedDepositService {
   // ============== FD Products ==============
 
   async listProducts(params: {
-    organization_id: string;
-    active_only?: boolean;
+        active_only?: boolean;
     skip?: number;
     limit?: number;
   }): Promise<{ items: FDProduct[]; total: number }> {
@@ -413,8 +410,7 @@ class FixedDepositService {
   // ============== Fixed Deposits ==============
 
   async listDeposits(params: {
-    organization_id: string;
-    customer_id?: string;
+        customer_id?: string;
     product_id?: string;
     status?: FDStatus;
     maturing_before?: string;
@@ -483,9 +479,9 @@ class FixedDepositService {
   }
 
   // Summary
-  async getSummary(organizationId: string): Promise<FDSummary> {
+  async getSummary(): Promise<FDSummary> {
     const response = await api.get('/fixed-deposits/deposits/summary', {
-      params: { organization_id: organizationId },
+      params: {},
     });
     return normalizeSummary(response.data);
   }
@@ -522,12 +518,9 @@ class FixedDepositService {
   }
 
   // Interest Operations
-  async runInterestAccrual(
-    organizationId: string,
-    accrualDate: string
-  ): Promise<{ processed: number; total_interest: number }> {
+  async runInterestAccrual(accrualDate: string): Promise<{ processed: number; total_interest: number }> {
     const response = await api.post('/fixed-deposits/deposits/interest/accrue', null, {
-      params: { organization_id: organizationId, accrual_date: accrualDate },
+      params: { accrual_date: accrualDate },
     });
     return {
       ...response.data,
@@ -535,12 +528,9 @@ class FixedDepositService {
     };
   }
 
-  async processInterestPayout(
-    organizationId: string,
-    payoutDate: string
-  ): Promise<{ processed: number; total_payout: number }> {
+  async processInterestPayout(payoutDate: string): Promise<{ processed: number; total_payout: number }> {
     const response = await api.post('/fixed-deposits/deposits/interest/payout', null, {
-      params: { organization_id: organizationId, payout_date: payoutDate },
+      params: { payout_date: payoutDate },
     });
     return {
       ...response.data,

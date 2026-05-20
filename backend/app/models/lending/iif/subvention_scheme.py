@@ -103,4 +103,15 @@ class SubventionScheme(BaseModel):
     # is suspended. IIF default is 30 days.
     npa_disqualification_dpd_days: Mapped[int] = mapped_column(Integer, nullable=False, default=30)
 
+    # ----- Configurable scheme rules -----------------------------------------
+
+    # Calculation, eligibility, documents, workflow and fund rules are
+    # intentionally JSONB so future Ministry notifications can be configured
+    # without another schema change. Services still validate known keys.
+    calculation_rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    eligibility_rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    required_documents: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
+    workflow_rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    fund_rules: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

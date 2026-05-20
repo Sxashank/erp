@@ -25,16 +25,66 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     # Create enum types
-    op.execute("""
-        CREATE TYPE einvoiceprovider AS ENUM ('NIC', 'CLEARTAX', 'TALLY', 'ZOHO');
-        CREATE TYPE einvoicerequeststatus AS ENUM ('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'CANCELLED');
-        CREATE TYPE ewaybillprovider AS ENUM ('NIC', 'CLEARTAX', 'MANUAL');
-        CREATE TYPE ewaybillstatus AS ENUM ('DRAFT', 'GENERATED', 'ACTIVE', 'CANCELLED', 'EXPIRED', 'EXTENDED');
-        CREATE TYPE transportmode AS ENUM ('1', '2', '3', '4');
-        CREATE TYPE vehicletype AS ENUM ('R', 'O');
-        CREATE TYPE transactiontype AS ENUM ('1', '2', '3', '4');
-        CREATE TYPE subsupplytype AS ENUM ('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12');
-    """)
+    enum_definitions = {
+        "einvoiceprovider": "'NIC', 'CLEARTAX', 'TALLY', 'ZOHO'",
+        "einvoicerequeststatus": "'PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'CANCELLED'",
+        "ewaybillprovider": "'NIC', 'CLEARTAX', 'MANUAL'",
+        "ewaybillstatus": "'DRAFT', 'GENERATED', 'ACTIVE', 'CANCELLED', 'EXPIRED', 'EXTENDED'",
+        "transportmode": "'1', '2', '3', '4'",
+        "vehicletype": "'R', 'O'",
+        "transactiontype": "'1', '2', '3', '4'",
+        "subsupplytype": "'1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'",
+    }
+    for enum_name, enum_values in enum_definitions.items():
+        op.execute(f"""
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = '{enum_name}') THEN
+                    CREATE TYPE {enum_name} AS ENUM ({enum_values});
+                END IF;
+            END $$;
+        """)
+
+    einvoice_provider_enum = postgresql.ENUM("NIC", "CLEARTAX", "TALLY", "ZOHO", name="einvoiceprovider", create_type=False)
+    einvoice_request_status_enum = postgresql.ENUM(
+        "PENDING",
+        "PROCESSING",
+        "SUCCESS",
+        "FAILED",
+        "CANCELLED",
+        name="einvoicerequeststatus",
+        create_type=False,
+    )
+    ewaybill_provider_enum = postgresql.ENUM("NIC", "CLEARTAX", "MANUAL", name="ewaybillprovider", create_type=False)
+    ewaybill_status_enum = postgresql.ENUM(
+        "DRAFT",
+        "GENERATED",
+        "ACTIVE",
+        "CANCELLED",
+        "EXPIRED",
+        "EXTENDED",
+        name="ewaybillstatus",
+        create_type=False,
+    )
+    transport_mode_enum = postgresql.ENUM("1", "2", "3", "4", name="transportmode", create_type=False)
+    vehicle_type_enum = postgresql.ENUM("R", "O", name="vehicletype", create_type=False)
+    transaction_type_enum = postgresql.ENUM("1", "2", "3", "4", name="transactiontype", create_type=False)
+    sub_supply_type_enum = postgresql.ENUM(
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11",
+        "12",
+        name="subsupplytype",
+        create_type=False,
+    )
 
     # Create gst_einvoice_request table
     op.create_table(
@@ -44,10 +94,10 @@ def upgrade() -> None:
         sa.Column("gst_registration_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("sales_invoice_id", postgresql.UUID(as_uuid=True), nullable=False),
         # Provider
-        sa.Column("provider", sa.Enum('NIC', 'CLEARTAX', 'TALLY', 'ZOHO', name='einvoiceprovider', create_type=False), nullable=False, server_default='NIC'),
+        sa.Column("provider", einvoice_provider_enum, nullable=False, server_default='NIC'),
         # Request details
         sa.Column("request_time", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
-        sa.Column("status", sa.Enum('PENDING', 'PROCESSING', 'SUCCESS', 'FAILED', 'CANCELLED', name='einvoicerequeststatus', create_type=False), nullable=False, server_default='PENDING'),
+        sa.Column("status", einvoice_request_status_enum, nullable=False, server_default='PENDING'),
         # Generated values
         sa.Column("irn", sa.String(64), nullable=True, unique=True),
         sa.Column("ack_number", sa.String(50), nullable=True),
@@ -100,20 +150,20 @@ def upgrade() -> None:
         sa.Column("sales_invoice_id", postgresql.UUID(as_uuid=True), nullable=True),
         sa.Column("einvoice_request_id", postgresql.UUID(as_uuid=True), nullable=True),
         # Provider
-        sa.Column("provider", sa.Enum('NIC', 'CLEARTAX', 'MANUAL', name='ewaybillprovider', create_type=False), nullable=False, server_default='NIC'),
+        sa.Column("provider", ewaybill_provider_enum, nullable=False, server_default='NIC'),
         # E-Way Bill details
         sa.Column("eway_bill_number", sa.String(20), nullable=True, unique=True),
         sa.Column("eway_bill_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("valid_from", sa.DateTime(timezone=True), nullable=True),
         sa.Column("valid_until", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("status", sa.Enum('DRAFT', 'GENERATED', 'ACTIVE', 'CANCELLED', 'EXPIRED', 'EXTENDED', name='ewaybillstatus', create_type=False), nullable=False, server_default='DRAFT'),
+        sa.Column("status", ewaybill_status_enum, nullable=False, server_default='DRAFT'),
         # Document reference
         sa.Column("document_type", sa.String(20), nullable=False, server_default='INV'),
         sa.Column("document_number", sa.String(50), nullable=False),
         sa.Column("document_date", sa.Date(), nullable=False),
         # Transaction details
-        sa.Column("transaction_type", sa.Enum('1', '2', '3', '4', name='transactiontype', create_type=False), nullable=False, server_default='1'),
-        sa.Column("sub_supply_type", sa.Enum('1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', name='subsupplytype', create_type=False), nullable=False, server_default='1'),
+        sa.Column("transaction_type", transaction_type_enum, nullable=False, server_default='1'),
+        sa.Column("sub_supply_type", sub_supply_type_enum, nullable=False, server_default='1'),
         # Supplier (From)
         sa.Column("supplier_gstin", sa.String(15), nullable=False),
         sa.Column("supplier_name", sa.String(200), nullable=False),
@@ -154,14 +204,14 @@ def upgrade() -> None:
         sa.Column("cess_amount", sa.Numeric(18, 2), nullable=False, server_default='0'),
         sa.Column("total_value", sa.Numeric(18, 2), nullable=False),
         # Transport details
-        sa.Column("transport_mode", sa.Enum('1', '2', '3', '4', name='transportmode', create_type=False), nullable=False, server_default='1'),
+        sa.Column("transport_mode", transport_mode_enum, nullable=False, server_default='1'),
         sa.Column("transporter_id", sa.String(15), nullable=True),
         sa.Column("transporter_name", sa.String(200), nullable=True),
         sa.Column("transport_doc_number", sa.String(50), nullable=True),
         sa.Column("transport_doc_date", sa.Date(), nullable=True),
         # Vehicle details
         sa.Column("vehicle_number", sa.String(20), nullable=True),
-        sa.Column("vehicle_type", sa.Enum('R', 'O', name='vehicletype', create_type=False), nullable=True),
+        sa.Column("vehicle_type", vehicle_type_enum, nullable=True),
         # Distance
         sa.Column("approximate_distance", sa.Integer(), nullable=False, server_default='0'),
         # Extension tracking

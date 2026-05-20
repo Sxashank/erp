@@ -92,12 +92,12 @@ interface Vendor {
   id: string;
   code: string;
   name: string;
-  display_name: string | null;
+  displayName: string | null;
   gstin: string | null;
   pan: string | null;
-  address_line1: string | null;
+  addressLine1: string | null;
   city: string | null;
-  state_code: string | null;
+  stateCode: string | null;
   pincode: string | null;
 }
 
@@ -311,14 +311,14 @@ export function PurchaseBillView() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="font-medium">{vendor?.name}</div>
-            {vendor?.display_name && vendor.display_name !== vendor.name && (
-              <div className="text-slate-500">{vendor.display_name}</div>
+            {vendor?.displayName && vendor.displayName !== vendor.name && (
+              <div className="text-slate-500">{vendor.displayName}</div>
             )}
-            {vendor?.address_line1 && (
+            {vendor?.addressLine1 && (
               <div className="text-slate-600">
-                {vendor.address_line1}
+                {vendor.addressLine1}
                 {vendor.city && `, ${vendor.city}`}
-                {vendor.state_code && ` - ${vendor.state_code}`}
+                {vendor.stateCode && ` - ${vendor.stateCode}`}
                 {vendor.pincode && `, ${vendor.pincode}`}
               </div>
             )}

@@ -64,15 +64,15 @@ interface Goal {
   description: string;
   category: string;
   weightage: number;
-  target_date: string;
+  targetDate: string;
   progress: number;
-  key_results: string;
+  keyResults: string;
 }
 
 interface CycleInfo {
   id: string;
   name: string;
-  self_appraisal_deadline: string;
+  selfAppraisalDeadline: string;
 }
 
 interface EmployeeInfo {
@@ -252,7 +252,7 @@ export default function SelfAppraisal() {
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Deadline</div>
-            <div className="font-semibold">{formatDate(cycleInfo.self_appraisal_deadline)}</div>
+            <div className="font-semibold">{formatDate(cycleInfo.selfAppraisalDeadline)}</div>
             <div className="text-xs text-red-500">Submit by this date</div>
           </CardContent>
         </Card>
@@ -353,7 +353,7 @@ export default function SelfAppraisal() {
 
                     <div className="rounded-lg bg-muted p-3">
                       <p className="mb-1 text-xs font-medium text-muted-foreground">Key Results</p>
-                      <p className="whitespace-pre-line text-sm">{goal.key_results}</p>
+                      <p className="whitespace-pre-line text-sm">{goal.keyResults}</p>
                     </div>
                   </div>
 

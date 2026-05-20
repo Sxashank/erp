@@ -6,9 +6,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
 from app.core.constants import Permissions
-from app.core.permissions import RequirePermissions
 from app.models.auth.user import User
 from app.schemas.hris.employee import (
     EmployeeCreate,
@@ -47,7 +46,6 @@ router = APIRouter()
 # Employee CRUD
 # ============================================
 @router.get("", response_model=PaginatedResponse[EmployeeListResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def list_employees(
     organization_id: Optional[UUID] = None,
     department_id: Optional[UUID] = None,
@@ -59,7 +57,7 @@ async def list_employees(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_VIEW)),
 ):
     """List employees with filters."""
     service = EmployeeService(db)
@@ -100,11 +98,10 @@ async def list_employees(
 
 
 @router.post("", response_model=EmployeeResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_CREATE])
 async def create_employee(
     data: EmployeeCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_CREATE)),
 ):
     """Create a new employee."""
     service = EmployeeService(db)
@@ -123,11 +120,10 @@ async def create_employee(
 
 
 @router.get("/{employee_id}", response_model=EmployeeResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def get_employee(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_VIEW)),
 ):
     """Get employee by ID."""
     service = EmployeeService(db)
@@ -138,12 +134,11 @@ async def get_employee(
 
 
 @router.put("/{employee_id}", response_model=EmployeeResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_employee(
     employee_id: UUID,
     data: EmployeeUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Update employee."""
     service = EmployeeService(db)
@@ -154,11 +149,10 @@ async def update_employee(
 
 
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_DELETE])
 async def delete_employee(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_DELETE)),
 ):
     """Delete (relieve) employee."""
     service = EmployeeService(db)
@@ -171,12 +165,11 @@ async def delete_employee(
 # Documents
 # ============================================
 @router.post("/{employee_id}/documents", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_document(
     employee_id: UUID,
     data: EmployeeDocumentCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Add document to employee."""
     service = EmployeeService(db)
@@ -185,12 +178,11 @@ async def add_document(
 
 
 @router.put("/documents/{document_id}", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_document(
     document_id: UUID,
     data: EmployeeDocumentUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Update employee document."""
     service = EmployeeService(db)
@@ -201,11 +193,10 @@ async def update_document(
 
 
 @router.delete("/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_document(
     document_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Delete employee document."""
     service = EmployeeService(db)
@@ -215,11 +206,10 @@ async def delete_document(
 
 
 @router.post("/documents/{document_id}/verify", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def verify_document(
     document_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Verify employee document."""
     service = EmployeeService(db)
@@ -233,12 +223,11 @@ async def verify_document(
 # Family Members
 # ============================================
 @router.post("/{employee_id}/family", response_model=EmployeeFamilyResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_family_member(
     employee_id: UUID,
     data: EmployeeFamilyCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Add family member to employee."""
     service = EmployeeService(db)
@@ -247,12 +236,11 @@ async def add_family_member(
 
 
 @router.put("/family/{family_id}", response_model=EmployeeFamilyResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_family_member(
     family_id: UUID,
     data: EmployeeFamilyUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Update family member."""
     service = EmployeeService(db)
@@ -263,11 +251,10 @@ async def update_family_member(
 
 
 @router.delete("/family/{family_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_family_member(
     family_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Delete family member."""
     service = EmployeeService(db)
@@ -280,12 +267,11 @@ async def delete_family_member(
 # Bank Accounts
 # ============================================
 @router.post("/{employee_id}/bank-accounts", response_model=EmployeeBankAccountResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_bank_account(
     employee_id: UUID,
     data: EmployeeBankAccountCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Add bank account to employee."""
     service = EmployeeService(db)
@@ -294,12 +280,11 @@ async def add_bank_account(
 
 
 @router.put("/bank-accounts/{bank_id}", response_model=EmployeeBankAccountResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_bank_account(
     bank_id: UUID,
     data: EmployeeBankAccountUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Update bank account."""
     service = EmployeeService(db)
@@ -310,11 +295,10 @@ async def update_bank_account(
 
 
 @router.delete("/bank-accounts/{bank_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_bank_account(
     bank_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Delete bank account."""
     service = EmployeeService(db)
@@ -327,12 +311,11 @@ async def delete_bank_account(
 # Education
 # ============================================
 @router.post("/{employee_id}/education", response_model=EmployeeEducationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_education(
     employee_id: UUID,
     data: EmployeeEducationCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Add education to employee."""
     service = EmployeeService(db)
@@ -341,12 +324,11 @@ async def add_education(
 
 
 @router.put("/education/{education_id}", response_model=EmployeeEducationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_education(
     education_id: UUID,
     data: EmployeeEducationUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Update education."""
     service = EmployeeService(db)
@@ -357,11 +339,10 @@ async def update_education(
 
 
 @router.delete("/education/{education_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_education(
     education_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Delete education."""
     service = EmployeeService(db)
@@ -374,12 +355,11 @@ async def delete_education(
 # Experience
 # ============================================
 @router.post("/{employee_id}/experience", response_model=EmployeeExperienceResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_experience(
     employee_id: UUID,
     data: EmployeeExperienceCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Add experience to employee."""
     service = EmployeeService(db)
@@ -388,12 +368,11 @@ async def add_experience(
 
 
 @router.put("/experience/{experience_id}", response_model=EmployeeExperienceResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def update_experience(
     experience_id: UUID,
     data: EmployeeExperienceUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Update experience."""
     service = EmployeeService(db)
@@ -404,11 +383,10 @@ async def update_experience(
 
 
 @router.delete("/experience/{experience_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def delete_experience(
     experience_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Delete experience."""
     service = EmployeeService(db)
@@ -421,11 +399,10 @@ async def delete_experience(
 # Statutory Info
 # ============================================
 @router.get("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def get_statutory(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_VIEW)),
 ):
     """Get employee statutory info."""
     service = EmployeeService(db)
@@ -436,12 +413,11 @@ async def get_statutory(
 
 
 @router.put("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def upsert_statutory(
     employee_id: UUID,
     data: EmployeeStatutoryCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Create or update statutory info."""
     service = EmployeeService(db)
@@ -453,11 +429,10 @@ async def upsert_statutory(
 # Lifecycle Events
 # ============================================
 @router.get("/{employee_id}/lifecycle", response_model=list[EmployeeLifecycleEventResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_VIEW])
 async def get_lifecycle_events(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_VIEW)),
 ):
     """Get employee lifecycle events."""
     service = EmployeeService(db)
@@ -466,12 +441,11 @@ async def get_lifecycle_events(
 
 
 @router.post("/{employee_id}/lifecycle", response_model=EmployeeLifecycleEventResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_EMPLOYEE_UPDATE])
 async def add_lifecycle_event(
     employee_id: UUID,
     data: EmployeeLifecycleEventCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_UPDATE)),
 ):
     """Add lifecycle event to employee."""
     service = EmployeeService(db)

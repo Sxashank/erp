@@ -137,7 +137,7 @@ export function PaymentList() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ include_inactive: false });
+      const response = await organizationsApi.list({ includeInactive: false });
       setOrganizations(response.data.items || []);
       if (!selectedOrg && response.data.items?.length > 0) {
         setSelectedOrg(response.data.items[0].id);
@@ -150,7 +150,7 @@ export function PaymentList() {
   const loadVendors = useCallback(async () => {
     if (!selectedOrg) return;
     try {
-      const response = await vendorsApi.getActive({ organization_id: selectedOrg });
+      const response = await vendorsApi.getActive({});
       setVendors(response.data || []);
     } catch (error) {
       logger.error('Failed to load vendors:', error);
@@ -160,7 +160,7 @@ export function PaymentList() {
   const loadCustomers = useCallback(async () => {
     if (!selectedOrg) return;
     try {
-      const response = await customersApi.getActive({ organization_id: selectedOrg });
+      const response = await customersApi.getActive({});
       setCustomers(response.data || []);
     } catch (error) {
       logger.error('Failed to load customers:', error);
@@ -172,7 +172,6 @@ export function PaymentList() {
     setLoading(true);
     try {
       const params: PaymentListParams = {
-        organization_id: selectedOrg,
         limit: 100,
       };
       if (search) params.search = search;

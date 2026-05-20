@@ -17,6 +17,44 @@ depends_on = None
 
 
 def upgrade() -> None:
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS mst_organization_bank_account (
+            id UUID NOT NULL,
+            organization_id UUID NOT NULL,
+            account_name VARCHAR(200) NOT NULL,
+            account_number VARCHAR(30) NOT NULL,
+            ifsc_code VARCHAR(11) NOT NULL,
+            bank_name VARCHAR(200) NOT NULL,
+            branch_name VARCHAR(200),
+            branch_address TEXT,
+            micr_code VARCHAR(9),
+            swift_code VARCHAR(11),
+            account_type VARCHAR(20) NOT NULL DEFAULT 'CURRENT',
+            ledger_account_id UUID,
+            sanctioned_limit NUMERIC(18, 2),
+            drawing_power NUMERIC(18, 2),
+            is_primary BOOLEAN NOT NULL DEFAULT false,
+            allow_payments BOOLEAN NOT NULL DEFAULT true,
+            allow_receipts BOOLEAN NOT NULL DEFAULT true,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            created_by UUID,
+            updated_at TIMESTAMPTZ,
+            updated_by UUID,
+            deleted_at TIMESTAMPTZ,
+            deleted_by UUID,
+            is_active BOOLEAN NOT NULL DEFAULT true,
+            PRIMARY KEY (id),
+            CONSTRAINT uq_org_bank_account_number UNIQUE (organization_id, account_number),
+            FOREIGN KEY (organization_id) REFERENCES mst_organization(id) ON DELETE CASCADE,
+            FOREIGN KEY (ledger_account_id) REFERENCES mst_account(id) ON DELETE SET NULL,
+            FOREIGN KEY (created_by) REFERENCES mst_user(id) ON DELETE SET NULL,
+            FOREIGN KEY (updated_by) REFERENCES mst_user(id) ON DELETE SET NULL,
+            FOREIGN KEY (deleted_by) REFERENCES mst_user(id) ON DELETE SET NULL
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_mst_organization_bank_account_organization_id ON mst_organization_bank_account (organization_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_org_bank_account_org_active ON mst_organization_bank_account (organization_id, is_active)")
+
     # Create payment file table
     op.create_table(
         'txn_payment_file',

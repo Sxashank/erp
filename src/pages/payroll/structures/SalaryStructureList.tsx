@@ -47,8 +47,7 @@ export default function SalaryStructureList() {
     try {
       setLoading(true);
       const response = await payrollService.listStructures({
-        organization_id: organizationId,
-        active_only: true,
+        activeOnly: true,
       });
       setStructures(response.items);
       setTotal(response.total);
@@ -87,8 +86,8 @@ export default function SalaryStructureList() {
 
   const filteredStructures = structures.filter(
     (s) =>
-      s.structure_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      s.structure_code.toLowerCase().includes(searchTerm.toLowerCase()),
+      s.structureName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      s.structureCode.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -146,13 +145,13 @@ export default function SalaryStructureList() {
               ) : (
                 filteredStructures.map((structure) => (
                   <TableRow key={structure.id}>
-                    <TableCell className="font-mono">{structure.structure_code}</TableCell>
-                    <TableCell className="font-medium">{structure.structure_name}</TableCell>
+                    <TableCell className="font-mono">{structure.structureCode}</TableCell>
+                    <TableCell className="font-medium">{structure.structureName}</TableCell>
                     <TableCell>
-                      {structure.ctc_from && structure.ctc_to ? (
+                      {structure.ctcFrom && structure.ctcTo ? (
                         <>
-                          <AmountDisplay amount={structure.ctc_from} compact /> -{' '}
-                          <AmountDisplay amount={structure.ctc_to} compact />
+                          <AmountDisplay amount={structure.ctcFrom} compact /> -{' '}
+                          <AmountDisplay amount={structure.ctcTo} compact />
                         </>
                       ) : (
                         <span className="text-muted-foreground">Not specified</span>
@@ -160,8 +159,8 @@ export default function SalaryStructureList() {
                     </TableCell>
                     <TableCell>{structure.components?.length || 0} components</TableCell>
                     <TableCell>
-                      <Badge variant={structure.is_active ? 'default' : 'secondary'}>
-                        {structure.is_active ? 'Active' : 'Inactive'}
+                      <Badge variant={structure.isActive ? 'default' : 'secondary'}>
+                        {structure.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">

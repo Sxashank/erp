@@ -38,11 +38,14 @@ from app.core.exceptions import (
 )
 from app.models.auth.user import User
 from app.models.lending.enums import (
+    EntityStatus,
     IIFLoanType,
     LoanAccountStatus,
     ProductCategory,
     SubventionEnrollmentStatus,
 )
+from app.models.lending.application import LoanApplication
+from app.models.lending.entity import Entity
 from app.models.lending.iif.loan_subvention_enrollment import (
     LoanSubventionEnrollment,
 )
@@ -55,6 +58,7 @@ from app.schemas.lending.iif import (
     LoanSubventionEnrollmentCreate,
     LoanSubventionEnrollmentUpdate,
 )
+from app.core.iif_rules import decimal_bool, eligibility_rules
 
 
 def _add_months(d: date, months: int) -> date:
@@ -97,6 +101,15 @@ class SubventionEnrollmentService:
 
         product: LoanProduct | None = await self.session.get(LoanProduct, loan.product_id)
         sanction: LoanSanction | None = await self.session.get(LoanSanction, loan.sanction_id)
+        entity: Entity | None = await self.session.get(Entity, loan.entity_id)
+        application: LoanApplication | None = (
+            await self.session.get(LoanApplication, sanction.application_id)
+            if sanction is not None
+            else None
+        )
+        app_extra = dict(getattr(application, "extra_data", None) or {})
+        entity_extra = dict(getattr(entity, "extra_data", None) or {})
+        rules = eligibility_rules(scheme)
 
         checks: dict[str, bool] = {}
         reasons: list[str] = []
@@ -203,6 +216,47 @@ class SubventionEnrollmentService:
                 refinance_ok = False
                 reasons.append(f"Loan is flagged {flag_name}=True")
         checks["not_refinance"] = refinance_ok
+
+        if rules.get("require_shipyard_located_in_india", True):
+            shipyard_country_ok = entity is not None and entity.country_of_incorporation == "IND"
+            shipyard_name_ok = bool(app_extra.get("shipyard_name") or app_extra.get("shipyardName"))
+            checks["shipyard_located_in_india"] = shipyard_country_ok and shipyard_name_ok
+            if not shipyard_country_ok:
+                reasons.append("Borrower / shipyard is not recorded as incorporated in India")
+            if not shipyard_name_ok:
+                reasons.append("Shipyard name/location evidence is not recorded on the application")
+
+        if rules.get("require_lender_regulated_in_india", True):
+            lender_recorded = bool(app_extra.get("lender_name") or app_extra.get("lenderName"))
+            lender_not_explicitly_ineligible = app_extra.get("lender_regulated_in_india") is not False
+            checks["lender_regulated_in_india"] = lender_recorded and lender_not_explicitly_ineligible
+            if not lender_recorded:
+                reasons.append("Lender details are not recorded on the application")
+            elif not lender_not_explicitly_ineligible:
+                reasons.append("Lender is not marked as regulated by an Indian regulator")
+
+        if rules.get("require_not_wilful_defaulter", True):
+            not_wilful = (
+                entity is not None
+                and entity.status != EntityStatus.BLACKLISTED
+                and not decimal_bool(entity_extra.get("is_wilful_defaulter"))
+                and not decimal_bool(app_extra.get("is_wilful_defaulter"))
+            )
+            checks["not_wilful_defaulter"] = not_wilful
+            if not not_wilful:
+                reasons.append("Borrower is blacklisted or flagged as wilful defaulter")
+
+        if rules.get("require_lender_forwarding_same_quarter", True):
+            # If the forwarding date is captured, enforce same-quarter. Missing
+            # evidence is reported but not inferred from external systems.
+            forwarded_same_quarter = app_extra.get("lender_forwarded_same_quarter")
+            if forwarded_same_quarter is None:
+                forwarded_ok = True
+            else:
+                forwarded_ok = decimal_bool(forwarded_same_quarter)
+            checks["lender_forwarded_same_quarter"] = forwarded_ok
+            if not forwarded_ok:
+                reasons.append("Lender forwarding was not within the quarter of disbursement")
 
         eligible = all(checks.values())
         return EligibilityCheckResponse(

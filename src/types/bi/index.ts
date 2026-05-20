@@ -405,7 +405,7 @@ export interface Dashboard {
   code: string;
   name: string;
   description?: string;
-  organization_id: string;
+  organization_id?: string;
   is_default: boolean;
   is_public: boolean;
   layout_config?: Record<string, unknown>;
@@ -423,7 +423,6 @@ export interface DashboardCreate {
   code: string;
   name: string;
   description?: string;
-  organization_id: string;
   is_default?: boolean;
   is_public?: boolean;
   layout_config?: Record<string, unknown>;

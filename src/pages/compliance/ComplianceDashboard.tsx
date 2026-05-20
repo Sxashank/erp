@@ -3,16 +3,14 @@
  */
 
 import {
-  Calendar,
   AlertTriangle,
+  Calendar,
   Clock,
-  CheckCircle,
   FileText,
-  Plus,
-  Settings,
   RefreshCw,
+  Settings,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { DateDisplay } from '@/components/common/DateDisplay';
@@ -35,13 +33,13 @@ import {
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import { getErrorMessage } from '@/lib/errorMessage';
 import type {
+  ComplianceCalendarItem,
   ComplianceSummary,
   UpcomingCompliance,
-  ComplianceCalendarItem,
 } from '@/services/complianceService';
 import complianceService from '@/services/complianceService';
-import { getErrorMessage } from "@/lib/errorMessage";
 
 const REGULATORY_BODY_COLORS: Record<string, string> = {
   RBI: 'bg-blue-100 text-blue-800',
@@ -75,28 +73,23 @@ export default function ComplianceDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
 
-  const organizationId = useRequiredActiveOrganizationId();
+  useRequiredActiveOrganizationId();
 
   const currentYear = new Date().getFullYear();
   const years = Array.from({ length: 3 }, (_, i) => currentYear - i + 1);
 
-  useEffect(() => {
-    loadData();
-  }, [selectedYear]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       const [summaryData, upcomingData] = await Promise.all([
         complianceService.getSummary({
-          organization_id: organizationId,
           year: parseInt(selectedYear),
         }),
-        complianceService.getUpcoming(organizationId),
+        complianceService.getUpcoming(),
       ]);
       setSummary(summaryData);
       setUpcoming(upcomingData);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to load compliance data',
@@ -105,13 +98,16 @@ export default function ComplianceDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedYear, toast]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   const handleGenerateInstances = async () => {
     const currentMonth = new Date().getMonth() + 1;
     try {
       const result = await complianceService.generateInstances({
-        organization_id: organizationId,
         year: parseInt(selectedYear),
         month: currentMonth,
       });
@@ -119,7 +115,7 @@ export default function ComplianceDashboard() {
         title: 'Success',
         description: result.message,
       });
-      loadData();
+      void loadData();
     } catch (error: unknown) {
       toast({
         title: 'Error',
@@ -132,17 +128,25 @@ export default function ComplianceDashboard() {
   const renderComplianceItem = (item: ComplianceCalendarItem) => (
     <div
       key={item.id}
+      role="button"
+      tabIndex={0}
       className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
       onClick={() => navigate(`/admin/compliance/instances/${item.id}`)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          navigate(`/admin/compliance/instances/${item.id}`);
+        }
+      }}
     >
       <div className="flex items-center gap-3">
-        <Badge className={REGULATORY_BODY_COLORS[item.regulatory_body]}>
-          {item.regulatory_body}
+        <Badge className={REGULATORY_BODY_COLORS[item.regulatoryBody]}>
+          {item.regulatoryBody}
         </Badge>
         <div>
-          <p className="font-medium">{item.item_name}</p>
+          <p className="font-medium">{item.itemName}</p>
           <p className="text-sm text-muted-foreground">
-            Due: <DateDisplay date={item.due_date} />
+            Due: <DateDisplay date={item.dueDate} />
           </p>
         </div>
       </div>
@@ -227,7 +231,7 @@ export default function ComplianceDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {summary?.in_progress || 0}
+              {summary?.inProgress || 0}
             </div>
           </CardContent>
         </Card>
@@ -301,16 +305,16 @@ export default function ComplianceDashboard() {
               <CardTitle className="text-yellow-600">Due This Week</CardTitle>
             </div>
             <CardDescription>
-              {upcoming?.due_this_week.length || 0} items due soon
+              {upcoming?.dueThisWeek.length || 0} items due soon
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcoming?.due_this_week.length === 0 ? (
+            {upcoming?.dueThisWeek.length === 0 ? (
               <p className="text-center text-muted-foreground py-4">
                 No items due this week
               </p>
             ) : (
-              upcoming?.due_this_week.map(renderComplianceItem)
+              upcoming?.dueThisWeek.map(renderComplianceItem)
             )}
           </CardContent>
         </Card>
@@ -323,16 +327,16 @@ export default function ComplianceDashboard() {
               <CardTitle>Due This Month</CardTitle>
             </div>
             <CardDescription>
-              {upcoming?.due_this_month.length || 0} upcoming items
+              {upcoming?.dueThisMonth.length || 0} upcoming items
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {upcoming?.due_this_month.length === 0 ? (
+            {upcoming?.dueThisMonth.length === 0 ? (
               <p className="text-center text-muted-foreground py-4">
                 No items due this month
               </p>
             ) : (
-              upcoming?.due_this_month.map(renderComplianceItem)
+              upcoming?.dueThisMonth.map(renderComplianceItem)
             )}
           </CardContent>
         </Card>

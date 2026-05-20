@@ -115,7 +115,7 @@ export default function TDSChallanWorkspace() {
 
   const form = useForm<TDSChallanFormValues, unknown, TDSChallanFormInput>({
     resolver: zodResolver(tdsChallanSchema),
-    defaultValues: { ...defaultValues, organizationId: activeOrganizationId ?? '' },
+    defaultValues: { ...defaultValues ?? '' },
   });
   const paymentForm = useForm<TDSChallanPaymentFormValues, unknown, TDSChallanPaymentFormInput>({
     resolver: zodResolver(tdsChallanPaymentSchema),
@@ -128,8 +128,8 @@ export default function TDSChallanWorkspace() {
 
   const organizationId = form.watch('organizationId');
   const sectionsQuery = useTDSSections({ pageSize: 100, includeInactive: false });
-  const financialYearsQuery = useFinancialYears(organizationId || activeOrganizationId || undefined);
-  const entriesQuery = useTDSEntries({ organizationId: organizationId || activeOrganizationId || undefined, challanStatus: 'PENDING', pageSize: 100 });
+  const financialYearsQuery = useFinancialYears();
+  const entriesQuery = useTDSEntries({ challanStatus: 'PENDING', pageSize: 100 });
   const selectedEntryIds = form.watch('entryIds') || [];
 
   useEffect(() => {

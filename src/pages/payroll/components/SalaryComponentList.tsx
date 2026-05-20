@@ -58,10 +58,9 @@ export default function SalaryComponentList() {
     try {
       setLoading(true);
       const response = await payrollService.listComponents({
-        organization_id: organizationId,
-        component_type: typeFilter || undefined,
+        componentType: typeFilter || undefined,
         category: categoryFilter || undefined,
-        active_only: true,
+        activeOnly: true,
       });
       setComponents(response.items);
       setTotal(response.total);
@@ -100,8 +99,8 @@ export default function SalaryComponentList() {
 
   const filteredComponents = components.filter(
     (comp) =>
-      comp.component_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      comp.component_code.toLowerCase().includes(searchTerm.toLowerCase()),
+      comp.componentName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      comp.componentCode.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -130,12 +129,17 @@ export default function SalaryComponentList() {
               />
             </div>
             <div className="flex gap-2">
-              <Select value={typeFilter} onValueChange={setTypeFilter}>
+              {/* Radix `<Select.Item>` forbids empty-string value; use a
+                  `__all__` sentinel and map it to "" in the handler. */}
+              <Select
+                value={typeFilter || '__all__'}
+                onValueChange={(v) => setTypeFilter(v === '__all__' ? '' : v)}
+              >
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="All Types" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Types</SelectItem>
+                  <SelectItem value="__all__">All Types</SelectItem>
                   {COMPONENT_TYPES.map((type) => (
                     <SelectItem key={type} value={type}>
                       {type}
@@ -143,12 +147,15 @@ export default function SalaryComponentList() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <Select
+                value={categoryFilter || '__all__'}
+                onValueChange={(v) => setCategoryFilter(v === '__all__' ? '' : v)}
+              >
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="All Categories" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Categories</SelectItem>
+                  <SelectItem value="__all__">All Categories</SelectItem>
                   {CATEGORIES.map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat}
@@ -190,32 +197,32 @@ export default function SalaryComponentList() {
               ) : (
                 filteredComponents.map((component) => (
                   <TableRow key={component.id}>
-                    <TableCell className="font-mono">{component.component_code}</TableCell>
-                    <TableCell className="font-medium">{component.component_name}</TableCell>
+                    <TableCell className="font-mono">{component.componentCode}</TableCell>
+                    <TableCell className="font-medium">{component.componentName}</TableCell>
                     <TableCell>
                       <Badge
-                        variant={component.component_type === 'EARNING' ? 'default' : 'secondary'}
+                        variant={component.componentType === 'EARNING' ? 'default' : 'secondary'}
                       >
-                        {component.component_type}
+                        {component.componentType}
                       </Badge>
                     </TableCell>
                     <TableCell>{component.category}</TableCell>
                     <TableCell>
-                      {component.calculation_type}
-                      {component.calculation_type === 'PERCENTAGE' &&
-                        component.percentage_value && (
+                      {component.calculationType}
+                      {component.calculationType === 'PERCENTAGE' &&
+                        component.percentageValue && (
                           <span className="ml-1 text-muted-foreground">
-                            ({component.percentage_value}%)
+                            ({component.percentageValue}%)
                           </span>
                         )}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={component.is_taxable ? 'destructive' : 'outline'}>
-                        {component.is_taxable ? 'Yes' : 'No'}
+                      <Badge variant={component.isTaxable ? 'destructive' : 'outline'}>
+                        {component.isTaxable ? 'Yes' : 'No'}
                       </Badge>
                     </TableCell>
-                    <TableCell>{component.affects_pf ? 'Yes' : 'No'}</TableCell>
-                    <TableCell>{component.affects_esi ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>{component.affectsPf ? 'Yes' : 'No'}</TableCell>
+                    <TableCell>{component.affectsEsi ? 'Yes' : 'No'}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button

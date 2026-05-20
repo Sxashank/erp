@@ -64,29 +64,29 @@ interface PostingDetail {
 
 interface VoucherLineDto {
   id: string;
-  account_code?: string | null;
-  account_name?: string | null;
+  accountCode?: string | null;
+  accountName?: string | null;
   narration?: string | null;
-  cost_center_id?: string | null;
-  debit_amount?: number | string | null;
-  credit_amount?: number | string | null;
+  costCenterId?: string | null;
+  debitAmount?: number | string | null;
+  creditAmount?: number | string | null;
 }
 
 interface VoucherDetailDto {
   id: string;
-  voucher_number?: string | null;
+  voucherNumber?: string | null;
   narration?: string | null;
-  voucher_type_name?: string | null;
-  voucher_date?: string | null;
-  financial_year_code?: string | null;
-  reference_number?: string | null;
+  voucherTypeName?: string | null;
+  voucherDate?: string | null;
+  financialYearCode?: string | null;
+  referenceNumber?: string | null;
   status?: string | null;
-  created_by?: string | null;
-  created_at?: string | null;
-  updated_by?: string | null;
-  updated_at?: string | null;
-  approved_at?: string | null;
-  posted_at?: string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
+  updatedBy?: string | null;
+  updatedAt?: string | null;
+  approvedAt?: string | null;
+  postedAt?: string | null;
   lines?: VoucherLineDto[];
 }
 
@@ -99,32 +99,32 @@ export default function GLPostingDetail() {
 
   const mapVoucher = (voucher: VoucherDetailDto): PostingDetail => ({
     id: voucher.id,
-    postingId: voucher.voucher_number || '-',
-    description: voucher.narration || voucher.voucher_type_name || 'Voucher posting',
-    postingDate: voucher.voucher_date || '-',
-    period: voucher.financial_year_code || '-',
-    reference: voucher.reference_number || null,
+    postingId: voucher.voucherNumber || '-',
+    description: voucher.narration || voucher.voucherTypeName || 'Voucher posting',
+    postingDate: voucher.voucherDate || '-',
+    period: voucher.financialYearCode || '-',
+    reference: voucher.referenceNumber || null,
     narration: voucher.narration || null,
     status: voucher.status || 'DRAFT',
-    createdBy: voucher.created_by || '-',
-    createdAt: voucher.created_at || '-',
-    approvedBy: voucher.approved_at ? 'Approver' : null,
-    approvedAt: voucher.approved_at || null,
-    postedAt: voucher.posted_at || null,
+    createdBy: voucher.createdBy || '-',
+    createdAt: voucher.createdAt || '-',
+    approvedBy: voucher.approvedAt ? 'Approver' : null,
+    approvedAt: voucher.approvedAt || null,
+    postedAt: voucher.postedAt || null,
     entries: (voucher.lines || []).map((line) => ({
       id: line.id,
-      accountCode: line.account_code || '-',
-      accountName: line.account_name || '-',
+      accountCode: line.accountCode || '-',
+      accountName: line.accountName || '-',
       description: line.narration || null,
-      costCenter: line.cost_center_id || '-',
-      debit: Number(line.debit_amount || 0),
-      credit: Number(line.credit_amount || 0),
+      costCenter: line.costCenterId || '-',
+      debit: Number(line.debitAmount || 0),
+      credit: Number(line.creditAmount || 0),
     })),
     history: [
       {
         action: voucher.status || 'DRAFT',
-        by: voucher.updated_by || voucher.created_by || '-',
-        at: voucher.updated_at || voucher.created_at || '-',
+        by: voucher.updatedBy || voucher.createdBy || '-',
+        at: voucher.updatedAt || voucher.createdAt || '-',
       },
     ],
   });

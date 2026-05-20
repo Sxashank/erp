@@ -104,12 +104,12 @@ export function WorkflowTaskList(): JSX.Element {
   const [delegateReason, setDelegateReason] = useState('');
 
   const tasksQuery = usePendingTasks(
-    activeOrganizationId ? { organization_id: activeOrganizationId } : undefined,
+    activeOrganizationId ? {} : undefined,
   );
   const approveMutation = useApproveTask();
   const delegateMutation = useDelegateTask();
 
-  const allTasks = tasksQuery.data ?? [];
+  const allTasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
 
   const filteredTasks = useMemo(() => {
     if (statusFilter === 'all') return allTasks;
@@ -117,7 +117,7 @@ export function WorkflowTaskList(): JSX.Element {
   }, [allTasks, statusFilter]);
 
   const pendingTasks = allTasks.filter((t) => t.status === 'PENDING');
-  const overdueTasks = pendingTasks.filter((t) => t.is_overdue);
+  const overdueTasks = pendingTasks.filter((t) => t.isOverdue);
   const escalatedTasks = allTasks.filter((t) => t.status === 'ESCALATED');
   const completedTasks = allTasks.filter((t) => t.status === 'APPROVED' || t.status === 'REJECTED');
 
@@ -135,7 +135,7 @@ export function WorkflowTaskList(): JSX.Element {
         onSuccess: () => {
           toast({
             title: approvalDialog.action === 'APPROVE' ? 'Task approved' : 'Task rejected',
-            description: `${approvalDialog.task.step_name ?? 'Step'} updated.`,
+            description: `${approvalDialog.task.stepName ?? 'Step'} updated.`,
           });
           setApprovalDialog(null);
           setApprovalComments('');
@@ -158,7 +158,7 @@ export function WorkflowTaskList(): JSX.Element {
       return;
     }
     delegateMutation.mutate(
-      { id: delegateDialog.id, body: { delegate_to: userId, reason } },
+      { id: delegateDialog.id, body: { delegateTo: userId, reason } },
       {
         onSuccess: () => {
           toast({
@@ -281,13 +281,13 @@ export function WorkflowTaskList(): JSX.Element {
                   </TableHeader>
                   <TableBody>
                     {filteredTasks.map((task) => (
-                      <TableRow key={task.id} className={task.is_overdue ? 'bg-red-50/50' : ''}>
+                      <TableRow key={task.id} className={task.isOverdue ? 'bg-red-50/50' : ''}>
                         <TableCell>
                           <div>
                             <p className="font-medium">
-                              {task.step_name ?? 'Step'}{' '}
-                              {task.step_number !== null && (
-                                <span className="text-muted-foreground">(#{task.step_number})</span>
+                              {task.stepName ?? 'Step'}{' '}
+                              {task.stepNumber !== null && (
+                                <span className="text-muted-foreground">(#{task.stepNumber})</span>
                               )}
                             </p>
                             <p className="text-xs text-muted-foreground">
@@ -296,15 +296,15 @@ export function WorkflowTaskList(): JSX.Element {
                           </div>
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          <DateDisplay date={task.assigned_at} />
+                          <DateDisplay date={task.assignedAt} />
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
-                            {task.is_overdue && <AlertCircle className="h-3 w-3 text-red-500" />}
+                            {task.isOverdue && <AlertCircle className="h-3 w-3 text-red-500" />}
                             <DateDisplay
-                              date={task.due_at}
+                              date={task.dueAt}
                               className={
-                                task.is_overdue
+                                task.isOverdue
                                   ? 'font-medium tabular-nums text-red-600'
                                   : 'tabular-nums'
                               }
@@ -312,9 +312,9 @@ export function WorkflowTaskList(): JSX.Element {
                           </div>
                         </TableCell>
                         <TableCell className="tabular-nums">
-                          {task.escalation_level > 0 ? (
+                          {task.escalationLevel > 0 ? (
                             <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">
-                              Level {task.escalation_level}
+                              Level {task.escalationLevel}
                             </Badge>
                           ) : (
                             <span className="text-muted-foreground">—</span>
@@ -412,10 +412,10 @@ export function WorkflowTaskList(): JSX.Element {
                     {completedTasks.map((task) => (
                       <TableRow key={task.id}>
                         <TableCell>
-                          <p className="font-medium">{task.step_name ?? 'Step'}</p>
+                          <p className="font-medium">{task.stepName ?? 'Step'}</p>
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          <DateDisplay date={task.acted_at} />
+                          <DateDisplay date={task.actedAt} />
                         </TableCell>
                         <TableCell>{getStatusBadge(task.status)}</TableCell>
                         <TableCell>{task.comments ?? '—'}</TableCell>
@@ -445,7 +445,7 @@ export function WorkflowTaskList(): JSX.Element {
               {approvalDialog?.action === 'APPROVE' ? 'Approve task' : 'Reject task'}
             </DialogTitle>
             <DialogDescription>
-              {approvalDialog?.task.step_name ?? 'Step'} — task{' '}
+              {approvalDialog?.task.stepName ?? 'Step'} — task{' '}
               {approvalDialog?.task.id.slice(0, 8)}
             </DialogDescription>
           </DialogHeader>

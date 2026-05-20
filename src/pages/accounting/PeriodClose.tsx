@@ -37,17 +37,17 @@ interface PeriodCloseTarget {
 interface FinancialYearPeriodDto {
   id: string;
   name: string;
-  start_date: string;
-  end_date: string;
-  is_closed?: boolean | null;
-  is_locked?: boolean | null;
+  startDate: string;
+  endDate: string;
+  isClosed?: boolean | null;
+  isLocked?: boolean | null;
 }
 
 interface FinancialYearDto {
   id: string;
   code?: string | null;
   name: string;
-  is_current?: boolean | null;
+  isCurrent?: boolean | null;
   periods?: FinancialYearPeriodDto[];
 }
 
@@ -151,13 +151,12 @@ export default function PeriodClose() {
       if (!organizationId) return;
       try {
         const response = await financialYearsApi.list({
-          organization_id: organizationId,
-          page_size: 100,
+          pageSize: 100,
         });
         const financialYears = (response.data.items || []) as FinancialYearDto[];
-        const currentFy = financialYears.find((fy) => fy.is_current) || financialYears[0];
-        const openPeriod = currentFy?.periods?.find((period) => !period.is_closed && !period.is_locked)
-          || currentFy?.periods?.find((period) => !period.is_closed)
+        const currentFy = financialYears.find((fy) => fy.isCurrent) || financialYears[0];
+        const openPeriod = currentFy?.periods?.find((period) => !period.isClosed && !period.isLocked)
+          || currentFy?.periods?.find((period) => !period.isClosed)
           || currentFy?.periods?.[0];
         if (currentFy && openPeriod) {
           setPeriodData({
@@ -165,8 +164,8 @@ export default function PeriodClose() {
             name: openPeriod.name,
             fiscalYear: currentFy.code || currentFy.name,
             financialYearId: currentFy.id,
-            startDate: openPeriod.start_date,
-            endDate: openPeriod.end_date,
+            startDate: openPeriod.startDate,
+            endDate: openPeriod.endDate,
           });
         }
       } catch (error) {

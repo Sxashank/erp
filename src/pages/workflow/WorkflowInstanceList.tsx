@@ -152,17 +152,16 @@ export function WorkflowInstanceList(): JSX.Element {
 
   const filters = activeOrganizationId
     ? {
-        organization_id: activeOrganizationId,
-        ...(entityFilter !== 'all' && { entity_type: entityFilter }),
+        ...(entityFilter !== 'all' && { entityType: entityFilter }),
         page: 1,
-        page_size: 100,
+        pageSize: 100,
       }
     : undefined;
 
   const instancesQuery = useWorkflowInstances(filters);
   const cancelMutation = useCancelInstance();
 
-  const allInstances = instancesQuery.data?.items ?? [];
+  const allInstances = useMemo(() => instancesQuery.data?.items ?? [], [instancesQuery.data?.items]);
 
   const filteredInstances = useMemo(() => {
     let next = allInstances;
@@ -172,15 +171,15 @@ export function WorkflowInstanceList(): JSX.Element {
       next = next.filter((i) => TERMINAL_STATUSES.includes(i.status));
     }
     if (definitionId) {
-      next = next.filter((i) => i.workflow_definition_id === definitionId);
+      next = next.filter((i) => i.workflowDefinitionId === definitionId);
     }
     const q = searchQuery.trim().toLowerCase();
     if (q) {
       next = next.filter(
         (i) =>
-          i.entity_reference.toLowerCase().includes(q) ||
-          (i.workflow_name ?? '').toLowerCase().includes(q) ||
-          (i.initiator_name ?? '').toLowerCase().includes(q),
+          i.entityReference.toLowerCase().includes(q) ||
+          (i.workflowName ?? '').toLowerCase().includes(q) ||
+          (i.initiatorName ?? '').toLowerCase().includes(q),
       );
     }
     return next;
@@ -208,7 +207,7 @@ export function WorkflowInstanceList(): JSX.Element {
         onSuccess: () => {
           toast({
             title: 'Workflow cancelled',
-            description: `${cancelTarget.entity_reference} has been cancelled.`,
+            description: `${cancelTarget.entityReference} has been cancelled.`,
           });
           setCancelTarget(null);
           setCancelReason('');
@@ -357,29 +356,29 @@ export function WorkflowInstanceList(): JSX.Element {
                     {filteredInstances.map((instance) => (
                       <TableRow key={instance.id}>
                         <TableCell>
-                          <p className="font-medium">{instance.entity_reference}</p>
+                          <p className="font-medium">{instance.entityReference}</p>
                         </TableCell>
                         <TableCell>
-                          <p className="text-sm">{instance.workflow_name ?? '—'}</p>
+                          <p className="text-sm">{instance.workflowName ?? '—'}</p>
                         </TableCell>
                         <TableCell>
-                          <EntityBadge entity={instance.entity_type} />
+                          <EntityBadge entity={instance.entityType} />
                         </TableCell>
                         <TableCell>
                           <div>
                             <p className="text-sm font-medium">
-                              {instance.current_step_name ?? '—'}
+                              {instance.currentStepName ?? '—'}
                             </p>
                             <p className="text-xs text-muted-foreground">
-                              Step {instance.current_step_number}
+                              Step {instance.currentStepNumber}
                             </p>
                           </div>
                         </TableCell>
                         <TableCell>
-                          <span className="text-sm">{instance.initiator_name ?? '—'}</span>
+                          <span className="text-sm">{instance.initiatorName ?? '—'}</span>
                         </TableCell>
                         <TableCell className="text-sm tabular-nums">
-                          {formatDateTime(instance.started_at)}
+                          {formatDateTime(instance.startedAt)}
                         </TableCell>
                         <TableCell>
                           <StatusBadge status={instance.status} />
@@ -437,7 +436,7 @@ export function WorkflowInstanceList(): JSX.Element {
         description={
           <div className="space-y-3">
             <p>
-              This will cancel <span className="font-medium">{cancelTarget?.entity_reference}</span>{' '}
+              This will cancel <span className="font-medium">{cancelTarget?.entityReference}</span>{' '}
               and stop all pending approvals. This cannot be undone.
             </p>
             <Textarea

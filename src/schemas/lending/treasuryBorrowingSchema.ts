@@ -72,6 +72,7 @@ const blankToUndefined = (value?: string): string | undefined =>
 
 export const defaultBorrowingFormValues = (): Partial<BorrowingFormData> => ({
   lenderId: '',
+  borrowingType: 'TERM_LOAN',
   sanctionDate: new Date().toISOString().split('T')[0],
   sanctionReference: '',
   currency: 'INR',
@@ -86,6 +87,7 @@ export const defaultBorrowingFormValues = (): Partial<BorrowingFormData> => ({
   moratoriumMonths: 0,
   firstInterestDate: '',
   firstPrincipalDate: '',
+  maturityDate: '',
   securityType: 'UNSECURED',
   securityDescription: '',
   securityCoverRequired: undefined,

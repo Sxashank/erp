@@ -118,7 +118,7 @@ async def list_returns(
     quarter: Optional[Quarter] = Query(None),
     status: Optional[ReturnStatus] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

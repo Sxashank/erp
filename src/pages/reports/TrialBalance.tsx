@@ -103,7 +103,7 @@ export function TrialBalance() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -115,7 +115,7 @@ export function TrialBalance() {
 
   const fetchFinancialYears = useCallback(async () => {
     try {
-      const response = await financialYearsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await financialYearsApi.list({ pageSize: 100 });
       setFinancialYears(response.data.items);
       const currentFY = response.data.items.find((fy: FinancialYear) => fy.is_current);
       if (currentFY) {
@@ -143,7 +143,6 @@ export function TrialBalance() {
     try {
       setLoading(true);
       const response = await reportsApi.getTrialBalance({
-        organization_id: selectedOrgId,
         financial_year_id: selectedFYId,
         from_date: fromDate,
         to_date: toDate,

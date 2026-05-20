@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -24,6 +25,7 @@ import { logger } from "@/lib/logger";
 export function DesignationForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const isEdit = Boolean(id);
 
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export function DesignationForm() {
 
   const fetchDepartments = async () => {
     try {
-      const response = await departmentsApi.list({ page_size: 100 });
+      const response = await departmentsApi.list({ pageSize: 100 });
       setDepartments(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch departments:', error);
@@ -64,7 +66,7 @@ export function DesignationForm() {
 
   const fetchReportingDesignations = async () => {
     try {
-      const response = await designationsApi.list({ page_size: 100 });
+      const response = await designationsApi.list({ pageSize: 100 });
       setReportingDesignations(response.data.items.filter((d: Designation) => d.id !== id));
     } catch (error) {
       logger.error('Failed to fetch reporting designations:', error);
@@ -100,21 +102,33 @@ export function DesignationForm() {
   const onSubmit = async (data: DesignationCreate | DesignationUpdate) => {
     try {
       setSubmitting(true);
-      const cleanData = {
-        ...data,
+      // Strip empty/whitespace strings (CLAUDE.md §5.3) + normalise numbers.
+      const cleanData: Record<string, unknown> = {
         department_id: data.department_id || undefined,
         reporting_to_id: data.reporting_to_id || undefined,
         level: data.level ? Number(data.level) : 1,
         min_experience_years: data.min_experience_years ? Number(data.min_experience_years) : 0,
       };
+      for (const [key, value] of Object.entries(data)) {
+        if (key in cleanData) continue;
+        if (typeof value === 'string' && value.trim() === '') continue;
+        cleanData[key] = value;
+      }
       if (isEdit && id) {
         await designationsApi.update(id, cleanData);
+        toast({ title: 'Designation updated', description: 'Changes saved successfully.' });
       } else {
         await designationsApi.create(cleanData);
+        toast({ title: 'Designation created', description: 'The designation was created successfully.' });
       }
       navigate('/admin/designations');
     } catch (error) {
       logger.error('Failed to save designation:', error);
+      toast({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Could not save the designation.',
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }

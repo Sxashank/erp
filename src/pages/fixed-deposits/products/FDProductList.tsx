@@ -43,7 +43,6 @@ export default function FDProductList() {
     try {
       setLoading(true);
       const response = await fixedDepositService.listProducts({
-        organization_id: organizationId,
         active_only: false,
       });
       setProducts(response.items);

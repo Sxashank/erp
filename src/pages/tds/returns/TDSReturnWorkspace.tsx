@@ -94,14 +94,14 @@ export default function TDSReturnWorkspace() {
 
   const form = useForm<TDSReturnFormValues, unknown, TDSReturnFormInput>({
     resolver: zodResolver(tdsReturnSchema),
-    defaultValues: { ...defaultValues, organizationId: activeOrganizationId ?? '' },
+    defaultValues: { ...defaultValues ?? '' },
   });
   const filingForm = useForm<TDSReturnFilingFormValues, unknown, TDSReturnFilingFormInput>({
     resolver: zodResolver(tdsReturnFilingSchema),
     defaultValues: filingDefaults,
   });
   const organizationId = form.watch('organizationId');
-  const financialYearsQuery = useFinancialYears(organizationId || activeOrganizationId || undefined);
+  const financialYearsQuery = useFinancialYears();
   const [generatedFileContent, setGeneratedFileContent] = useState<string>('');
   const [generatedFileName, setGeneratedFileName] = useState<string>('');
   const [generatedFileNote, setGeneratedFileNote] = useState<string>('');

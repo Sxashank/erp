@@ -87,7 +87,7 @@ export function APAgingReport() {
     const fetchVendors = async () => {
       if (!organizationId) return;
       try {
-        const response = await vendorsApi.getActive({ organization_id: organizationId });
+        const response = await vendorsApi.getActive({});
         setVendors(response.data || []);
       } catch (error) {
         logger.error('Failed to fetch vendors:', error);
@@ -102,7 +102,6 @@ export function APAgingReport() {
     setLoading(true);
     try {
       const params: Parameters<typeof agingReportsApi.getAPAgingSummary>[0] = {
-        organization_id: organizationId,
         as_of_date: asOfDate,
       };
       if (selectedVendor !== 'all') {

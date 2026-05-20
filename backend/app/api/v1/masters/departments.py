@@ -23,10 +23,10 @@ router = APIRouter()
 
 @router.get("", response_model=PaginatedResponse[DepartmentResponse], response_model_by_alias=True)
 async def list_departments(
-    organization_id: Optional[UUID] = Query(None),
+    organization_id: Optional[UUID] = Query(None, alias="organizationId"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -61,7 +61,7 @@ async def create_department(
 
 @router.get("/tree", response_model=List[DepartmentTreeResponse], response_model_by_alias=True)
 async def get_department_tree(
-    organization_id: UUID,
+    organization_id: UUID = Query(..., alias="organizationId"),
     current_user: User = Depends(RequirePermissions("MASTER_DEPT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

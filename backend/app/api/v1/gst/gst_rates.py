@@ -42,8 +42,8 @@ def _to_response(rate) -> GSTRateResponse:
 @router.get("", response_model=PaginatedResponse[GSTRateResponse], response_model_by_alias=True)
 async def list_gst_rates(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -57,9 +57,9 @@ async def list_gst_rates(
 
 @router.get("/active", response_model=PaginatedResponse[GSTRateResponse], response_model_by_alias=True)
 async def list_active_gst_rates(
-    as_of_date: Optional[date] = Query(None),
+    as_of_date: Optional[date] = Query(None, alias="asOfDate"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

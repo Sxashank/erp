@@ -50,7 +50,7 @@ interface Account {
   id: string;
   code: string;
   name: string;
-  account_type: string;
+  accountType: string;
 }
 
 interface LineItem {
@@ -119,7 +119,7 @@ export function VoucherTemplateForm() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (!selectedOrgId && response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -132,8 +132,7 @@ export function VoucherTemplateForm() {
   const fetchVoucherTypes = useCallback(async () => {
     try {
       const response = await voucherTypesApi.list({
-        organization_id: selectedOrgId,
-        page_size: 100,
+        pageSize: 100,
       });
       setVoucherTypes(response.data.items);
     } catch (error) {
@@ -143,9 +142,9 @@ export function VoucherTemplateForm() {
 
   const fetchAccounts = useCallback(async () => {
     try {
-      const response = await accountsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await accountsApi.list({ pageSize: 100 });
       const accountItems = response.data.items as Account[];
-      setAccounts(accountItems.filter((account) => account.account_type !== 'GROUP'));
+      setAccounts(accountItems.filter((account) => account.accountType !== 'GROUP'));
     } catch (error) {
       logger.error('Failed to fetch accounts:', error);
     }
@@ -238,7 +237,6 @@ export function VoucherTemplateForm() {
       setSubmitting(true);
 
       const payload = {
-        organization_id: selectedOrgId,
         voucher_type_id: formData.voucher_type_id,
         template_name: formData.template_name,
         description: formData.description || null,

@@ -113,13 +113,13 @@ const navItems: NavItem[] = [
     ],
   },
   {
-    label: 'Treasury & ALM',
+    label: 'Treasury & Borrowings',
     icon: Wallet,
     children: [
       { label: 'Dashboard', href: '/admin/treasury' },
-      { label: 'Lenders', href: '/admin/treasury/lenders' },
-      { label: 'Borrowings', href: '/admin/treasury/borrowings' },
-      { label: 'Source of Funds', href: '/admin/treasury/source-of-funds' },
+      { label: 'Funding Sources / Lenders', href: '/admin/treasury/lenders' },
+      { label: 'Borrowing Facilities / Loans Taken', href: '/admin/treasury/borrowings' },
+      { label: 'Borrowing-to-Loan Mapping', href: '/admin/treasury/source-of-funds' },
       { label: 'ALM Dashboard', href: '/admin/treasury/alm' },
       { label: 'Gap Analysis', href: '/admin/treasury/alm/gap' },
       { label: 'Interest Rate Risk', href: '/admin/treasury/alm/irs' },
@@ -341,20 +341,20 @@ export function AdminLayout() {
           <button
             onClick={() => toggleExpand(item.label)}
             className={cn(
-              'flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+              'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium leading-5 transition-colors',
               active
                 ? 'bg-blue-50 text-blue-700'
                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
             )}
           >
-            <span className="flex items-center gap-2">
-              <item.icon className="h-4 w-4" />
-              {item.label}
+            <span className="flex min-w-0 flex-1 items-center gap-3">
+              <item.icon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 flex-1">{item.label}</span>
             </span>
             {isExpanded ? (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="h-4 w-4 shrink-0" />
             ) : (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4 shrink-0" />
             )}
           </button>
           {isExpanded && (
@@ -365,7 +365,7 @@ export function AdminLayout() {
                   to={child.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    'block rounded-lg px-3 py-2 text-sm transition-colors',
+                    'block rounded-lg px-3 py-2 text-left text-sm leading-5 transition-colors',
                     isActive(child.href)
                       ? 'bg-blue-50 font-medium text-blue-700'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
@@ -386,14 +386,14 @@ export function AdminLayout() {
         to={item.href!}
         onClick={() => setSidebarOpen(false)}
         className={cn(
-          'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+          'flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium leading-5 transition-colors',
           active
             ? 'bg-blue-50 text-blue-700'
             : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
         )}
       >
-        <item.icon className="h-4 w-4" />
-        {item.label}
+        <item.icon className="h-4 w-4 shrink-0" />
+        <span className="min-w-0 flex-1">{item.label}</span>
       </Link>
     );
   };
@@ -480,7 +480,7 @@ export function AdminLayout() {
         {/* Sidebar - Scrolls independently */}
         <aside
           className={cn(
-            'fixed left-0 top-0 z-50 h-full w-64 transform border-r border-slate-200 bg-white transition-transform lg:static lg:z-auto lg:h-auto lg:translate-x-0',
+            'fixed left-0 top-0 z-50 h-full w-80 transform border-r border-slate-200 bg-white transition-transform lg:static lg:z-auto lg:h-auto lg:w-80 lg:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >

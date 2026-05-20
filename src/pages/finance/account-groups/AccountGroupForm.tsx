@@ -51,7 +51,7 @@ export function AccountGroupForm() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
     } catch (error) {
@@ -63,9 +63,8 @@ export function AccountGroupForm() {
     if (!selectedOrg || !selectedNature) return;
     try {
       const response = await accountGroupsApi.list({
-        organization_id: selectedOrg,
         nature: selectedNature,
-        page_size: 100,
+        pageSize: 100,
       });
       const data: PaginatedResponse<AccountGroup> = response.data;
       // Filter out current group if editing

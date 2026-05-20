@@ -42,11 +42,11 @@ interface AccountingPeriod {
 interface FinancialYearPeriodDto {
   id: string;
   name: string;
-  period_number?: number | string | null;
-  start_date: string;
-  end_date: string;
-  is_closed?: boolean | null;
-  is_locked?: boolean | null;
+  periodNumber?: number | string | null;
+  startDate: string;
+  endDate: string;
+  isClosed?: boolean | null;
+  isLocked?: boolean | null;
 }
 
 interface FinancialYearDto {
@@ -66,8 +66,7 @@ export default function PeriodManagement() {
       if (!organizationId) return;
       try {
         const response = await financialYearsApi.list({
-          organization_id: organizationId,
-          page_size: 100,
+          pageSize: 100,
         });
         const financialYears = (response.data.items || []) as FinancialYearDto[];
         const flattened = financialYears.flatMap((fy) =>
@@ -75,13 +74,13 @@ export default function PeriodManagement() {
             id: period.id,
             name: period.name,
             fiscalYear: fy.code || fy.name,
-            quarter: `Q${Math.ceil(Number(period.period_number || 1) / 3)}`,
-            startDate: period.start_date,
-            endDate: period.end_date,
-            status: period.is_closed ? 'CLOSED' : period.is_locked ? 'SOFT_CLOSED' : 'OPEN',
+            quarter: `Q${Math.ceil(Number(period.periodNumber || 1) / 3)}`,
+            startDate: period.startDate,
+            endDate: period.endDate,
+            status: period.isClosed ? 'CLOSED' : period.isLocked ? 'SOFT_CLOSED' : 'OPEN',
             glPostings: 0,
             pendingPostings: 0,
-            isYearEnd: Number(period.period_number) === 12,
+            isYearEnd: Number(period.periodNumber) === 12,
             financialYearId: fy.id,
           })),
         );

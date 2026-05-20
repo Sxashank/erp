@@ -70,7 +70,6 @@ export default function ApprovalMatrixList() {
       if (!organizationId) return;
       try {
         const response = await approvalsApi.listWorkflows({
-          organization_id: organizationId,
           limit: 100,
         });
         setApprovalMatrices(response.data.items || []);

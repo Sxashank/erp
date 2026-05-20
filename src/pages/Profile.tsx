@@ -91,7 +91,11 @@ export function Profile() {
     try {
       setChangingPassword(true);
       setPasswordError('');
-      await authApi.changePassword(data);
+      await authApi.changePassword({
+        currentPassword: data.current_password,
+        newPassword: data.new_password,
+        confirmPassword: data.confirm_password,
+      });
       setPasswordChanged(true);
       reset();
       setTimeout(() => {

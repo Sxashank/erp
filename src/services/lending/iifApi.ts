@@ -52,6 +52,11 @@ export interface SubventionScheme {
   eligibilityWindowMonths: number | null;
   claimFrequency: ClaimFrequency;
   npaDisqualificationDpdDays: number;
+  calculationRules?: Record<string, unknown>;
+  eligibilityRules?: Record<string, unknown>;
+  requiredDocuments?: Array<Record<string, unknown>>;
+  workflowRules?: Record<string, unknown>;
+  fundRules?: Record<string, unknown>;
   description: string | null;
   isActive: boolean;
 }
@@ -137,6 +142,8 @@ export interface ClaimComputePreview {
   interestPaidInPeriod: string;
   applicableSubventionAmount: string;
   subventionRatePercent: string;
+  calculationMethod?: string | null;
+  eligibleBaseAmount?: string | null;
 }
 
 export interface EligibilityCheckResult {
@@ -199,6 +206,11 @@ export interface SubventionSchemeCreate {
   eligibilityWindowMonths?: number | null;
   claimFrequency: ClaimFrequency;
   npaDisqualificationDpdDays: number;
+  calculationRules?: Record<string, unknown>;
+  eligibilityRules?: Record<string, unknown>;
+  requiredDocuments?: Array<Record<string, unknown>>;
+  workflowRules?: Record<string, unknown>;
+  fundRules?: Record<string, unknown>;
   description?: string | null;
   isActive?: boolean;
 }
@@ -567,6 +579,18 @@ export const claimsApi = {
   },
   async downloadReportCsv(id: string): Promise<Blob> {
     const { data } = await api.get<Blob>(`/lending/iif/claims/${id}/report.csv`, {
+      responseType: 'blob',
+    });
+    return data;
+  },
+  async downloadReportXlsx(id: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/lending/iif/claims/${id}/report.xlsx`, {
+      responseType: 'blob',
+    });
+    return data;
+  },
+  async downloadReportPdf(id: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/lending/iif/claims/${id}/report.pdf`, {
       responseType: 'blob',
     });
     return data;

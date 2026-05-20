@@ -22,10 +22,10 @@ router = APIRouter()
 
 @router.get("", response_model=PaginatedResponse[DesignationResponse], response_model_by_alias=True)
 async def list_designations(
-    department_id: Optional[UUID] = Query(None),
+    department_id: Optional[UUID] = Query(None, alias="departmentId"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("MASTER_DESIG_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

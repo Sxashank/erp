@@ -107,7 +107,7 @@ export function HRISDashboard() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
       if (data.items.length > 0) {

@@ -50,6 +50,7 @@ import {
   useCreatePortalClaim,
   usePortalClaim,
   useDownloadPortalClaimCsv,
+  useDownloadPortalClaimReport,
   useInitiatePortalClaimRelease,
   useMarkPortalClaimReleased,
   usePortalClaimEnrollments,
@@ -69,11 +70,21 @@ import type {
 
 const ALL_ENROLLMENTS = '__ALL_ENROLLMENTS__';
 const ALL_STATUSES = '__ALL_STATUSES__';
+const CLAIM_DOCUMENT_TYPES = [
+  { value: 'INTEREST_CALCULATION_SHEET', label: 'Interest calculation sheet' },
+  { value: 'REPAYMENT_RECORD', label: 'Borrower repayment record' },
+  { value: 'REGULAR_ACCOUNT_CERTIFICATE', label: 'Regular account certificate' },
+  { value: 'NON_DUPLICATION_UNDERTAKING', label: 'Non-duplication undertaking' },
+  { value: 'AUDITED_INTEREST_CERTIFICATE', label: 'Audited interest certificate' },
+  { value: 'CLAIM_SUMMARY', label: 'Claim summary' },
+];
 
 export default function PortalSubsidyReports(): JSX.Element {
   const { toast } = useToast();
   const { actorRole } = usePortalSession();
   const isBorrower = actorRole === 'scheme_borrower';
+  const canCreateClaim =
+    actorRole === 'scheme_borrower' || actorRole === 'scheme_lender' || actorRole === 'scheme_admin';
   const canVerify = actorRole === 'scheme_smfcl_reviewer' || actorRole === 'scheme_admin';
   const canRelease = actorRole === 'scheme_smfcl_approver' || actorRole === 'scheme_admin';
 
@@ -107,6 +118,8 @@ export default function PortalSubsidyReports(): JSX.Element {
 
   const title = isBorrower
     ? 'Claims'
+    : canCreateClaim
+      ? 'Lender Claim Submission'
     : canRelease
       ? 'Claim Release Queue'
       : canVerify
@@ -114,6 +127,8 @@ export default function PortalSubsidyReports(): JSX.Element {
         : 'Claims Monitoring';
   const subtitle = isBorrower
     ? 'Create borrower subsidy claims, submit draft periods, and track release status across enrolled loans.'
+    : canCreateClaim
+      ? 'Submit IIF claim proposals with required lender certificates and repayment records.'
     : canRelease
       ? 'Mark verified subsidy claims as released and capture audited payment references.'
       : canVerify
@@ -212,7 +227,7 @@ export default function PortalSubsidyReports(): JSX.Element {
         subtitle={subtitle}
         breadcrumbs={[{ label: 'Scheme Portal', to: '/portal/workbench' }, { label: 'Claims' }]}
         actions={
-          isBorrower ? (
+          canCreateClaim ? (
             <div className="flex flex-wrap justify-end gap-2">
               {firstDraftClaim ? (
                 <Button variant="outline" onClick={() => setDocumentsClaimId(firstDraftClaim.id)}>
@@ -439,7 +454,7 @@ function CreateClaimDialog({
         <DialogHeader>
           <DialogTitle>Create borrower claim</DialogTitle>
           <DialogDescription>
-            Select an enrolled loan and an eligible closed period to create a draft subsidy claim.
+            Select an enrolled loan and an eligible closed period to create a draft IIF claim.
           </DialogDescription>
         </DialogHeader>
 
@@ -585,6 +600,7 @@ function ClaimDocumentsDialog({
   const uploadDocument = useUploadPortalClaimDocument();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentName, setDocumentName] = useState('');
+  const [documentCategory, setDocumentCategory] = useState(CLAIM_DOCUMENT_TYPES[0].value);
 
   const claim = claimQuery.data;
   const canUpload = claim?.status === 'DRAFT';
@@ -592,6 +608,7 @@ function ClaimDocumentsDialog({
   const resetUploadState = () => {
     setSelectedFile(null);
     setDocumentName('');
+    setDocumentCategory(CLAIM_DOCUMENT_TYPES[0].value);
   };
 
   const handleUpload = async () => {
@@ -603,6 +620,7 @@ function ClaimDocumentsDialog({
         id: claimId,
         file: selectedFile,
         documentName: documentName.trim() || selectedFile.name,
+        documentCategory,
       });
       resetUploadState();
       await claimQuery.refetch();
@@ -644,7 +662,22 @@ function ClaimDocumentsDialog({
             </div>
 
             {canUpload ? (
-              <div className="grid gap-4 md:grid-cols-[1fr_auto]">
+              <div className="grid gap-4 md:grid-cols-[1fr_1fr_auto]">
+                <div className="space-y-2">
+                  <Label htmlFor="claim-document-category">Document type</Label>
+                  <Select value={documentCategory} onValueChange={setDocumentCategory}>
+                    <SelectTrigger id="claim-document-category">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CLAIM_DOCUMENT_TYPES.map((type) => (
+                        <SelectItem key={type.value} value={type.value}>
+                          {type.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 <div className="space-y-2">
                   <Label htmlFor="claim-document-name">Document name</Label>
                   <Input
@@ -963,27 +996,39 @@ function DownloadClaimButton({
   claimReference: string;
   onError: (err: unknown) => void;
 }): JSX.Element {
-  const { download, isDownloading } = useDownloadPortalClaimCsv(claimId);
+  const csv = useDownloadPortalClaimCsv(claimId);
+  const xlsx = useDownloadPortalClaimReport(claimId, 'xlsx');
+  const pdf = useDownloadPortalClaimReport(claimId, 'pdf');
+  const isDownloading = csv.isDownloading || xlsx.isDownloading || pdf.isDownloading;
+  const downloadAs = async (format: 'csv' | 'xlsx' | 'pdf') => {
+    const downloader = format === 'xlsx' ? xlsx : format === 'pdf' ? pdf : csv;
+    await downloader.download(`${claimReference}.${format}`);
+  };
   return (
-    <Button
-      variant="outline"
-      size="sm"
-      onClick={async () => {
-        try {
-          await download(`${claimReference}.csv`);
-        } catch (err) {
-          onError(err);
-        }
-      }}
-      disabled={isDownloading}
-    >
-      {isDownloading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <Download className="mr-2 h-4 w-4" />
-      )}
-      CSV
-    </Button>
+    <>
+      {(['csv', 'xlsx', 'pdf'] as const).map((format) => (
+        <Button
+          key={format}
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              await downloadAs(format);
+            } catch (err) {
+              onError(err);
+            }
+          }}
+          disabled={isDownloading}
+        >
+          {isDownloading ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Download className="mr-2 h-4 w-4" />
+          )}
+          {format.toUpperCase()}
+        </Button>
+      ))}
+    </>
   );
 }
 

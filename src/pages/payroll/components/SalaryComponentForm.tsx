@@ -57,22 +57,21 @@ export default function SalaryComponentForm() {
   const organizationId = useRequiredActiveOrganizationId();
 
   const [formData, setFormData] = useState({
-    organization_id: organizationId,
-    component_code: '',
-    component_name: '',
-    component_type: 'EARNING',
+    componentCode: '',
+    componentName: '',
+    componentType: 'EARNING',
     category: 'ALLOWANCE',
-    calculation_type: 'FIXED',
-    percentage_of: '',
-    percentage_value: '',
+    calculationType: 'FIXED',
+    percentageOf: '',
+    percentageValue: '',
     formula: '',
-    is_taxable: true,
-    is_pro_rated: true,
-    affects_pf: false,
-    affects_esi: false,
-    affects_pt: false,
-    display_order: 0,
-    is_active: true,
+    isTaxable: true,
+    isProRated: true,
+    affectsPf: false,
+    affectsEsi: false,
+    affectsPt: false,
+    displayOrder: 0,
+    isActive: true,
   });
 
   useEffect(() => {
@@ -86,22 +85,21 @@ export default function SalaryComponentForm() {
       setLoading(true);
       const data = await payrollService.getComponent(componentId);
       setFormData({
-        organization_id: data.organization_id,
-        component_code: data.component_code,
-        component_name: data.component_name,
-        component_type: data.component_type,
+        componentCode: data.componentCode,
+        componentName: data.componentName,
+        componentType: data.componentType,
         category: data.category,
-        calculation_type: data.calculation_type,
-        percentage_of: data.percentage_of || '',
-        percentage_value: data.percentage_value?.toString() || '',
+        calculationType: data.calculationType,
+        percentageOf: data.percentageOf || '',
+        percentageValue: data.percentageValue?.toString() || '',
         formula: data.formula || '',
-        is_taxable: data.is_taxable,
-        is_pro_rated: data.is_pro_rated,
-        affects_pf: data.affects_pf,
-        affects_esi: data.affects_esi,
-        affects_pt: data.affects_pt,
-        display_order: data.display_order,
-        is_active: data.is_active,
+        isTaxable: data.isTaxable,
+        isProRated: data.isProRated,
+        affectsPf: data.affectsPf,
+        affectsEsi: data.affectsEsi,
+        affectsPt: data.affectsPt,
+        displayOrder: data.displayOrder,
+        isActive: data.isActive,
       });
     } catch (error) {
       toast({
@@ -118,7 +116,7 @@ export default function SalaryComponentForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.component_code || !formData.component_name) {
+    if (!formData.componentCode || !formData.componentName) {
       toast({
         title: 'Validation Error',
         description: 'Code and name are required',
@@ -132,10 +130,10 @@ export default function SalaryComponentForm() {
 
       const payload: Record<string, unknown> = {
         ...formData,
-        percentage_value: formData.percentage_value
-          ? parseFloat(formData.percentage_value)
+        percentageValue: formData.percentageValue
+          ? parseFloat(formData.percentageValue)
           : undefined,
-        percentage_of: formData.percentage_of || undefined,
+        percentageOf: formData.percentageOf || undefined,
         formula: formData.formula || undefined,
       };
 
@@ -193,14 +191,14 @@ export default function SalaryComponentForm() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="component_code">Component Code *</Label>
+                  <Label htmlFor="componentCode">Component Code *</Label>
                   <Input
-                    id="component_code"
-                    value={formData.component_code}
+                    id="componentCode"
+                    value={formData.componentCode}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        component_code: e.target.value.toUpperCase(),
+                        componentCode: e.target.value.toUpperCase(),
                       })
                     }
                     placeholder="e.g., BASIC, HRA, PF"
@@ -208,15 +206,15 @@ export default function SalaryComponentForm() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="display_order">Display Order</Label>
+                  <Label htmlFor="displayOrder">Display Order</Label>
                   <Input
-                    id="display_order"
+                    id="displayOrder"
                     type="number"
-                    value={formData.display_order}
+                    value={formData.displayOrder}
                     onChange={(e) =>
                       setFormData({
                         ...formData,
-                        display_order: parseInt(e.target.value) || 0,
+                        displayOrder: parseInt(e.target.value) || 0,
                       })
                     }
                   />
@@ -224,21 +222,21 @@ export default function SalaryComponentForm() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="component_name">Component Name *</Label>
+                <Label htmlFor="componentName">Component Name *</Label>
                 <Input
-                  id="component_name"
-                  value={formData.component_name}
-                  onChange={(e) => setFormData({ ...formData, component_name: e.target.value })}
+                  id="componentName"
+                  value={formData.componentName}
+                  onChange={(e) => setFormData({ ...formData, componentName: e.target.value })}
                   placeholder="e.g., Basic Salary, House Rent Allowance"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="component_type">Type *</Label>
+                  <Label htmlFor="componentType">Type *</Label>
                   <Select
-                    value={formData.component_type}
-                    onValueChange={(value) => setFormData({ ...formData, component_type: value })}
+                    value={formData.componentType}
+                    onValueChange={(value) => setFormData({ ...formData, componentType: value })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -280,10 +278,10 @@ export default function SalaryComponentForm() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="calculation_type">Calculation Type *</Label>
+                <Label htmlFor="calculationType">Calculation Type *</Label>
                 <Select
-                  value={formData.calculation_type}
-                  onValueChange={(value) => setFormData({ ...formData, calculation_type: value })}
+                  value={formData.calculationType}
+                  onValueChange={(value) => setFormData({ ...formData, calculationType: value })}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -298,28 +296,28 @@ export default function SalaryComponentForm() {
                 </Select>
               </div>
 
-              {formData.calculation_type === 'PERCENTAGE' && (
+              {formData.calculationType === 'PERCENTAGE' && (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="percentage_of">Percentage Of</Label>
+                    <Label htmlFor="percentageOf">Percentage Of</Label>
                     <Input
-                      id="percentage_of"
-                      value={formData.percentage_of}
-                      onChange={(e) => setFormData({ ...formData, percentage_of: e.target.value })}
+                      id="percentageOf"
+                      value={formData.percentageOf}
+                      onChange={(e) => setFormData({ ...formData, percentageOf: e.target.value })}
                       placeholder="e.g., BASIC, GROSS"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="percentage_value">Percentage Value (%)</Label>
+                    <Label htmlFor="percentageValue">Percentage Value (%)</Label>
                     <Input
-                      id="percentage_value"
+                      id="percentageValue"
                       type="number"
                       step="0.01"
-                      value={formData.percentage_value}
+                      value={formData.percentageValue}
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          percentage_value: e.target.value,
+                          percentageValue: e.target.value,
                         })
                       }
                       placeholder="e.g., 50"
@@ -328,7 +326,7 @@ export default function SalaryComponentForm() {
                 </>
               )}
 
-              {formData.calculation_type === 'FORMULA' && (
+              {formData.calculationType === 'FORMULA' && (
                 <div className="space-y-2">
                   <Label htmlFor="formula">Formula</Label>
                   <Textarea
@@ -350,57 +348,57 @@ export default function SalaryComponentForm() {
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="is_taxable"
-                  checked={formData.is_taxable}
+                  id="isTaxable"
+                  checked={formData.isTaxable}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, is_taxable: checked as boolean })
+                    setFormData({ ...formData, isTaxable: checked as boolean })
                   }
                 />
-                <Label htmlFor="is_taxable">Taxable (included in TDS calculation)</Label>
+                <Label htmlFor="isTaxable">Taxable (included in TDS calculation)</Label>
               </div>
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="is_pro_rated"
-                  checked={formData.is_pro_rated}
+                  id="isProRated"
+                  checked={formData.isProRated}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, is_pro_rated: checked as boolean })
+                    setFormData({ ...formData, isProRated: checked as boolean })
                   }
                 />
-                <Label htmlFor="is_pro_rated">Pro-rated (adjusted for LOP days)</Label>
+                <Label htmlFor="isProRated">Pro-rated (adjusted for LOP days)</Label>
               </div>
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="affects_pf"
-                  checked={formData.affects_pf}
+                  id="affectsPf"
+                  checked={formData.affectsPf}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, affects_pf: checked as boolean })
+                    setFormData({ ...formData, affectsPf: checked as boolean })
                   }
                 />
-                <Label htmlFor="affects_pf">Included in PF wage base</Label>
+                <Label htmlFor="affectsPf">Included in PF wage base</Label>
               </div>
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="affects_esi"
-                  checked={formData.affects_esi}
+                  id="affectsEsi"
+                  checked={formData.affectsEsi}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, affects_esi: checked as boolean })
+                    setFormData({ ...formData, affectsEsi: checked as boolean })
                   }
                 />
-                <Label htmlFor="affects_esi">Included in ESI wage base</Label>
+                <Label htmlFor="affectsEsi">Included in ESI wage base</Label>
               </div>
 
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="affects_pt"
-                  checked={formData.affects_pt}
+                  id="affectsPt"
+                  checked={formData.affectsPt}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, affects_pt: checked as boolean })
+                    setFormData({ ...formData, affectsPt: checked as boolean })
                   }
                 />
-                <Label htmlFor="affects_pt">Included in Professional Tax base</Label>
+                <Label htmlFor="affectsPt">Included in Professional Tax base</Label>
               </div>
             </CardContent>
           </Card>
@@ -412,13 +410,13 @@ export default function SalaryComponentForm() {
             <CardContent>
               <div className="flex items-center space-x-2">
                 <Checkbox
-                  id="is_active"
-                  checked={formData.is_active}
+                  id="isActive"
+                  checked={formData.isActive}
                   onCheckedChange={(checked) =>
-                    setFormData({ ...formData, is_active: checked as boolean })
+                    setFormData({ ...formData, isActive: checked as boolean })
                   }
                 />
-                <Label htmlFor="is_active">Active</Label>
+                <Label htmlFor="isActive">Active</Label>
               </div>
             </CardContent>
           </Card>

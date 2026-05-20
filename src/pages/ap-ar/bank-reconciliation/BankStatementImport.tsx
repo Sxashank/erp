@@ -95,9 +95,8 @@ export function BankStatementImport() {
       if (!organizationId) return;
       try {
         const response = await accountsApi.list({
-          organization_id: organizationId,
-          account_type: 'BANK',
-          page_size: 100,
+          accountType: 'BANK',
+          pageSize: 100,
         });
         setBankAccounts(response.data.items || []);
       } catch (error) {
@@ -165,7 +164,6 @@ export function BankStatementImport() {
     try {
       const response = await bankReconciliationApi.importStatements({
         bank_account_id: selectedBankAccount,
-        organization_id: organizationId,
         rows: selectedRows.map((row) => ({
           transaction_date: row.transaction_date,
           value_date: row.value_date,

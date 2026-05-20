@@ -53,10 +53,20 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         except Exception as e:
             duration_ms = round((time.time() - start_time) * 1000, 2)
+            # `str(e)` can itself raise — FastAPI's `ResponseValidationError`
+            # formats every error item, and an item may contain an ORM
+            # instance whose session has already closed (DetachedInstanceError
+            # on `__repr__`). Defensive serialisation keeps the original
+            # exception flowing to the global handler instead of being
+            # masked by uvicorn's plain-text 500.
+            try:
+                error_message = str(e)
+            except Exception:  # noqa: BLE001
+                error_message = f"<unrepresentable: {type(e).__name__}>"
             logger.exception(
                 "request_failed",
                 duration_ms=duration_ms,
                 error_type=type(e).__name__,
-                error_message=str(e),
+                error_message=error_message,
             )
             raise

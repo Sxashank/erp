@@ -23,10 +23,10 @@ router = APIRouter()
 
 @router.get("", response_model=PaginatedResponse[VoucherTypeResponse], response_model_by_alias=True)
 async def list_voucher_types(
-    voucher_class: Optional[VoucherClass] = Query(None),
+    voucher_class: Optional[VoucherClass] = Query(None, alias="voucherClass"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("FIN_VTYPE_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

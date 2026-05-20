@@ -58,15 +58,15 @@ interface GLPosting {
 
 interface VoucherListItem {
   id: string;
-  voucher_number?: string | null;
+  voucherNumber?: string | null;
   narration?: string | null;
-  voucher_type_name?: string | null;
-  voucher_date?: string | null;
-  financial_year_code?: string | null;
-  total_debit?: number | string | null;
-  total_credit?: number | string | null;
+  voucherTypeName?: string | null;
+  voucherDate?: string | null;
+  financialYearCode?: string | null;
+  totalDebit?: number | string | null;
+  totalCredit?: number | string | null;
   status?: string | null;
-  created_by?: string | null;
+  createdBy?: string | null;
 }
 
 export default function GLPostingList() {
@@ -83,7 +83,6 @@ export default function GLPostingList() {
       setLoading(true);
       try {
         const response = await vouchersApi.list({
-          organization_id: organizationId,
           page_size: 100,
           ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
         });
@@ -91,15 +90,15 @@ export default function GLPostingList() {
         setGlPostings(
           items.map((voucher) => ({
             id: voucher.id,
-            postingId: voucher.voucher_number || '-',
-            description: voucher.narration || voucher.voucher_type_name || 'Voucher posting',
-            postingDate: voucher.voucher_date || '-',
-            period: voucher.financial_year_code || '-',
-            debitAmount: Number(voucher.total_debit || 0),
-            creditAmount: Number(voucher.total_credit || 0),
+            postingId: voucher.voucherNumber || '-',
+            description: voucher.narration || voucher.voucherTypeName || 'Voucher posting',
+            postingDate: voucher.voucherDate || '-',
+            period: voucher.financialYearCode || '-',
+            debitAmount: Number(voucher.totalDebit || 0),
+            creditAmount: Number(voucher.totalCredit || 0),
             entries: 0,
             status: voucher.status || 'DRAFT',
-            createdBy: voucher.created_by || '-',
+            createdBy: voucher.createdBy || '-',
           })),
         );
       } catch (error) {

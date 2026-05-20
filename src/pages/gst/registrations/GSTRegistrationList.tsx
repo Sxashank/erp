@@ -11,13 +11,10 @@ import {
   useGSTRegistrations,
   type GSTRegistration,
 } from '@/hooks/tax/useTaxation';
-import { useActiveOrganizationId } from '@/stores/organizationStore';
 
 export function GSTRegistrationList() {
   const navigate = useNavigate();
-  const activeOrganizationId = useActiveOrganizationId();
   const registrationsQuery = useGSTRegistrations({
-    organizationId: activeOrganizationId ?? undefined,
     pageSize: 100,
     includeInactive: true,
   });

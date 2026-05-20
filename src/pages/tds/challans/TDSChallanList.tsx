@@ -24,9 +24,8 @@ export default function TDSChallanList() {
   const activeOrganizationId = useActiveOrganizationId();
   const [status, setStatus] = useState('all');
   const [financialYearId, setFinancialYearId] = useState('all');
-  const financialYearsQuery = useFinancialYears(activeOrganizationId ?? undefined);
+  const financialYearsQuery = useFinancialYears();
   const challansQuery = useTDSChallans({
-    organizationId: activeOrganizationId ?? undefined,
     status: status === 'all' ? undefined : status,
     financialYearId: financialYearId === 'all' ? undefined : financialYearId,
     pageSize: 100,

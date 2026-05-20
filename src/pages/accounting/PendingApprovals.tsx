@@ -63,16 +63,16 @@ interface PendingApprovalItem {
 
 interface PendingVoucherDto {
   id: string;
-  created_at?: string | null;
-  voucher_date?: string | null;
-  voucher_number?: string | null;
-  voucher_type_name?: string | null;
-  voucher_class?: string | null;
+  createdAt?: string | null;
+  voucherDate?: string | null;
+  voucherNumber?: string | null;
+  voucherTypeName?: string | null;
+  voucherClass?: string | null;
   narration?: string | null;
-  party_name?: string | null;
-  total_debit?: number | string | null;
-  total_amount?: number | string | null;
-  created_by?: string | null;
+  partyName?: string | null;
+  totalDebit?: number | string | null;
+  totalAmount?: number | string | null;
+  createdBy?: string | null;
 }
 
 const getModuleIcon = (module: string) => {
@@ -132,23 +132,22 @@ export default function PendingApprovals() {
     setIsLoading(true);
     try {
       const response = await vouchersApi.getPendingApproval({
-        organization_id: organizationId,
         page_size: 100,
       });
       const pending = (response.data.items || []) as PendingVoucherDto[];
       setItems(
         pending.map((voucher) => {
-          const requestedDate = voucher.created_at || voucher.voucher_date || '';
+          const requestedDate = voucher.createdAt || voucher.voucherDate || '';
           const daysPending = getDaysPending(requestedDate);
           return {
             id: voucher.id,
-            referenceNumber: voucher.voucher_number || voucher.id,
+            referenceNumber: voucher.voucherNumber || voucher.id,
             module: 'ACCOUNTING',
-            transactionType: voucher.voucher_type_name || voucher.voucher_class || 'Voucher',
-            description: voucher.narration || voucher.voucher_type_name || 'Voucher approval',
-            entity: voucher.party_name || null,
-            amount: Number(voucher.total_debit || voucher.total_amount || 0),
-            requestedBy: voucher.created_by || 'System',
+            transactionType: voucher.voucherTypeName || voucher.voucherClass || 'Voucher',
+            description: voucher.narration || voucher.voucherTypeName || 'Voucher approval',
+            entity: voucher.partyName || null,
+            amount: Number(voucher.totalDebit || voucher.totalAmount || 0),
+            requestedBy: voucher.createdBy || 'System',
             requestedDate,
             currentLevel: 1,
             totalLevels: 1,

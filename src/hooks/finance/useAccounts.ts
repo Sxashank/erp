@@ -13,7 +13,7 @@ export interface Account {
   id: string;
   code: string;
   name: string;
-  account_type: string;
+  accountType: string;
   nature?: string;
   is_active: boolean;
 }
@@ -55,10 +55,9 @@ export function useAccounts(params?: {
     enabled: !!organizationId && (params?.enabled ?? true),
     queryFn: async (): Promise<Account[]> => {
       const res = await accountsApi.list({
-        organization_id: organizationId!,
-        account_type: params?.accountType,
-        account_group_id: params?.accountGroupId,
-        page_size: 100,
+        accountType: params?.accountType,
+        accountGroupId: params?.accountGroupId,
+        pageSize: 100,
       });
       const data = res.data as Account[] | { items: Account[] };
       return Array.isArray(data) ? data : data.items;
@@ -73,8 +72,7 @@ export function useAccountGroups() {
     enabled: !!organizationId,
     queryFn: async (): Promise<AccountGroup[]> => {
       const res = await accountGroupsApi.list({
-        organization_id: organizationId!,
-        page_size: 100,
+        pageSize: 100,
       });
       const data = res.data as AccountGroup[] | { items: AccountGroup[] };
       return Array.isArray(data) ? data : data.items;
@@ -89,8 +87,7 @@ export function useFinancialYears() {
     enabled: !!organizationId,
     queryFn: async (): Promise<FinancialYear[]> => {
       const res = await financialYearsApi.list({
-        organization_id: organizationId!,
-        page_size: 100,
+        pageSize: 100,
       });
       const data = res.data as FinancialYear[] | { items: FinancialYear[] };
       return Array.isArray(data) ? data : data.items;

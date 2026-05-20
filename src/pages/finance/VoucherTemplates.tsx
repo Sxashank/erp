@@ -102,7 +102,7 @@ export function VoucherTemplates() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -115,14 +115,14 @@ export function VoucherTemplates() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params: VoucherTemplateListParams = { organization_id: selectedOrgId, page_size: 50 };
+      const params: VoucherTemplateListParams = { page_size: 50 };
       if (filterCategory && filterCategory !== 'ALL') params.category = filterCategory;
       if (filterFavorite !== undefined) params.is_favorite = filterFavorite;
       if (searchQuery) params.search = searchQuery;
 
       const [listRes, statsRes] = await Promise.all([
         voucherTemplatesApi.list(params),
-        voucherTemplatesApi.getStats(selectedOrgId),
+        voucherTemplatesApi.getStats(),
       ]);
 
       setTemplates(listRes.data.items);

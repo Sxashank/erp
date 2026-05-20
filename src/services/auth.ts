@@ -26,19 +26,19 @@ export interface LoginPayload {
 }
 
 export interface TokenResponse {
-  access_token: string;
-  refresh_token: string;
-  token_type: string;
-  expires_in: number;
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
   user?: {
     id: string;
     username: string;
     email: string;
-    full_name: string;
+    fullName: string;
     roles: string[];
     permissions: string[];
   };
-  requires_mfa?: boolean;
+  requiresMfa?: boolean;
   message?: string;
 }
 
@@ -46,10 +46,10 @@ export interface MeResponse {
   id: string;
   username: string;
   email: string;
-  full_name: string;
-  organization_id: string | null;
-  default_unit_id: string | null;
-  mfa_enabled: boolean;
+  fullName: string;
+  organizationId: string | null;
+  defaultUnitId: string | null;
+  mfaEnabled: boolean;
   roles: { id: string; code: string; name: string }[];
   permissions: string[];
 }
@@ -65,10 +65,10 @@ function mapMeToUser(me: MeResponse): AuthUser {
     id: me.id ?? '',
     username: me.username ?? '',
     email: me.email ?? '',
-    fullName: me.full_name ?? '',
-    organizationId: me.organization_id ?? null,
-    defaultUnitId: me.default_unit_id ?? null,
-    mfaEnabled: Boolean(me.mfa_enabled),
+    fullName: me.fullName ?? '',
+    organizationId: me.organizationId ?? null,
+    defaultUnitId: me.defaultUnitId ?? null,
+    mfaEnabled: Boolean(me.mfaEnabled),
     roles: Array.isArray(me.roles) ? me.roles.map((r) => r.code) : [],
   };
 }
@@ -79,10 +79,10 @@ function mapOrg(o: OrganizationListItem): Organization {
 
 export async function login(payload: LoginPayload): Promise<{ requiresMfa: boolean }> {
   const { data } = await bareAxios.post<TokenResponse>('/auth/login', payload);
-  if (data.requires_mfa) {
+  if (data.requiresMfa) {
     return { requiresMfa: true };
   }
-  useAuthStore.getState().setTokens(data.access_token, data.refresh_token);
+  useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
   await hydrateFromServer();
   return { requiresMfa: false };
 }
@@ -91,7 +91,7 @@ export async function logout(): Promise<void> {
   const refresh = useAuthStore.getState().refreshToken;
   if (refresh) {
     try {
-      await api.post('/auth/logout', { refresh_token: refresh });
+      await api.post('/auth/logout', { refreshToken: refresh });
     } catch {
       // Best-effort; the server may already have revoked it.
     }
@@ -109,10 +109,10 @@ export async function refreshTokens(): Promise<string | null> {
   if (!refresh) return null;
   try {
     const { data } = await bareAxios.post<TokenResponse>('/auth/refresh', {
-      refresh_token: refresh,
+      refreshToken: refresh,
     });
-    useAuthStore.getState().setTokens(data.access_token, data.refresh_token);
-    return data.access_token;
+    useAuthStore.getState().setTokens(data.accessToken, data.refreshToken);
+    return data.accessToken;
   } catch {
     useAuthStore.getState().clear();
     useOrganizationStore.getState().clear();

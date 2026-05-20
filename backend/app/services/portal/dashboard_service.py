@@ -12,6 +12,12 @@ from sqlalchemy import select, and_, or_, func, case
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.models.lending.loan_account import (
+    LoanAccount,
+    LoanReceipt,
+    RepaymentSchedule,
+    ScheduleInstallment,
+)
 from app.models.portal.portal_user import PortalUser
 
 
@@ -29,10 +35,11 @@ class PortalDashboardService:
         self,
         user_id: UUID,
         customer_id: UUID,
+        entity_ids: set[UUID] | None = None,
     ) -> Dict[str, Any]:
         """Get dashboard summary for the customer."""
         # Get loan summary
-        loans = await self.get_loan_summary(customer_id)
+        loans = await self.get_loan_summary(customer_id, entity_ids=entity_ids)
 
         # Calculate totals
         total_outstanding = sum(loan.get("total_outstanding", 0) for loan in loans)
@@ -46,7 +53,7 @@ class PortalDashboardService:
 
         # Get recent payments
         recent_payments = await self.get_payment_history(
-            customer_id, page=1, page_size=5
+            customer_id, page=1, page_size=5, entity_ids=entity_ids
         )
 
         # Get unread notifications count
@@ -80,91 +87,91 @@ class PortalDashboardService:
 
     async def get_loan_summary(
         self,
-        customer_id: UUID,
+        customer_id: UUID | None = None,
+        entity_ids: set[UUID] | None = None,
     ) -> List[Dict[str, Any]]:
         """Get all loans for a customer."""
-        # This would join with the lending module's loan account table
-        # Simplified implementation - actual implementation would query loan tables
+        if not entity_ids:
+            return []
 
-        # Placeholder: In production, this would query txn_loan_account
-        # and related tables
-        loans = []
-
-        # Example structure of what would be returned:
-        # loans = [
-        #     {
-        #         "loan_account_id": str(loan.id),
-        #         "loan_account_number": loan.account_number,
-        #         "product_name": loan.product.name,
-        #         "sanctioned_amount": float(loan.sanctioned_amount),
-        #         "disbursed_amount": float(loan.disbursed_amount),
-        #         "principal_outstanding": float(loan.principal_outstanding),
-        #         "interest_outstanding": float(loan.interest_outstanding),
-        #         "total_outstanding": float(loan.total_outstanding),
-        #         "overdue_amount": float(loan.overdue_amount),
-        #         "emi_amount": float(loan.emi_amount),
-        #         "emi_date": loan.emi_date,
-        #         "tenure_months": loan.tenure_months,
-        #         "remaining_tenure": loan.remaining_tenure,
-        #         "interest_rate": float(loan.interest_rate),
-        #         "status": loan.status.value,
-        #         "disbursement_date": loan.disbursement_date.isoformat(),
-        #         "maturity_date": loan.maturity_date.isoformat(),
-        #         "dpd": loan.days_past_due,
-        #     }
-        # ]
-
-        return loans
+        stmt = (
+            select(LoanAccount)
+            .options(
+                selectinload(LoanAccount.product),
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.schedules).selectinload(
+                    RepaymentSchedule.installments
+                ),
+            )
+            .where(
+                LoanAccount.entity_id.in_(entity_ids),
+                LoanAccount.deleted_at.is_(None),
+            )
+            .order_by(LoanAccount.account_open_date.desc())
+        )
+        loans = list((await self.db.execute(stmt)).scalars().unique().all())
+        return [self._loan_summary(loan) for loan in loans]
 
     async def get_loan_details(
         self,
         loan_account_id: UUID,
-        customer_id: UUID,
+        customer_id: UUID | None = None,
+        entity_ids: set[UUID] | None = None,
     ) -> Optional[Dict[str, Any]]:
         """Get detailed information for a specific loan."""
-        # Verify loan belongs to customer
-        # Query loan details from lending module
+        if not entity_ids:
+            return None
 
-        # Placeholder implementation
-        return {
-            "loan_account_id": str(loan_account_id),
-            "loan_account_number": "",
-            "product_name": "",
-            "product_type": "",
-            # Basic Details
-            "sanctioned_amount": 0,
-            "disbursed_amount": 0,
-            "disbursement_date": None,
-            "maturity_date": None,
-            "tenure_months": 0,
-            "interest_rate": 0,
-            "rate_type": "FLOATING",
-            # Outstanding
-            "principal_outstanding": 0,
-            "interest_outstanding": 0,
-            "charges_outstanding": 0,
-            "total_outstanding": 0,
-            "overdue_amount": 0,
-            # EMI Details
-            "emi_amount": 0,
-            "emi_date": 1,
-            "next_emi_date": None,
-            "remaining_emis": 0,
-            # Status
-            "status": "ACTIVE",
-            "dpd": 0,
-            "npa_status": None,
-            # Payments
-            "total_paid": 0,
-            "last_payment_date": None,
-            "last_payment_amount": 0,
-            # Security (if applicable)
-            "security_type": None,
-            "security_value": 0,
-            # Insurance
-            "insurance_premium": 0,
-            "insurance_expiry": None,
-        }
+        stmt = (
+            select(LoanAccount)
+            .options(
+                selectinload(LoanAccount.product),
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.schedules).selectinload(
+                    RepaymentSchedule.installments
+                ),
+            )
+            .where(
+                LoanAccount.id == loan_account_id,
+                LoanAccount.entity_id.in_(entity_ids),
+                LoanAccount.deleted_at.is_(None),
+            )
+        )
+        loan = (await self.db.execute(stmt)).scalars().unique().one_or_none()
+        if loan is None:
+            return None
+
+        summary = self._loan_summary(loan)
+        total_paid = (
+            loan.total_principal_received
+            + loan.total_interest_received
+            + loan.total_penal_interest_received
+            + loan.total_charges_received
+        )
+        summary.update(
+            {
+                "borrower_name": loan.entity.legal_name if loan.entity else "",
+                "co_borrowers": [],
+                "product_type": self._enum_value(getattr(loan.product, "category", "")),
+                "rate_type": self._enum_value(loan.interest_type),
+                "outstanding_interest": float(
+                    loan.interest_outstanding + loan.interest_overdue
+                ),
+                "charges_due": float(loan.charges_outstanding),
+                "emi_start_date": (
+                    loan.repayment_start_date.isoformat()
+                    if loan.repayment_start_date
+                    else None
+                ),
+                "emi_end_date": loan.maturity_date.isoformat() if loan.maturity_date else None,
+                "total_paid": float(total_paid),
+                "total_principal_paid": float(loan.total_principal_received),
+                "total_interest_paid": float(loan.total_interest_received),
+                "prepaid_amount": 0,
+                "nach_mandate_status": None,
+            }
+        )
+        return summary
 
     # =========================================================================
     # Repayment Schedule
@@ -173,30 +180,38 @@ class PortalDashboardService:
     async def get_repayment_schedule(
         self,
         loan_account_id: UUID,
-        customer_id: UUID,
+        customer_id: UUID | None = None,
+        entity_ids: set[UUID] | None = None,
     ) -> List[Dict[str, Any]]:
         """Get EMI repayment schedule for a loan."""
-        # Would query the repayment schedule from lending module
-        # Placeholder implementation
+        if not entity_ids:
+            return []
 
-        schedule = []
-        # Example structure:
-        # schedule = [
-        #     {
-        #         "installment_number": 1,
-        #         "due_date": "2024-01-05",
-        #         "emi_amount": 10000,
-        #         "principal_component": 8000,
-        #         "interest_component": 2000,
-        #         "opening_balance": 100000,
-        #         "closing_balance": 92000,
-        #         "status": "PAID",  # PAID, PARTIALLY_PAID, DUE, OVERDUE, UPCOMING
-        #         "paid_amount": 10000,
-        #         "paid_date": "2024-01-05",
-        #     }
-        # ]
+        loan = await self._get_accessible_loan(loan_account_id, entity_ids)
+        if loan is None:
+            return []
 
-        return schedule
+        current_schedule = self._current_schedule(loan)
+        if current_schedule is None:
+            return []
+
+        return [
+            {
+                "installment_number": row.installment_number,
+                "due_date": row.due_date.isoformat(),
+                "emi_amount": float(row.emi_amount),
+                "principal_component": float(row.principal_amount),
+                "interest_component": float(row.interest_amount),
+                "principal": float(row.principal_amount),
+                "interest": float(row.interest_amount),
+                "opening_balance": float(row.opening_balance),
+                "closing_balance": float(row.closing_balance),
+                "status": self._schedule_status(row),
+                "paid_amount": float((row.principal_paid or 0) + (row.interest_paid or 0)),
+                "paid_date": row.paid_date.isoformat() if row.paid_date else None,
+            }
+            for row in current_schedule.installments
+        ]
 
     # =========================================================================
     # Upcoming Dues
@@ -256,32 +271,135 @@ class PortalDashboardService:
         to_date: Optional[date] = None,
         page: int = 1,
         page_size: int = 20,
+        entity_ids: set[UUID] | None = None,
     ) -> Tuple[List[Dict[str, Any]], int]:
         """Get payment history."""
-        # Would query payment receipts from lending module
-        # Placeholder implementation
+        if not entity_ids:
+            return [], 0
+        stmt = (
+            select(LoanReceipt)
+            .join(LoanAccount, LoanAccount.id == LoanReceipt.loan_account_id)
+            .options(selectinload(LoanReceipt.loan_account))
+            .where(LoanAccount.entity_id.in_(entity_ids))
+        )
+        if loan_account_id:
+            stmt = stmt.where(LoanReceipt.loan_account_id == loan_account_id)
+        if from_date:
+            stmt = stmt.where(LoanReceipt.receipt_date >= from_date)
+        if to_date:
+            stmt = stmt.where(LoanReceipt.receipt_date <= to_date)
 
-        payments = []
-        total = 0
-        # Example structure:
-        # payments = [
-        #     {
-        #         "receipt_id": str(receipt.id),
-        #         "receipt_number": "RCP0001",
-        #         "payment_date": "2024-01-05",
-        #         "amount": 10000,
-        #         "principal_adjusted": 8000,
-        #         "interest_adjusted": 2000,
-        #         "charges_adjusted": 0,
-        #         "payment_mode": "UPI",
-        #         "reference_number": "UPI123456",
-        #         "loan_account_id": str(loan_id),
-        #         "loan_account_number": "LN0001",
-        #         "status": "SUCCESS",
-        #     }
-        # ]
+        total = (await self.db.execute(select(func.count()).select_from(stmt.subquery()))).scalar()
+        stmt = (
+            stmt.order_by(LoanReceipt.receipt_date.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+        )
+        receipts = list((await self.db.execute(stmt)).scalars().all())
+        return [
+            {
+                "id": str(row.id),
+                "receipt_id": str(row.id),
+                "receipt_number": row.receipt_number,
+                "payment_date": row.receipt_date.isoformat(),
+                "amount": float(row.receipt_amount),
+                "principal_applied": float(row.principal_allocated),
+                "interest_applied": float(row.interest_allocated),
+                "charges_applied": float(row.charges_allocated),
+                "payment_mode": self._enum_value(row.receipt_mode),
+                "reference_number": row.instrument_number,
+                "loan_account_id": str(row.loan_account_id),
+                "loan_account_number": row.loan_account.loan_account_number
+                if row.loan_account
+                else "",
+                "status": self._enum_value(row.status),
+            }
+            for row in receipts
+        ], int(total or 0)
 
-        return payments, total
+    async def _get_accessible_loan(
+        self, loan_account_id: UUID, entity_ids: set[UUID]
+    ) -> LoanAccount | None:
+        stmt = (
+            select(LoanAccount)
+            .options(
+                selectinload(LoanAccount.product),
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.schedules).selectinload(
+                    RepaymentSchedule.installments
+                ),
+            )
+            .where(
+                LoanAccount.id == loan_account_id,
+                LoanAccount.entity_id.in_(entity_ids),
+                LoanAccount.deleted_at.is_(None),
+            )
+        )
+        return (await self.db.execute(stmt)).scalars().unique().one_or_none()
+
+    def _loan_summary(self, loan: LoanAccount) -> Dict[str, Any]:
+        next_due = self._next_due(loan)
+        current_schedule = self._current_schedule(loan)
+        remaining = (
+            len([i for i in current_schedule.installments if self._schedule_status(i) != "PAID"])
+            if current_schedule
+            else loan.tenure_months
+        )
+        overdue_amount = loan.principal_overdue + loan.interest_overdue
+        return {
+            "id": str(loan.id),
+            "loan_account_id": str(loan.id),
+            "loan_account_number": loan.loan_account_number,
+            "product_name": loan.product.name if loan.product else "",
+            "sanctioned_amount": float(loan.sanctioned_amount),
+            "disbursed_amount": float(loan.total_disbursed_amount),
+            "outstanding_principal": float(loan.principal_outstanding),
+            "principal_outstanding": float(loan.principal_outstanding),
+            "outstanding_interest": float(loan.interest_outstanding + loan.interest_overdue),
+            "interest_outstanding": float(loan.interest_outstanding + loan.interest_overdue),
+            "total_outstanding": float(loan.total_outstanding),
+            "overdue_amount": float(overdue_amount),
+            "emi_amount": float(loan.current_emi_amount or 0),
+            "interest_rate": float(loan.current_interest_rate),
+            "tenure_months": loan.tenure_months,
+            "remaining_tenure": remaining,
+            "remaining_emis": remaining,
+            "disbursement_date": loan.first_disbursement_date.isoformat()
+            if loan.first_disbursement_date
+            else None,
+            "maturity_date": loan.maturity_date.isoformat() if loan.maturity_date else None,
+            "next_emi_date": next_due["due_date"] if next_due else None,
+            "next_emi_amount": next_due["emi_amount"] if next_due else None,
+            "overdue_days": loan.days_past_due,
+            "dpd": loan.days_past_due,
+            "status": self._enum_value(loan.status),
+        }
+
+    def _current_schedule(self, loan: LoanAccount) -> RepaymentSchedule | None:
+        return next((schedule for schedule in loan.schedules if schedule.is_current), None)
+
+    def _next_due(self, loan: LoanAccount) -> Dict[str, Any] | None:
+        schedule = self._current_schedule(loan)
+        if schedule is None:
+            return None
+        for row in sorted(schedule.installments, key=lambda item: item.due_date):
+            if self._schedule_status(row) != "PAID":
+                return {
+                    "due_date": row.due_date.isoformat(),
+                    "emi_amount": float(row.emi_amount),
+                }
+        return None
+
+    def _schedule_status(self, row: ScheduleInstallment) -> str:
+        status = self._enum_value(row.status)
+        if status in {"NOT_DUE", "UPCOMING"}:
+            return "FUTURE"
+        if status == "PARTIALLY_PAID":
+            return "PARTIAL"
+        return status
+
+    def _enum_value(self, value: Any) -> str:
+        return value.value if hasattr(value, "value") else str(value)
 
     # =========================================================================
     # Loan Statements

@@ -102,7 +102,6 @@ export function Gstr3bFiling() {
   const [otp, setOtp] = useState('');
 
   const registrationsQuery = useGSTRegistrations({
-    organizationId: activeOrganizationId ?? undefined,
     includeInactive: false,
     pageSize: 100,
   });

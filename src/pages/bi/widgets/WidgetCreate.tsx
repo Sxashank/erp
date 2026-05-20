@@ -591,7 +591,7 @@ export function WidgetCreate() {
                         <SelectValue placeholder="Select a data source" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None (use mock data)</SelectItem>
+                        <SelectItem value="__none__">None (use mock data)</SelectItem>
                         {dataSources.map((ds) => (
                           <SelectItem key={ds.id} value={ds.id}>
                             {ds.name}

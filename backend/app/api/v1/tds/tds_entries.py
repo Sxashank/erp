@@ -84,7 +84,7 @@ async def list_tds_entries(
     to_date: Optional[date] = Query(None),
     challan_status: Optional[TDSChallanStatus] = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -101,7 +101,7 @@ async def list_tds_entries(
 @router.get("/pending-challans", response_model=PaginatedResponse[TDSEntryResponse], response_model_by_alias=True)
 async def list_pending_challans(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

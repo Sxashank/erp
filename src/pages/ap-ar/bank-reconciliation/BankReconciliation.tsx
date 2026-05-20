@@ -122,9 +122,8 @@ export function BankReconciliation() {
       if (!organizationId) return;
       try {
         const response = await accountsApi.list({
-          organization_id: organizationId,
-          account_type: 'BANK',
-          page_size: 100,
+          accountType: 'BANK',
+          pageSize: 100,
         });
         setBankAccounts(response.data.items || []);
         if (!selectedBankAccount && response.data.items?.length > 0) {

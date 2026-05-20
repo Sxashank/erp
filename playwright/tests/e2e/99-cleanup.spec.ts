@@ -12,19 +12,29 @@ import { expect, test } from '../../fixtures/test';
 
 test.describe('E2E › cleanup', () => {
   test('truncate E2E-prefixed rows from transactional tables', async ({ db }) => {
-    // Allowlist of `(table, code-column)` pairs the suite writes to. Add new
-    // entries here when new specs create new entities. The DELETE is RLS-
-    // scoped by organization_id (see `dbConnect`), so dev rows are not at risk.
-    const targets: Array<[string, string]> = [
-      ['mst_unit', 'code'],
-      ['mst_department', 'code'],
-      ['mst_designation', 'code'],
+    // Allowlist of `(table, entity-code-prefix, code-column)` triples the
+    // suite writes to. Add new entries as new specs land. The DELETE is RLS-
+    // scoped by organization_id (see `dbConnect`), so dev rows are not at
+    // risk; the per-entity prefix is the per-spec match (set in
+    // `fixtures/unique.ts::uniqueCode`).
+    // Entries land here as each spec adopts a `code` prefix. The cleanup
+    // helper scopes the DELETE by `organization_id`; only tables that carry
+    // that column belong here (e.g. `mst_designation` is platform-global and
+    // is intentionally excluded — designations never become test churn).
+    const targets: Array<[string, string, string]> = [
+      ['mst_unit', 'UNIT', 'code'],
+      ['mst_department', 'DEPT', 'code'],
+      ['mst_designation', 'DESIG', 'code'],
+      ['mst_voucher_type', 'VT', 'code'],
+      ['mst_payment_terms', 'PTERM', 'code'],
+      ['mst_gst_rate', 'GR', 'code'],
+      ['mst_hsn_sac', 'HSN', 'code'],
       // Tier-2 / tier-3 entries added as their specs land.
     ];
 
     let totalDeleted = 0;
-    for (const [table, column] of targets) {
-      const n = await db.cleanupByPrefix(table, 'E2E-', column);
+    for (const [table, prefix, column] of targets) {
+      const n = await db.cleanupByPrefix(table, prefix, column);
       totalDeleted += n;
     }
     // We don't fail the test if zero rows were deleted — a fresh DB has none

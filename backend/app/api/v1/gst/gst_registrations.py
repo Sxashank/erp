@@ -47,8 +47,8 @@ def _to_response(reg) -> GSTRegistrationResponse:
 @router.get("", response_model=PaginatedResponse[GSTRegistrationResponse], response_model_by_alias=True)
 async def list_gst_registrations(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

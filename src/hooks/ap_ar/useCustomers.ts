@@ -26,7 +26,6 @@ export function useCustomers(params?: { search?: string; enabled?: boolean }) {
     enabled: !!organizationId && (params?.enabled ?? true),
     queryFn: async (): Promise<Customer[]> => {
       const res = await customersApi.list({
-        organization_id: organizationId!,
         search: params?.search?.trim() || undefined,
         page_size: 100,
       });

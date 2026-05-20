@@ -31,23 +31,23 @@ import { hrisApi, organizationsApi, departmentsApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface Attendance {
   id: string;
-  employee_id: string;
-  employee_name?: string;
-  employee_code?: string;
-  attendance_date: string;
-  shift_name?: string;
-  scheduled_in?: string;
-  scheduled_out?: string;
-  first_in?: string;
-  last_out?: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  attendanceDate: string;
+  shiftName?: string;
+  scheduledIn?: string;
+  scheduledOut?: string;
+  firstIn?: string;
+  lastOut?: string;
   status: string;
-  total_work_minutes: number;
-  late_minutes: number;
-  early_leave_minutes: number;
-  overtime_minutes: number;
-  is_holiday: boolean;
-  is_week_off: boolean;
-  is_regularized: boolean;
+  totalWorkMinutes: number;
+  lateMinutes: number;
+  earlyLeaveMinutes: number;
+  overtimeMinutes: number;
+  isHoliday: boolean;
+  isWeekOff: boolean;
+  isRegularized: boolean;
 }
 
 interface Organization {
@@ -125,7 +125,7 @@ export function AttendanceList() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -145,7 +145,7 @@ export function AttendanceList() {
         return;
       }
       try {
-        const response = await departmentsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+        const response = await departmentsApi.list({ pageSize: 100 });
         setDepartments(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch departments:', error);
@@ -159,7 +159,6 @@ export function AttendanceList() {
     try {
       setLoading(true);
       const params: Record<string, unknown> = {
-        organization_id: selectedOrgId,
         date: selectedDate,
         skip,
         limit: pagination.limit,
@@ -305,34 +304,34 @@ export function AttendanceList() {
                     <TableRow key={record.id}>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{record.employee_name}</p>
-                          <p className="text-xs text-slate-500">{record.employee_code}</p>
+                          <p className="font-medium">{record.employeeName}</p>
+                          <p className="text-xs text-slate-500">{record.employeeCode}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{record.shift_name || '-'}</TableCell>
+                      <TableCell>{record.shiftName || '-'}</TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{formatTime(record.first_in)}</p>
-                          <p className="text-xs text-slate-500">Scheduled: {formatTime(record.scheduled_in)}</p>
+                          <p className="font-medium">{formatTime(record.firstIn)}</p>
+                          <p className="text-xs text-slate-500">Scheduled: {formatTime(record.scheduledIn)}</p>
                         </div>
                       </TableCell>
                       <TableCell>
                         <div>
-                          <p className="font-medium">{formatTime(record.last_out)}</p>
-                          <p className="text-xs text-slate-500">Scheduled: {formatTime(record.scheduled_out)}</p>
+                          <p className="font-medium">{formatTime(record.lastOut)}</p>
+                          <p className="text-xs text-slate-500">Scheduled: {formatTime(record.scheduledOut)}</p>
                         </div>
                       </TableCell>
-                      <TableCell>{formatMinutes(record.total_work_minutes)}</TableCell>
+                      <TableCell>{formatMinutes(record.totalWorkMinutes)}</TableCell>
                       <TableCell>
-                        {record.late_minutes > 0 ? (
-                          <span className="text-amber-600">{formatMinutes(record.late_minutes)}</span>
+                        {record.lateMinutes > 0 ? (
+                          <span className="text-amber-600">{formatMinutes(record.lateMinutes)}</span>
                         ) : (
                           '-'
                         )}
                       </TableCell>
                       <TableCell>
-                        {record.early_leave_minutes > 0 ? (
-                          <span className="text-orange-600">{formatMinutes(record.early_leave_minutes)}</span>
+                        {record.earlyLeaveMinutes > 0 ? (
+                          <span className="text-orange-600">{formatMinutes(record.earlyLeaveMinutes)}</span>
                         ) : (
                           '-'
                         )}
@@ -343,7 +342,7 @@ export function AttendanceList() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {record.is_regularized && (
+                        {record.isRegularized && (
                           <Badge variant="outline" className="text-blue-600">
                             Regularized
                           </Badge>

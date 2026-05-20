@@ -72,17 +72,17 @@ interface Customer {
 
 interface SalesInvoice {
   id: string;
-  invoice_number: string;
-  invoice_date: string;
-  due_date: string;
-  customer_id: string;
-  customer_name: string | null;
-  total_amount: number;
-  balance_amount: number;
+  invoiceNumber: string;
+  invoiceDate: string;
+  dueDate: string;
+  customerId: string;
+  customerName: string | null;
+  totalAmount: number;
+  balanceAmount: number;
   status: string;
-  receipt_status: string;
-  e_invoice_status: string | null;
-  is_posted: boolean;
+  receiptStatus: string;
+  eInvoiceStatus: string | null;
+  isPosted: boolean;
 }
 
 type SalesInvoiceListParams = Parameters<typeof salesInvoicesApi.list>[0];
@@ -158,7 +158,7 @@ export function SalesInvoiceList() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page: 1, page_size: 100 });
+      const response = await organizationsApi.list({ page: 1, pageSize: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0) {
@@ -177,7 +177,7 @@ export function SalesInvoiceList() {
   const loadCustomers = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
-      const response = await customersApi.getActive({ organization_id: selectedOrgId });
+      const response = await customersApi.getActive({});
       setCustomers(response.data || []);
     } catch (error) {
       logger.error('Failed to load customers:', error);
@@ -189,7 +189,6 @@ export function SalesInvoiceList() {
     setLoading(true);
     try {
       const params: SalesInvoiceListParams = {
-        organization_id: selectedOrgId,
         page,
         page_size: pageSize,
         include_inactive: includeInactive,
@@ -496,22 +495,22 @@ export function SalesInvoiceList() {
             ) : (
               invoices.map((invoice) => (
                 <TableRow key={invoice.id}>
-                  <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                  <TableCell>{invoice.customer_name || '-'}</TableCell>
-                  <TableCell><DateDisplay date={invoice.invoice_date} /></TableCell>
+                  <TableCell className="font-medium">{invoice.invoiceNumber}</TableCell>
+                  <TableCell>{invoice.customerName || '-'}</TableCell>
+                  <TableCell><DateDisplay date={invoice.invoiceDate} /></TableCell>
                   <TableCell>
-                    <div className={isOverdue(invoice.due_date, invoice.status) ? 'text-red-600 font-medium' : ''}>
-                      <DateDisplay date={invoice.due_date} />
-                      {isOverdue(invoice.due_date, invoice.status) && (
+                    <div className={isOverdue(invoice.dueDate, invoice.status) ? 'text-red-600 font-medium' : ''}>
+                      <DateDisplay date={invoice.dueDate} />
+                      {isOverdue(invoice.dueDate, invoice.status) && (
                         <span className="block text-xs">Overdue</span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    <AmountDisplay amount={invoice.total_amount} />
+                    <AmountDisplay amount={invoice.totalAmount} />
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    <AmountDisplay amount={invoice.balance_amount} />
+                    <AmountDisplay amount={invoice.balanceAmount} />
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -524,18 +523,18 @@ export function SalesInvoiceList() {
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      className={receiptStatusColors[invoice.receipt_status] || 'bg-gray-100'}
+                      className={receiptStatusColors[invoice.receiptStatus] || 'bg-gray-100'}
                     >
-                      {receiptStatusLabels[invoice.receipt_status] || invoice.receipt_status}
+                      {receiptStatusLabels[invoice.receiptStatus] || invoice.receiptStatus}
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {invoice.e_invoice_status && (
+                    {invoice.eInvoiceStatus && (
                       <Badge
                         variant="secondary"
-                        className={eInvoiceStatusColors[invoice.e_invoice_status] || 'bg-gray-100'}
+                        className={eInvoiceStatusColors[invoice.eInvoiceStatus] || 'bg-gray-100'}
                       >
-                        {eInvoiceStatusLabels[invoice.e_invoice_status] || invoice.e_invoice_status}
+                        {eInvoiceStatusLabels[invoice.eInvoiceStatus] || invoice.eInvoiceStatus}
                       </Badge>
                     )}
                   </TableCell>
@@ -574,7 +573,7 @@ export function SalesInvoiceList() {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
-                        {invoice.status !== 'CANCELLED' && invoice.receipt_status === 'UNRECEIVED' && (
+                        {invoice.status !== 'CANCELLED' && invoice.receiptStatus === 'UNRECEIVED' && (
                           <DropdownMenuItem
                             onClick={() => {
                               setInvoiceToCancel(invoice);
@@ -645,7 +644,7 @@ export function SalesInvoiceList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Sales Invoice</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete invoice &quot;{invoiceToDelete?.invoice_number}&quot;? This action
+              Are you sure you want to delete invoice &quot;{invoiceToDelete?.invoiceNumber}&quot;? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -667,7 +666,7 @@ export function SalesInvoiceList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Sales Invoice</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel invoice &quot;{invoiceToCancel?.invoice_number}&quot;?
+              Are you sure you want to cancel invoice &quot;{invoiceToCancel?.invoiceNumber}&quot;?
               Please provide a reason for cancellation.
             </AlertDialogDescription>
           </AlertDialogHeader>

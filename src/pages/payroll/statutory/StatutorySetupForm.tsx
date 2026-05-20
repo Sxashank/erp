@@ -35,30 +35,30 @@ const STATUTORY_TYPES = [
 
 const DEFAULT_VALUES: Record<string, Partial<StatutorySetup>> = {
   PF: {
-    employer_contribution_pct: 12,
-    employee_contribution_pct: 12,
-    wage_ceiling: 15000,
-    admin_charges_pct: 0.5,
+    employerContributionPct: 12,
+    employeeContributionPct: 12,
+    wageCeiling: 15000,
+    adminChargesPct: 0.5,
   },
   ESI: {
-    employer_contribution_pct: 3.25,
-    employee_contribution_pct: 0.75,
-    wage_ceiling: 21000,
+    employerContributionPct: 3.25,
+    employeeContributionPct: 0.75,
+    wageCeiling: 21000,
   },
   PT: {
-    employer_contribution_pct: 0,
-    employee_contribution_pct: 0,
-    wage_ceiling: undefined,
+    employerContributionPct: 0,
+    employeeContributionPct: 0,
+    wageCeiling: undefined,
   },
   LWF: {
-    employer_contribution_pct: 0,
-    employee_contribution_pct: 0,
-    wage_ceiling: undefined,
+    employerContributionPct: 0,
+    employeeContributionPct: 0,
+    wageCeiling: undefined,
   },
   GRATUITY: {
-    employer_contribution_pct: 4.81,
-    employee_contribution_pct: 0,
-    wage_ceiling: undefined,
+    employerContributionPct: 4.81,
+    employeeContributionPct: 0,
+    wageCeiling: undefined,
   },
 };
 
@@ -77,14 +77,13 @@ export default function StatutorySetupForm() {
   const presetType = searchParams.get('type');
 
   const [formData, setFormData] = useState({
-    organization_id: organizationId,
-    statutory_type: presetType || 'PF',
-    employer_contribution_pct: '',
-    employee_contribution_pct: '',
-    wage_ceiling: '',
-    admin_charges_pct: '',
-    is_applicable: true,
-    effective_from: new Date().toISOString().split('T')[0],
+    statutoryType: presetType || 'PF',
+    employerContributionPct: '',
+    employeeContributionPct: '',
+    wageCeiling: '',
+    adminChargesPct: '',
+    isApplicable: true,
+    effectiveFrom: new Date().toISOString().split('T')[0],
   });
 
   useEffect(() => {
@@ -100,14 +99,13 @@ export default function StatutorySetupForm() {
       setLoading(true);
       const data = await payrollService.getStatutorySetup(setupId);
       setFormData({
-        organization_id: data.organization_id,
-        statutory_type: data.statutory_type,
-        employer_contribution_pct: data.employer_contribution_pct?.toString() || '',
-        employee_contribution_pct: data.employee_contribution_pct?.toString() || '',
-        wage_ceiling: data.wage_ceiling?.toString() || '',
-        admin_charges_pct: data.admin_charges_pct?.toString() || '',
-        is_applicable: data.is_applicable,
-        effective_from: data.effective_from,
+        statutoryType: data.statutoryType,
+        employerContributionPct: data.employerContributionPct?.toString() || '',
+        employeeContributionPct: data.employeeContributionPct?.toString() || '',
+        wageCeiling: data.wageCeiling?.toString() || '',
+        adminChargesPct: data.adminChargesPct?.toString() || '',
+        isApplicable: data.isApplicable,
+        effectiveFrom: data.effectiveFrom,
       });
     } catch (error) {
       toast({
@@ -126,17 +124,17 @@ export default function StatutorySetupForm() {
     if (defaults) {
       setFormData((prev) => ({
         ...prev,
-        statutory_type: type,
-        employer_contribution_pct: defaults.employer_contribution_pct?.toString() || '',
-        employee_contribution_pct: defaults.employee_contribution_pct?.toString() || '',
-        wage_ceiling: defaults.wage_ceiling?.toString() || '',
-        admin_charges_pct: defaults.admin_charges_pct?.toString() || '',
+        statutoryType: type,
+        employerContributionPct: defaults.employerContributionPct?.toString() || '',
+        employeeContributionPct: defaults.employeeContributionPct?.toString() || '',
+        wageCeiling: defaults.wageCeiling?.toString() || '',
+        adminChargesPct: defaults.adminChargesPct?.toString() || '',
       }));
     }
   };
 
   const handleTypeChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, statutory_type: value }));
+    setFormData((prev) => ({ ...prev, statutoryType: value }));
     if (!isEdit) {
       applyDefaults(value);
     }
@@ -145,7 +143,7 @@ export default function StatutorySetupForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.statutory_type || !formData.effective_from) {
+    if (!formData.statutoryType || !formData.effectiveFrom) {
       toast({
         title: 'Validation Error',
         description: 'Type and effective date are required',
@@ -158,20 +156,19 @@ export default function StatutorySetupForm() {
       setSaving(true);
 
       const payload: Partial<StatutorySetup> = {
-        organization_id: formData.organization_id,
-        statutory_type: formData.statutory_type as StatutorySetup['statutory_type'],
-        employer_contribution_pct: formData.employer_contribution_pct
-          ? parseFloat(formData.employer_contribution_pct)
+        statutoryType: formData.statutoryType as StatutorySetup['statutoryType'],
+        employerContributionPct: formData.employerContributionPct
+          ? parseFloat(formData.employerContributionPct)
           : undefined,
-        employee_contribution_pct: formData.employee_contribution_pct
-          ? parseFloat(formData.employee_contribution_pct)
+        employeeContributionPct: formData.employeeContributionPct
+          ? parseFloat(formData.employeeContributionPct)
           : undefined,
-        wage_ceiling: formData.wage_ceiling ? parseFloat(formData.wage_ceiling) : undefined,
-        admin_charges_pct: formData.admin_charges_pct
-          ? parseFloat(formData.admin_charges_pct)
+        wageCeiling: formData.wageCeiling ? parseFloat(formData.wageCeiling) : undefined,
+        adminChargesPct: formData.adminChargesPct
+          ? parseFloat(formData.adminChargesPct)
           : undefined,
-        is_applicable: formData.is_applicable,
-        effective_from: formData.effective_from,
+        isApplicable: formData.isApplicable,
+        effectiveFrom: formData.effectiveFrom,
       };
 
       if (isEdit && id) {
@@ -229,9 +226,9 @@ export default function StatutorySetupForm() {
           </CardHeader>
           <CardContent className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="statutory_type">Statutory Type *</Label>
+              <Label htmlFor="statutoryType">Statutory Type *</Label>
               <Select
-                value={formData.statutory_type}
+                value={formData.statutoryType}
                 onValueChange={handleTypeChange}
                 disabled={isEdit}
               >
@@ -250,32 +247,32 @@ export default function StatutorySetupForm() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="employer_contribution_pct">Employer Contribution (%)</Label>
+                <Label htmlFor="employerContributionPct">Employer Contribution (%)</Label>
                 <Input
-                  id="employer_contribution_pct"
+                  id="employerContributionPct"
                   type="number"
                   step="0.01"
-                  value={formData.employer_contribution_pct}
+                  value={formData.employerContributionPct}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      employer_contribution_pct: e.target.value,
+                      employerContributionPct: e.target.value,
                     })
                   }
                   placeholder="e.g., 12"
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="employee_contribution_pct">Employee Contribution (%)</Label>
+                <Label htmlFor="employeeContributionPct">Employee Contribution (%)</Label>
                 <Input
-                  id="employee_contribution_pct"
+                  id="employeeContributionPct"
                   type="number"
                   step="0.01"
-                  value={formData.employee_contribution_pct}
+                  value={formData.employeeContributionPct}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      employee_contribution_pct: e.target.value,
+                      employeeContributionPct: e.target.value,
                     })
                   }
                   placeholder="e.g., 12"
@@ -285,12 +282,12 @@ export default function StatutorySetupForm() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="wage_ceiling">Wage Ceiling (₹)</Label>
+                <Label htmlFor="wageCeiling">Wage Ceiling (₹)</Label>
                 <Input
-                  id="wage_ceiling"
+                  id="wageCeiling"
                   type="number"
-                  value={formData.wage_ceiling}
-                  onChange={(e) => setFormData({ ...formData, wage_ceiling: e.target.value })}
+                  value={formData.wageCeiling}
+                  onChange={(e) => setFormData({ ...formData, wageCeiling: e.target.value })}
                   placeholder="e.g., 15000"
                 />
                 <p className="text-xs text-muted-foreground">
@@ -298,16 +295,16 @@ export default function StatutorySetupForm() {
                 </p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="admin_charges_pct">Admin Charges (%)</Label>
+                <Label htmlFor="adminChargesPct">Admin Charges (%)</Label>
                 <Input
-                  id="admin_charges_pct"
+                  id="adminChargesPct"
                   type="number"
                   step="0.01"
-                  value={formData.admin_charges_pct}
+                  value={formData.adminChargesPct}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      admin_charges_pct: e.target.value,
+                      adminChargesPct: e.target.value,
                     })
                   }
                   placeholder="e.g., 0.5"
@@ -319,24 +316,24 @@ export default function StatutorySetupForm() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="effective_from">Effective From *</Label>
+              <Label htmlFor="effectiveFrom">Effective From *</Label>
               <Input
-                id="effective_from"
+                id="effectiveFrom"
                 type="date"
-                value={formData.effective_from}
-                onChange={(e) => setFormData({ ...formData, effective_from: e.target.value })}
+                value={formData.effectiveFrom}
+                onChange={(e) => setFormData({ ...formData, effectiveFrom: e.target.value })}
               />
             </div>
 
             <div className="flex items-center space-x-2">
               <Checkbox
-                id="is_applicable"
-                checked={formData.is_applicable}
+                id="isApplicable"
+                checked={formData.isApplicable}
                 onCheckedChange={(checked) =>
-                  setFormData({ ...formData, is_applicable: checked as boolean })
+                  setFormData({ ...formData, isApplicable: checked as boolean })
                 }
               />
-              <Label htmlFor="is_applicable">Applicable for payroll processing</Label>
+              <Label htmlFor="isApplicable">Applicable for payroll processing</Label>
             </div>
           </CardContent>
         </Card>

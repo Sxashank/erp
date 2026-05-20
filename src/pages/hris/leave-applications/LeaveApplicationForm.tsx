@@ -109,7 +109,7 @@ export function LeaveApplicationForm() {
   useEffect(() => {
     const fetchOrganizations = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         const orgs = response.data.items || response.data;
         setOrganizations(Array.isArray(orgs) ? orgs : []);
         if (orgs.length > 0 && !selectedOrgId) {
@@ -128,8 +128,8 @@ export function LeaveApplicationForm() {
     const fetchEmployeesAndLeaveTypes = async () => {
       try {
         const [empRes, ltRes] = await Promise.all([
-          hrisApi.listEmployees({ organization_id: selectedOrgId, limit: 500 }),
-          hrisApi.listLeaveTypes({ organization_id: selectedOrgId }),
+          hrisApi.listEmployees({ limit: 500 }),
+          hrisApi.listLeaveTypes({}),
         ]);
         setEmployees(empRes.data.items || []);
         setLeaveTypes(ltRes.data.items || ltRes.data || []);

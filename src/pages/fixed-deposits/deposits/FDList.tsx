@@ -87,7 +87,6 @@ export default function FDList() {
   const loadProducts = async () => {
     try {
       const response = await fixedDepositService.listProducts({
-        organization_id: organizationId,
         active_only: false,
       });
       setProducts(response.items);
@@ -100,7 +99,6 @@ export default function FDList() {
     try {
       setLoading(true);
       const response = await fixedDepositService.listDeposits({
-        organization_id: organizationId,
         status: statusFilter === ALL_FILTER_VALUE ? undefined : statusFilter,
         product_id: productFilter === ALL_FILTER_VALUE ? undefined : productFilter,
       });

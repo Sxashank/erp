@@ -13,25 +13,25 @@ import { hrisApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface Regularization {
   id: string;
-  employee_id: string;
-  employee_name?: string;
-  employee_code?: string;
-  department_name?: string;
-  attendance_date: string;
-  request_type: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  departmentName?: string;
+  attendanceDate: string;
+  requestType: string;
   reason: string;
-  original_first_in?: string;
-  original_last_out?: string;
-  original_status?: string;
-  requested_first_in?: string;
-  requested_last_out?: string;
-  requested_status?: string;
+  originalFirstIn?: string;
+  originalLastOut?: string;
+  originalStatus?: string;
+  requestedFirstIn?: string;
+  requestedLastOut?: string;
+  requestedStatus?: string;
   status: string;
-  approved_at?: string;
-  approver_remarks?: string;
-  rejected_at?: string;
-  rejection_reason?: string;
-  created_at: string;
+  approvedAt?: string;
+  approverRemarks?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  createdAt: string;
 }
 
 const REQUEST_TYPE_LABELS: Record<string, string> = {
@@ -144,7 +144,7 @@ export function RegularizationView() {
     <div className="space-y-6">
       <PageHeader
         title="Regularization Request"
-        subtitle={`${request.employee_name} - ${new Date(request.attendance_date).toLocaleDateString()}`}
+        subtitle={`${request.employeeName} - ${new Date(request.attendanceDate).toLocaleDateString()}`}
         breadcrumbs={[
           { label: 'Regularization', to: '/admin/hris/attendance/regularization' },
           { label: 'Request' },
@@ -164,20 +164,20 @@ export function RegularizationView() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <p className="text-sm text-slate-500">Employee Name</p>
-                  <p className="font-medium">{request.employee_name}</p>
+                  <p className="font-medium">{request.employeeName}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Employee Code</p>
-                  <p className="font-medium">{request.employee_code}</p>
+                  <p className="font-medium">{request.employeeCode}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Department</p>
-                  <p className="font-medium">{request.department_name || '-'}</p>
+                  <p className="font-medium">{request.departmentName || '-'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Request Type</p>
                   <Badge variant="outline">
-                    {REQUEST_TYPE_LABELS[request.request_type] || request.request_type}
+                    {REQUEST_TYPE_LABELS[request.requestType] || request.requestType}
                   </Badge>
                 </div>
               </div>
@@ -199,16 +199,16 @@ export function RegularizationView() {
                   <div className="space-y-2 rounded-lg bg-slate-50 p-4">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">First In</span>
-                      <span className="font-medium">{formatTime(request.original_first_in)}</span>
+                      <span className="font-medium">{formatTime(request.originalFirstIn)}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Last Out</span>
-                      <span className="font-medium">{formatTime(request.original_last_out)}</span>
+                      <span className="font-medium">{formatTime(request.originalLastOut)}</span>
                     </div>
-                    {request.original_status && (
+                    {request.originalStatus && (
                       <div className="flex justify-between">
                         <span className="text-sm text-slate-500">Status</span>
-                        <Badge variant="outline">{request.original_status}</Badge>
+                        <Badge variant="outline">{request.originalStatus}</Badge>
                       </div>
                     )}
                   </div>
@@ -220,19 +220,19 @@ export function RegularizationView() {
                     <div className="flex justify-between">
                       <span className="text-sm text-blue-700">First In</span>
                       <span className="font-medium text-blue-900">
-                        {formatTime(request.requested_first_in)}
+                        {formatTime(request.requestedFirstIn)}
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-sm text-blue-700">Last Out</span>
                       <span className="font-medium text-blue-900">
-                        {formatTime(request.requested_last_out)}
+                        {formatTime(request.requestedLastOut)}
                       </span>
                     </div>
-                    {request.requested_status && (
+                    {request.requestedStatus && (
                       <div className="flex justify-between">
                         <span className="text-sm text-blue-700">Status</span>
-                        <Badge variant="outline">{request.requested_status}</Badge>
+                        <Badge variant="outline">{request.requestedStatus}</Badge>
                       </div>
                     )}
                   </div>
@@ -345,13 +345,13 @@ export function RegularizationView() {
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Approved On</span>
                       <span className="font-medium">
-                        {request.approved_at ? new Date(request.approved_at).toLocaleString() : '-'}
+                        {request.approvedAt ? new Date(request.approvedAt).toLocaleString() : '-'}
                       </span>
                     </div>
-                    {request.approver_remarks && (
+                    {request.approverRemarks && (
                       <div>
                         <p className="text-sm text-slate-500">Remarks</p>
-                        <p className="mt-1 font-medium">{request.approver_remarks}</p>
+                        <p className="mt-1 font-medium">{request.approverRemarks}</p>
                       </div>
                     )}
                   </div>
@@ -362,13 +362,13 @@ export function RegularizationView() {
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Rejected On</span>
                       <span className="font-medium">
-                        {request.rejected_at ? new Date(request.rejected_at).toLocaleString() : '-'}
+                        {request.rejectedAt ? new Date(request.rejectedAt).toLocaleString() : '-'}
                       </span>
                     </div>
-                    {request.rejection_reason && (
+                    {request.rejectionReason && (
                       <div>
                         <p className="text-sm text-slate-500">Reason</p>
-                        <p className="mt-1 font-medium">{request.rejection_reason}</p>
+                        <p className="mt-1 font-medium">{request.rejectionReason}</p>
                       </div>
                     )}
                   </div>
@@ -397,7 +397,7 @@ export function RegularizationView() {
                   <div>
                     <p className="text-sm font-medium">Request Submitted</p>
                     <p className="text-xs text-slate-500">
-                      {new Date(request.created_at).toLocaleString()}
+                      {new Date(request.createdAt).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -414,8 +414,8 @@ export function RegularizationView() {
                     <div>
                       <p className="text-sm font-medium">{request.status}</p>
                       <p className="text-xs text-slate-500">
-                        {request.approved_at && new Date(request.approved_at).toLocaleString()}
-                        {request.rejected_at && new Date(request.rejected_at).toLocaleString()}
+                        {request.approvedAt && new Date(request.approvedAt).toLocaleString()}
+                        {request.rejectedAt && new Date(request.rejectedAt).toLocaleString()}
                       </p>
                     </div>
                   </div>

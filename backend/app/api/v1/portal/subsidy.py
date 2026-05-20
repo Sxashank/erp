@@ -18,9 +18,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.deps import get_db, get_db_with_tenant
+from app.api.deps import get_db
 from app.api.v1.lending.iif.claims import _report_to_csv
-from app.api.v1.portal.auth import get_portal_user
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.core.exceptions import NotFoundException
 from app.models.lending.iif.loan_subvention_enrollment import (
     LoanSubventionEnrollment,
@@ -75,7 +75,7 @@ async def list_claims(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200, alias="pageSize"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> BorrowerClaimsResponse:
     loan = await assert_loan_access(user, loan_account_id, db)
 
@@ -134,7 +134,7 @@ async def claim_report_csv(
     loan_account_id: UUID,
     claim_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> StreamingResponse:
     """Pre-filter by entity-access, then stream the CSV the admin uses."""
     loan = await assert_loan_access(user, loan_account_id, db)

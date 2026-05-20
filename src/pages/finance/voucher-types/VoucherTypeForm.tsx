@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -31,6 +32,7 @@ import { logger } from "@/lib/logger";
 export function VoucherTypeForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const isEdit = Boolean(id);
 
   const [loading, setLoading] = useState(false);
@@ -55,7 +57,7 @@ export function VoucherTypeForm() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
     } catch (error) {
@@ -103,19 +105,30 @@ export function VoucherTypeForm() {
   const onSubmit = async (data: VoucherTypeCreate | VoucherTypeUpdate) => {
     try {
       setSubmitting(true);
-      // Set approval_levels to 0 if not required
-      const submitData = {
-        ...data,
+      // Strip empty/whitespace strings + normalise approval_levels.
+      const submitData: Record<string, unknown> = {
         approval_levels: data.requires_approval ? data.approval_levels || 1 : 0,
       };
+      for (const [key, value] of Object.entries(data)) {
+        if (key === 'approval_levels') continue;
+        if (typeof value === 'string' && value.trim() === '') continue;
+        submitData[key] = value;
+      }
       if (isEdit && id) {
         await voucherTypesApi.update(id, submitData);
+        toast({ title: 'Voucher type updated', description: 'Changes saved successfully.' });
       } else {
         await voucherTypesApi.create(submitData);
+        toast({ title: 'Voucher type created', description: 'The voucher type was created successfully.' });
       }
       navigate('/admin/finance/voucher-types');
     } catch (error) {
       logger.error('Failed to save voucher type:', error);
+      toast({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Could not save the voucher type.',
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }

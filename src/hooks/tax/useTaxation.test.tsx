@@ -160,7 +160,6 @@ describe('tax hooks', () => {
             stateCode: '27',
             stateName: 'Maharashtra',
             registrationType: 'REGULAR',
-            organizationId: 'org-1',
             isActive: true,
             isEInvoiceEnabled: true,
             isEWayBillEnabled: false,
@@ -169,7 +168,7 @@ describe('tax hooks', () => {
       },
     } as any);
 
-    const { result } = renderHook(() => useGSTRegistrations({ organizationId: 'org-1' }), { wrapper });
+    const { result } = renderHook(() => useGSTRegistrations(), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.items[0]).toMatchObject({
@@ -221,7 +220,6 @@ describe('tax hooks', () => {
           {
             id: 'entry-1',
             tdsSectionId: 'sec-1',
-            organizationId: 'org-1',
             deducteeName: 'Vendor One',
             deducteePan: 'ABCDE1234F',
             deducteeType: 'COMPANY',
@@ -242,7 +240,7 @@ describe('tax hooks', () => {
       },
     } as any);
 
-    const { result } = renderHook(() => useTDSEntries({ organizationId: 'org-1' }), { wrapper });
+    const { result } = renderHook(() => useTDSEntries({}), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.items[0]).toMatchObject({
@@ -297,10 +295,7 @@ describe('tax hooks', () => {
       ],
     } as any);
 
-    const { result } = renderHook(
-      () => useTDSCertificates('org-1', '2025-26', 'Q1'),
-      { wrapper },
-    );
+    const { result } = renderHook(() => useTDSCertificates('2025-26', 'Q1'), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.[0]).toMatchObject({

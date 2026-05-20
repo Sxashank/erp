@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
+from app.database import clear_tenant_context, set_tenant_context
 from app.config import settings
 from app.core.rate_limit import portal_generic_limit, portal_login_limit
 from app.models.masters.organization import Organization
@@ -187,6 +188,7 @@ async def get_portal_user(
         )
 
     token = authorization[7:]
+    await clear_tenant_context(db)
     service = PortalAuthService(db)
     user = await service.validate_session(token)
 
@@ -210,6 +212,16 @@ async def get_portal_user(
         )
 
     return user
+
+
+async def get_portal_db_with_tenant(
+    db: AsyncSession = Depends(get_db),
+    user: PortalUser = Depends(get_portal_user),
+) -> AsyncSession:
+    """Return a DB session scoped to the authenticated portal user's tenant."""
+
+    await set_tenant_context(db, user.organization_id)
+    return db
 
 
 async def _resolve_portal_organization_id(

@@ -101,7 +101,6 @@ export function ItcReconciliation() {
   const [activeTab, setActiveTab] = useState('summary');
 
   const registrationsQuery = useGSTRegistrations({
-    organizationId: activeOrganizationId ?? undefined,
     includeInactive: false,
     pageSize: 100,
   });

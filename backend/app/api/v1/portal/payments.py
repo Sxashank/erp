@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, status, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.models.portal.enums import PaymentMode, MandateFrequency
 from app.services.portal.payment_service import PortalPaymentService
 from app.core.exceptions import BadRequestException, NotFoundException
@@ -168,7 +168,7 @@ class PaginatedResponse(BaseModel):
 async def initiate_payment(
     request: PaymentInitiateRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Initiate a payment.
@@ -202,7 +202,7 @@ async def initiate_payment(
 async def payment_callback(
     gateway: str,
     request: Request,
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Handle payment gateway callback.
@@ -233,7 +233,7 @@ async def payment_callback(
 async def get_payment_status(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get payment request status."""
     service = PortalPaymentService(db)
@@ -265,7 +265,7 @@ async def get_payment_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get payment transaction history."""
     service = PortalPaymentService(db)
@@ -299,7 +299,7 @@ async def get_payment_history(
 )
 async def get_saved_methods(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get saved payment methods."""
     service = PortalPaymentService(db)
@@ -317,7 +317,7 @@ async def get_saved_methods(
 async def save_payment_method(
     request: SavePaymentMethodRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Save a payment method for quick payments."""
     service = PortalPaymentService(db)
@@ -347,7 +347,7 @@ async def save_payment_method(
 async def delete_saved_method(
     method_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Delete a saved payment method."""
     service = PortalPaymentService(db)
@@ -374,7 +374,7 @@ async def delete_saved_method(
 async def setup_mandate(
     request: MandateSetupRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Setup NACH or UPI Autopay mandate.
@@ -401,7 +401,7 @@ async def setup_mandate(
 async def get_mandates(
     loan_account_id: Optional[UUID] = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get all mandates for the user."""
     service = PortalPaymentService(db)
@@ -421,7 +421,7 @@ async def get_mandates(
 async def get_mandate_status(
     mandate_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get mandate status and details."""
     service = PortalPaymentService(db)
@@ -441,7 +441,7 @@ async def cancel_mandate(
     mandate_id: UUID,
     reason: str = "Customer requested",
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Cancel an active mandate."""
     service = PortalPaymentService(db)

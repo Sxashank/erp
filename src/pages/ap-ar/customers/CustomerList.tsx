@@ -63,15 +63,15 @@ interface Customer {
   id: string;
   code: string;
   name: string;
-  display_name: string | null;
-  customer_type: string;
+  displayName: string | null;
+  customerType: string;
   gstin: string | null;
   pan: string | null;
-  billing_city: string | null;
-  billing_state_code: string | null;
-  current_balance: number;
-  current_balance_type: string | null;
-  is_active: boolean;
+  billingCity: string | null;
+  billingStateCode: string | null;
+  currentBalance: number;
+  currentBalanceType: string | null;
+  isActive: boolean;
 }
 
 type CustomerListParams = Parameters<typeof customersApi.list>[0];
@@ -109,7 +109,7 @@ export function CustomerList() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page: 1, page_size: 100 });
+      const response = await organizationsApi.list({ page: 1, pageSize: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0) {
@@ -130,7 +130,6 @@ export function CustomerList() {
     setLoading(true);
     try {
       const params: CustomerListParams = {
-        organization_id: selectedOrgId,
         page,
         page_size: pageSize,
         include_inactive: includeInactive,
@@ -298,40 +297,40 @@ export function CustomerList() {
                   <TableCell>
                     <div>
                       <div className="font-medium">{customer.name}</div>
-                      {customer.display_name && customer.display_name !== customer.name && (
-                        <div className="text-sm text-slate-500">{customer.display_name}</div>
+                      {customer.displayName && customer.displayName !== customer.name && (
+                        <div className="text-sm text-slate-500">{customer.displayName}</div>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      className={customerTypeColors[customer.customer_type] || 'bg-gray-100'}
+                      className={customerTypeColors[customer.customerType] || 'bg-gray-100'}
                     >
-                      {customerTypeLabels[customer.customer_type] || customer.customer_type}
+                      {customerTypeLabels[customer.customerType] || customer.customerType}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-sm">{customer.gstin || '-'}</TableCell>
                   <TableCell className="font-mono text-sm">{customer.pan || '-'}</TableCell>
                   <TableCell>
-                    {customer.billing_city || customer.billing_state_code ? (
+                    {customer.billingCity || customer.billingStateCode ? (
                       <div className="flex items-center gap-1 text-sm text-slate-600">
                         <MapPin className="h-3 w-3" />
-                        {[customer.billing_city, customer.billing_state_code].filter(Boolean).join(', ')}
+                        {[customer.billingCity, customer.billingStateCode].filter(Boolean).join(', ')}
                       </div>
                     ) : (
                       '-'
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    <AmountDisplay amount={Math.abs(customer.current_balance)} />
-                    {customer.current_balance !== 0 && customer.current_balance_type ? (
-                      <span className="ml-1">{customer.current_balance_type}</span>
+                    <AmountDisplay amount={Math.abs(customer.currentBalance)} />
+                    {customer.currentBalance !== 0 && customer.currentBalanceType ? (
+                      <span className="ml-1">{customer.currentBalanceType}</span>
                     ) : null}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={customer.is_active ? 'default' : 'secondary'}>
-                      {customer.is_active ? 'Active' : 'Inactive'}
+                    <Badge variant={customer.isActive ? 'default' : 'secondary'}>
+                      {customer.isActive ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
                   <TableCell>

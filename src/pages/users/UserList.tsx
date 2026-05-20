@@ -34,7 +34,7 @@ export function UserList() {
   const fetchUsers = async (page = 1) => {
     try {
       setLoading(true);
-      const response = await usersApi.list({ page, page_size: 10, include_inactive: true });
+      const response = await usersApi.list({ page, pageSize: 10, includeInactive: true });
       const data: PaginatedResponse<User> = response.data;
       setUsers(data.items);
       setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });

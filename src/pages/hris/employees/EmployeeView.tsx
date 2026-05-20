@@ -35,145 +35,145 @@ import { hrisApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface Employee {
   id: string;
-  employee_code: string;
+  employeeCode: string;
   salutation?: string;
-  first_name: string;
-  middle_name?: string;
-  last_name: string;
-  full_name: string;
-  date_of_birth?: string;
+  firstName: string;
+  middleName?: string;
+  lastName: string;
+  fullName: string;
+  dateOfBirth?: string;
   gender?: string;
-  blood_group?: string;
-  marital_status?: string;
-  wedding_anniversary?: string;
+  bloodGroup?: string;
+  maritalStatus?: string;
+  weddingAnniversary?: string;
   nationality?: string;
-  personal_email?: string;
-  personal_mobile: string;
-  alternate_mobile?: string;
-  official_email?: string;
-  official_mobile?: string;
-  current_address_line1?: string;
-  current_address_line2?: string;
-  current_city?: string;
-  current_state?: string;
-  current_country?: string;
-  current_pincode?: string;
-  permanent_address_line1?: string;
-  permanent_address_line2?: string;
-  permanent_city?: string;
-  permanent_state?: string;
-  permanent_country?: string;
-  permanent_pincode?: string;
-  emergency_contact_name?: string;
-  emergency_contact_relation?: string;
-  emergency_contact_phone?: string;
-  organization_id: string;
-  organization_name?: string;
-  department_id?: string;
-  department_name?: string;
-  designation_id?: string;
-  designation_name?: string;
-  reporting_manager_id?: string;
-  reporting_manager_name?: string;
-  employment_type: string;
-  employment_status: string;
-  date_of_joining: string;
-  date_of_confirmation?: string;
-  probation_end_date?: string;
-  date_of_leaving?: string;
-  leaving_reason?: string;
-  notice_period_days?: number;
-  shift_id?: string;
-  shift_name?: string;
-  work_location?: string;
-  profile_photo_url?: string;
+  personalEmail?: string;
+  personalMobile: string;
+  alternateMobile?: string;
+  officialEmail?: string;
+  officialMobile?: string;
+  currentAddressLine1?: string;
+  currentAddressLine2?: string;
+  currentCity?: string;
+  currentState?: string;
+  currentCountry?: string;
+  currentPincode?: string;
+  permanentAddressLine1?: string;
+  permanentAddressLine2?: string;
+  permanentCity?: string;
+  permanentState?: string;
+  permanentCountry?: string;
+  permanentPincode?: string;
+  emergencyContactName?: string;
+  emergencyContactRelation?: string;
+  emergencyContactPhone?: string;
+  organizationId: string;
+  organizationName?: string;
+  departmentId?: string;
+  departmentName?: string;
+  designationId?: string;
+  designationName?: string;
+  reportingManagerId?: string;
+  reportingManagerName?: string;
+  employmentType: string;
+  employmentStatus: string;
+  dateOfJoining: string;
+  dateOfConfirmation?: string;
+  probationEndDate?: string;
+  dateOfLeaving?: string;
+  leavingReason?: string;
+  noticePeriodDays?: number;
+  shiftId?: string;
+  shiftName?: string;
+  workLocation?: string;
+  profilePhotoUrl?: string;
   remarks?: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface EmployeeDocument {
   id: string;
-  document_type: string;
-  document_number: string;
-  issue_date?: string;
-  expiry_date?: string;
-  issuing_authority?: string;
-  document_url?: string;
-  is_verified: boolean;
+  documentType: string;
+  documentNumber: string;
+  issueDate?: string;
+  expiryDate?: string;
+  issuingAuthority?: string;
+  documentUrl?: string;
+  isVerified: boolean;
 }
 
 interface EmployeeFamily {
   id: string;
   name: string;
   relation: string;
-  date_of_birth?: string;
+  dateOfBirth?: string;
   occupation?: string;
-  contact_number?: string;
-  is_dependent: boolean;
-  is_nominee: boolean;
-  nominee_percentage?: number;
+  contactNumber?: string;
+  isDependent: boolean;
+  isNominee: boolean;
+  nomineePercentage?: number;
 }
 
 interface EmployeeBankAccount {
   id: string;
-  bank_name: string;
-  branch_name?: string;
-  account_number: string;
-  ifsc_code: string;
-  account_type?: string;
-  is_primary: boolean;
+  bankName: string;
+  branchName?: string;
+  accountNumber: string;
+  ifscCode: string;
+  accountType?: string;
+  isPrimary: boolean;
 }
 
 interface EmployeeEducation {
   id: string;
-  education_level: string;
-  degree_name: string;
-  institution_name: string;
-  university_board?: string;
+  educationLevel: string;
+  degreeName: string;
+  institutionName: string;
+  universityBoard?: string;
   specialization?: string;
-  start_year?: number;
-  end_year?: number;
-  percentage_cgpa?: number;
-  is_highest_qualification: boolean;
+  startYear?: number;
+  endYear?: number;
+  percentageCgpa?: number;
+  isHighestQualification: boolean;
 }
 
 interface EmployeeExperience {
   id: string;
-  company_name: string;
+  companyName: string;
   designation: string;
   department?: string;
   location?: string;
-  from_date: string;
-  to_date?: string;
-  is_current: boolean;
+  fromDate: string;
+  toDate?: string;
+  isCurrent: boolean;
   responsibilities?: string;
-  leaving_reason?: string;
-  last_ctc?: number;
+  leavingReason?: string;
+  lastCtc?: number;
 }
 
 interface EmployeeStatutory {
   id: string;
-  pan_number?: string;
-  aadhaar_number?: string;
-  uan_number?: string;
-  pf_number?: string;
-  esi_number?: string;
-  pf_joining_date?: string;
-  is_pf_applicable: boolean;
-  is_esi_applicable: boolean;
-  is_pt_applicable: boolean;
-  pt_state?: string;
+  panNumber?: string;
+  aadhaarNumber?: string;
+  uanNumber?: string;
+  pfNumber?: string;
+  esiNumber?: string;
+  pfJoiningDate?: string;
+  isPfApplicable: boolean;
+  isEsiApplicable: boolean;
+  isPtApplicable: boolean;
+  ptState?: string;
 }
 
 interface LifecycleEvent {
   id: string;
-  event_type: string;
-  event_date: string;
-  effective_date: string;
+  eventType: string;
+  eventDate: string;
+  effectiveDate: string;
   description?: string;
   remarks?: string;
-  created_at: string;
+  createdAt: string;
 }
 
 const getStatusBadgeColor = (status: string) => {
@@ -263,16 +263,16 @@ export function EmployeeView() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={employee.full_name}
-        subtitle={`${employee.employee_code} • ${employee.designation_name || 'No Designation'}`}
+        title={employee.fullName}
+        subtitle={`${employee.employeeCode} • ${employee.designationName || 'No Designation'}`}
         breadcrumbs={[
           { label: 'Employees', to: '/admin/hris/employees' },
-          { label: employee.employee_code },
+          { label: employee.employeeCode },
         ]}
         actions={
           <div className="flex items-center gap-2">
-            <Badge className={getStatusBadgeColor(employee.employment_status)}>
-              {employee.employment_status}
+            <Badge className={getStatusBadgeColor(employee.employmentStatus)}>
+              {employee.employmentStatus}
             </Badge>
             <Button onClick={() => navigate(`/admin/hris/employees/${id}/edit`)}>
               <Edit className="mr-2 h-4 w-4" />
@@ -292,7 +292,7 @@ export function EmployeeView() {
               </div>
               <div>
                 <p className="text-xs text-slate-500">Department</p>
-                <p className="font-medium">{employee.department_name || '-'}</p>
+                <p className="font-medium">{employee.departmentName || '-'}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -302,7 +302,7 @@ export function EmployeeView() {
               <div>
                 <p className="text-xs text-slate-500">Joining Date</p>
                 <p className="font-medium">
-                  <DateDisplay date={employee.date_of_joining} />
+                  <DateDisplay date={employee.dateOfJoining} />
                 </p>
               </div>
             </div>
@@ -312,7 +312,7 @@ export function EmployeeView() {
               </div>
               <div>
                 <p className="text-xs text-slate-500">Mobile</p>
-                <p className="font-medium">{employee.personal_mobile}</p>
+                <p className="font-medium">{employee.personalMobile}</p>
               </div>
             </div>
             <div className="flex items-center gap-3">
@@ -322,7 +322,7 @@ export function EmployeeView() {
               <div>
                 <p className="text-xs text-slate-500">Email</p>
                 <p className="font-medium">
-                  {employee.official_email || employee.personal_email || '-'}
+                  {employee.officialEmail || employee.personalEmail || '-'}
                 </p>
               </div>
             </div>
@@ -387,11 +387,11 @@ export function EmployeeView() {
                   <div className="grid gap-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-slate-500">Full Name</span>
-                      <span className="font-medium">{employee.full_name}</span>
+                      <span className="font-medium">{employee.fullName}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Date of Birth</span>
-                      <DateDisplay date={employee.date_of_birth} className="font-medium" />
+                      <DateDisplay date={employee.dateOfBirth} className="font-medium" />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Gender</span>
@@ -399,11 +399,11 @@ export function EmployeeView() {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Blood Group</span>
-                      <span className="font-medium">{employee.blood_group || '-'}</span>
+                      <span className="font-medium">{employee.bloodGroup || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Marital Status</span>
-                      <span className="font-medium">{employee.marital_status || '-'}</span>
+                      <span className="font-medium">{employee.maritalStatus || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Nationality</span>
@@ -416,23 +416,23 @@ export function EmployeeView() {
                   <div className="grid gap-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-slate-500">Personal Email</span>
-                      <span className="font-medium">{employee.personal_email || '-'}</span>
+                      <span className="font-medium">{employee.personalEmail || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Personal Mobile</span>
-                      <span className="font-medium">{employee.personal_mobile}</span>
+                      <span className="font-medium">{employee.personalMobile}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Alternate Mobile</span>
-                      <span className="font-medium">{employee.alternate_mobile || '-'}</span>
+                      <span className="font-medium">{employee.alternateMobile || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Emergency Contact</span>
-                      <span className="font-medium">{employee.emergency_contact_name || '-'}</span>
+                      <span className="font-medium">{employee.emergencyContactName || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Emergency Phone</span>
-                      <span className="font-medium">{employee.emergency_contact_phone || '-'}</span>
+                      <span className="font-medium">{employee.emergencyContactPhone || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -445,25 +445,25 @@ export function EmployeeView() {
                     Current Address
                   </h4>
                   <p className="text-sm text-slate-600">
-                    {employee.current_address_line1 || '-'}
-                    {employee.current_address_line2 && (
+                    {employee.currentAddressLine1 || '-'}
+                    {employee.currentAddressLine2 && (
                       <>
                         <br />
-                        {employee.current_address_line2}
+                        {employee.currentAddressLine2}
                       </>
                     )}
-                    {employee.current_city && (
+                    {employee.currentCity && (
                       <>
                         <br />
-                        {employee.current_city}
+                        {employee.currentCity}
                       </>
                     )}
-                    {employee.current_state && <>, {employee.current_state}</>}
-                    {employee.current_pincode && <> - {employee.current_pincode}</>}
-                    {employee.current_country && (
+                    {employee.currentState && <>, {employee.currentState}</>}
+                    {employee.currentPincode && <> - {employee.currentPincode}</>}
+                    {employee.currentCountry && (
                       <>
                         <br />
-                        {employee.current_country}
+                        {employee.currentCountry}
                       </>
                     )}
                   </p>
@@ -474,25 +474,25 @@ export function EmployeeView() {
                     Permanent Address
                   </h4>
                   <p className="text-sm text-slate-600">
-                    {employee.permanent_address_line1 || '-'}
-                    {employee.permanent_address_line2 && (
+                    {employee.permanentAddressLine1 || '-'}
+                    {employee.permanentAddressLine2 && (
                       <>
                         <br />
-                        {employee.permanent_address_line2}
+                        {employee.permanentAddressLine2}
                       </>
                     )}
-                    {employee.permanent_city && (
+                    {employee.permanentCity && (
                       <>
                         <br />
-                        {employee.permanent_city}
+                        {employee.permanentCity}
                       </>
                     )}
-                    {employee.permanent_state && <>, {employee.permanent_state}</>}
-                    {employee.permanent_pincode && <> - {employee.permanent_pincode}</>}
-                    {employee.permanent_country && (
+                    {employee.permanentState && <>, {employee.permanentState}</>}
+                    {employee.permanentPincode && <> - {employee.permanentPincode}</>}
+                    {employee.permanentCountry && (
                       <>
                         <br />
-                        {employee.permanent_country}
+                        {employee.permanentCountry}
                       </>
                     )}
                   </p>
@@ -518,27 +518,27 @@ export function EmployeeView() {
                   <div className="grid gap-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-slate-500">Organization</span>
-                      <span className="font-medium">{employee.organization_name || '-'}</span>
+                      <span className="font-medium">{employee.organizationName || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Department</span>
-                      <span className="font-medium">{employee.department_name || '-'}</span>
+                      <span className="font-medium">{employee.departmentName || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Designation</span>
-                      <span className="font-medium">{employee.designation_name || '-'}</span>
+                      <span className="font-medium">{employee.designationName || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Reporting Manager</span>
-                      <span className="font-medium">{employee.reporting_manager_name || '-'}</span>
+                      <span className="font-medium">{employee.reportingManagerName || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Work Location</span>
-                      <span className="font-medium">{employee.work_location || '-'}</span>
+                      <span className="font-medium">{employee.workLocation || '-'}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Shift</span>
-                      <span className="font-medium">{employee.shift_name || '-'}</span>
+                      <span className="font-medium">{employee.shiftName || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -547,29 +547,29 @@ export function EmployeeView() {
                   <div className="grid gap-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-slate-500">Employee Code</span>
-                      <span className="font-medium">{employee.employee_code}</span>
+                      <span className="font-medium">{employee.employeeCode}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Employment Type</span>
-                      <Badge variant="outline">{employee.employment_type}</Badge>
+                      <Badge variant="outline">{employee.employmentType}</Badge>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Employment Status</span>
-                      <Badge className={getStatusBadgeColor(employee.employment_status)}>
-                        {employee.employment_status}
+                      <Badge className={getStatusBadgeColor(employee.employmentStatus)}>
+                        {employee.employmentStatus}
                       </Badge>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Date of Joining</span>
-                      <DateDisplay date={employee.date_of_joining} className="font-medium" />
+                      <DateDisplay date={employee.dateOfJoining} className="font-medium" />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Confirmation Date</span>
-                      <DateDisplay date={employee.date_of_confirmation} className="font-medium" />
+                      <DateDisplay date={employee.dateOfConfirmation} className="font-medium" />
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Notice Period (Days)</span>
-                      <span className="font-medium">{employee.notice_period_days || '-'}</span>
+                      <span className="font-medium">{employee.noticePeriodDays || '-'}</span>
                     </div>
                   </div>
                 </div>
@@ -580,11 +580,11 @@ export function EmployeeView() {
                 <div className="grid gap-3 text-sm md:grid-cols-2">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Official Email</span>
-                    <span className="font-medium">{employee.official_email || '-'}</span>
+                    <span className="font-medium">{employee.officialEmail || '-'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Official Mobile</span>
-                    <span className="font-medium">{employee.official_mobile || '-'}</span>
+                    <span className="font-medium">{employee.officialMobile || '-'}</span>
                   </div>
                 </div>
               </div>
@@ -618,17 +618,17 @@ export function EmployeeView() {
                   <TableBody>
                     {documents.map((doc) => (
                       <TableRow key={doc.id}>
-                        <TableCell className="font-medium">{doc.document_type}</TableCell>
-                        <TableCell>{doc.document_number}</TableCell>
+                        <TableCell className="font-medium">{doc.documentType}</TableCell>
+                        <TableCell>{doc.documentNumber}</TableCell>
                         <TableCell>
-                          <DateDisplay date={doc.issue_date} />
+                          <DateDisplay date={doc.issueDate} />
                         </TableCell>
                         <TableCell>
-                          <DateDisplay date={doc.expiry_date} />
+                          <DateDisplay date={doc.expiryDate} />
                         </TableCell>
                         <TableCell>
-                          <Badge variant={doc.is_verified ? 'default' : 'secondary'}>
-                            {doc.is_verified ? 'Verified' : 'Pending'}
+                          <Badge variant={doc.isVerified ? 'default' : 'secondary'}>
+                            {doc.isVerified ? 'Verified' : 'Pending'}
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -670,17 +670,17 @@ export function EmployeeView() {
                         <TableCell className="font-medium">{member.name}</TableCell>
                         <TableCell>{member.relation}</TableCell>
                         <TableCell>
-                          <DateDisplay date={member.date_of_birth} />
+                          <DateDisplay date={member.dateOfBirth} />
                         </TableCell>
-                        <TableCell>{member.contact_number || '-'}</TableCell>
+                        <TableCell>{member.contactNumber || '-'}</TableCell>
                         <TableCell>
-                          <Badge variant={member.is_dependent ? 'default' : 'secondary'}>
-                            {member.is_dependent ? 'Yes' : 'No'}
+                          <Badge variant={member.isDependent ? 'default' : 'secondary'}>
+                            {member.isDependent ? 'Yes' : 'No'}
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          {member.is_nominee ? (
-                            <Badge variant="default">{member.nominee_percentage}%</Badge>
+                          {member.isNominee ? (
+                            <Badge variant="default">{member.nomineePercentage}%</Badge>
                           ) : (
                             <Badge variant="secondary">No</Badge>
                           )}
@@ -725,24 +725,24 @@ export function EmployeeView() {
                       <TableRow key={edu.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            {edu.education_level}
-                            {edu.is_highest_qualification && (
+                            {edu.educationLevel}
+                            {edu.isHighestQualification && (
                               <Badge variant="outline" className="text-xs">
                                 Highest
                               </Badge>
                             )}
                           </div>
                         </TableCell>
-                        <TableCell className="font-medium">{edu.degree_name}</TableCell>
-                        <TableCell>{edu.institution_name}</TableCell>
+                        <TableCell className="font-medium">{edu.degreeName}</TableCell>
+                        <TableCell>{edu.institutionName}</TableCell>
                         <TableCell>{edu.specialization || '-'}</TableCell>
                         <TableCell>
-                          {edu.start_year && edu.end_year
-                            ? `${edu.start_year} - ${edu.end_year}`
+                          {edu.startYear && edu.endYear
+                            ? `${edu.startYear} - ${edu.endYear}`
                             : '-'}
                         </TableCell>
                         <TableCell>
-                          {edu.percentage_cgpa ? `${edu.percentage_cgpa}%` : '-'}
+                          {edu.percentageCgpa ? `${edu.percentageCgpa}%` : '-'}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -781,14 +781,14 @@ export function EmployeeView() {
                   <TableBody>
                     {experience.map((exp) => (
                       <TableRow key={exp.id}>
-                        <TableCell className="font-medium">{exp.company_name}</TableCell>
+                        <TableCell className="font-medium">{exp.companyName}</TableCell>
                         <TableCell>{exp.designation}</TableCell>
                         <TableCell>{exp.department || '-'}</TableCell>
                         <TableCell>
-                          <DateDisplay date={exp.from_date} /> - {exp.is_current ? 'Present' : <DateDisplay date={exp.to_date} />}
+                          <DateDisplay date={exp.fromDate} /> - {exp.isCurrent ? 'Present' : <DateDisplay date={exp.toDate} />}
                         </TableCell>
                         <TableCell>
-                          {exp.last_ctc ? `₹${exp.last_ctc.toLocaleString()}` : '-'}
+                          {exp.lastCtc ? `₹${exp.lastCtc.toLocaleString()}` : '-'}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -826,14 +826,14 @@ export function EmployeeView() {
                   <TableBody>
                     {bankAccounts.map((account) => (
                       <TableRow key={account.id}>
-                        <TableCell className="font-medium">{account.bank_name}</TableCell>
-                        <TableCell>{account.branch_name || '-'}</TableCell>
-                        <TableCell>{account.account_number}</TableCell>
-                        <TableCell>{account.ifsc_code}</TableCell>
-                        <TableCell>{account.account_type || '-'}</TableCell>
+                        <TableCell className="font-medium">{account.bankName}</TableCell>
+                        <TableCell>{account.branchName || '-'}</TableCell>
+                        <TableCell>{account.accountNumber}</TableCell>
+                        <TableCell>{account.ifscCode}</TableCell>
+                        <TableCell>{account.accountType || '-'}</TableCell>
                         <TableCell>
-                          <Badge variant={account.is_primary ? 'default' : 'secondary'}>
-                            {account.is_primary ? 'Primary' : 'Secondary'}
+                          <Badge variant={account.isPrimary ? 'default' : 'secondary'}>
+                            {account.isPrimary ? 'Primary' : 'Secondary'}
                           </Badge>
                         </TableCell>
                       </TableRow>
@@ -866,11 +866,11 @@ export function EmployeeView() {
                     <div className="grid gap-3 text-sm">
                       <div className="flex justify-between">
                         <span className="text-slate-500">PAN Number</span>
-                        <span className="font-medium">{statutory.pan_number || '-'}</span>
+                        <span className="font-medium">{statutory.panNumber || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">Aadhaar Number</span>
-                        <span className="font-medium">{statutory.aadhaar_number || '-'}</span>
+                        <span className="font-medium">{statutory.aadhaarNumber || '-'}</span>
                       </div>
                     </div>
                   </div>
@@ -879,38 +879,38 @@ export function EmployeeView() {
                     <div className="grid gap-3 text-sm">
                       <div className="flex justify-between">
                         <span className="text-slate-500">UAN Number</span>
-                        <span className="font-medium">{statutory.uan_number || '-'}</span>
+                        <span className="font-medium">{statutory.uanNumber || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">PF Number</span>
-                        <span className="font-medium">{statutory.pf_number || '-'}</span>
+                        <span className="font-medium">{statutory.pfNumber || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">PF Applicable</span>
-                        <Badge variant={statutory.is_pf_applicable ? 'default' : 'secondary'}>
-                          {statutory.is_pf_applicable ? 'Yes' : 'No'}
+                        <Badge variant={statutory.isPfApplicable ? 'default' : 'secondary'}>
+                          {statutory.isPfApplicable ? 'Yes' : 'No'}
                         </Badge>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">ESI Number</span>
-                        <span className="font-medium">{statutory.esi_number || '-'}</span>
+                        <span className="font-medium">{statutory.esiNumber || '-'}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">ESI Applicable</span>
-                        <Badge variant={statutory.is_esi_applicable ? 'default' : 'secondary'}>
-                          {statutory.is_esi_applicable ? 'Yes' : 'No'}
+                        <Badge variant={statutory.isEsiApplicable ? 'default' : 'secondary'}>
+                          {statutory.isEsiApplicable ? 'Yes' : 'No'}
                         </Badge>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-500">PT Applicable</span>
-                        <Badge variant={statutory.is_pt_applicable ? 'default' : 'secondary'}>
-                          {statutory.is_pt_applicable ? 'Yes' : 'No'}
+                        <Badge variant={statutory.isPtApplicable ? 'default' : 'secondary'}>
+                          {statutory.isPtApplicable ? 'Yes' : 'No'}
                         </Badge>
                       </div>
-                      {statutory.pt_state && (
+                      {statutory.ptState && (
                         <div className="flex justify-between">
                           <span className="text-slate-500">PT State</span>
-                          <span className="font-medium">{statutory.pt_state}</span>
+                          <span className="font-medium">{statutory.ptState}</span>
                         </div>
                       )}
                     </div>
@@ -950,10 +950,10 @@ export function EmployeeView() {
                     {lifecycle.map((event) => (
                       <TableRow key={event.id}>
                         <TableCell>
-                          <Badge variant="outline">{event.event_type}</Badge>
+                          <Badge variant="outline">{event.eventType}</Badge>
                         </TableCell>
-                        <TableCell><DateDisplay date={event.event_date} /></TableCell>
-                        <TableCell><DateDisplay date={event.effective_date} /></TableCell>
+                        <TableCell><DateDisplay date={event.eventDate} /></TableCell>
+                        <TableCell><DateDisplay date={event.effectiveDate} /></TableCell>
                         <TableCell>{event.description || '-'}</TableCell>
                         <TableCell>{event.remarks || '-'}</TableCell>
                       </TableRow>

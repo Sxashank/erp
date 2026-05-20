@@ -47,23 +47,23 @@ import type {
 } from '@/services/workflow/workflowApi';
 
 interface ApproverFormValue {
-  approver_type: ApproverType;
-  user_id?: string;
-  role_id?: string;
+  approverType: ApproverType;
+  userId?: string;
+  roleId?: string;
   designation?: string;
-  is_mandatory: boolean;
-  can_self_approve: boolean;
+  isMandatory: boolean;
+  canSelfApprove: boolean;
 }
 
 interface StepFormValue {
-  step_number: number;
+  stepNumber: number;
   name: string;
   description?: string;
-  step_type: WorkflowStepType;
-  approval_mode: ApprovalMode;
-  sla_hours?: number | null;
-  reminder_hours?: number | null;
-  allow_delegation: boolean;
+  stepType: WorkflowStepType;
+  approvalMode: ApprovalMode;
+  slaHours?: number | null;
+  reminderHours?: number | null;
+  allowDelegation: boolean;
   approvers: ApproverFormValue[];
 }
 
@@ -71,13 +71,13 @@ interface WorkflowFormData {
   code: string;
   name: string;
   description: string;
-  entity_type: WorkflowEntityType | '';
-  is_default: boolean;
+  entityType: WorkflowEntityType | '';
+  isDefault: boolean;
   priority: number;
-  allow_parallel_branches: boolean;
-  require_comments_on_reject: boolean;
-  notify_initiator_on_complete: boolean;
-  allow_withdrawal: boolean;
+  allowParallelBranches: boolean;
+  requireCommentsOnReject: boolean;
+  notifyInitiatorOnComplete: boolean;
+  allowWithdrawal: boolean;
   steps: StepFormValue[];
 }
 
@@ -127,11 +127,11 @@ const APPROVER_TYPES: { value: ApproverType; label: string }[] = [
 ];
 
 const DEFAULT_STEP: StepFormValue = {
-  step_number: 1,
+  stepNumber: 1,
   name: 'Step 1',
-  step_type: 'APPROVAL',
-  approval_mode: 'SEQUENTIAL',
-  allow_delegation: false,
+  stepType: 'APPROVAL',
+  approvalMode: 'SEQUENTIAL',
+  allowDelegation: false,
   approvers: [],
 };
 
@@ -161,13 +161,13 @@ export function WorkflowDefinitionForm(): JSX.Element {
       code: '',
       name: '',
       description: '',
-      entity_type: '',
-      is_default: false,
+      entityType: '',
+      isDefault: false,
       priority: 0,
-      allow_parallel_branches: false,
-      require_comments_on_reject: true,
-      notify_initiator_on_complete: true,
-      allow_withdrawal: true,
+      allowParallelBranches: false,
+      requireCommentsOnReject: true,
+      notifyInitiatorOnComplete: true,
+      allowWithdrawal: true,
       steps: [DEFAULT_STEP],
     },
   });
@@ -187,29 +187,29 @@ export function WorkflowDefinitionForm(): JSX.Element {
       code: d.code,
       name: d.name,
       description: d.description ?? '',
-      entity_type: d.entity_type,
-      is_default: d.is_default,
+      entityType: d.entityType,
+      isDefault: d.isDefault,
       priority: d.priority,
-      allow_parallel_branches: d.allow_parallel_branches,
-      require_comments_on_reject: d.require_comments_on_reject,
-      notify_initiator_on_complete: d.notify_initiator_on_complete,
-      allow_withdrawal: d.allow_withdrawal,
+      allowParallelBranches: d.allowParallelBranches,
+      requireCommentsOnReject: d.requireCommentsOnReject,
+      notifyInitiatorOnComplete: d.notifyInitiatorOnComplete,
+      allowWithdrawal: d.allowWithdrawal,
       steps: d.steps.map((s) => ({
-        step_number: s.step_number,
+        stepNumber: s.stepNumber,
         name: s.name,
         description: s.description ?? '',
-        step_type: s.step_type,
-        approval_mode: s.approval_mode,
-        sla_hours: s.sla_hours,
-        reminder_hours: s.reminder_hours,
-        allow_delegation: s.allow_delegation,
-        approvers: s.approval_rules.map((r) => ({
-          approver_type: r.approver_type,
-          user_id: r.user_id ?? undefined,
-          role_id: r.role_id ?? undefined,
+        stepType: s.stepType,
+        approvalMode: s.approvalMode,
+        slaHours: s.slaHours,
+        reminderHours: s.reminderHours,
+        allowDelegation: s.allowDelegation,
+        approvers: s.approvalRules.map((r) => ({
+          approverType: r.approverType,
+          userId: r.userId ?? undefined,
+          roleId: r.roleId ?? undefined,
           designation: r.designation ?? undefined,
-          is_mandatory: r.is_mandatory,
-          can_self_approve: r.can_self_approve,
+          isMandatory: r.isMandatory,
+          canSelfApprove: r.canSelfApprove,
         })),
       })),
     });
@@ -225,7 +225,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
     const next = steps.length + 1;
     addStep({
       ...DEFAULT_STEP,
-      step_number: next,
+      stepNumber: next,
       name: `Step ${next}`,
     });
     setExpandedSteps((prev) => [...prev, steps.length]);
@@ -236,7 +236,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
     if (newIndex < 0 || newIndex >= steps.length) return;
     moveStep(index, newIndex);
     steps.forEach((_, i) => {
-      setValue(`steps.${i}.step_number`, i + 1);
+      setValue(`steps.${i}.stepNumber`, i + 1);
     });
   };
 
@@ -246,9 +246,9 @@ export function WorkflowDefinitionForm(): JSX.Element {
     setValue(path, [
       ...current,
       {
-        approver_type: 'ROLE',
-        is_mandatory: true,
-        can_self_approve: false,
+        approverType: 'ROLE',
+        isMandatory: true,
+        canSelfApprove: false,
       },
     ]);
   };
@@ -271,7 +271,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
       });
       return;
     }
-    if (!data.entity_type) {
+    if (!data.entityType) {
       toast({
         title: 'Entity type required',
         description: 'Pick the entity type this workflow applies to.',
@@ -287,12 +287,12 @@ export function WorkflowDefinitionForm(): JSX.Element {
           body: {
             name: data.name,
             description: data.description || null,
-            is_default: data.is_default,
+            isDefault: data.isDefault,
             priority: data.priority,
-            allow_parallel_branches: data.allow_parallel_branches,
-            require_comments_on_reject: data.require_comments_on_reject,
-            notify_initiator_on_complete: data.notify_initiator_on_complete,
-            allow_withdrawal: data.allow_withdrawal,
+            allowParallelBranches: data.allowParallelBranches,
+            requireCommentsOnReject: data.requireCommentsOnReject,
+            notifyInitiatorOnComplete: data.notifyInitiatorOnComplete,
+            allowWithdrawal: data.allowWithdrawal,
           },
         },
         {
@@ -310,34 +310,33 @@ export function WorkflowDefinitionForm(): JSX.Element {
     }
 
     const payload: WorkflowDefinitionCreate = {
-      organization_id: activeOrganizationId,
       name: data.name,
       code: data.code,
       description: data.description || null,
-      entity_type: data.entity_type,
-      is_default: data.is_default,
+      entityType: data.entityType,
+      isDefault: data.isDefault,
       priority: data.priority,
-      allow_parallel_branches: data.allow_parallel_branches,
-      require_comments_on_reject: data.require_comments_on_reject,
-      notify_initiator_on_complete: data.notify_initiator_on_complete,
-      allow_withdrawal: data.allow_withdrawal,
+      allowParallelBranches: data.allowParallelBranches,
+      requireCommentsOnReject: data.requireCommentsOnReject,
+      notifyInitiatorOnComplete: data.notifyInitiatorOnComplete,
+      allowWithdrawal: data.allowWithdrawal,
       steps: data.steps.map<WorkflowStepCreate>((s, idx) => ({
-        step_number: idx + 1,
+        stepNumber: idx + 1,
         name: s.name,
         description: s.description || null,
-        step_type: s.step_type,
-        approval_mode: s.approval_mode,
-        sla_hours: s.sla_hours ?? null,
-        reminder_hours: s.reminder_hours ?? null,
-        allow_delegation: s.allow_delegation,
-        approval_rules: s.approvers.map((a, ai) => ({
+        stepType: s.stepType,
+        approvalMode: s.approvalMode,
+        slaHours: s.slaHours ?? null,
+        reminderHours: s.reminderHours ?? null,
+        allowDelegation: s.allowDelegation,
+        approvalRules: s.approvers.map((a, ai) => ({
           sequence: ai + 1,
-          approver_type: a.approver_type,
-          user_id: a.user_id || null,
-          role_id: a.role_id || null,
+          approverType: a.approverType,
+          userId: a.userId || null,
+          roleId: a.roleId || null,
           designation: a.designation || null,
-          is_mandatory: a.is_mandatory,
-          can_self_approve: a.can_self_approve,
+          isMandatory: a.isMandatory,
+          canSelfApprove: a.canSelfApprove,
         })),
       })),
     };
@@ -470,10 +469,10 @@ export function WorkflowDefinitionForm(): JSX.Element {
 
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="entity_type">Entity Type *</Label>
+                    <Label htmlFor="entityType">Entity Type *</Label>
                     <Select
-                      value={watch('entity_type')}
-                      onValueChange={(v) => setValue('entity_type', v as WorkflowEntityType)}
+                      value={watch('entityType')}
+                      onValueChange={(v) => setValue('entityType', v as WorkflowEntityType)}
                       disabled={isEdit}
                     >
                       <SelectTrigger>
@@ -504,47 +503,47 @@ export function WorkflowDefinitionForm(): JSX.Element {
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="flex items-center space-x-2">
                     <Switch
-                      id="is_default"
-                      checked={watch('is_default')}
-                      onCheckedChange={(checked) => setValue('is_default', checked)}
+                      id="isDefault"
+                      checked={watch('isDefault')}
+                      onCheckedChange={(checked) => setValue('isDefault', checked)}
                     />
-                    <Label htmlFor="is_default">Default workflow for this entity type</Label>
+                    <Label htmlFor="isDefault">Default workflow for this entity type</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
-                      id="allow_parallel_branches"
-                      checked={watch('allow_parallel_branches')}
-                      onCheckedChange={(checked) => setValue('allow_parallel_branches', checked)}
+                      id="allowParallelBranches"
+                      checked={watch('allowParallelBranches')}
+                      onCheckedChange={(checked) => setValue('allowParallelBranches', checked)}
                     />
-                    <Label htmlFor="allow_parallel_branches">Allow parallel branches</Label>
+                    <Label htmlFor="allowParallelBranches">Allow parallel branches</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
-                      id="require_comments_on_reject"
-                      checked={watch('require_comments_on_reject')}
-                      onCheckedChange={(checked) => setValue('require_comments_on_reject', checked)}
+                      id="requireCommentsOnReject"
+                      checked={watch('requireCommentsOnReject')}
+                      onCheckedChange={(checked) => setValue('requireCommentsOnReject', checked)}
                     />
-                    <Label htmlFor="require_comments_on_reject">Require comments on reject</Label>
+                    <Label htmlFor="requireCommentsOnReject">Require comments on reject</Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
-                      id="notify_initiator_on_complete"
-                      checked={watch('notify_initiator_on_complete')}
+                      id="notifyInitiatorOnComplete"
+                      checked={watch('notifyInitiatorOnComplete')}
                       onCheckedChange={(checked) =>
-                        setValue('notify_initiator_on_complete', checked)
+                        setValue('notifyInitiatorOnComplete', checked)
                       }
                     />
-                    <Label htmlFor="notify_initiator_on_complete">
+                    <Label htmlFor="notifyInitiatorOnComplete">
                       Notify initiator on completion
                     </Label>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Switch
-                      id="allow_withdrawal"
-                      checked={watch('allow_withdrawal')}
-                      onCheckedChange={(checked) => setValue('allow_withdrawal', checked)}
+                      id="allowWithdrawal"
+                      checked={watch('allowWithdrawal')}
+                      onCheckedChange={(checked) => setValue('allowWithdrawal', checked)}
                     />
-                    <Label htmlFor="allow_withdrawal">Allow initiator withdrawal</Label>
+                    <Label htmlFor="allowWithdrawal">Allow initiator withdrawal</Label>
                   </div>
                 </div>
               </CardContent>
@@ -589,8 +588,16 @@ export function WorkflowDefinitionForm(): JSX.Element {
                     return (
                       <div key={step.id} className="rounded-lg border bg-muted/30">
                         <div
+                          role="button"
+                          tabIndex={0}
                           className="flex cursor-pointer items-center gap-2 p-4"
                           onClick={() => toggleStepExpanded(index)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault();
+                              toggleStepExpanded(index);
+                            }
+                          }}
                         >
                           <GripVertical className="h-4 w-4 text-muted-foreground" />
                           <Badge variant="outline" className="mr-2">
@@ -600,7 +607,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
                             {watch(`steps.${index}.name`) || `Step ${index + 1}`}
                           </span>
                           <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">
-                            {watch(`steps.${index}.step_type`) || 'APPROVAL'}
+                            {watch(`steps.${index}.stepType`) || 'APPROVAL'}
                           </Badge>
                           <div className="flex items-center gap-1">
                             <Button
@@ -664,9 +671,9 @@ export function WorkflowDefinitionForm(): JSX.Element {
                               <div className="space-y-2">
                                 <Label>Step Type *</Label>
                                 <Select
-                                  value={watch(`steps.${index}.step_type`)}
+                                  value={watch(`steps.${index}.stepType`)}
                                   onValueChange={(v) =>
-                                    setValue(`steps.${index}.step_type`, v as WorkflowStepType)
+                                    setValue(`steps.${index}.stepType`, v as WorkflowStepType)
                                   }
                                   disabled={isEdit}
                                 >
@@ -702,9 +709,9 @@ export function WorkflowDefinitionForm(): JSX.Element {
                               <div className="space-y-2">
                                 <Label>Approval Mode</Label>
                                 <Select
-                                  value={watch(`steps.${index}.approval_mode`)}
+                                  value={watch(`steps.${index}.approvalMode`)}
                                   onValueChange={(v) =>
-                                    setValue(`steps.${index}.approval_mode`, v as ApprovalMode)
+                                    setValue(`steps.${index}.approvalMode`, v as ApprovalMode)
                                   }
                                   disabled={isEdit}
                                 >
@@ -727,7 +734,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
                                   min={1}
                                   placeholder="24"
                                   disabled={isEdit}
-                                  {...register(`steps.${index}.sla_hours`, {
+                                  {...register(`steps.${index}.slaHours`, {
                                     valueAsNumber: true,
                                   })}
                                 />
@@ -739,7 +746,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
                                   min={1}
                                   placeholder="12"
                                   disabled={isEdit}
-                                  {...register(`steps.${index}.reminder_hours`, {
+                                  {...register(`steps.${index}.reminderHours`, {
                                     valueAsNumber: true,
                                   })}
                                 />
@@ -748,14 +755,14 @@ export function WorkflowDefinitionForm(): JSX.Element {
 
                             <div className="flex items-center space-x-2">
                               <Switch
-                                id={`allow_delegation_${index}`}
-                                checked={watch(`steps.${index}.allow_delegation`)}
+                                id={`allowDelegation_${index}`}
+                                checked={watch(`steps.${index}.allowDelegation`)}
                                 onCheckedChange={(checked) =>
-                                  setValue(`steps.${index}.allow_delegation`, checked)
+                                  setValue(`steps.${index}.allowDelegation`, checked)
                                 }
                                 disabled={isEdit}
                               />
-                              <Label htmlFor={`allow_delegation_${index}`}>Allow delegation</Label>
+                              <Label htmlFor={`allowDelegation_${index}`}>Allow delegation</Label>
                             </div>
 
                             <Separator />
@@ -789,11 +796,11 @@ export function WorkflowDefinitionForm(): JSX.Element {
                                         <Label className="text-xs">Approver Type</Label>
                                         <Select
                                           value={watch(
-                                            `steps.${index}.approvers.${approverIndex}.approver_type`,
+                                            `steps.${index}.approvers.${approverIndex}.approverType`,
                                           )}
                                           onValueChange={(v) =>
                                             setValue(
-                                              `steps.${index}.approvers.${approverIndex}.approver_type`,
+                                              `steps.${index}.approvers.${approverIndex}.approverType`,
                                               v as ApproverType,
                                             )
                                           }
@@ -819,7 +826,7 @@ export function WorkflowDefinitionForm(): JSX.Element {
                                           placeholder="UUID or designation key"
                                           disabled={isEdit}
                                           {...register(
-                                            `steps.${index}.approvers.${approverIndex}.role_id`,
+                                            `steps.${index}.approvers.${approverIndex}.roleId`,
                                           )}
                                         />
                                       </div>

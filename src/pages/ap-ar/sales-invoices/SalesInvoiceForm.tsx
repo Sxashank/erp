@@ -279,7 +279,7 @@ export function SalesInvoiceForm() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0 && !isEdit) {
@@ -294,7 +294,7 @@ export function SalesInvoiceForm() {
   const loadUnits = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
-      const response = await unitsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await unitsApi.list({ pageSize: 100 });
       setUnits(response.data.items || []);
     } catch (error) {
       logger.error('Failed to load units:', error);
@@ -304,7 +304,7 @@ export function SalesInvoiceForm() {
   const loadCustomers = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
-      const response = await customersApi.getActive({ organization_id: selectedOrgId });
+      const response = await customersApi.getActive({});
       setCustomers(response.data || []);
     } catch (error) {
       logger.error('Failed to load customers:', error);
@@ -324,8 +324,7 @@ export function SalesInvoiceForm() {
     if (!selectedOrgId) return;
     try {
       const response = await accountsApi.list({
-        organization_id: selectedOrgId,
-        page_size: 100,
+        pageSize: 100,
       });
       // Filter for revenue accounts (nature = INCOME)
       const accounts = response.data.items || [];
@@ -583,7 +582,6 @@ export function SalesInvoiceForm() {
         customerId,
         invoiceDate,
         dueDate,
-        organizationId: selectedOrgId,
         unitId: unitId || undefined,
         placeOfSupply: placeOfSupply || undefined,
         isReverseCharge,

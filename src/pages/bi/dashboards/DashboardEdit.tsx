@@ -382,7 +382,7 @@ export function DashboardEdit() {
                   <SelectValue placeholder="Select a chart" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">None</SelectItem>
+                  <SelectItem value="__none__">None</SelectItem>
                   {charts.map((chart) => (
                     <SelectItem key={chart.id} value={chart.id}>
                       {chart.name} ({chart.module})

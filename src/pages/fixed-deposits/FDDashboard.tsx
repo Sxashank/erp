@@ -60,7 +60,7 @@ export default function FDDashboard() {
       setLoading(true);
 
       // Get summary
-      const summaryData = await fixedDepositService.getSummary(organizationId);
+      const summaryData = await fixedDepositService.getSummary();
       setSummary(summaryData);
 
       // Get FDs maturing in next 30 days
@@ -69,7 +69,6 @@ export default function FDDashboard() {
       thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
 
       const maturingData = await fixedDepositService.listDeposits({
-        organization_id: organizationId,
         status: 'ACTIVE',
         maturing_after: today.toISOString().split('T')[0],
         maturing_before: thirtyDaysLater.toISOString().split('T')[0],

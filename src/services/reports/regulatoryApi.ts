@@ -194,19 +194,19 @@ export async function getLargeExposure(params?: LargeExposureParams): Promise<La
 export interface CapitalCompositionLine {
   label: string;
   amount: NumericValue;
-  is_subtotal: boolean;
+  isSubtotal: boolean;
   tier: 'TIER_1' | 'TIER_2';
 }
 
 export interface CapitalCompositionResponse {
-  as_of_date: string;
-  generated_at: string;
-  organization_id: string;
-  tier_1_lines: CapitalCompositionLine[];
-  tier_1_total: NumericValue;
-  tier_2_lines: CapitalCompositionLine[];
-  tier_2_total: NumericValue;
-  total_capital: NumericValue;
+  asOfDate: string;
+  generatedAt: string;
+  organizationId: string;
+  tier1Lines: CapitalCompositionLine[];
+  tier1Total: NumericValue;
+  tier2Lines: CapitalCompositionLine[];
+  tier2Total: NumericValue;
+  totalCapital: NumericValue;
 }
 
 export interface CrarCompositionParams {
@@ -223,22 +223,22 @@ export async function getCrarComposition(
 }
 
 export interface CapitalSnapshotItem {
-  snapshot_date: string;
-  tier_1_capital: NumericValue;
-  tier_2_capital: NumericValue;
-  total_capital: NumericValue;
-  credit_risk_rwa: NumericValue;
-  market_risk_rwa: NumericValue;
-  operational_risk_rwa: NumericValue;
-  total_rwa: NumericValue;
+  snapshotDate: string;
+  tier1Capital: NumericValue;
+  tier2Capital: NumericValue;
+  totalCapital: NumericValue;
+  creditRiskRwa: NumericValue;
+  marketRiskRwa: NumericValue;
+  operationalRiskRwa: NumericValue;
+  totalRwa: NumericValue;
   crar: NumericValue;
-  tier_1_ratio: NumericValue;
+  tier1Ratio: NumericValue;
 }
 
 export interface CrarTrendResponse {
-  organization_id: string;
+  organizationId: string;
   months: number;
-  generated_at: string;
+  generatedAt: string;
   snapshots: CapitalSnapshotItem[];
 }
 
@@ -254,13 +254,13 @@ export async function getCrarTrend(params?: CrarTrendParams): Promise<CrarTrendR
 export type InfrastructureRatioStatus = 'QUALIFIED' | 'AT_RISK' | 'NOT_QUALIFIED';
 
 export interface InfrastructureRatioResponse {
-  as_of_date: string;
-  generated_at: string;
-  organization_id: string;
-  infrastructure_loans_amount: NumericValue;
-  total_loans_amount: NumericValue;
-  infrastructure_ratio_percent: NumericValue;
-  minimum_required_percent: NumericValue;
+  asOfDate: string;
+  generatedAt: string;
+  organizationId: string;
+  infrastructureLoansAmount: NumericValue;
+  totalLoansAmount: NumericValue;
+  infrastructureRatioPercent: NumericValue;
+  minimumRequiredPercent: NumericValue;
   status: InfrastructureRatioStatus;
 }
 

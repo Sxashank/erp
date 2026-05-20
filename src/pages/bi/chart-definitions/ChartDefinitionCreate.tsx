@@ -72,9 +72,6 @@ export function ChartDefinitionCreate() {
   const [dataSources, setDataSources] = useState<DataSourceListItem[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
-
-  const organizationId = localStorage.getItem('organization_id') || '';
-
   const {
     register,
     handleSubmit,
@@ -140,8 +137,7 @@ export function ChartDefinitionCreate() {
       const payload: ChartDefinitionCreateType = {
         code: data.code,
         name: data.name,
-        description: data.description || undefined,
-        organization_id: organizationId || undefined,
+        description: data.description || undefined || undefined,
         module: data.module,
         chart_type: data.chart_type,
         default_data_source_id: data.default_data_source_id || undefined,
@@ -342,7 +338,7 @@ export function ChartDefinitionCreate() {
                     <SelectValue placeholder="Select a data source" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {dataSources.map((ds) => (
                       <SelectItem key={ds.id} value={ds.id}>
                         {ds.name}

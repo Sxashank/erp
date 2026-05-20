@@ -7,9 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
 from app.core.constants import Permissions, LeaveApplicationStatus
-from app.core.permissions import RequirePermissions
 from app.models.auth.user import User
 from app.schemas.hris.leave import (
     LeaveTypeCreate,
@@ -41,12 +40,11 @@ router = APIRouter()
 # Leave Types
 # ============================================
 @router.get("/types", response_model=List[LeaveTypeResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_VIEW])
 async def list_leave_types(
     organization_id: UUID,
     active_only: bool = True,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_VIEW)),
 ):
     """List leave types for organization."""
     service = LeaveTypeService(db)
@@ -55,11 +53,10 @@ async def list_leave_types(
 
 
 @router.post("/types", response_model=LeaveTypeResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_CREATE])
 async def create_leave_type(
     data: LeaveTypeCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_CREATE)),
 ):
     """Create a new leave type."""
     service = LeaveTypeService(db)
@@ -77,11 +74,10 @@ async def create_leave_type(
 
 
 @router.get("/types/{leave_type_id}", response_model=LeaveTypeResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_VIEW])
 async def get_leave_type(
     leave_type_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_VIEW)),
 ):
     """Get leave type by ID."""
     service = LeaveTypeService(db)
@@ -92,12 +88,11 @@ async def get_leave_type(
 
 
 @router.put("/types/{leave_type_id}", response_model=LeaveTypeResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_UPDATE])
 async def update_leave_type(
     leave_type_id: UUID,
     data: LeaveTypeUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_UPDATE)),
 ):
     """Update leave type."""
     service = LeaveTypeService(db)
@@ -108,11 +103,10 @@ async def update_leave_type(
 
 
 @router.delete("/types/{leave_type_id}", status_code=status.HTTP_204_NO_CONTENT)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_DELETE])
 async def delete_leave_type(
     leave_type_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_DELETE)),
 ):
     """Delete (deactivate) leave type."""
     service = LeaveTypeService(db)
@@ -125,12 +119,11 @@ async def delete_leave_type(
 # Leave Balances
 # ============================================
 @router.get("/balances/{employee_id}", response_model=LeaveBalanceSummary, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_VIEW])
 async def get_leave_balances(
     employee_id: UUID,
     year: int,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_VIEW)),
 ):
     """Get leave balances for an employee."""
     service = LeaveBalanceService(db)
@@ -163,11 +156,10 @@ async def get_leave_balances(
 
 
 @router.post("/balances", response_model=LeaveBalanceResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_UPDATE])
 async def create_or_update_balance(
     data: LeaveBalanceCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_UPDATE)),
 ):
     """Create or update leave balance (for admin adjustments)."""
     service = LeaveBalanceService(db)
@@ -189,13 +181,12 @@ async def create_or_update_balance(
 
 
 @router.post("/balances/initialize/{employee_id}", response_model=List[LeaveBalanceResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_TYPE_UPDATE])
 async def initialize_balances(
     employee_id: UUID,
     organization_id: UUID,
     year: int,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_UPDATE)),
 ):
     """Initialize leave balances for a new year."""
     service = LeaveBalanceService(db)
@@ -207,7 +198,6 @@ async def initialize_balances(
 # Leave Applications
 # ============================================
 @router.get("/applications", response_model=PaginatedResponse[LeaveApplicationResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_VIEW])
 async def list_leave_applications(
     organization_id: Optional[UUID] = None,
     employee_id: Optional[UUID] = None,
@@ -219,7 +209,7 @@ async def list_leave_applications(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_VIEW)),
 ):
     """List leave applications."""
     service = LeaveApplicationService(db)
@@ -242,12 +232,11 @@ async def list_leave_applications(
 
 
 @router.get("/applications/pending-approval", response_model=PaginatedResponse[LeaveApplicationResponse], response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_APPROVE])
 async def get_pending_approvals(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_APPROVE)),
 ):
     """Get leave applications pending for current user's approval."""
     service = LeaveApplicationService(db)
@@ -261,11 +250,10 @@ async def get_pending_approvals(
 
 
 @router.post("/applications", response_model=LeaveApplicationResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-@RequirePermissions([Permissions.HRIS_LEAVE_APPLY])
 async def create_leave_application(
     data: LeaveApplicationCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_APPLY)),
 ):
     """Create a new leave application."""
     service = LeaveApplicationService(db)
@@ -277,11 +265,10 @@ async def create_leave_application(
 
 
 @router.get("/applications/{application_id}", response_model=LeaveApplicationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_VIEW])
 async def get_leave_application(
     application_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_VIEW)),
 ):
     """Get leave application by ID."""
     service = LeaveApplicationService(db)
@@ -295,12 +282,11 @@ async def get_leave_application(
 
 
 @router.put("/applications/{application_id}", response_model=LeaveApplicationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_APPLY])
 async def update_leave_application(
     application_id: UUID,
     data: LeaveApplicationUpdate,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_APPLY)),
 ):
     """Update leave application (only if pending)."""
     service = LeaveApplicationService(db)
@@ -317,12 +303,11 @@ async def update_leave_application(
 
 
 @router.post("/applications/{application_id}/approve", response_model=LeaveApplicationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_APPROVE])
 async def approve_leave_application(
     application_id: UUID,
     data: LeaveApplicationApprove,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_APPROVE)),
 ):
     """Approve leave application."""
     service = LeaveApplicationService(db)
@@ -339,12 +324,11 @@ async def approve_leave_application(
 
 
 @router.post("/applications/{application_id}/reject", response_model=LeaveApplicationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_APPROVE])
 async def reject_leave_application(
     application_id: UUID,
     data: LeaveApplicationReject,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_APPROVE)),
 ):
     """Reject leave application."""
     service = LeaveApplicationService(db)
@@ -361,12 +345,11 @@ async def reject_leave_application(
 
 
 @router.post("/applications/{application_id}/cancel", response_model=LeaveApplicationResponse, response_model_by_alias=True)
-@RequirePermissions([Permissions.HRIS_LEAVE_CANCEL])
 async def cancel_leave_application(
     application_id: UUID,
     data: LeaveApplicationCancel,
     db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_CANCEL)),
 ):
     """Cancel leave application."""
     service = LeaveApplicationService(db)

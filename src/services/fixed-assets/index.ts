@@ -212,7 +212,7 @@ export async function getAssetCategoryTree(
   organizationId: string,
 ): Promise<AssetCategoryTreeNode[]> {
   const { data } = await api.get<AssetCategoryTreeNode[]>('/fixed-assets/categories/tree', {
-    params: { organization_id: organizationId },
+    params: {},
   });
   return data;
 }
@@ -352,7 +352,6 @@ export async function listDisposals(
 ): Promise<OffsetPaginatedResponse<DisposalRegisterItem>> {
   const { data } = await api.get<OffsetPaginatedResponse<DisposalRegisterItem>>('/fixed-assets/disposals', {
     params: {
-      organization_id: organizationId,
       status: params?.status,
       disposal_type: params?.disposalType,
       search: params?.search,
@@ -388,7 +387,6 @@ export async function listDepreciationRuns(
 ): Promise<OffsetPaginatedResponse<DepreciationRun>> {
   const { data } = await api.get<OffsetPaginatedResponse<DepreciationRun>>('/fixed-assets/depreciation/runs', {
     params: {
-      organization_id: organizationId,
       skip: params?.skip ?? 0,
       limit: params?.limit ?? 20,
     },
@@ -470,7 +468,6 @@ export async function listVerificationSchedules(
     '/fixed-assets/verification/schedules',
     {
       params: {
-        organization_id: organizationId,
         financial_year: params?.financialYear,
         status: params?.status,
         skip: params?.skip ?? 0,
@@ -591,7 +588,6 @@ export async function listDiscrepancies(
     '/fixed-assets/verification/discrepancies',
     {
       params: {
-        organization_id: organizationId,
         status: params?.status,
         skip: params?.skip ?? 0,
         limit: params?.limit ?? 100,
@@ -621,7 +617,6 @@ export async function getVerificationSummary(
 ): Promise<VerificationSummary> {
   const { data } = await api.get<VerificationSummary>('/fixed-assets/verification/summary', {
     params: {
-      organization_id: organizationId,
       financial_year: financialYear,
     },
   });
@@ -651,7 +646,6 @@ export async function getDepreciationSummaryReport(
     '/fixed-assets/reports/depreciation-summary',
     {
       params: {
-        organization_id: organizationId,
         depreciation_period: depreciationPeriod,
       },
     },
@@ -663,7 +657,7 @@ export async function listAccounts(organizationId: string): Promise<MasterOption
   const { data } = await api.get<{
     items: { id: string; code?: string | null; name?: string | null }[];
   }>('/accounts', {
-    params: { organization_id: organizationId, page_size: 100 },
+    params: { page_size: 100 },
   });
   return (data.items ?? []).map(mapOption);
 }
@@ -672,7 +666,7 @@ export async function listUnits(organizationId: string): Promise<MasterOption[]>
   const { data } = await api.get<{
     items: { id: string; code?: string | null; name?: string | null }[];
   }>('/units', {
-    params: { organization_id: organizationId, page_size: 100 },
+    params: { page_size: 100 },
   });
   return (data.items ?? []).map(mapOption);
 }
@@ -681,7 +675,7 @@ export async function listDepartments(organizationId: string): Promise<MasterOpt
   const { data } = await api.get<{
     items: { id: string; code?: string | null; name?: string | null }[];
   }>('/departments', {
-    params: { organization_id: organizationId, page_size: 100 },
+    params: { page_size: 100 },
   });
   return (data.items ?? []).map(mapOption);
 }
@@ -690,7 +684,7 @@ export async function listVendors(organizationId: string): Promise<MasterOption[
   const { data } = await api.get<{
     items: { id: string; code?: string | null; name?: string | null }[];
   }>('/vendors', {
-    params: { organization_id: organizationId, page_size: 100 },
+    params: { page_size: 100 },
   });
   return (data.items ?? []).map(mapOption);
 }

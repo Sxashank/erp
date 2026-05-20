@@ -106,7 +106,6 @@ export default function PayrollBatchList() {
     try {
       setLoading(true);
       const response = await payrollService.listBatches({
-        organization_id: organizationId,
         year: yearFilter ? parseInt(yearFilter) : undefined,
         status: statusFilter === ALL_STATUSES ? undefined : statusFilter,
       });
@@ -162,7 +161,7 @@ export default function PayrollBatchList() {
   };
 
   const filteredBatches = batches.filter((batch) =>
-    batch.batch_reference.toLowerCase().includes(searchTerm.toLowerCase()),
+    batch.batchReference.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -250,19 +249,19 @@ export default function PayrollBatchList() {
               ) : (
                 filteredBatches.map((batch) => (
                   <TableRow key={batch.id}>
-                    <TableCell className="font-mono">{batch.batch_reference}</TableCell>
+                    <TableCell className="font-mono">{batch.batchReference}</TableCell>
                     <TableCell>
-                      {MONTHS[batch.payroll_month - 1]} {batch.payroll_year}
+                      {MONTHS[batch.payrollMonth - 1]} {batch.payrollYear}
                     </TableCell>
-                    <TableCell className="text-right">{batch.total_employees}</TableCell>
+                    <TableCell className="text-right">{batch.totalEmployees}</TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={batch.total_gross} />
+                      <AmountDisplay amount={batch.totalGross} />
                     </TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={batch.total_deductions} />
+                      <AmountDisplay amount={batch.totalDeductions} />
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      <AmountDisplay amount={batch.total_net} />
+                      <AmountDisplay amount={batch.totalNet} />
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_COLORS[batch.status] || 'outline'}>

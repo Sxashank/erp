@@ -82,18 +82,18 @@ export default function PayslipView() {
     );
   }
 
-  const earnings = payslip.components?.filter((c) => c.component_type === 'EARNING') || [];
-  const deductions = payslip.components?.filter((c) => c.component_type === 'DEDUCTION') || [];
+  const earnings = payslip.components?.filter((c) => c.componentType === 'EARNING') || [];
+  const deductions = payslip.components?.filter((c) => c.componentType === 'DEDUCTION') || [];
 
   return (
     <div className="container mx-auto max-w-4xl space-y-6 py-6">
       <div className="print:hidden">
         <PageHeader
           title="Payslip"
-          subtitle={`${MONTHS[payslip.payroll_month - 1]} ${payslip.payroll_year}`}
+          subtitle={`${MONTHS[payslip.payrollMonth - 1]} ${payslip.payrollYear}`}
           breadcrumbs={[
             { label: 'Payslips', to: '/admin/payroll/payslips' },
-            { label: `${MONTHS[payslip.payroll_month - 1]} ${payslip.payroll_year}` },
+            { label: `${MONTHS[payslip.payrollMonth - 1]} ${payslip.payrollYear}` },
           ]}
           actions={
             <div className="flex gap-2">
@@ -116,7 +116,7 @@ export default function PayslipView() {
             <div>
               <CardTitle className="text-xl">PAYSLIP</CardTitle>
               <p className="mt-1 text-sm text-muted-foreground">
-                For the period of {MONTHS[payslip.payroll_month - 1]} {payslip.payroll_year}
+                For the period of {MONTHS[payslip.payrollMonth - 1]} {payslip.payrollYear}
               </p>
             </div>
             <Badge
@@ -136,16 +136,16 @@ export default function PayslipView() {
                 <p>
                   <span className="text-muted-foreground">Name:</span>{' '}
                   <span className="font-medium">
-                    {payslip.employee?.first_name} {payslip.employee?.last_name}
+                    {payslip.employee?.firstName} {payslip.employee?.lastName}
                   </span>
                 </p>
                 <p>
                   <span className="text-muted-foreground">Employee ID:</span>{' '}
-                  {payslip.employee?.employee_code}
+                  {payslip.employee?.employeeCode}
                 </p>
                 <p>
                   <span className="text-muted-foreground">Department:</span>{' '}
-                  {payslip.employee?.department?.department_name || '-'}
+                  {payslip.employee?.department?.departmentName || '-'}
                 </p>
               </div>
             </div>
@@ -154,15 +154,15 @@ export default function PayslipView() {
               <div className="space-y-1 text-sm">
                 <p>
                   <span className="text-muted-foreground">Working Days:</span>{' '}
-                  {payslip.working_days}
+                  {payslip.workingDays}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Paid Days:</span> {payslip.paid_days}
+                  <span className="text-muted-foreground">Paid Days:</span> {payslip.paidDays}
                 </p>
                 <p>
                   <span className="text-muted-foreground">LOP Days:</span>{' '}
-                  <span className={payslip.lop_days > 0 ? 'text-destructive' : ''}>
-                    {payslip.lop_days}
+                  <span className={payslip.lopDays > 0 ? 'text-destructive' : ''}>
+                    {payslip.lopDays}
                   </span>
                 </p>
               </div>
@@ -187,8 +187,8 @@ export default function PayslipView() {
                   {earnings.map((comp) => (
                     <TableRow key={comp.id}>
                       <TableCell>
-                        {comp.component_name}
-                        {comp.is_arrear && (
+                        {comp.componentName}
+                        {comp.isArrear && (
                           <Badge variant="outline" className="ml-2 text-xs">
                             Arrear
                           </Badge>
@@ -202,7 +202,7 @@ export default function PayslipView() {
                   <TableRow className="bg-muted/50">
                     <TableCell className="font-semibold">Gross Earnings</TableCell>
                     <TableCell className="text-right font-semibold">
-                      <AmountDisplay amount={payslip.gross_earnings} />
+                      <AmountDisplay amount={payslip.grossEarnings} />
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -222,7 +222,7 @@ export default function PayslipView() {
                 <TableBody>
                   {deductions.map((comp) => (
                     <TableRow key={comp.id}>
-                      <TableCell>{comp.component_name}</TableCell>
+                      <TableCell>{comp.componentName}</TableCell>
                       <TableCell className="text-right">
                         <AmountDisplay amount={comp.amount} compact />
                       </TableCell>
@@ -231,7 +231,7 @@ export default function PayslipView() {
                   <TableRow className="bg-muted/50">
                     <TableCell className="font-semibold">Total Deductions</TableCell>
                     <TableCell className="text-right font-semibold">
-                      <AmountDisplay amount={payslip.total_deductions} />
+                      <AmountDisplay amount={payslip.totalDeductions} />
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -258,15 +258,15 @@ export default function PayslipView() {
                   <TableBody>
                     {payslip.statutory.map((stat) => (
                       <TableRow key={stat.id}>
-                        <TableCell>{stat.statutory_type}</TableCell>
+                        <TableCell>{stat.statutoryType}</TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={stat.wage_base} compact />
+                          <AmountDisplay amount={stat.wageBase} compact />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={stat.employee_amount} compact />
+                          <AmountDisplay amount={stat.employeeAmount} compact />
                         </TableCell>
                         <TableCell className="text-right">
-                          <AmountDisplay amount={stat.employer_amount} compact />
+                          <AmountDisplay amount={stat.employerAmount} compact />
                         </TableCell>
                       </TableRow>
                     ))}
@@ -286,25 +286,25 @@ export default function PayslipView() {
               </div>
               <div className="text-right">
                 <p className="text-3xl font-bold text-primary">
-                  <AmountDisplay amount={payslip.net_salary} />
+                  <AmountDisplay amount={payslip.netSalary} />
                 </p>
               </div>
             </div>
           </div>
 
           {/* Employer Contribution */}
-          {(payslip.employer_pf || payslip.employer_esi) && (
+          {(payslip.employerPf || payslip.employerEsi) && (
             <div className="text-sm text-muted-foreground">
               <p className="font-medium">Employer Contributions (Not included in Net Pay):</p>
               <div className="mt-1 flex gap-4">
-                {payslip.employer_pf && payslip.employer_pf > 0 && (
+                {payslip.employerPf && payslip.employerPf > 0 && (
                   <span>
-                    PF: <AmountDisplay amount={payslip.employer_pf} compact />
+                    PF: <AmountDisplay amount={payslip.employerPf} compact />
                   </span>
                 )}
-                {payslip.employer_esi && payslip.employer_esi > 0 && (
+                {payslip.employerEsi && payslip.employerEsi > 0 && (
                   <span>
-                    ESI: <AmountDisplay amount={payslip.employer_esi} compact />
+                    ESI: <AmountDisplay amount={payslip.employerEsi} compact />
                   </span>
                 )}
               </div>

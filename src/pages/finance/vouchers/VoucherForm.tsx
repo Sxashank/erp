@@ -91,7 +91,7 @@ export function VoucherForm() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
       if (data.items.length > 0 && !isEdit) {
@@ -105,7 +105,7 @@ export function VoucherForm() {
   const fetchUnits = useCallback(async () => {
     if (!selectedOrg) return;
     try {
-      const response = await unitsApi.list({ organization_id: selectedOrg, page_size: 100 });
+      const response = await unitsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Unit> = response.data;
       setUnits(data.items);
     } catch (error) {
@@ -116,7 +116,7 @@ export function VoucherForm() {
   const fetchVoucherTypes = useCallback(async () => {
     if (!selectedOrg) return;
     try {
-      const response = await voucherTypesApi.list({ organization_id: selectedOrg, page_size: 100 });
+      const response = await voucherTypesApi.list({ pageSize: 100 });
       const data: PaginatedResponse<VoucherType> = response.data;
       setVoucherTypes(data.items);
     } catch (error) {
@@ -128,8 +128,7 @@ export function VoucherForm() {
     if (!selectedOrg) return;
     try {
       const response = await financialYearsApi.list({
-        organization_id: selectedOrg,
-        page_size: 100,
+        pageSize: 100,
       });
       const data: PaginatedResponse<FinancialYear> = response.data;
       setFinancialYears(data.items);
@@ -153,9 +152,8 @@ export function VoucherForm() {
 
       while (hasMore) {
         const response = await accountsApi.list({
-          organization_id: selectedOrg,
           page,
-          page_size: 100,
+          pageSize: 100,
         });
         const data: PaginatedResponse<Account> = response.data;
         allAccounts = [...allAccounts, ...data.items];
@@ -285,7 +283,6 @@ export function VoucherForm() {
         reference_number: referenceNumber || undefined,
         reference_date: referenceDate || undefined,
         narration: narration || undefined,
-        organization_id: selectedOrg,
         unit_id: unitId && unitId !== 'all' ? unitId : undefined,
         lines: lines
           .filter((l) => l.account_id && (l.debit_amount > 0 || l.credit_amount > 0))

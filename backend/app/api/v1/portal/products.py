@@ -7,8 +7,8 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.schemas.portal.application import ProductListItem
 from app.services.portal.application_service import PortalApplicationService
 
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/products", tags=["Scheme Portal · Products"])
 async def list_products(
     entity_id: UUID | None = Query(None, alias="entityId"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> list[ProductListItem]:
     service = PortalApplicationService(db)
     return await service.list_products(portal_user=user, entity_id=entity_id)

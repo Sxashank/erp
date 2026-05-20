@@ -24,8 +24,8 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.core.exceptions import BadRequestException
 from app.core.upload_validation import DOCUMENT_MIME_TYPES, validate_upload
 from app.schemas.portal.application import (
@@ -66,7 +66,7 @@ async def list_applications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200, alias="pageSize"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationListResponse:
     service = PortalApplicationService(db)
     return await service.list_applications(
@@ -87,7 +87,7 @@ async def list_applications(
 async def get_application(
     application_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     service = PortalApplicationService(db)
     return await service.get_application(portal_user=user, application_id=application_id)
@@ -103,7 +103,7 @@ async def create_application(
     payload: CreateApplicationRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -123,7 +123,7 @@ async def update_application(
     payload: UpdateApplicationRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -146,7 +146,7 @@ async def submit_application(
     application_id: UUID,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -168,7 +168,7 @@ async def resubmit_application(
     application_id: UUID,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -191,7 +191,7 @@ async def withdraw_application(
     payload: ApplicationWithdrawRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -215,7 +215,7 @@ async def lender_validate_application(
     payload: ApplicationReviewActionRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -239,7 +239,7 @@ async def start_appraisal(
     payload: ApplicationReviewActionRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -263,7 +263,7 @@ async def raise_application_query(
     payload: ApplicationQueryRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -287,7 +287,7 @@ async def approve_application(
     payload: ApplicationReviewActionRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -311,7 +311,7 @@ async def reject_application(
     payload: ApplicationRejectRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> ApplicationDetailResponse:
     _require_idempotency_key(idempotency_key)
     service = PortalApplicationService(db)
@@ -337,7 +337,7 @@ async def upload_application_document(
     document_name: str | None = Form(default=None),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> UploadDocumentResponse:
     """Upload an application supporting document through the main DMS."""
     _require_idempotency_key(idempotency_key)
@@ -387,7 +387,7 @@ async def upload_application_document(
 async def list_application_documents(
     application_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> list[ApplicationDocumentResponse]:
     service = PortalApplicationService(db)
     return await service.list_documents(portal_user=user, application_id=application_id)
@@ -401,7 +401,7 @@ async def download_application_document(
     application_id: UUID,
     document_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> FileResponse:
     service = PortalApplicationService(db)
     document = await service.get_document_record(

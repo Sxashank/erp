@@ -89,17 +89,16 @@ export function WorkflowDefinitionList(): JSX.Element {
 
   const filters = activeOrganizationId
     ? {
-        organization_id: activeOrganizationId,
-        ...(selectedEntityType !== 'all' && { entity_type: selectedEntityType }),
+        ...(selectedEntityType !== 'all' && { entityType: selectedEntityType }),
         page: 1,
-        page_size: 100,
+        pageSize: 100,
       }
     : undefined;
 
   const definitionsQuery = useWorkflowDefinitions(filters);
   const deleteMutation = useDeleteWorkflowDefinition();
 
-  const items = definitionsQuery.data?.items ?? [];
+  const items = useMemo(() => definitionsQuery.data?.items ?? [], [definitionsQuery.data?.items]);
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return items;
@@ -111,8 +110,8 @@ export function WorkflowDefinitionList(): JSX.Element {
     );
   }, [items, searchQuery]);
 
-  const activeWorkflows = items.filter((w) => w.is_active).length;
-  const defaultWorkflows = items.filter((w) => w.is_default).length;
+  const activeWorkflows = items.filter((w) => w.isActive).length;
+  const defaultWorkflows = items.filter((w) => w.isDefault).length;
   const totalWorkflows = items.length;
 
   const handleDelete = (def: WorkflowDefinitionResponse) => {
@@ -262,10 +261,10 @@ export function WorkflowDefinitionList(): JSX.Element {
                         <p className="text-sm text-muted-foreground">{workflow.name}</p>
                       </div>
                     </TableCell>
-                    <TableCell>{getEntityBadge(workflow.entity_type)}</TableCell>
+                    <TableCell>{getEntityBadge(workflow.entityType)}</TableCell>
                     <TableCell className="tabular-nums">{workflow.priority}</TableCell>
                     <TableCell>
-                      {workflow.is_default ? (
+                      {workflow.isDefault ? (
                         <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Default</Badge>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -273,7 +272,7 @@ export function WorkflowDefinitionList(): JSX.Element {
                     </TableCell>
                     <TableCell>v{workflow.version}</TableCell>
                     <TableCell>
-                      {workflow.is_active ? (
+                      {workflow.isActive ? (
                         <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">
                           Active
                         </Badge>

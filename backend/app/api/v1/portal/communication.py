@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.models.portal.enums import (
     TicketCategory,
     TicketPriority,
@@ -161,7 +161,7 @@ async def get_notifications(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get notifications for the user."""
     service = PortalNotificationService(db)
@@ -190,7 +190,7 @@ async def get_notifications(
 )
 async def get_unread_count(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get count of unread notifications."""
     service = PortalNotificationService(db)
@@ -206,7 +206,7 @@ async def get_unread_count(
 async def mark_notification_read(
     notification_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Mark a notification as read."""
     service = PortalNotificationService(db)
@@ -225,7 +225,7 @@ async def mark_notification_read(
 )
 async def mark_all_notifications_read(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Mark all notifications as read."""
     service = PortalNotificationService(db)
@@ -249,7 +249,7 @@ async def mark_all_notifications_read(
 async def send_message(
     request: MessageSendRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Send a message to support."""
     service = PortalNotificationService(db)
@@ -283,7 +283,7 @@ async def get_messages(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get messages."""
     service = PortalNotificationService(db)
@@ -310,7 +310,7 @@ async def get_messages(
 async def mark_message_read(
     message_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Mark a message as read."""
     service = PortalNotificationService(db)
@@ -337,7 +337,7 @@ async def mark_message_read(
 async def create_ticket(
     request: TicketCreateRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Create a new support ticket."""
     service = PortalNotificationService(db)
@@ -372,7 +372,7 @@ async def get_tickets(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get support tickets."""
     service = PortalNotificationService(db)
@@ -401,7 +401,7 @@ async def get_tickets(
 async def get_ticket_details(
     ticket_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get ticket details with message history."""
     service = PortalNotificationService(db)
@@ -422,7 +422,7 @@ async def reply_to_ticket(
     ticket_id: UUID,
     request: TicketReplyRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Add a reply to a ticket."""
     service = PortalNotificationService(db)
@@ -461,7 +461,7 @@ async def rate_ticket(
     ticket_id: UUID,
     request: TicketRatingRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Rate a resolved/closed ticket."""
     service = PortalNotificationService(db)
@@ -498,7 +498,7 @@ async def rate_ticket(
 )
 async def get_announcements(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get active announcements."""
     service = PortalNotificationService(db)
@@ -516,7 +516,7 @@ async def get_announcements(
 async def record_announcement_view(
     announcement_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Record that user viewed an announcement."""
     service = PortalNotificationService(db)
@@ -533,7 +533,7 @@ async def record_announcement_view(
 async def dismiss_announcement(
     announcement_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Dismiss an announcement."""
     service = PortalNotificationService(db)
@@ -550,7 +550,7 @@ async def dismiss_announcement(
 async def record_announcement_click(
     announcement_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Record that user clicked announcement action."""
     service = PortalNotificationService(db)

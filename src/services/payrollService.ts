@@ -5,228 +5,225 @@
 
 import api from './api';
 
-// Types
+// Types — wire shape is camelCase per Wave 3 of the Convention Sweep
+// (`response_model_by_alias=True` everywhere). Listing types match the wire.
 export interface SalaryComponent {
   id: string;
-  organization_id: string;
-  component_code: string;
-  component_name: string;
-  component_type: 'EARNING' | 'DEDUCTION';
+  componentCode: string;
+  componentName: string;
+  componentType: 'EARNING' | 'DEDUCTION';
   category: 'BASIC' | 'ALLOWANCE' | 'REIMBURSEMENT' | 'BONUS' | 'STATUTORY' | 'OTHER';
-  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA' | 'PERCENTAGE_OF_BASIC' | 'PERCENTAGE_OF_GROSS' | 'PERCENTAGE_OF_CTC';
-  default_value?: number;
-  percentage_of?: string;
-  percentage_value?: number;
+  calculationType: 'FIXED' | 'PERCENTAGE' | 'FORMULA' | 'PERCENTAGE_OF_BASIC' | 'PERCENTAGE_OF_GROSS' | 'PERCENTAGE_OF_CTC';
+  defaultValue?: number;
+  percentageOf?: string;
+  percentageValue?: number;
   formula?: string;
-  is_taxable: boolean;
-  is_pro_rated: boolean;
-  affects_pf: boolean;
-  affects_esi: boolean;
-  affects_pt: boolean;
-  display_order: number;
-  is_active: boolean;
-  created_at: string;
+  isTaxable: boolean;
+  isProRated: boolean;
+  affectsPf: boolean;
+  affectsEsi: boolean;
+  affectsPt: boolean;
+  displayOrder: number;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface SalaryStructure {
   id: string;
-  organization_id: string;
-  structure_code: string;
-  structure_name: string;
+  structureCode: string;
+  structureName: string;
   description?: string;
-  effective_from: string;
-  effective_to?: string;
-  payment_mode?: string;
-  pay_frequency?: string;
-  ctc_from?: number;
-  ctc_to?: number;
-  is_active: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  paymentMode?: string;
+  payFrequency?: string;
+  ctcFrom?: number;
+  ctcTo?: number;
+  isActive: boolean;
   components?: SalaryStructureComponent[];
-  created_at: string;
+  createdAt: string;
 }
 
 export interface SalaryStructureComponent {
   id: string;
-  structure_id: string;
-  component_id: string;
+  structureId: string;
+  componentId: string;
   component?: SalaryComponent;
-  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA' | 'PERCENTAGE_OF_BASIC' | 'PERCENTAGE_OF_GROSS' | 'PERCENTAGE_OF_CTC';
-  default_value?: number;
-  percentage_of?: string;
-  percentage_value?: number;
+  calculationType: 'FIXED' | 'PERCENTAGE' | 'FORMULA' | 'PERCENTAGE_OF_BASIC' | 'PERCENTAGE_OF_GROSS' | 'PERCENTAGE_OF_CTC';
+  defaultValue?: number;
+  percentageOf?: string;
+  percentageValue?: number;
   formula?: string;
-  is_mandatory: boolean;
+  isMandatory: boolean;
 }
 
 export interface EmployeeSalary {
   id: string;
-  employee_id: string;
+  employeeId: string;
   employee?: {
     id: string;
-    employee_code: string;
-    first_name: string;
-    last_name: string;
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
   };
-  structure_id?: string;
+  structureId?: string;
   structure?: SalaryStructure;
-  effective_from: string;
-  effective_to?: string;
-  gross_salary: number;
-  net_salary: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  grossSalary: number;
+  netSalary: number;
   ctc: number;
   status: 'ACTIVE' | 'SUPERSEDED' | 'DRAFT';
-  revision_number: number;
+  revisionNumber: number;
   components?: EmployeeSalaryComponent[];
-  created_at: string;
+  createdAt: string;
 }
 
 export interface EmployeeSalaryComponent {
   id: string;
-  employee_salary_id: string;
-  component_id: string;
+  employeeSalaryId: string;
+  componentId: string;
   component?: SalaryComponent;
   amount: number;
-  calculation_type: 'FIXED' | 'PERCENTAGE' | 'FORMULA';
-  percentage_value?: number;
+  calculationType: 'FIXED' | 'PERCENTAGE' | 'FORMULA';
+  percentageValue?: number;
 }
 
 export interface StatutorySetup {
   id: string;
-  organization_id: string;
-  statutory_type: 'PF' | 'ESI' | 'PT' | 'LWF' | 'GRATUITY';
-  pf_employer_rate?: number;
-  pf_employee_rate?: number;
-  pf_admin_charge_rate?: number;
-  pf_edli_rate?: number;
-  pf_wage_ceiling?: number;
-  eps_employer_rate?: number;
-  eps_wage_ceiling?: number;
-  esi_employer_rate?: number;
-  esi_employee_rate?: number;
-  esi_wage_ceiling?: number;
-  pt_state?: string;
-  pt_slabs?: Record<string, unknown>;
-  lwf_employer_contribution?: number;
-  lwf_employee_contribution?: number;
-  lwf_frequency?: string;
-  employer_contribution_pct?: number;
-  employee_contribution_pct?: number;
-  wage_ceiling?: number;
-  admin_charges_pct?: number;
-  is_applicable: boolean;
-  effective_from: string;
-  effective_to?: string;
-  config_data?: Record<string, unknown>;
-  created_at: string;
+  statutoryType: 'PF' | 'ESI' | 'PT' | 'LWF' | 'GRATUITY';
+  pfEmployerRate?: number;
+  pfEmployeeRate?: number;
+  pfAdminChargeRate?: number;
+  pfEdliRate?: number;
+  pfWageCeiling?: number;
+  epsEmployerRate?: number;
+  epsWageCeiling?: number;
+  esiEmployerRate?: number;
+  esiEmployeeRate?: number;
+  esiWageCeiling?: number;
+  ptState?: string;
+  ptSlabs?: Record<string, unknown>;
+  lwfEmployerContribution?: number;
+  lwfEmployeeContribution?: number;
+  lwfFrequency?: string;
+  employerContributionPct?: number;
+  employeeContributionPct?: number;
+  wageCeiling?: number;
+  adminChargesPct?: number;
+  isApplicable: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  configData?: Record<string, unknown>;
+  createdAt: string;
 }
 
 export interface PayrollBatch {
   id: string;
-  organization_id: string;
-  batch_reference: string;
-  batch_number?: string;
-  payroll_month: number;
-  payroll_year: number;
-  pay_period_from: string;
-  pay_period_to: string;
+  batchReference: string;
+  batchNumber?: string;
+  payrollMonth: number;
+  payrollYear: number;
+  payPeriodFrom: string;
+  payPeriodTo: string;
   status: 'DRAFT' | 'PROCESSING' | 'PROCESSED' | 'APPROVED' | 'PAID' | 'CANCELLED';
-  total_employees: number;
-  total_gross: number;
-  total_deductions: number;
-  total_net: number;
-  total_employer_contribution: number;
-  total_employer_statutory?: number;
-  processed_at?: string;
-  processed_by?: string;
-  approved_at?: string;
-  approved_by?: string;
-  paid_at?: string;
-  paid_by?: string;
+  totalEmployees: number;
+  totalGross: number;
+  totalDeductions: number;
+  totalNet: number;
+  totalEmployerContribution: number;
+  totalEmployerStatutory?: number;
+  processedAt?: string;
+  processedBy?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  paidAt?: string;
+  paidBy?: string;
   remarks?: string;
-  created_at: string;
+  createdAt: string;
 }
 
 export interface Payslip {
   id: string;
-  batch_id: string;
+  batchId: string;
   batch?: PayrollBatch;
-  employee_id: string;
+  employeeId: string;
   employee?: {
     id: string;
-    employee_code: string;
-    first_name: string;
-    last_name: string;
-    department?: { department_name: string };
+    employeeCode: string;
+    firstName: string;
+    lastName: string;
+    department?: { departmentName: string };
   };
-  employee_salary_id: string;
-  payroll_month: number;
-  payroll_year: number;
-  working_days: number;
-  paid_days: number;
-  lop_days: number;
-  basic_salary: number;
-  gross_earnings: number;
-  total_deductions: number;
-  net_salary: number;
-  employer_pf?: number;
-  employer_esi?: number;
-  total_earnings?: number;
+  employeeSalaryId: string;
+  payrollMonth: number;
+  payrollYear: number;
+  workingDays: number;
+  paidDays: number;
+  lopDays: number;
+  basicSalary: number;
+  grossEarnings: number;
+  totalDeductions: number;
+  netSalary: number;
+  employerPf?: number;
+  employerEsi?: number;
+  totalEarnings?: number;
   status: 'DRAFT' | 'GENERATED' | 'PROCESSED' | 'APPROVED' | 'PAID' | 'CANCELLED';
   components?: PayslipComponent[];
   statutory?: PayrollStatutory[];
-  created_at: string;
+  createdAt: string;
 }
 
 export interface PayslipComponent {
   id: string;
-  payslip_id: string;
-  component_id: string;
+  payslipId: string;
+  componentId: string;
   component?: SalaryComponent;
-  component_name: string;
-  component_type: 'EARNING' | 'DEDUCTION';
+  componentName: string;
+  componentType: 'EARNING' | 'DEDUCTION';
   amount: number;
-  is_arrear: boolean;
+  isArrear: boolean;
 }
 
 export interface PayrollStatutory {
   id: string;
-  payslip_id: string;
-  statutory_type: 'PF' | 'ESI' | 'PT' | 'TDS' | 'LWF';
-  employee_amount: number;
-  employer_amount: number;
-  wage_base: number;
+  payslipId: string;
+  statutoryType: 'PF' | 'ESI' | 'PT' | 'TDS' | 'LWF';
+  employeeAmount: number;
+  employerAmount: number;
+  wageBase: number;
   remarks?: string;
 }
 
 export interface PayrollBankFile {
-  file_name: string;
-  file_content: string;
-  record_count: number;
-  total_amount: number;
-  generated_at: string;
+  fileName: string;
+  fileContent: string;
+  recordCount: number;
+  totalAmount: number;
+  generatedAt: string;
 }
 
 export interface PayrollGLPostRequest {
-  salary_expense_account_id: string;
-  net_salary_payable_account_id: string;
-  pf_payable_account_id?: string;
-  esi_payable_account_id?: string;
-  pt_payable_account_id?: string;
-  tds_payable_account_id?: string;
-  other_deductions_payable_account_id?: string;
-  employer_contribution_expense_account_id?: string;
-  voucher_date?: string;
-  cost_center_id?: string;
+  salaryExpenseAccountId: string;
+  netSalaryPayableAccountId: string;
+  pfPayableAccountId?: string;
+  esiPayableAccountId?: string;
+  ptPayableAccountId?: string;
+  tdsPayableAccountId?: string;
+  otherDeductionsPayableAccountId?: string;
+  employerContributionExpenseAccountId?: string;
+  voucherDate?: string;
+  costCenterId?: string;
   narration?: string;
 }
 
 export interface PayrollGLPostResult {
   posted: boolean;
-  source_reference: string;
-  gl_entry_count: number;
-  voucher_number?: string;
-  total_debit: number;
-  total_credit: number;
+  sourceReference: string;
+  glEntryCount: number;
+  voucherNumber?: string;
+  totalDebit: number;
+  totalCredit: number;
 }
 
 // Backend payroll payloads use slightly different field names across phases of
@@ -235,50 +232,50 @@ export interface PayrollGLPostResult {
 type RawPayload = Record<string, unknown>;
 
 function normalizeComponentCalculation(raw: RawPayload) {
-  const calculationType = String(raw.calculation_type ?? 'FIXED');
+  const calculationType = String(raw.calculationType ?? 'FIXED');
   if (calculationType.startsWith('PERCENTAGE_OF_')) {
     return {
-      calculation_type: 'PERCENTAGE' as const,
-      percentage_of: calculationType.replace('PERCENTAGE_OF_', ''),
-      percentage_value: Number(raw.default_value ?? raw.value ?? raw.percentage_value ?? 0),
+      calculationType: 'PERCENTAGE' as const,
+      percentageOf: calculationType.replace('PERCENTAGE_OF_', ''),
+      percentageValue: Number(raw.defaultValue ?? raw.value ?? raw.percentageValue ?? 0),
     };
   }
   return {
-    calculation_type: calculationType as SalaryComponent['calculation_type'],
-    percentage_of: raw.percentage_of as string | undefined,
-    percentage_value: raw.percentage_value as number | undefined,
+    calculationType: calculationType as SalaryComponent['calculationType'],
+    percentageOf: raw.percentageOf as string | undefined,
+    percentageValue: raw.percentageValue as number | undefined,
   };
 }
 
 function toBackendCalculationType(input: {
-  calculation_type?: string;
-  percentage_of?: string;
+  calculationType?: string;
+  percentageOf?: string;
 }) {
-  if (input.calculation_type === 'PERCENTAGE') {
-    const base = String(input.percentage_of || 'BASIC').toUpperCase();
+  if (input.calculationType === 'PERCENTAGE') {
+    const base = String(input.percentageOf || 'BASIC').toUpperCase();
     return `PERCENTAGE_OF_${base}`;
   }
-  return input.calculation_type;
+  return input.calculationType;
 }
 
 function normalizeSalaryComponent(raw: RawPayload): SalaryComponent {
   return {
     ...(raw as unknown as SalaryComponent),
     ...normalizeComponentCalculation(raw),
-    default_value: raw.default_value == null ? undefined : Number(raw.default_value),
+    defaultValue: raw.defaultValue == null ? undefined : Number(raw.defaultValue),
   };
 }
 
 function salaryComponentToApi(data: Partial<SalaryComponent>) {
   return {
     ...data,
-    calculation_type: toBackendCalculationType(data),
-    default_value:
-      data.calculation_type === 'PERCENTAGE'
-        ? data.percentage_value
-        : data.default_value ?? data.percentage_value,
-    percentage_of: undefined,
-    percentage_value: undefined,
+    calculationType: toBackendCalculationType(data),
+    defaultValue:
+      data.calculationType === 'PERCENTAGE'
+        ? data.percentageValue
+        : data.defaultValue ?? data.percentageValue,
+    percentageOf: undefined,
+    percentageValue: undefined,
   };
 }
 
@@ -287,7 +284,7 @@ function normalizeSalaryStructureComponent(raw: RawPayload): SalaryStructureComp
   return {
     ...(raw as unknown as SalaryStructureComponent),
     ...calculation,
-    default_value: (raw.default_value == null ? raw.value : raw.default_value) as number | undefined,
+    defaultValue: (raw.defaultValue == null ? raw.value : raw.defaultValue) as number | undefined,
     component: raw.component
       ? normalizeSalaryComponent(raw.component as RawPayload)
       : (raw.component as SalaryComponent | undefined),
@@ -305,14 +302,14 @@ function normalizeSalaryStructure(raw: RawPayload): SalaryStructure {
 function salaryStructureComponentToApi(data: Partial<SalaryStructureComponent>) {
   const calculationType = toBackendCalculationType(data);
   return {
-    component_id: data.component_id,
-    calculation_type: calculationType,
+    componentId: data.componentId,
+    calculationType: calculationType,
     value:
-      data.calculation_type === 'PERCENTAGE'
-        ? data.percentage_value
-        : data.default_value ?? data.percentage_value,
+      data.calculationType === 'PERCENTAGE'
+        ? data.percentageValue
+        : data.defaultValue ?? data.percentageValue,
     formula: data.formula || undefined,
-    is_mandatory: data.is_mandatory ?? true,
+    isMandatory: data.isMandatory ?? true,
   };
 }
 
@@ -322,15 +319,14 @@ type SalaryStructureInput = Omit<Partial<SalaryStructure>, 'components'> & {
 
 function salaryStructureToApi(data: SalaryStructureInput) {
   return {
-    organization_id: data.organization_id,
-    structure_code: data.structure_code,
-    structure_name: data.structure_name,
+    structureCode: data.structureCode,
+    structureName: data.structureName,
     description: data.description || undefined,
-    effective_from: data.effective_from,
-    effective_to: data.effective_to || undefined,
-    payment_mode: data.payment_mode ?? 'BANK',
-    pay_frequency: data.pay_frequency ?? 'MONTHLY',
-    is_active: data.is_active ?? true,
+    effectiveFrom: data.effectiveFrom,
+    effectiveTo: data.effectiveTo || undefined,
+    paymentMode: data.paymentMode ?? 'BANK',
+    payFrequency: data.payFrequency ?? 'MONTHLY',
+    isActive: data.isActive ?? true,
     components: (data.components ?? []).map(salaryStructureComponentToApi),
   };
 }
@@ -341,14 +337,14 @@ function normalizeEmployeeSalary(raw: RawPayload): EmployeeSalary {
 
   return {
     ...(raw as unknown as EmployeeSalary),
-    gross_salary: Number(raw.gross_salary ?? raw.monthly_gross ?? 0),
-    net_salary: Number(raw.net_salary ?? raw.monthly_net ?? 0),
+    grossSalary: Number(raw.grossSalary ?? raw.monthly_gross ?? 0),
+    netSalary: Number(raw.netSalary ?? raw.monthly_net ?? 0),
     ctc: Number(raw.ctc ?? raw.monthly_ctc ?? raw.annual_ctc ?? 0),
     employee: (raw.employee as EmployeeSalary['employee']) ?? {
-      id: String(raw.employee_id ?? ''),
-      employee_code: String(raw.employee_code ?? ''),
-      first_name: firstName,
-      last_name: lastNameParts.join(' '),
+      id: String(raw.employeeId ?? ''),
+      employeeCode: String(raw.employeeCode ?? ''),
+      firstName: firstName,
+      lastName: lastNameParts.join(' '),
     },
   };
 }
@@ -356,9 +352,9 @@ function normalizeEmployeeSalary(raw: RawPayload): EmployeeSalary {
 function normalizePayrollBatch(raw: RawPayload): PayrollBatch {
   return {
     ...(raw as unknown as PayrollBatch),
-    batch_reference: String(raw.batch_reference ?? raw.batch_number ?? ''),
-    total_employer_contribution: Number(
-      raw.total_employer_contribution ?? raw.total_employer_statutory ?? 0,
+    batchReference: String(raw.batchReference ?? raw.batchNumber ?? ''),
+    totalEmployerContribution: Number(
+      raw.totalEmployerContribution ?? raw.totalEmployerStatutory ?? 0,
     ),
   };
 }
@@ -369,88 +365,87 @@ function normalizePayslip(raw: RawPayload): Payslip {
 
   return {
     ...(raw as unknown as Payslip),
-    gross_earnings: Number(raw.gross_earnings ?? raw.total_earnings ?? raw.gross_salary ?? 0),
+    grossEarnings: Number(raw.grossEarnings ?? raw.totalEarnings ?? raw.grossSalary ?? 0),
     employee: (raw.employee as Payslip['employee']) ?? {
-      id: String(raw.employee_id ?? ''),
-      employee_code: String(raw.employee_code ?? ''),
-      first_name: firstName,
-      last_name: lastNameParts.join(' '),
+      id: String(raw.employeeId ?? ''),
+      employeeCode: String(raw.employeeCode ?? ''),
+      firstName: firstName,
+      lastName: lastNameParts.join(' '),
     },
   };
 }
 
 function normalizeStatutorySetup(raw: RawPayload): StatutorySetup {
-  const statutoryType = raw.statutory_type;
+  const statutoryType = raw.statutoryType;
   const employerContribution =
     statutoryType === 'PF'
-      ? raw.pf_employer_rate
+      ? raw.pfEmployerRate
       : statutoryType === 'ESI'
-        ? raw.esi_employer_rate
+        ? raw.esiEmployerRate
         : statutoryType === 'LWF'
-          ? raw.lwf_employer_contribution
+          ? raw.lwfEmployerContribution
           : undefined;
   const employeeContribution =
     statutoryType === 'PF'
-      ? raw.pf_employee_rate
+      ? raw.pfEmployeeRate
       : statutoryType === 'ESI'
-        ? raw.esi_employee_rate
+        ? raw.esiEmployeeRate
         : statutoryType === 'LWF'
-          ? raw.lwf_employee_contribution
+          ? raw.lwfEmployeeContribution
           : undefined;
   const wageCeiling =
     statutoryType === 'PF'
-      ? raw.pf_wage_ceiling
+      ? raw.pfWageCeiling
       : statutoryType === 'ESI'
-        ? raw.esi_wage_ceiling
+        ? raw.esiWageCeiling
         : undefined;
 
   return {
     ...(raw as unknown as StatutorySetup),
-    employer_contribution_pct:
+    employerContributionPct:
       employerContribution == null ? undefined : Number(employerContribution),
-    employee_contribution_pct:
+    employeeContributionPct:
       employeeContribution == null ? undefined : Number(employeeContribution),
-    wage_ceiling: wageCeiling == null ? undefined : Number(wageCeiling),
-    admin_charges_pct:
-      raw.pf_admin_charge_rate == null ? undefined : Number(raw.pf_admin_charge_rate),
-    is_applicable: (raw.is_active as boolean | undefined) ?? true,
+    wageCeiling: wageCeiling == null ? undefined : Number(wageCeiling),
+    adminChargesPct:
+      raw.pfAdminChargeRate == null ? undefined : Number(raw.pfAdminChargeRate),
+    isApplicable: (raw.isActive as boolean | undefined) ?? true,
   };
 }
 
 function statutorySetupToApi(data: Partial<StatutorySetup>) {
   const payload: Record<string, unknown> = {
-    organization_id: data.organization_id,
-    statutory_type: data.statutory_type,
-    effective_from: data.effective_from,
-    effective_to: data.effective_to || undefined,
-    is_active: data.is_applicable ?? true,
+    statutoryType: data.statutoryType,
+    effectiveFrom: data.effectiveFrom,
+    effectiveTo: data.effectiveTo || undefined,
+    isActive: data.isApplicable ?? true,
   };
 
-  if (data.statutory_type === 'PF') {
-    payload.pf_employer_rate = data.employer_contribution_pct;
-    payload.pf_employee_rate = data.employee_contribution_pct;
-    payload.pf_wage_ceiling = data.wage_ceiling;
-    payload.pf_admin_charge_rate = data.admin_charges_pct;
-    payload.pf_edli_rate = data.pf_edli_rate;
-    payload.eps_employer_rate = data.eps_employer_rate;
-    payload.eps_wage_ceiling = data.eps_wage_ceiling ?? data.wage_ceiling;
+  if (data.statutoryType === 'PF') {
+    payload.pfEmployerRate = data.employerContributionPct;
+    payload.pfEmployeeRate = data.employeeContributionPct;
+    payload.pfWageCeiling = data.wageCeiling;
+    payload.pfAdminChargeRate = data.adminChargesPct;
+    payload.pfEdliRate = data.pfEdliRate;
+    payload.epsEmployerRate = data.epsEmployerRate;
+    payload.epsWageCeiling = data.epsWageCeiling ?? data.wageCeiling;
   }
 
-  if (data.statutory_type === 'ESI') {
-    payload.esi_employer_rate = data.employer_contribution_pct;
-    payload.esi_employee_rate = data.employee_contribution_pct;
-    payload.esi_wage_ceiling = data.wage_ceiling;
+  if (data.statutoryType === 'ESI') {
+    payload.esiEmployerRate = data.employerContributionPct;
+    payload.esiEmployeeRate = data.employeeContributionPct;
+    payload.esiWageCeiling = data.wageCeiling;
   }
 
-  if (data.statutory_type === 'PT') {
-    payload.pt_state = data.pt_state;
-    payload.pt_slabs = data.pt_slabs;
+  if (data.statutoryType === 'PT') {
+    payload.ptState = data.ptState;
+    payload.ptSlabs = data.ptSlabs;
   }
 
-  if (data.statutory_type === 'LWF') {
-    payload.lwf_employer_contribution = data.employer_contribution_pct;
-    payload.lwf_employee_contribution = data.employee_contribution_pct;
-    payload.lwf_frequency = data.lwf_frequency;
+  if (data.statutoryType === 'LWF') {
+    payload.lwfEmployerContribution = data.employerContributionPct;
+    payload.lwfEmployeeContribution = data.employeeContributionPct;
+    payload.lwfFrequency = data.lwfFrequency;
   }
 
   return payload;
@@ -461,10 +456,9 @@ class PayrollService {
   // ============== Salary Components ==============
 
   async listComponents(params: {
-    organization_id: string;
-    component_type?: string;
+    componentType?: string;
     category?: string;
-    active_only?: boolean;
+    activeOnly?: boolean;
     skip?: number;
     limit?: number;
   }): Promise<{ items: SalaryComponent[]; total: number }> {
@@ -497,8 +491,7 @@ class PayrollService {
   // ============== Salary Structures ==============
 
   async listStructures(params: {
-    organization_id: string;
-    active_only?: boolean;
+    activeOnly?: boolean;
     skip?: number;
     limit?: number;
   }): Promise<{ items: SalaryStructure[]; total: number }> {
@@ -531,8 +524,8 @@ class PayrollService {
   // ============== Employee Salaries ==============
 
   async listEmployeeSalaries(params: {
-    employee_id?: string;
-    active_only?: boolean;
+    employeeId?: string;
+    activeOnly?: boolean;
     skip?: number;
     limit?: number;
   }): Promise<{ items: EmployeeSalary[]; total: number }> {
@@ -563,8 +556,7 @@ class PayrollService {
   // ============== Statutory Setup ==============
 
   async listStatutorySetup(params: {
-    organization_id: string;
-    statutory_type?: string;
+    statutoryType?: string;
   }): Promise<StatutorySetup[]> {
     const response = await api.get('/payroll/statutory-setup', { params });
     return (response.data ?? []).map(normalizeStatutorySetup);
@@ -588,7 +580,6 @@ class PayrollService {
   // ============== Payroll Batches ==============
 
   async listBatches(params: {
-    organization_id: string;
     year?: number;
     status?: string;
     skip?: number;
@@ -648,8 +639,8 @@ class PayrollService {
   // ============== Payslips ==============
 
   async listPayslips(params: {
-    batch_id?: string;
-    employee_id?: string;
+    batchId?: string;
+    employeeId?: string;
     status?: string;
     skip?: number;
     limit?: number;
@@ -672,12 +663,12 @@ class PayrollService {
   }
 
   async getEmployeePayslips(params: {
-    employee_id: string;
+    employeeId: string;
     year?: number;
     skip?: number;
     limit?: number;
   }): Promise<{ items: Payslip[]; total: number }> {
-    const response = await api.get(`/payroll/payslips/employee/${params.employee_id}`, {
+    const response = await api.get(`/payroll/payslips/employee/${params.employeeId}`, {
       params: {
         year: params.year,
         skip: params.skip,

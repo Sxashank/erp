@@ -66,14 +66,13 @@ export const npaApi = {
   },
 
   batchClassify: async (
-    organizationId: string,
     asOfDate?: string,
     autoUpdate = true
   ): Promise<{ total_processed: number; classifications: Record<string, number>; errors: unknown[] }> => {
     const response = await api.post(`${BASE_URL}/npa/batch-classify`, {
       as_of_date: asOfDate,
       auto_update: autoUpdate,
-    }, { params: { organization_id: organizationId } });
+    }, { params: {} });
     return response.data;
   },
 
@@ -99,16 +98,16 @@ export const npaApi = {
     });
   },
 
-  getSummary: async (organizationId: string, asOfDate?: string): Promise<NPASummary> => {
+  getSummary: async (asOfDate?: string): Promise<NPASummary> => {
     const response = await api.get(`${BASE_URL}/npa/summary`, {
-      params: { organization_id: organizationId, as_of_date: asOfDate },
+      params: { as_of_date: asOfDate },
     });
     return response.data;
   },
 
-  getMovement: async (organizationId: string, fromDate: string, toDate: string): Promise<NPAMovement> => {
+  getMovement: async (fromDate: string, toDate: string): Promise<NPAMovement> => {
     const response = await api.get(`${BASE_URL}/npa/movement`, {
-      params: { organization_id: organizationId, from_date: fromDate, to_date: toDate },
+      params: { from_date: fromDate, to_date: toDate },
     });
     return response.data;
   },
@@ -202,14 +201,13 @@ export const receiptApi = {
   },
 
   processBulkReceipts: async (
-    organizationId: string,
     receipts: BulkReceiptItem[],
     autoAllocate = true
   ): Promise<BulkReceiptResult> => {
     const response = await api.post(`${BASE_URL}/receipts/bulk`, {
       receipts,
       auto_allocate: autoAllocate,
-    }, { params: { organization_id: organizationId } });
+    }, { params: {} });
     return response.data;
   },
 
@@ -231,11 +229,10 @@ export const receiptApi = {
   },
 
   getReceiptSummary: async (
-    organizationId: string,
     fromDate?: string,
     toDate?: string
   ): Promise<any> => {
-    const response = await api.get(`${BASE_URL}/receipts/organization/${organizationId}/summary`, {
+    const response = await api.get(`${BASE_URL}/receipts/summary`, {
       params: { from_date: fromDate, to_date: toDate },
     });
     return response.data;
@@ -339,22 +336,20 @@ export const disbursementApi = {
   },
 
   getPendingDisbursements: async (
-    organizationId: string,
     status?: string
-  ): Promise<{ organization_id: string; count: number; disbursements: Record<string, unknown>[] }> => {
+  ): Promise<{ organizationId: string; count: number; disbursements: Record<string, unknown>[] }> => {
     const response = await api.get(`${BASE_URL}/disbursements/pending`, {
-      params: { organization_id: organizationId, status },
+      params: { status },
     });
     return response.data;
   },
 
   getSummary: async (
-    organizationId: string,
     fromDate?: string,
     toDate?: string
   ): Promise<DisbursementSummary> => {
     const response = await api.get(`${BASE_URL}/disbursements/summary`, {
-      params: { organization_id: organizationId, from_date: fromDate, to_date: toDate },
+      params: { from_date: fromDate, to_date: toDate },
     });
     return response.data;
   },
@@ -436,11 +431,10 @@ export const collateralApi = {
   },
 
   getDueForValuation: async (
-    organizationId: string,
     daysAhead = 30
-  ): Promise<{ organization_id: string; count: number; securities: Record<string, unknown>[] }> => {
+  ): Promise<{ organizationId: string; count: number; securities: Record<string, unknown>[] }> => {
     const response = await api.get(`${BASE_URL}/collaterals/due-valuation`, {
-      params: { organization_id: organizationId, days_ahead: daysAhead },
+      params: { days_ahead: daysAhead },
     });
     return response.data;
   },
@@ -483,9 +477,9 @@ export const collateralApi = {
     return response.data;
   },
 
-  getSummary: async (organizationId: string): Promise<CollateralSummary> => {
+  getSummary: async (): Promise<CollateralSummary> => {
     const response = await api.get(`${BASE_URL}/collaterals/summary`, {
-      params: { organization_id: organizationId },
+      params: {},
     });
     return response.data;
   },

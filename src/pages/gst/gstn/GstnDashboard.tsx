@@ -28,7 +28,6 @@ export function GstnDashboard() {
   const currentPeriod = format(subMonths(new Date(), 1), 'MMyyyy');
 
   const registrationsQuery = useGSTRegistrations({
-    organizationId: activeOrganizationId ?? undefined,
     includeInactive: false,
     pageSize: 100,
   });

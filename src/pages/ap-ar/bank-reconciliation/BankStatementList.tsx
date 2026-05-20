@@ -113,9 +113,8 @@ export function BankStatementList() {
       if (!organizationId) return;
       try {
         const response = await accountsApi.list({
-          organization_id: organizationId,
-          account_type: 'BANK',
-          page_size: 100,
+          accountType: 'BANK',
+          pageSize: 100,
         });
         setBankAccounts(response.data.items || []);
         // Auto-select first bank account if none selected
@@ -141,7 +140,6 @@ export function BankStatementList() {
       try {
         const params: Parameters<typeof bankReconciliationApi.listStatements>[0] = {
           bank_account_id: selectedBankAccount,
-          organization_id: organizationId,
           skip: (page - 1) * pageSize,
           limit: pageSize,
         };

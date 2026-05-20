@@ -109,7 +109,7 @@ export default function ClaimDetail(): JSX.Element {
   const [releasedDate, setReleasedDate] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [downloading, setDownloading] = useState<'csv' | null>(null);
+  const [downloading, setDownloading] = useState<'csv' | 'xlsx' | 'pdf' | null>(null);
 
   if (isLoading) {
     return (
@@ -202,11 +202,16 @@ export default function ClaimDetail(): JSX.Element {
     );
   };
 
-  const handleDownload = async (kind: 'csv') => {
+  const handleDownload = async (kind: 'csv' | 'xlsx' | 'pdf') => {
     if (!id) return;
     setDownloading(kind);
     try {
-      const blob = await claimsApi.downloadReportCsv(id);
+      const blob =
+        kind === 'xlsx'
+          ? await claimsApi.downloadReportXlsx(id)
+          : kind === 'pdf'
+            ? await claimsApi.downloadReportPdf(id)
+            : await claimsApi.downloadReportCsv(id);
       triggerDownload(blob, `${claim.claimReference}.${kind}`);
     } catch (e) {
       toast({
@@ -238,14 +243,17 @@ export default function ClaimDetail(): JSX.Element {
             <Badge variant="outline" className={v.className}>
               {v.label}
             </Badge>
-            <Button
-              variant="outline"
-              onClick={() => handleDownload('csv')}
-              disabled={downloading === 'csv'}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              Download CSV report
-            </Button>
+            {(['csv', 'xlsx', 'pdf'] as const).map((kind) => (
+              <Button
+                key={kind}
+                variant="outline"
+                onClick={() => handleDownload(kind)}
+                disabled={downloading === kind}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                {kind.toUpperCase()} report
+              </Button>
+            ))}
             {claim.status === 'DRAFT' && (
               <Button onClick={handleSubmit} disabled={submitMut.isPending}>
                 <Send className="mr-2 h-4 w-4" />

@@ -68,7 +68,7 @@ class VoucherCreate(BaseSchema):
     narration: Optional[str] = None
     unit_id: Optional[UUID] = None
     lines: List[VoucherLineCreate]
-    organization_id: UUID
+    organization_id: Optional[UUID] = None
 
     @field_validator("lines")
     @classmethod

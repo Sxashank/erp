@@ -23,7 +23,6 @@ export function GstnLogin() {
   const [countdown, setCountdown] = useState(0);
 
   const registrationsQuery = useGSTRegistrations({
-    organizationId: activeOrganizationId ?? undefined,
     includeInactive: false,
     pageSize: 100,
   });

@@ -58,7 +58,6 @@ export default function FDProductForm() {
   const organizationId = useRequiredActiveOrganizationId();
 
   const [formData, setFormData] = useState<Partial<FDProduct>>({
-    organization_id: organizationId,
     product_code: '',
     product_name: '',
     description: '',
@@ -94,7 +93,6 @@ export default function FDProductForm() {
     }
     setFormData((current) => ({
       ...current,
-      organization_id: organizationId,
     }));
   }, [isEdit, organizationId]);
 

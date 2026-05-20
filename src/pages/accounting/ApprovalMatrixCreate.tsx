@@ -195,7 +195,6 @@ export default function ApprovalMatrixCreate() {
     setIsSubmitting(true);
     try {
       const payload: ApprovalWorkflowPayload = {
-        organizationId,
         workflowType: data.transactionType as ApprovalWorkflowType,
         workflowName: data.name,
         description: data.description || null,
@@ -223,7 +222,7 @@ export default function ApprovalMatrixCreate() {
         }),
       };
       if (isEditMode && id) {
-        const { organizationId: _organizationId, workflowType: _workflowType, ...updatePayload } = payload;
+        const { workflowType: _workflowType, ...updatePayload } = payload;
         await approvalsApi.updateWorkflow(id, {
           ...updatePayload,
           isActive: data.isActive,

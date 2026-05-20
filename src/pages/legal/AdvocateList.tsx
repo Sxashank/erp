@@ -449,7 +449,7 @@ export default function AdvocateList() {
                   <SelectValue placeholder="Select law firm (optional)" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Independent</SelectItem>
+                  <SelectItem value="__none__">Independent</SelectItem>
                   {lawFirms.map((firm) => (
                     <SelectItem key={firm.id} value={firm.id}>
                       {firm.name}

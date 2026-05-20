@@ -273,8 +273,8 @@ async function adminLogin(): Promise<AdminSession> {
   const body = await response.json();
   await ctx.dispose();
   return {
-    accessToken: body.access_token,
-    refreshToken: body.refresh_token,
+    accessToken: body.accessToken ?? body.access_token,
+    refreshToken: body.refreshToken ?? body.refresh_token,
     user: body.user ?? {},
   };
 }
@@ -471,9 +471,7 @@ async function assertRouteClean(page: Page, route: string): Promise<void> {
     if (/\.(ico|png|jpg|jpeg|gif|svg|map|woff2?|ttf)(\?.*)?$/.test(url)) return;
     if (/\/api\/v1\/bi\/dashboards\/landing(?:\?.*)?$/.test(url)) return;
     if (/ERR_ABORTED/i.test(errorText)) return;
-    failedResponses.push(
-      `request failed ${errorText} ${url.replace(/^https?:\/\/[^/]+/, '')}`,
-    );
+    failedResponses.push(`request failed ${errorText} ${url.replace(/^https?:\/\/[^/]+/, '')}`);
   });
 
   await page.goto(route, { waitUntil: 'domcontentloaded' });
@@ -493,11 +491,12 @@ async function assertRouteClean(page: Page, route: string): Promise<void> {
 }
 
 test.describe('manual release UAT readiness', () => {
-  test.skip(!LIVE_BACKEND_ENABLED, 'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live UAT release suite.');
+  test.skip(
+    !LIVE_BACKEND_ENABLED,
+    'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live UAT release suite.',
+  );
 
-  test('admin release routes render without API or console failures', async ({
-    page,
-  }) => {
+  test('admin release routes render without API or console failures', async ({ page }) => {
     test.setTimeout(180_000);
     const session = await adminLogin();
     await installAdminSession(page, session);
@@ -518,9 +517,7 @@ test.describe('manual release UAT readiness', () => {
     }
   });
 
-  test('full ERP routes remain visible in default release mode', async ({
-    page,
-  }) => {
+  test('full ERP routes remain visible in default release mode', async ({ page }) => {
     const session = await adminLogin();
     await installAdminSession(page, session);
 

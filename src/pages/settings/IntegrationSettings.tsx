@@ -49,17 +49,17 @@ interface IntegrationType {
 
 interface IntegrationConfig {
   id: string;
-  integration_type: string;
+  integrationType: string;
   provider: string;
-  display_name: string | null;
-  config_data: Record<string, unknown>;
-  sandbox_mode: boolean;
-  is_active: boolean;
-  health_status: string;
-  last_used_at: string | null;
-  last_health_check: string | null;
-  total_requests: number;
-  failed_requests: number;
+  displayName: string | null;
+  configData: Record<string, unknown>;
+  sandboxMode: boolean;
+  isActive: boolean;
+  healthStatus: string;
+  lastUsedAt: string | null;
+  lastHealthCheck: string | null;
+  totalRequests: number;
+  failedRequests: number;
 }
 
 interface Organization {
@@ -113,11 +113,11 @@ export function IntegrationSettings() {
 
   useEffect(() => {
     // Load existing config when tab changes
-    const existingConfig = configs.find((c) => c.integration_type === activeTab);
+    const existingConfig = configs.find((c) => c.integrationType === activeTab);
     if (existingConfig) {
-      setFormData(existingConfig.config_data || {});
+      setFormData(existingConfig.configData || {});
       setSelectedProvider(existingConfig.provider);
-      setSandboxMode(existingConfig.sandbox_mode);
+      setSandboxMode(existingConfig.sandboxMode);
     } else {
       setFormData({});
       setSelectedProvider('');
@@ -127,7 +127,7 @@ export function IntegrationSettings() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -153,7 +153,6 @@ export function IntegrationSettings() {
     try {
       setLoading(true);
       const response = await integrationsApi.list({
-        organization_id: selectedOrgId,
         page_size: 50,
       });
       setConfigs(response.data.items);
@@ -169,7 +168,7 @@ export function IntegrationSettings() {
   };
 
   const getExistingConfig = () => {
-    return configs.find((c) => c.integration_type === activeTab);
+    return configs.find((c) => c.integrationType === activeTab);
   };
 
   const handleSave = async () => {
@@ -199,7 +198,6 @@ export function IntegrationSettings() {
       } else {
         // Create new
         await integrationsApi.create({
-          organization_id: selectedOrgId,
           integration_type: activeTab,
           provider: selectedProvider,
           config_data: formData,
@@ -390,7 +388,7 @@ export function IntegrationSettings() {
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="grid w-full grid-cols-5">
             {integrationTypes.map((type) => {
-              const config = configs.find((c) => c.integration_type === type.type);
+              const config = configs.find((c) => c.integrationType === type.type);
               return (
                 <TabsTrigger
                   key={type.type}
@@ -402,9 +400,9 @@ export function IntegrationSettings() {
                   {config && (
                     <Badge
                       variant="secondary"
-                      className={`ml-1 ${HEALTH_STATUS_STYLES[config.health_status]}`}
+                      className={`ml-1 ${HEALTH_STATUS_STYLES[config.healthStatus]}`}
                     >
-                      {config.health_status === 'HEALTHY' ? (
+                      {config.healthStatus === 'HEALTHY' ? (
                         <Check className="h-3 w-3" />
                       ) : (
                         <AlertCircle className="h-3 w-3" />
@@ -430,13 +428,13 @@ export function IntegrationSettings() {
                     </div>
                     {existingConfig && (
                       <div className="flex items-center gap-2">
-                        <Badge className={HEALTH_STATUS_STYLES[existingConfig.health_status]}>
-                          {existingConfig.health_status}
+                        <Badge className={HEALTH_STATUS_STYLES[existingConfig.healthStatus]}>
+                          {existingConfig.healthStatus}
                         </Badge>
-                        {existingConfig.last_health_check && (
+                        {existingConfig.lastHealthCheck && (
                           <span className="text-xs text-slate-500">
                             Last checked:{' '}
-                            {new Date(existingConfig.last_health_check).toLocaleString()}
+                            {new Date(existingConfig.lastHealthCheck).toLocaleString()}
                           </span>
                         )}
                       </div>
@@ -506,13 +504,13 @@ export function IntegrationSettings() {
                       <Server className="h-4 w-4" />
                       <AlertDescription>
                         <span className="font-medium">Usage Statistics: </span>
-                        {existingConfig.total_requests} total requests,{' '}
-                        {existingConfig.failed_requests} failed
-                        {existingConfig.last_used_at && (
+                        {existingConfig.totalRequests} total requests,{' '}
+                        {existingConfig.failedRequests} failed
+                        {existingConfig.lastUsedAt && (
                           <>
                             {' '}
                             | Last used:{' '}
-                            {new Date(existingConfig.last_used_at).toLocaleString()}
+                            {new Date(existingConfig.lastUsedAt).toLocaleString()}
                           </>
                         )}
                       </AlertDescription>

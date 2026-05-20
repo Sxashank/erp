@@ -10,6 +10,8 @@ NGINX_CONF_DIR="$RUNTIME_DIR/nginx/conf.d"
 CERTBOT_WEBROOT="$RUNTIME_DIR/certbot/www"
 CERTBOT_CONF="$RUNTIME_DIR/certbot/conf"
 DOCKER_CMD=(docker)
+SSL_ACTIVE=false
+SSL_PENDING_REASON=""
 
 log() {
   printf '\n==> %s\n' "$*"
@@ -57,6 +59,25 @@ import secrets
 print(secrets.token_hex(32))
 PY
   fi
+}
+
+json_array_value() {
+  python3 - "$1" <<'PY'
+import json
+import sys
+
+raw = sys.argv[1].strip()
+if raw.startswith("["):
+    try:
+        values = json.loads(raw)
+    except json.JSONDecodeError:
+        values = [item.strip().strip('"').strip("'") for item in raw.strip("[]").split(",") if item.strip()]
+elif raw:
+    values = [item.strip() for item in raw.split(",") if item.strip()]
+else:
+    values = []
+print(json.dumps(values))
+PY
 }
 
 set_env_value() {
@@ -116,6 +137,9 @@ validate_env() {
   [ -n "${JWT_SECRET_KEY:-}" ] || fail "JWT_SECRET_KEY is required"
   [ "$JWT_SECRET_KEY" != "change-me-generate-on-server" ] || fail "JWT_SECRET_KEY still has the example value"
   [ -n "${CORS_ORIGINS:-}" ] || fail "CORS_ORIGINS is required"
+  CORS_ORIGINS="$(json_array_value "$CORS_ORIGINS")"
+  export CORS_ORIGINS
+  set_env_value "CORS_ORIGINS" "'$CORS_ORIGINS'"
 
   if [ "${RUN_SEED_DATA:-false}" = "true" ]; then
     [ -n "${SEED_ADMIN_USERNAME:-}" ] || fail "SEED_ADMIN_USERNAME is required when RUN_SEED_DATA=true"
@@ -157,7 +181,10 @@ install_compose_plugin_binary() {
 install_docker_on_amazon_linux() {
   log "Installing Docker on Amazon Linux"
 
-  install_packages ca-certificates curl
+  install_packages ca-certificates
+  if ! command -v curl >/dev/null 2>&1; then
+    install_packages curl-minimal || install_packages curl
+  fi
 
   if command -v dnf >/dev/null 2>&1; then
     sudo_if_needed dnf install -y docker docker-cli || sudo_if_needed dnf install -y docker
@@ -233,6 +260,61 @@ compose() {
   "${DOCKER_CMD[@]}" compose "${args[@]}" "$@"
 }
 
+server_public_ip() {
+  if [ -n "${SERVER_PUBLIC_IP:-}" ]; then
+    printf '%s' "$SERVER_PUBLIC_IP"
+    return
+  fi
+
+  curl -fsS --max-time 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null \
+    || curl -fsS --max-time 3 https://checkip.amazonaws.com 2>/dev/null \
+    | tr -d '[:space:]' \
+    || true
+}
+
+domain_ipv4_addresses() {
+  local addresses=""
+  if command -v dig >/dev/null 2>&1; then
+    addresses="$(
+      {
+        dig +short @1.1.1.1 "$DOMAIN_NAME" A 2>/dev/null
+        dig +short @8.8.8.8 "$DOMAIN_NAME" A 2>/dev/null
+      } | awk '/^[0-9.]+$/ {print}' | sort -u
+    )"
+  fi
+
+  if [ -z "$addresses" ]; then
+    addresses="$(getent ahostsv4 "$DOMAIN_NAME" 2>/dev/null | awk '{print $1}' | sort -u || true)"
+  fi
+
+  printf '%s\n' "$addresses"
+}
+
+domain_points_to_this_host() {
+  local public_ip
+  public_ip="$(server_public_ip)"
+  if [ -z "$public_ip" ]; then
+    log "Could not determine server public IP; attempting SSL challenge without DNS preflight"
+    return 0
+  fi
+
+  local addresses
+  addresses="$(domain_ipv4_addresses)"
+  if [ -z "$addresses" ]; then
+    SSL_PENDING_REASON="DNS has no IPv4 A record for $DOMAIN_NAME."
+    log "$SSL_PENDING_REASON Skipping SSL until DNS is configured"
+    return 1
+  fi
+
+  if printf '%s\n' "$addresses" | grep -Fxq "$public_ip"; then
+    return 0
+  fi
+
+  SSL_PENDING_REASON="DNS for $DOMAIN_NAME points to $(printf '%s' "$addresses" | paste -sd, -), not this server ($public_ip)."
+  log "$SSL_PENDING_REASON Skipping SSL for now"
+  return 1
+}
+
 start_http_stack() {
   log "Rendering HTTP Nginx config"
   render_nginx_config "$ROOT_DIR/deploy/nginx/http.conf.template"
@@ -244,20 +326,31 @@ start_http_stack() {
 issue_or_refresh_certificate() {
   if [ "${ENABLE_SSL:-true}" != "true" ]; then
     log "SSL disabled; leaving HTTP-only stack running"
+    SSL_ACTIVE=false
+    return
+  fi
+
+  if ! domain_points_to_this_host; then
+    SSL_ACTIVE=false
     return
   fi
 
   local cert="$CERTBOT_CONF/live/$DOMAIN_NAME/fullchain.pem"
   if [ ! -f "$cert" ]; then
     log "Requesting Let's Encrypt certificate for $DOMAIN_NAME"
-    compose --profile ssl run --rm certbot certonly \
+    if ! compose --profile ssl run --rm certbot certonly \
       --webroot \
       --webroot-path /var/www/certbot \
       -d "$DOMAIN_NAME" \
       --email "$LETSENCRYPT_EMAIL" \
       --agree-tos \
       --no-eff-email \
-      --non-interactive
+      --non-interactive; then
+      SSL_PENDING_REASON="Let's Encrypt could not reach http://$DOMAIN_NAME/.well-known/acme-challenge/. Confirm the DNS A record and inbound port 80 are open to the internet."
+      log "Let's Encrypt challenge failed; leaving HTTP-only stack running"
+      SSL_ACTIVE=false
+      return
+    fi
   else
     log "Existing certificate found for $DOMAIN_NAME"
   fi
@@ -266,22 +359,28 @@ issue_or_refresh_certificate() {
   render_nginx_config "$ROOT_DIR/deploy/nginx/https.conf.template"
   compose up -d nginx
   compose exec -T nginx nginx -s reload || compose restart nginx
+  SSL_ACTIVE=true
 }
 
 install_ssl_renewal_cron() {
-  if [ "${ENABLE_SSL:-true}" != "true" ] || [ "${INSTALL_SSL_RENEWAL_CRON:-true}" != "true" ]; then
+  if [ "$SSL_ACTIVE" != "true" ] || [ "${INSTALL_SSL_RENEWAL_CRON:-true}" != "true" ]; then
     return
   fi
 
   local cron_file="/etc/cron.d/smfc-erp-ssl-renew"
   local renew_script="$ROOT_DIR/deploy/renew-ssl.sh"
   log "Installing SSL renewal cron at $cron_file"
+  sudo_if_needed mkdir -p "$(dirname "$cron_file")"
   sudo_if_needed tee "$cron_file" >/dev/null <<EOF
 SHELL=/bin/bash
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 17 3 * * * root cd "$ROOT_DIR" && "$renew_script" "$ENV_FILE" >> "$ROOT_DIR/deploy/runtime/certbot/renew.log" 2>&1
 EOF
   sudo_if_needed chmod 0644 "$cron_file"
+
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files crond.service >/dev/null 2>&1; then
+    sudo_if_needed systemctl enable --now crond >/dev/null 2>&1 || true
+  fi
 }
 
 main() {
@@ -297,12 +396,15 @@ main() {
   install_ssl_renewal_cron
 
   log "Deployment complete"
-  if [ "${ENABLE_SSL:-true}" = "true" ]; then
+  if [ "$SSL_ACTIVE" = "true" ]; then
     printf 'Open: https://%s\n' "$DOMAIN_NAME"
   else
     printf 'Open: http://%s\n' "$DOMAIN_NAME"
+    if [ "${ENABLE_SSL:-true}" = "true" ]; then
+      printf 'SSL pending: %s Rerun this script after fixing it.\n' "${SSL_PENDING_REASON:-point the DNS A record to this server and ensure inbound port 80 is open.}"
+    fi
   fi
-  printf 'Health: %s://%s/health\n' "$([ "${ENABLE_SSL:-true}" = "true" ] && printf https || printf http)" "$DOMAIN_NAME"
+  printf 'Health: %s://%s/health\n' "$([ "$SSL_ACTIVE" = "true" ] && printf https || printf http)" "$DOMAIN_NAME"
 }
 
 main "$@"

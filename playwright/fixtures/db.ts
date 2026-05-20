@@ -19,10 +19,12 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client, type QueryResultRow } from 'pg';
 
-const ROOT = resolve(__dirname, '..', '..');
+const HERE = dirname(fileURLToPath(import.meta.url));
+const ROOT = resolve(HERE, '..', '..');
 
 export const E2E_DATABASE_URL =
   process.env.DATABASE_URL_E2E ??
@@ -157,6 +159,17 @@ export async function dbConnect(orgId?: string): Promise<DbHelper> {
       return row as never;
     },
     async cleanupByPrefix(table, prefix, column = 'code') {
+      // Probe whether the table is org-scoped — global masters like
+      // mst_designation have no `organization_id` column.
+      const cols = await client.query<{ column_name: string }>(
+        "SELECT column_name FROM information_schema.columns WHERE table_name = $1 AND column_name = 'organization_id'",
+        [table],
+      );
+      if (cols.rows.length === 0) {
+        const sql = `DELETE FROM ${quoteIdent(table)} WHERE ${quoteIdent(column)} LIKE $1`;
+        const res = await client.query(sql, [`${prefix}%`]);
+        return res.rowCount ?? 0;
+      }
       const sql = `DELETE FROM ${quoteIdent(table)} WHERE ${quoteIdent(column)} LIKE $1 AND organization_id = $2`;
       const res = await client.query(sql, [`${prefix}%`, resolvedOrg]);
       return res.rowCount ?? 0;

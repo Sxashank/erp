@@ -33,6 +33,8 @@ from app.models.auth.user import User
 from app.models.finance.account import Account
 from app.models.lending import (
     AllocationComponent,
+    ApplicationFundingSource,
+    ApplicationLenderLoan,
     ApplicationStage,
     ApplicationStatus,
     AssetClassification,
@@ -552,6 +554,7 @@ async def ensure_application(
         ),
     )
     if not app:
+        project_cost = (amount * Decimal("1.35")).quantize(Decimal("0.01"))
         app = LoanApplication(
             organization_id=org.id,
             application_number=number,
@@ -563,7 +566,7 @@ async def ensure_application(
             detailed_purpose="Manual UAT lifecycle coverage: appraisal, sanction, tranche disbursement, schedule, receipt, overdue and closure.",
             is_project_finance=True,
             project_name=project_name,
-            project_cost=(amount * Decimal("1.35")).quantize(Decimal("0.01")),
+            project_cost=project_cost,
             promoter_contribution=(amount * Decimal("0.25")).quantize(Decimal("0.01")),
             promoter_contribution_pct=money("25.00"),
             bank_finance=amount,
@@ -593,7 +596,84 @@ async def ensure_application(
         )
         session.add(app)
         await session.flush()
+    await ensure_application_iif_details(session, org, app, amount)
     return app
+
+
+async def ensure_application_iif_details(
+    session: AsyncSession,
+    org: Organization,
+    app: LoanApplication,
+    amount: Decimal,
+) -> None:
+    funding_exists = await scalar_one_or_none(
+        session,
+        select(ApplicationFundingSource).where(
+            ApplicationFundingSource.organization_id == org.id,
+            ApplicationFundingSource.application_id == app.id,
+            ApplicationFundingSource.deleted_at.is_(None),
+        ),
+    )
+    if funding_exists is None:
+        project_cost = app.project_cost or (amount * Decimal("1.35")).quantize(Decimal("0.01"))
+        funding_rows = [
+            ("EQUITY_SHARE_CAPITAL", "Equity share capital", money("30000000")),
+            ("PROMOTER_CONTRIBUTION", "Promoter contribution", money("20000000")),
+            ("BANK_TERM_LOAN", "Bank / FI term loan", amount),
+            ("INTERNAL_ACCRUALS", "Internal accruals", project_cost - amount - money("50000000")),
+        ]
+        for source_code, source_label, source_amount in funding_rows:
+            session.add(
+                ApplicationFundingSource(
+                    organization_id=org.id,
+                    application_id=app.id,
+                    source_code=source_code,
+                    source_label=source_label,
+                    amount=source_amount,
+                    remarks="Seeded for IIF project funding composition demo.",
+                )
+            )
+
+    lender_loan_exists = await scalar_one_or_none(
+        session,
+        select(ApplicationLenderLoan).where(
+            ApplicationLenderLoan.organization_id == org.id,
+            ApplicationLenderLoan.application_id == app.id,
+            ApplicationLenderLoan.deleted_at.is_(None),
+        ),
+    )
+    if lender_loan_exists is None:
+        session.add(
+            ApplicationLenderLoan(
+                organization_id=org.id,
+                application_id=app.id,
+                loan_type="Term Loan",
+                loan_amount=amount,
+                lender_name="UAT National Bank",
+                lender_category="Bank",
+                lender_contact="Credit Desk",
+                lender_email="creditdesk@uatnationalbank.example.com",
+                lender_address="Mumbai Corporate Banking Branch",
+                lender_state="Maharashtra",
+                lender_district="Mumbai",
+                lender_pincode="400001",
+                sanction_reference=f"{app.application_number}/SANCTION",
+                sanction_date=today() - timedelta(days=30),
+                interest_rate_percent=money("10.75"),
+                emi_periodicity="Quarterly",
+                interest_debiting_periodicity="Monthly",
+                loan_account_number="UATBNKTL0001",
+                ifsc_code="UTNB0000001",
+                security_type="First charge on project assets",
+                disbursement_call_type="Tranche based",
+                emi_amount=money("18500000"),
+                emi_due_date=add_months(today(), 3),
+                lender_validation_status="VALIDATED",
+                lender_validation_remarks="Seeded lender validation for client demo.",
+                lender_validated_at=datetime.now(UTC) - timedelta(days=20),
+            )
+        )
+    await session.flush()
 
 
 async def ensure_sanction(

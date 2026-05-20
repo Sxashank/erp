@@ -160,7 +160,7 @@ Violations (e.g. an endpoint calling a repository directly, a service issuing an
 - Every mutable table has `organization_id` (UUID, not null, indexed).
 - PostgreSQL Row-Level Security enforces tenant isolation via the session GUC `app.current_org_id`.
 - Backend dependency `get_db_with_tenant` (in `app/api/deps.py`) sets the GUC before the endpoint runs and clears it after. **Every authenticated route uses `get_db_with_tenant`.** Routes that must cross tenants (super-admin endpoints) use a different dependency and are explicitly audited.
-- Frontend mirrors via `OrganizationContext`: every hook reads `activeOrganizationId` from context and passes it on the wire (the backend does not trust it; the backend reads it from the JWT + RLS). No page may hard-code or omit the organization ID.
+- Frontend mirrors tenant selection via `OrganizationContext`: pages and hooks may read `activeOrganizationId` for UI state, filtering controls, and the `X-Organization-Id` header where the authenticated user can switch tenants. **Tenant-scoped ERP APIs must not take `organization_id` / `organizationId` as ordinary query parameters or request-body fields.** The backend derives tenant scope from the authenticated principal and PostgreSQL RLS (`app.current_org_id`). Explicit organization IDs are allowed only for audited platform-admin/cross-tenant endpoints or true child resources under an organization path such as `/organizations/{org_id}/addresses`.
 
 ### 3.5 Environments
 

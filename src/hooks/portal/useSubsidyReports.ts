@@ -241,7 +241,12 @@ export function useMarkPortalClaimReleased() {
   });
 }
 
-export function useDownloadPortalClaimCsv(claimId: string | undefined) {
+type PortalClaimDownloadFormat = 'csv' | 'xlsx' | 'pdf';
+
+export function useDownloadPortalClaimReport(
+  claimId: string | undefined,
+  format: PortalClaimDownloadFormat = 'csv',
+) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<unknown>(null);
 
@@ -251,17 +256,27 @@ export function useDownloadPortalClaimCsv(claimId: string | undefined) {
       setError(null);
       setIsDownloading(true);
       try {
-        const res = await portalClaimsApi.downloadClaimCsv(claimId);
+        const res =
+          format === 'xlsx'
+            ? await portalClaimsApi.downloadClaimXlsx(claimId)
+            : format === 'pdf'
+              ? await portalClaimsApi.downloadClaimPdf(claimId)
+              : await portalClaimsApi.downloadClaimCsv(claimId);
         const blob =
           res.data instanceof Blob
             ? res.data
             : new Blob([res.data as unknown as ArrayBuffer], {
-                type: 'text/csv',
+                type:
+                  format === 'xlsx'
+                    ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    : format === 'pdf'
+                      ? 'application/pdf'
+                      : 'text/csv',
               });
         const url = window.URL.createObjectURL(blob);
         const a = window.document.createElement('a');
         a.href = url;
-        a.download = overrideFilename ?? `claim_${claimId}.csv`;
+        a.download = overrideFilename ?? `claim_${claimId}.${format}`;
         window.document.body.appendChild(a);
         a.click();
         window.document.body.removeChild(a);
@@ -273,8 +288,12 @@ export function useDownloadPortalClaimCsv(claimId: string | undefined) {
         setIsDownloading(false);
       }
     },
-    [claimId],
+    [claimId, format],
   );
 
   return { download, isDownloading, error };
+}
+
+export function useDownloadPortalClaimCsv(claimId: string | undefined) {
+  return useDownloadPortalClaimReport(claimId, 'csv');
 }

@@ -150,7 +150,7 @@ class BorrowerClaimItem(CamelSchema):
             "documents": [
                 {
                     **BorrowerClaimDocument.model_validate(doc).model_dump(by_alias=True),
-                    "download_url": (
+                    "downloadUrl": (
                         f"/api/v1/portal/claims/{obj.id}/documents/"
                         f"{doc.get('document_id')}/download"
                         if isinstance(doc, dict) and doc.get("document_id")

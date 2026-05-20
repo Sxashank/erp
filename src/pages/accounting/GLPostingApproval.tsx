@@ -60,24 +60,24 @@ interface PendingPosting {
 
 interface VoucherLineDto {
   id: string;
-  account_code?: string | null;
-  account_name?: string | null;
-  debit_amount?: number | string | null;
-  credit_amount?: number | string | null;
+  accountCode?: string | null;
+  accountName?: string | null;
+  debitAmount?: number | string | null;
+  creditAmount?: number | string | null;
 }
 
 interface VoucherDto {
   id: string;
-  voucher_number?: string | null;
+  voucherNumber?: string | null;
   narration?: string | null;
-  voucher_type_name?: string | null;
-  voucher_date?: string | null;
-  financial_year_code?: string | null;
+  voucherTypeName?: string | null;
+  voucherDate?: string | null;
+  financialYearCode?: string | null;
   lines?: VoucherLineDto[];
-  total_debit?: number | string | null;
-  total_credit?: number | string | null;
-  created_by?: string | null;
-  created_at?: string | null;
+  totalDebit?: number | string | null;
+  totalCredit?: number | string | null;
+  createdBy?: string | null;
+  createdAt?: string | null;
 }
 
 export default function GLPostingApproval() {
@@ -90,22 +90,22 @@ export default function GLPostingApproval() {
 
   const mapVoucher = useCallback((voucher: VoucherDto): PendingPosting => ({
     id: voucher.id,
-    postingId: voucher.voucher_number || '-',
-    description: voucher.narration || voucher.voucher_type_name || 'Voucher posting',
-    postingDate: voucher.voucher_date || '-',
-    period: voucher.financial_year_code || '-',
+    postingId: voucher.voucherNumber || '-',
+    description: voucher.narration || voucher.voucherTypeName || 'Voucher posting',
+    postingDate: voucher.voucherDate || '-',
+    period: voucher.financialYearCode || '-',
     entries: (voucher.lines || []).map((line) => ({
       id: line.id,
-      accountCode: line.account_code || '-',
-      accountName: line.account_name || '-',
-      debit: Number(line.debit_amount || 0),
-      credit: Number(line.credit_amount || 0),
+      accountCode: line.accountCode || '-',
+      accountName: line.accountName || '-',
+      debit: Number(line.debitAmount || 0),
+      credit: Number(line.creditAmount || 0),
     })),
-    totalDebit: Number(voucher.total_debit || 0),
-    totalCredit: Number(voucher.total_credit || 0),
-    createdBy: voucher.created_by || '-',
-    createdAt: voucher.created_at || '-',
-    priority: Number(voucher.total_debit || 0) >= 5000000 ? 'HIGH' : 'NORMAL',
+    totalDebit: Number(voucher.totalDebit || 0),
+    totalCredit: Number(voucher.totalCredit || 0),
+    createdBy: voucher.createdBy || '-',
+    createdAt: voucher.createdAt || '-',
+    priority: Number(voucher.totalDebit || 0) >= 5000000 ? 'HIGH' : 'NORMAL',
     remarks: voucher.narration || undefined,
   }), []);
 
@@ -123,7 +123,6 @@ export default function GLPostingApproval() {
     if (!organizationId) return;
     try {
       const response = await vouchersApi.getPendingApproval({
-        organization_id: organizationId,
         page_size: 100,
       });
       const postings = ((response.data || []) as VoucherDto[]).map(mapVoucher);

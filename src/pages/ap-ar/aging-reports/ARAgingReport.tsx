@@ -89,7 +89,7 @@ export function ARAgingReport() {
     const fetchCustomers = async () => {
       if (!organizationId) return;
       try {
-        const response = await customersApi.getActive({ organization_id: organizationId });
+        const response = await customersApi.getActive({});
         setCustomers(response.data || []);
       } catch (error) {
         logger.error('Failed to fetch customers:', error);
@@ -104,7 +104,6 @@ export function ARAgingReport() {
     setLoading(true);
     try {
       const params: Parameters<typeof agingReportsApi.getARAgingSummary>[0] = {
-        organization_id: organizationId,
         as_of_date: asOfDate,
       };
       if (selectedCustomer !== 'all') {

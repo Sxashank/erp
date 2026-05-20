@@ -40,9 +40,9 @@ def _to_response(hsn_sac) -> HSNSACResponse:
 @router.get("", response_model=PaginatedResponse[HSNSACResponse], response_model_by_alias=True)
 async def search_hsn_sac(
     search: str = Query("", description="Search by code or description"),
-    hsn_sac_type: Optional[HSNSACType] = Query(None),
+    hsn_sac_type: Optional[HSNSACType] = Query(None, alias="hsnSacType"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

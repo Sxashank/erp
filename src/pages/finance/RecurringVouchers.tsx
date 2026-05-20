@@ -123,7 +123,7 @@ export function RecurringVouchers() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -136,14 +136,14 @@ export function RecurringVouchers() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params: RecurringVoucherListParams = { organization_id: selectedOrgId, page_size: 50 };
+      const params: RecurringVoucherListParams = { page_size: 50 };
       if (filterStatus && filterStatus !== 'ALL') params.status = filterStatus;
       if (filterFrequency && filterFrequency !== 'ALL') params.frequency = filterFrequency;
 
       const [listRes, statsRes, upcomingRes] = await Promise.all([
         recurringVouchersApi.list(params),
-        recurringVouchersApi.getStats(selectedOrgId),
-        recurringVouchersApi.getUpcoming(selectedOrgId, 7),
+        recurringVouchersApi.getStats(),
+        recurringVouchersApi.getUpcoming(7),
       ]);
 
       setRecurringVouchers(listRes.data.items);
@@ -200,7 +200,7 @@ export function RecurringVouchers() {
   const handleProcessDue = async () => {
     try {
       setLoading(true);
-      const response = await recurringVouchersApi.processDue(selectedOrgId);
+      const response = await recurringVouchersApi.processDue();
       const results = response.data as ProcessDueResult[];
       const successCount = results.filter((result) => result.success).length;
       toast({ title: 'Processing Complete', description: `${successCount} of ${results.length} vouchers generated successfully` });

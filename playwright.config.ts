@@ -6,6 +6,8 @@
  * preview` over the built dist for a faster start.
  */
 
+import { fileURLToPath } from 'node:url';
+
 import { defineConfig, devices } from '@playwright/test';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5176';
@@ -16,7 +18,7 @@ const useBuilt = process.env.PLAYWRIGHT_USE_BUILD === '1';
 // `pnpm test:e2e:real`) — otherwise the smoke + visual specs don't need the
 // dedicated DB.
 const e2eGlobalSetup = process.env.PLAYWRIGHT_E2E === '1'
-  ? require.resolve('./playwright/tests/e2e/globalSetup.ts')
+  ? fileURLToPath(new URL('./playwright/tests/e2e/globalSetup.ts', import.meta.url))
   : undefined;
 
 export default defineConfig({

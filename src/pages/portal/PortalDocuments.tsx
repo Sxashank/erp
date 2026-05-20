@@ -87,7 +87,7 @@ export default function PortalDocuments() {
   // builds one for us. The BE accepts multipart/form-data.
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadLoanId, setUploadLoanId] = useState<string>('');
-  const [uploadType, setUploadType] = useState<string>('SUPPORTING_DOCUMENT');
+  const [uploadType, setUploadType] = useState<string>('LOAN_AGREEMENT');
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
@@ -103,7 +103,9 @@ export default function PortalDocuments() {
   const [generatingCert, setGeneratingCert] = useState(false);
 
   // TDS certificate
+  const [tdsLoan, setTdsLoan] = useState('');
   const [tdsYear, setTdsYear] = useState('');
+  const [tdsQuarter, setTdsQuarter] = useState('Q1');
   const [generatingTds, setGeneratingTds] = useState(false);
 
   useEffect(() => {
@@ -116,7 +118,7 @@ export default function PortalDocuments() {
         portalDocumentApi.getDocuments(),
         portalDashboardApi.getLoans(),
       ]);
-      setDocuments(docsRes.data);
+      setDocuments(Array.isArray(docsRes.data) ? docsRes.data : (docsRes.data.items ?? []));
       setLoans(loansRes.data);
     } catch (error) {
       logger.error('Failed to fetch data:', error);
@@ -199,12 +201,14 @@ export default function PortalDocuments() {
   };
 
   const handleGenerateTdsCert = async () => {
-    if (!tdsYear) return;
+    if (!tdsLoan || !tdsYear || !tdsQuarter) return;
 
     setGeneratingTds(true);
     try {
       const response = await portalDocumentApi.getTdsCertificate({
+        loan_account_id: tdsLoan,
         financial_year: tdsYear,
+        quarter: tdsQuarter,
       });
       const blob = new Blob([response.data], { type: 'application/pdf' });
       const url = window.URL.createObjectURL(blob);
@@ -249,7 +253,7 @@ export default function PortalDocuments() {
       setUploadFile(null);
       // Refresh the docs list.
       const docsRes = await portalDocumentApi.getDocuments();
-      setDocuments(docsRes.data);
+      setDocuments(Array.isArray(docsRes.data) ? docsRes.data : (docsRes.data.items ?? []));
     } catch (err) {
       showErrorToast(err, toast);
     } finally {
@@ -345,10 +349,10 @@ export default function PortalDocuments() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="BOARD_RESOLUTION">Board resolution</SelectItem>
-                  <SelectItem value="FINANCIAL_STATEMENT">Financial statement</SelectItem>
-                  <SelectItem value="PROJECT_PROPOSAL">Project proposal</SelectItem>
-                  <SelectItem value="SUPPORTING_DOCUMENT">Supporting document</SelectItem>
+                  <SelectItem value="LOAN_AGREEMENT">Loan agreement</SelectItem>
+                  <SelectItem value="SANCTION_LETTER">Sanction letter</SelectItem>
+                  <SelectItem value="ACCOUNT_STATEMENT">Account statement</SelectItem>
+                  <SelectItem value="REPAYMENT_SCHEDULE">Repayment schedule</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -636,6 +640,21 @@ export default function PortalDocuments() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
+                  <Label>Loan Account</Label>
+                  <Select value={tdsLoan} onValueChange={setTdsLoan}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select loan" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {loans.map((loan) => (
+                        <SelectItem key={loan.id} value={loan.id}>
+                          {loan.loan_account_number}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
                   <Label>Financial Year</Label>
                   <Select value={tdsYear} onValueChange={setTdsYear}>
                     <SelectTrigger>
@@ -650,10 +669,24 @@ export default function PortalDocuments() {
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="space-y-2">
+                  <Label>Quarter</Label>
+                  <Select value={tdsQuarter} onValueChange={setTdsQuarter}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Q1">Q1</SelectItem>
+                      <SelectItem value="Q2">Q2</SelectItem>
+                      <SelectItem value="Q3">Q3</SelectItem>
+                      <SelectItem value="Q4">Q4</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Button
                   className="w-full"
                   onClick={handleGenerateTdsCert}
-                  disabled={!tdsYear || generatingTds}
+                  disabled={!tdsLoan || !tdsYear || !tdsQuarter || generatingTds}
                 >
                   {generatingTds ? (
                     <>

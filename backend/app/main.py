@@ -83,6 +83,33 @@ async def app_exception_handler(request: Request, exc: AppException) -> JSONResp
         body["details"] = exc.detail
     return JSONResponse(status_code=exc.status_code, content=body, headers=exc.headers)
 
+
+# Catch-all guard: anything that escapes FastAPI's per-type handlers must still
+# emit a structured envelope (and a traceback in the log) instead of falling
+# through to uvicorn's plain-text "Internal Server Error" — which lacks CORS
+# headers and breaks the FE error-toast contract (§7). Without this, a
+# `ResponseValidationError` (or any unanticipated server bug) silently returns
+# 500 with no detail, making it impossible to debug.
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    import traceback as _traceback
+    logger.error(
+        "unhandled_exception",
+        method=request.method,
+        path=request.url.path,
+        error_type=type(exc).__name__,
+        traceback=_traceback.format_exc(),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error_code": "INTERNAL_ERROR",
+            "message": "Internal server error",
+            "correlation_id": get_correlation_id() or None,
+            "details": {"error_type": type(exc).__name__},
+        },
+    )
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,

@@ -65,14 +65,14 @@ export default function PayrollBatchView() {
   const [paymentReference, setPaymentReference] = useState('');
   const [glDialogOpen, setGlDialogOpen] = useState(false);
   const [glForm, setGlForm] = useState({
-    salary_expense_account_id: '',
-    net_salary_payable_account_id: '',
-    pf_payable_account_id: '',
-    esi_payable_account_id: '',
-    pt_payable_account_id: '',
-    tds_payable_account_id: '',
-    other_deductions_payable_account_id: '',
-    employer_contribution_expense_account_id: '',
+    salaryExpenseAccountId: '',
+    netSalaryPayableAccountId: '',
+    pfPayableAccountId: '',
+    esiPayableAccountId: '',
+    ptPayableAccountId: '',
+    tdsPayableAccountId: '',
+    otherDeductionsPayableAccountId: '',
+    employerContributionExpenseAccountId: '',
   });
 
   useEffect(() => {
@@ -102,7 +102,7 @@ export default function PayrollBatchView() {
   const loadPayslips = async (batchId: string) => {
     try {
       const response = await payrollService.listPayslips({
-        batch_id: batchId,
+        batchId: batchId,
         limit: 200,
       });
       setPayslips(response.items);
@@ -199,16 +199,16 @@ export default function PayrollBatchView() {
     if (!id) return;
     try {
       const file = await payrollService.exportBankFile(id);
-      const blob = new Blob([file.file_content], { type: 'text/csv;charset=utf-8' });
+      const blob = new Blob([file.fileContent], { type: 'text/csv;charset=utf-8' });
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = file.file_name;
+      link.download = file.fileName;
       link.click();
       window.URL.revokeObjectURL(url);
       toast({
         title: 'Bank file generated',
-        description: `${file.record_count} records exported for salary upload`,
+        description: `${file.recordCount} records exported for salary upload`,
       });
     } catch (error: unknown) {
       toast({
@@ -225,18 +225,18 @@ export default function PayrollBatchView() {
       setProcessing(true);
       const result = await payrollService.postBatchToGL(id, {
         ...glForm,
-        pf_payable_account_id: glForm.pf_payable_account_id || undefined,
-        esi_payable_account_id: glForm.esi_payable_account_id || undefined,
-        pt_payable_account_id: glForm.pt_payable_account_id || undefined,
-        tds_payable_account_id: glForm.tds_payable_account_id || undefined,
-        other_deductions_payable_account_id: glForm.other_deductions_payable_account_id || undefined,
-        employer_contribution_expense_account_id:
-          glForm.employer_contribution_expense_account_id || undefined,
+        pfPayableAccountId: glForm.pfPayableAccountId || undefined,
+        esiPayableAccountId: glForm.esiPayableAccountId || undefined,
+        ptPayableAccountId: glForm.ptPayableAccountId || undefined,
+        tdsPayableAccountId: glForm.tdsPayableAccountId || undefined,
+        otherDeductionsPayableAccountId: glForm.otherDeductionsPayableAccountId || undefined,
+        employerContributionExpenseAccountId:
+          glForm.employerContributionExpenseAccountId || undefined,
       });
       setGlDialogOpen(false);
       toast({
         title: 'GL posted',
-        description: `Voucher ${result.voucher_number || result.source_reference} created`,
+        description: `Voucher ${result.voucherNumber || result.sourceReference} created`,
       });
     } catch (error: unknown) {
       toast({
@@ -260,11 +260,11 @@ export default function PayrollBatchView() {
   return (
     <div className="container mx-auto space-y-6 py-6">
       <PageHeader
-        title={batch.batch_reference}
-        subtitle={`${MONTHS[batch.payroll_month - 1]} ${batch.payroll_year}`}
+        title={batch.batchReference}
+        subtitle={`${MONTHS[batch.payrollMonth - 1]} ${batch.payrollYear}`}
         breadcrumbs={[
           { label: 'Payroll Batches', to: '/admin/payroll/batches' },
-          { label: batch.batch_reference },
+          { label: batch.batchReference },
         ]}
         actions={
           <div className="flex items-center gap-2">
@@ -313,7 +313,7 @@ export default function PayrollBatchView() {
           <CardContent>
             <div className="flex items-center">
               <Users className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span className="text-2xl font-bold">{batch.total_employees}</span>
+              <span className="text-2xl font-bold">{batch.totalEmployees}</span>
             </div>
           </CardContent>
         </Card>
@@ -326,7 +326,7 @@ export default function PayrollBatchView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              <AmountDisplay amount={batch.total_gross} />
+              <AmountDisplay amount={batch.totalGross} />
             </div>
           </CardContent>
         </Card>
@@ -339,7 +339,7 @@ export default function PayrollBatchView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-destructive">
-              <AmountDisplay amount={batch.total_deductions} />
+              <AmountDisplay amount={batch.totalDeductions} />
             </div>
           </CardContent>
         </Card>
@@ -350,7 +350,7 @@ export default function PayrollBatchView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              <AmountDisplay amount={batch.total_net} />
+              <AmountDisplay amount={batch.totalNet} />
             </div>
           </CardContent>
         </Card>
@@ -396,32 +396,32 @@ export default function PayrollBatchView() {
                     <TableCell>
                       <div>
                         <span className="font-medium">
-                          {payslip.employee?.first_name} {payslip.employee?.last_name}
+                          {payslip.employee?.firstName} {payslip.employee?.lastName}
                         </span>
                         <br />
                         <span className="text-sm text-muted-foreground">
-                          {payslip.employee?.employee_code}
+                          {payslip.employee?.employeeCode}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>{payslip.employee?.department?.department_name || '-'}</TableCell>
-                    <TableCell className="text-right">{payslip.working_days}</TableCell>
-                    <TableCell className="text-right">{payslip.paid_days}</TableCell>
+                    <TableCell>{payslip.employee?.department?.departmentName || '-'}</TableCell>
+                    <TableCell className="text-right">{payslip.workingDays}</TableCell>
+                    <TableCell className="text-right">{payslip.paidDays}</TableCell>
                     <TableCell className="text-right">
-                      {payslip.lop_days > 0 ? (
-                        <span className="text-destructive">{payslip.lop_days}</span>
+                      {payslip.lopDays > 0 ? (
+                        <span className="text-destructive">{payslip.lopDays}</span>
                       ) : (
-                        payslip.lop_days
+                        payslip.lopDays
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={payslip.gross_earnings} compact />
+                      <AmountDisplay amount={payslip.grossEarnings} compact />
                     </TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={payslip.total_deductions} compact />
+                      <AmountDisplay amount={payslip.totalDeductions} compact />
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      <AmountDisplay amount={payslip.net_salary} compact />
+                      <AmountDisplay amount={payslip.netSalary} compact />
                     </TableCell>
                     <TableCell>
                       <Badge
@@ -506,14 +506,14 @@ export default function PayrollBatchView() {
           </DialogHeader>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {[
-              ['salary_expense_account_id', 'Salary expense account'],
-              ['net_salary_payable_account_id', 'Net salary payable account'],
-              ['pf_payable_account_id', 'PF payable account'],
-              ['esi_payable_account_id', 'ESI payable account'],
-              ['pt_payable_account_id', 'PT payable account'],
-              ['tds_payable_account_id', 'TDS payable account'],
-              ['other_deductions_payable_account_id', 'Other deductions payable account'],
-              ['employer_contribution_expense_account_id', 'Employer contribution expense account'],
+              ['salaryExpenseAccountId', 'Salary expense account'],
+              ['netSalaryPayableAccountId', 'Net salary payable account'],
+              ['pfPayableAccountId', 'PF payable account'],
+              ['esiPayableAccountId', 'ESI payable account'],
+              ['ptPayableAccountId', 'PT payable account'],
+              ['tdsPayableAccountId', 'TDS payable account'],
+              ['otherDeductionsPayableAccountId', 'Other deductions payable account'],
+              ['employerContributionExpenseAccountId', 'Employer contribution expense account'],
             ].map(([field, label]) => (
               <div key={field} className="space-y-2">
                 <Label htmlFor={field}>{label}</Label>
@@ -535,7 +535,7 @@ export default function PayrollBatchView() {
             <Button
               onClick={handlePostGL}
               disabled={
-                processing || !glForm.salary_expense_account_id || !glForm.net_salary_payable_account_id
+                processing || !glForm.salaryExpenseAccountId || !glForm.netSalaryPayableAccountId
               }
             >
               Post GL

@@ -14,36 +14,36 @@ import { hrisApi } from '@/services/api';
 import { logger } from "@/lib/logger";
 interface LeaveApplication {
   id: string;
-  application_number: string;
-  employee_id: string;
-  employee_name?: string;
-  employee_code?: string;
-  department_name?: string;
-  designation_name?: string;
-  leave_type_id: string;
-  leave_type_name?: string;
-  leave_type_code?: string;
-  from_date: string;
-  to_date: string;
-  total_days: number;
-  working_days: number;
-  is_half_day: boolean;
-  half_day_type?: string;
+  applicationNumber: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeCode?: string;
+  departmentName?: string;
+  designationName?: string;
+  leaveTypeId: string;
+  leaveTypeName?: string;
+  leaveTypeCode?: string;
+  fromDate: string;
+  toDate: string;
+  totalDays: number;
+  workingDays: number;
+  isHalfDay: boolean;
+  halfDayType?: string;
   reason: string;
-  contact_number?: string;
-  contact_address?: string;
+  contactNumber?: string;
+  contactAddress?: string;
   attachments?: string[];
   status: string;
-  approved_by?: string;
-  approved_at?: string;
-  approver_remarks?: string;
-  rejected_by?: string;
-  rejected_at?: string;
-  rejection_reason?: string;
-  cancelled_at?: string;
-  cancellation_reason?: string;
-  created_at: string;
-  updated_at: string;
+  approvedBy?: string;
+  approvedAt?: string;
+  approverRemarks?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
+  cancelledAt?: string;
+  cancellationReason?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 const getStatusBadgeColor = (status: string) => {
@@ -159,10 +159,10 @@ export function LeaveApplicationView() {
     <div className="space-y-6">
       <PageHeader
         title="Leave Application"
-        subtitle={application.application_number}
+        subtitle={application.applicationNumber}
         breadcrumbs={[
           { label: 'Leave Applications', to: '/admin/hris/leave-applications' },
-          { label: application.application_number },
+          { label: application.applicationNumber },
         ]}
         actions={
           <Badge className={getStatusBadgeColor(application.status)}>{application.status}</Badge>
@@ -184,19 +184,19 @@ export function LeaveApplicationView() {
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <p className="text-sm text-slate-500">Employee Name</p>
-                  <p className="font-medium">{application.employee_name}</p>
+                  <p className="font-medium">{application.employeeName}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Employee Code</p>
-                  <p className="font-medium">{application.employee_code}</p>
+                  <p className="font-medium">{application.employeeCode}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Department</p>
-                  <p className="font-medium">{application.department_name || '-'}</p>
+                  <p className="font-medium">{application.departmentName || '-'}</p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Designation</p>
-                  <p className="font-medium">{application.designation_name || '-'}</p>
+                  <p className="font-medium">{application.designationName || '-'}</p>
                 </div>
               </div>
             </CardContent>
@@ -215,28 +215,28 @@ export function LeaveApplicationView() {
                 <div>
                   <p className="text-sm text-slate-500">Leave Type</p>
                   <p className="font-medium">
-                    {application.leave_type_code} - {application.leave_type_name}
+                    {application.leaveTypeCode} - {application.leaveTypeName}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">Duration</p>
                   <p className="font-medium">
-                    {application.working_days} day(s)
-                    {application.is_half_day && (
-                      <span className="ml-1 text-slate-500">({application.half_day_type})</span>
+                    {application.workingDays} day(s)
+                    {application.isHalfDay && (
+                      <span className="ml-1 text-slate-500">({application.halfDayType})</span>
                     )}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">From Date</p>
                   <p className="font-medium">
-                    <DateDisplay date={application.from_date} />
+                    <DateDisplay date={application.fromDate} />
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-slate-500">To Date</p>
                   <p className="font-medium">
-                    <DateDisplay date={application.to_date} />
+                    <DateDisplay date={application.toDate} />
                   </p>
                 </div>
               </div>
@@ -246,21 +246,21 @@ export function LeaveApplicationView() {
                 <p className="mt-1 font-medium">{application.reason}</p>
               </div>
 
-              {(application.contact_number || application.contact_address) && (
+              {(application.contactNumber || application.contactAddress) && (
                 <div className="grid gap-4 md:grid-cols-2">
-                  {application.contact_number && (
+                  {application.contactNumber && (
                     <div className="flex items-center gap-2">
                       <Phone className="h-4 w-4 text-slate-400" />
                       <div>
                         <p className="text-sm text-slate-500">Contact During Leave</p>
-                        <p className="font-medium">{application.contact_number}</p>
+                        <p className="font-medium">{application.contactNumber}</p>
                       </div>
                     </div>
                   )}
-                  {application.contact_address && (
+                  {application.contactAddress && (
                     <div>
                       <p className="text-sm text-slate-500">Contact Address</p>
-                      <p className="font-medium">{application.contact_address}</p>
+                      <p className="font-medium">{application.contactAddress}</p>
                     </div>
                   )}
                 </div>
@@ -371,12 +371,12 @@ export function LeaveApplicationView() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Approved On</span>
-                      <DateDisplay date={application.approved_at} className="font-medium" />
+                      <DateDisplay date={application.approvedAt} className="font-medium" />
                     </div>
-                    {application.approver_remarks && (
+                    {application.approverRemarks && (
                       <div>
                         <p className="text-sm text-slate-500">Remarks</p>
-                        <p className="mt-1 font-medium">{application.approver_remarks}</p>
+                        <p className="mt-1 font-medium">{application.approverRemarks}</p>
                       </div>
                     )}
                   </div>
@@ -386,12 +386,12 @@ export function LeaveApplicationView() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Rejected On</span>
-                      <DateDisplay date={application.rejected_at} className="font-medium" />
+                      <DateDisplay date={application.rejectedAt} className="font-medium" />
                     </div>
-                    {application.rejection_reason && (
+                    {application.rejectionReason && (
                       <div>
                         <p className="text-sm text-slate-500">Reason</p>
-                        <p className="mt-1 font-medium">{application.rejection_reason}</p>
+                        <p className="mt-1 font-medium">{application.rejectionReason}</p>
                       </div>
                     )}
                   </div>
@@ -401,12 +401,12 @@ export function LeaveApplicationView() {
                   <div className="space-y-2">
                     <div className="flex justify-between">
                       <span className="text-sm text-slate-500">Cancelled On</span>
-                      <DateDisplay date={application.cancelled_at} className="font-medium" />
+                      <DateDisplay date={application.cancelledAt} className="font-medium" />
                     </div>
-                    {application.cancellation_reason && (
+                    {application.cancellationReason && (
                       <div>
                         <p className="text-sm text-slate-500">Reason</p>
-                        <p className="mt-1 font-medium">{application.cancellation_reason}</p>
+                        <p className="mt-1 font-medium">{application.cancellationReason}</p>
                       </div>
                     )}
                   </div>
@@ -436,7 +436,7 @@ export function LeaveApplicationView() {
                   <div>
                     <p className="text-sm font-medium">Applied</p>
                     <p className="text-xs text-slate-500">
-                      {new Date(application.created_at).toLocaleString()}
+                      {new Date(application.createdAt).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -457,12 +457,12 @@ export function LeaveApplicationView() {
                     <div>
                       <p className="text-sm font-medium">{application.status}</p>
                       <p className="text-xs text-slate-500">
-                        {application.approved_at &&
-                          new Date(application.approved_at).toLocaleString()}
-                        {application.rejected_at &&
-                          new Date(application.rejected_at).toLocaleString()}
-                        {application.cancelled_at &&
-                          new Date(application.cancelled_at).toLocaleString()}
+                        {application.approvedAt &&
+                          new Date(application.approvedAt).toLocaleString()}
+                        {application.rejectedAt &&
+                          new Date(application.rejectedAt).toLocaleString()}
+                        {application.cancelledAt &&
+                          new Date(application.cancelledAt).toLocaleString()}
                       </p>
                     </div>
                   </div>

@@ -3,13 +3,13 @@
  */
 
 import { Plus, Edit, Trash2, Search } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -72,26 +72,18 @@ export default function ComplianceItemList() {
   const [searchTerm, setSearchTerm] = useState('');
   const [bodyFilter, setBodyFilter] = useState<string>('');
   const [frequencyFilter, setFrequencyFilter] = useState<string>('');
-  const [total, setTotal] = useState(0);
+  useRequiredActiveOrganizationId();
 
-  const organizationId = useRequiredActiveOrganizationId();
-
-  useEffect(() => {
-    loadItems();
-  }, [bodyFilter, frequencyFilter]);
-
-  const loadItems = async () => {
+  const loadItems = useCallback(async () => {
     try {
       setLoading(true);
       const response = await complianceService.listItems({
-        organization_id: organizationId,
-        regulatory_body: bodyFilter || undefined,
+        regulatoryBody: bodyFilter || undefined,
         frequency: frequencyFilter || undefined,
-        active_only: true,
+        activeOnly: true,
       });
       setItems(response.items);
-      setTotal(response.total);
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to load compliance items',
@@ -100,7 +92,11 @@ export default function ComplianceItemList() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [bodyFilter, frequencyFilter, toast]);
+
+  useEffect(() => {
+    void loadItems();
+  }, [loadItems]);
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to deactivate this item?')) return;
@@ -111,8 +107,8 @@ export default function ComplianceItemList() {
         title: 'Success',
         description: 'Item deactivated successfully',
       });
-      loadItems();
-    } catch (error) {
+      void loadItems();
+    } catch {
       toast({
         title: 'Error',
         description: 'Failed to deactivate item',
@@ -123,8 +119,8 @@ export default function ComplianceItemList() {
 
   const filteredItems = items.filter(
     (item) =>
-      item.item_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.item_code.toLowerCase().includes(searchTerm.toLowerCase()),
+      item.itemName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.itemCode.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
   return (
@@ -220,21 +216,21 @@ export default function ComplianceItemList() {
               ) : (
                 filteredItems.map((item) => (
                   <TableRow key={item.id}>
-                    <TableCell className="font-mono">{item.item_code}</TableCell>
-                    <TableCell className="font-medium">{item.item_name}</TableCell>
+                    <TableCell className="font-mono">{item.itemCode}</TableCell>
+                    <TableCell className="font-medium">{item.itemName}</TableCell>
                     <TableCell>
-                      <Badge variant="outline">{item.regulatory_body}</Badge>
+                      <Badge variant="outline">{item.regulatoryBody}</Badge>
                     </TableCell>
                     <TableCell>{item.frequency}</TableCell>
                     <TableCell>
-                      {item.due_day
-                        ? `${item.due_day}${item.due_month ? ` (${item.due_month})` : ''}`
+                      {item.dueDay
+                        ? `${item.dueDay}${item.dueMonth ? ` (${item.dueMonth})` : ''}`
                         : '-'}
                     </TableCell>
                     <TableCell>
                       <Badge variant={PRIORITY_COLORS[item.priority]}>{item.priority}</Badge>
                     </TableCell>
-                    <TableCell>{item.form_name || '-'}</TableCell>
+                    <TableCell>{item.formName || '-'}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
                         <Button

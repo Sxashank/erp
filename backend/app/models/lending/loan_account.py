@@ -1417,9 +1417,14 @@ class LoanReceipt(BaseModel):
         comment="Prepayment/foreclosure charges",
     )
 
-    # Status
+    # Status — pinned to a distinct Postgres enum type name so it doesn't
+    # collide with the AP/AR `sales_invoice.ReceiptStatus` (UNRECEIVED /
+    # PARTIALLY_RECEIVED / RECEIVED) which materialises as `receiptstatus`.
+    # Both Python enums declared the same DB type name and clashed at runtime;
+    # the LMS receipt domain owns its own type. Same family as the
+    # BalanceType fix (E2E_BOOTSTRAP_FIXES #6).
     status: Mapped[ReceiptStatus] = mapped_column(
-        Enum(ReceiptStatus),
+        Enum(ReceiptStatus, name="lms_receipt_status"),
         nullable=False,
         default=ReceiptStatus.PENDING,
         index=True,

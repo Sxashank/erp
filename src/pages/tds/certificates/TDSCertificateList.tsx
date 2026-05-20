@@ -25,9 +25,8 @@ export default function TDSCertificateList() {
   const activeOrganizationId = useActiveOrganizationId();
   const [financialYear, setFinancialYear] = useState('');
   const [quarter, setQuarter] = useState('all');
-  const financialYearsQuery = useFinancialYears(activeOrganizationId ?? undefined);
+  const financialYearsQuery = useFinancialYears();
   const certificatesQuery = useTDSCertificates(
-    activeOrganizationId ?? undefined,
     financialYear || undefined,
     quarter === 'all' ? undefined : quarter,
   );

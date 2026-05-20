@@ -20,7 +20,7 @@
  */
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ChevronLeft, ChevronRight, CloudUpload, Loader2, Send, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudUpload, Loader2, Plus, Send, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
@@ -78,17 +78,54 @@ import {
   type SubmitApplicationInput,
 } from '@/schemas/portal/applicationSchema';
 
-type Step = 'entity' | 'loan' | 'utilization' | 'documents' | 'review';
+type Step = 'entity' | 'loan' | 'funding' | 'utilization' | 'documents' | 'review';
 
 const STEPS: { key: Step; label: string }[] = [
   { key: 'entity', label: 'Entity & product' },
   { key: 'loan', label: 'Loan details' },
+  { key: 'funding', label: 'Funding & lenders' },
   { key: 'utilization', label: 'Fund utilisation' },
   { key: 'documents', label: 'Documents' },
   { key: 'review', label: 'Review & submit' },
 ];
 
 const PRODUCT_FALLBACK: { id: string; name: string }[] = [];
+
+const DEFAULT_FUNDING_SOURCES = [
+  { sourceCode: 'EQUITY_SHARE_CAPITAL', sourceLabel: 'Equity share capital' },
+  { sourceCode: 'PROMOTER_CONTRIBUTION', sourceLabel: 'Promoter contribution' },
+  { sourceCode: 'BANK_TERM_LOAN', sourceLabel: 'Bank / FI term loan' },
+  { sourceCode: 'NBFC_TERM_LOAN', sourceLabel: 'NBFC term loan' },
+  { sourceCode: 'GOVERNMENT_GRANT', sourceLabel: 'Government support / grant' },
+  { sourceCode: 'INTERNAL_ACCRUALS', sourceLabel: 'Internal accruals' },
+  { sourceCode: 'OTHER_SOURCES', sourceLabel: 'Other sources' },
+];
+
+function emptyLenderLoan() {
+  return {
+    loanType: 'Term Loan',
+    loanAmount: '',
+    lenderName: '',
+    lenderCategory: 'Bank',
+    lenderContact: '',
+    lenderEmail: '',
+    lenderAddress: '',
+    lenderState: '',
+    lenderDistrict: '',
+    lenderPincode: '',
+    sanctionReference: '',
+    sanctionDate: '',
+    interestRatePercent: '',
+    emiPeriodicity: 'Monthly',
+    interestDebitingPeriodicity: 'Monthly',
+    loanAccountNumber: '',
+    ifscCode: '',
+    securityType: '',
+    disbursementCallType: '',
+    emiAmount: '',
+    emiDueDate: '',
+  };
+}
 
 interface StagedDocument {
   id: string;
@@ -124,6 +161,12 @@ export default function PortalApplicationNew(): JSX.Element {
       lenderBranch: '',
       sanctionReference: '',
       declarationAccepted: false,
+      fundingSources: DEFAULT_FUNDING_SOURCES.map((source) => ({
+        ...source,
+        amount: '',
+        remarks: null,
+      })),
+      lenderLoans: [emptyLenderLoan()],
       lines: [],
     },
     mode: 'onBlur',
@@ -138,10 +181,18 @@ export default function PortalApplicationNew(): JSX.Element {
 
   const lines = form.watch('lines');
   const requestedAmount = form.watch('requestedAmount');
+  const projectCost = form.watch('projectCost');
+  const fundingSources = form.watch('fundingSources');
+  const lenderLoans = form.watch('lenderLoans');
 
   const totalAllocated = lines.reduce((acc, l) => acc + Number(l.amount || 0), 0);
   const requestedNumeric = Number(requestedAmount || 0);
+  const projectCostNumeric = Number(projectCost || 0);
   const remainder = requestedNumeric - totalAllocated;
+  const totalFundingSources = fundingSources.reduce((acc, l) => acc + Number(l.amount || 0), 0);
+  const fundingRemainder = projectCostNumeric - totalFundingSources;
+  const totalLenderLoans = lenderLoans.reduce((acc, l) => acc + Number(l.loanAmount || 0), 0);
+  const lenderRemainder = requestedNumeric - totalLenderLoans;
 
   useEffect(() => {
     if ((form.getValues('lines') ?? []).length > 0) {
@@ -185,6 +236,10 @@ export default function PortalApplicationNew(): JSX.Element {
           'sanctionReference',
           'declarationAccepted',
         ]);
+        if (valid) setStep('funding');
+        break;
+      case 'funding':
+        valid = await form.trigger(['fundingSources', 'lenderLoans']);
         if (valid) setStep('utilization');
         break;
       case 'utilization':
@@ -236,6 +291,35 @@ export default function PortalApplicationNew(): JSX.Element {
     lenderBranch: values.lenderBranch || null,
     sanctionReference: values.sanctionReference || null,
     declarationAccepted: values.declarationAccepted,
+    fundingSources: values.fundingSources.map((source) => ({
+      sourceCode: source.sourceCode,
+      sourceLabel: source.sourceLabel,
+      amount: source.amount || '0',
+      remarks: source.remarks ?? null,
+    })),
+    lenderLoans: values.lenderLoans.map((loan) => ({
+      loanType: loan.loanType,
+      loanAmount: loan.loanAmount,
+      lenderName: loan.lenderName,
+      lenderCategory: loan.lenderCategory || null,
+      lenderContact: loan.lenderContact || null,
+      lenderEmail: loan.lenderEmail || null,
+      lenderAddress: loan.lenderAddress || null,
+      lenderState: loan.lenderState || null,
+      lenderDistrict: loan.lenderDistrict || null,
+      lenderPincode: loan.lenderPincode || null,
+      sanctionReference: loan.sanctionReference || null,
+      sanctionDate: loan.sanctionDate || null,
+      interestRatePercent: loan.interestRatePercent || null,
+      emiPeriodicity: loan.emiPeriodicity || null,
+      interestDebitingPeriodicity: loan.interestDebitingPeriodicity || null,
+      loanAccountNumber: loan.loanAccountNumber || null,
+      ifscCode: loan.ifscCode || null,
+      securityType: loan.securityType || null,
+      disbursementCallType: loan.disbursementCallType || null,
+      emiAmount: loan.emiAmount || null,
+      emiDueDate: loan.emiDueDate || null,
+    })),
     fundUtilization: values.lines.map((l) => ({
       categoryId: l.categoryId,
       amount: l.amount,
@@ -657,6 +741,176 @@ export default function PortalApplicationNew(): JSX.Element {
               </div>
             )}
 
+            {step === 'funding' && (
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Project funding composition</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <span>
+                        <span className="text-muted-foreground">Project cost: </span>
+                        <span className="font-medium">
+                          <AmountDisplay amount={projectCostNumeric} />
+                        </span>
+                      </span>
+                      <span>
+                        <span className="text-muted-foreground">Funding total: </span>
+                        <span className="font-medium">
+                          <AmountDisplay amount={totalFundingSources} />
+                        </span>
+                      </span>
+                      <span>
+                        <span className="text-muted-foreground">Remaining: </span>
+                        <span
+                          className={`font-medium ${
+                            projectCostNumeric > 0 && Math.abs(fundingRemainder) > 0.01
+                              ? 'text-amber-600'
+                              : 'text-emerald-700'
+                          }`}
+                        >
+                          <AmountDisplay amount={fundingRemainder} />
+                        </span>
+                      </span>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Source</TableHead>
+                          <TableHead className="text-right">Amount</TableHead>
+                          <TableHead>Remarks</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {fundingSources.map((source, idx) => (
+                          <TableRow key={source.sourceCode}>
+                            <TableCell>
+                              <div className="font-medium">{source.sourceLabel}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {source.sourceCode}
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <AmountInput
+                                value={source.amount ? Number(source.amount) : undefined}
+                                onChange={(amount) => {
+                                  const next = [...form.getValues('fundingSources')];
+                                  next[idx] = {
+                                    ...next[idx]!,
+                                    amount: amount === undefined ? '' : String(amount),
+                                  };
+                                  form.setValue('fundingSources', next, {
+                                    shouldValidate: true,
+                                  });
+                                }}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Input
+                                value={source.remarks ?? ''}
+                                onChange={(event) => {
+                                  const next = [...form.getValues('fundingSources')];
+                                  next[idx] = {
+                                    ...next[idx]!,
+                                    remarks: event.target.value || null,
+                                  };
+                                  form.setValue('fundingSources', next);
+                                }}
+                              />
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                    {form.formState.errors.fundingSources ? (
+                      <p className="text-sm text-destructive">
+                        {String(form.formState.errors.fundingSources.message ?? '')}
+                      </p>
+                    ) : null}
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between gap-3">
+                      <CardTitle className="text-base">Tagged lender loans</CardTitle>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() =>
+                          form.setValue('lenderLoans', [
+                            ...form.getValues('lenderLoans'),
+                            emptyLenderLoan(),
+                          ])
+                        }
+                      >
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add lender
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-wrap gap-4 text-sm">
+                      <span>
+                        <span className="text-muted-foreground">Requested loan: </span>
+                        <span className="font-medium">
+                          <AmountDisplay amount={requestedNumeric} />
+                        </span>
+                      </span>
+                      <span>
+                        <span className="text-muted-foreground">Tagged loans: </span>
+                        <span className="font-medium">
+                          <AmountDisplay amount={totalLenderLoans} />
+                        </span>
+                      </span>
+                      <span>
+                        <span className="text-muted-foreground">Remaining: </span>
+                        <span
+                          className={`font-medium ${
+                            Math.abs(lenderRemainder) > 0.01 ? 'text-amber-600' : 'text-emerald-700'
+                          }`}
+                        >
+                          <AmountDisplay amount={lenderRemainder} />
+                        </span>
+                      </span>
+                    </div>
+                    <div className="space-y-4">
+                      {lenderLoans.map((loan, idx) => (
+                        <div key={idx} className="rounded-lg border p-4">
+                          <div className="mb-4 flex items-center justify-between gap-3">
+                            <p className="font-medium">Lender loan {idx + 1}</p>
+                            {lenderLoans.length > 1 ? (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => {
+                                  const next = form
+                                    .getValues('lenderLoans')
+                                    .filter((_, loanIdx) => loanIdx !== idx);
+                                  form.setValue('lenderLoans', next, { shouldValidate: true });
+                                }}
+                                aria-label="Remove lender loan"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            ) : null}
+                          </div>
+                          <LenderLoanFields form={form} index={idx} />
+                        </div>
+                      ))}
+                    </div>
+                    {form.formState.errors.lenderLoans ? (
+                      <p className="text-sm text-destructive">
+                        {String(form.formState.errors.lenderLoans.message ?? '')}
+                      </p>
+                    ) : null}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
             {step === 'utilization' && (
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -807,6 +1061,172 @@ export default function PortalApplicationNew(): JSX.Element {
   );
 }
 
+function LenderLoanFields({
+  form,
+  index,
+}: {
+  form: ReturnType<typeof useForm<SubmitApplicationInput>>;
+  index: number;
+}): JSX.Element {
+  const loans = form.watch('lenderLoans');
+  const loan = loans[index] ?? emptyLenderLoan();
+
+  const updateLoan = (field: keyof typeof loan, value: string) => {
+    const next = [...form.getValues('lenderLoans')];
+    next[index] = { ...next[index]!, [field]: value };
+    form.setValue('lenderLoans', next, { shouldValidate: true });
+  };
+
+  return (
+    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      <div className="space-y-2">
+        <Label>Loan type</Label>
+        <Input
+          value={loan.loanType}
+          onChange={(event) => updateLoan('loanType', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Lender name</Label>
+        <Input
+          value={loan.lenderName}
+          onChange={(event) => updateLoan('lenderName', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Lender category</Label>
+        <Select
+          value={loan.lenderCategory || 'Bank'}
+          onValueChange={(value) => updateLoan('lenderCategory', value)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Bank">Bank</SelectItem>
+            <SelectItem value="NBFC">NBFC</SelectItem>
+            <SelectItem value="Financial Institution">Financial Institution</SelectItem>
+            <SelectItem value="Other">Other</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Loan amount</Label>
+        <AmountInput
+          value={loan.loanAmount ? Number(loan.loanAmount) : undefined}
+          onChange={(amount) =>
+            updateLoan('loanAmount', amount === undefined ? '' : String(amount))
+          }
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Interest rate (%)</Label>
+        <Input
+          type="number"
+          min={0}
+          max={100}
+          step="0.01"
+          value={loan.interestRatePercent ?? ''}
+          onChange={(event) => updateLoan('interestRatePercent', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Sanction date</Label>
+        <Input
+          type="date"
+          value={loan.sanctionDate ?? ''}
+          onChange={(event) => updateLoan('sanctionDate', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Sanction reference</Label>
+        <Input
+          value={loan.sanctionReference ?? ''}
+          onChange={(event) => updateLoan('sanctionReference', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Loan account number</Label>
+        <Input
+          value={loan.loanAccountNumber ?? ''}
+          onChange={(event) => updateLoan('loanAccountNumber', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>IFSC</Label>
+        <Input
+          value={loan.ifscCode ?? ''}
+          onChange={(event) => updateLoan('ifscCode', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>EMI periodicity</Label>
+        <Select
+          value={loan.emiPeriodicity || 'Monthly'}
+          onValueChange={(value) => updateLoan('emiPeriodicity', value)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Monthly">Monthly</SelectItem>
+            <SelectItem value="Quarterly">Quarterly</SelectItem>
+            <SelectItem value="Half-yearly">Half-yearly</SelectItem>
+            <SelectItem value="Annual">Annual</SelectItem>
+            <SelectItem value="Bullet">Bullet</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>Interest debiting</Label>
+        <Select
+          value={loan.interestDebitingPeriodicity || 'Monthly'}
+          onValueChange={(value) => updateLoan('interestDebitingPeriodicity', value)}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="Monthly">Monthly</SelectItem>
+            <SelectItem value="Quarterly">Quarterly</SelectItem>
+            <SelectItem value="Half-yearly">Half-yearly</SelectItem>
+            <SelectItem value="Annual">Annual</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label>EMI amount</Label>
+        <AmountInput
+          value={loan.emiAmount ? Number(loan.emiAmount) : undefined}
+          onChange={(amount) => updateLoan('emiAmount', amount === undefined ? '' : String(amount))}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>EMI due date</Label>
+        <Input
+          type="date"
+          value={loan.emiDueDate ?? ''}
+          onChange={(event) => updateLoan('emiDueDate', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Security type</Label>
+        <Input
+          value={loan.securityType ?? ''}
+          onChange={(event) => updateLoan('securityType', event.target.value)}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Disbursement call type</Label>
+        <Input
+          value={loan.disbursementCallType ?? ''}
+          onChange={(event) => updateLoan('disbursementCallType', event.target.value)}
+        />
+      </div>
+    </div>
+  );
+}
+
 function UploadStager({
   onAdd,
 }: {
@@ -867,6 +1287,8 @@ function ReviewPanel({
 }): JSX.Element {
   const v = form.getValues();
   const sum = v.lines.reduce((acc, l) => acc + Number(l.amount || 0), 0);
+  const fundingTotal = v.fundingSources.reduce((acc, l) => acc + Number(l.amount || 0), 0);
+  const lenderTotal = v.lenderLoans.reduce((acc, l) => acc + Number(l.loanAmount || 0), 0);
   return (
     <div className="space-y-4 text-sm">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -910,6 +1332,45 @@ function ReviewPanel({
           <p className="text-muted-foreground">Sanction reference</p>
           <p className="font-medium">{v.sanctionReference || '—'}</p>
         </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div>
+          <p className="text-muted-foreground">Funding-source total</p>
+          <p className="font-medium">
+            <AmountDisplay amount={fundingTotal} />
+          </p>
+        </div>
+        <div>
+          <p className="text-muted-foreground">Tagged lender-loan total</p>
+          <p className="font-medium">
+            <AmountDisplay amount={lenderTotal} />
+          </p>
+        </div>
+      </div>
+      <div>
+        <p className="mb-2 text-muted-foreground">Tagged lender loans</p>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Lender</TableHead>
+              <TableHead>Loan type</TableHead>
+              <TableHead className="text-right">Amount</TableHead>
+              <TableHead>Sanction</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {v.lenderLoans.map((loan, idx) => (
+              <TableRow key={`${loan.lenderName}-${idx}`}>
+                <TableCell>{loan.lenderName || '—'}</TableCell>
+                <TableCell>{loan.loanType || '—'}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  <AmountDisplay amount={Number(loan.loanAmount || 0)} />
+                </TableCell>
+                <TableCell>{loan.sanctionReference || '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
       </div>
       <div>
         <p className="mb-2 text-muted-foreground">Fund utilisation</p>

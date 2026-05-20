@@ -61,6 +61,29 @@ interface UtilizationRow {
   remarks?: string | null;
 }
 
+interface FundingSourceRow {
+  id: string;
+  sourceCode: string;
+  sourceLabel: string;
+  amount: string;
+  remarks?: string | null;
+}
+
+interface LenderLoanRow {
+  id: string;
+  loanType: string;
+  loanAmount: string;
+  lenderName: string;
+  lenderCategory?: string | null;
+  sanctionReference?: string | null;
+  sanctionDate?: string | null;
+  interestRatePercent?: string | null;
+  emiPeriodicity?: string | null;
+  loanAccountNumber?: string | null;
+  ifscCode?: string | null;
+  lenderValidationStatus: string;
+}
+
 type ReasonAction = 'query' | 'reject' | 'withdraw';
 
 export default function PortalApplicationDetail(): JSX.Element {
@@ -126,6 +149,29 @@ export default function PortalApplicationDetail(): JSX.Element {
     remarks: l.remarks,
   }));
 
+  const fundingSourceRows: FundingSourceRow[] = (application?.fundingSources ?? []).map((row) => ({
+    id: row.id,
+    sourceCode: row.sourceCode,
+    sourceLabel: row.sourceLabel,
+    amount: row.amount,
+    remarks: row.remarks,
+  }));
+
+  const lenderLoanRows: LenderLoanRow[] = (application?.lenderLoans ?? []).map((row) => ({
+    id: row.id,
+    loanType: row.loanType,
+    loanAmount: row.loanAmount,
+    lenderName: row.lenderName,
+    lenderCategory: row.lenderCategory,
+    sanctionReference: row.sanctionReference,
+    sanctionDate: row.sanctionDate,
+    interestRatePercent: row.interestRatePercent,
+    emiPeriodicity: row.emiPeriodicity,
+    loanAccountNumber: row.loanAccountNumber,
+    ifscCode: row.ifscCode,
+    lenderValidationStatus: row.lenderValidationStatus,
+  }));
+
   const utilizationColumns: Column<UtilizationRow>[] = [
     {
       key: 'categoryLabel',
@@ -153,6 +199,88 @@ export default function PortalApplicationDetail(): JSX.Element {
       key: 'remarks',
       header: 'Remarks',
       render: (r) => r.remarks ?? '',
+    },
+  ];
+
+  const fundingSourceColumns: Column<FundingSourceRow>[] = [
+    {
+      key: 'sourceLabel',
+      header: 'Funding source',
+      render: (row) => (
+        <div>
+          <div className="font-medium">{row.sourceLabel}</div>
+          <div className="text-sm text-muted-foreground">{row.sourceCode}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      align: 'right',
+      render: (row) => <AmountDisplay amount={Number(row.amount)} />,
+    },
+    {
+      key: 'remarks',
+      header: 'Remarks',
+      render: (row) => row.remarks ?? '',
+    },
+  ];
+
+  const lenderLoanColumns: Column<LenderLoanRow>[] = [
+    {
+      key: 'lenderName',
+      header: 'Lender',
+      render: (row) => (
+        <div>
+          <div className="font-medium">{row.lenderName}</div>
+          <div className="text-sm text-muted-foreground">{row.lenderCategory ?? '—'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'loanType',
+      header: 'Facility',
+      render: (row) => row.loanType,
+    },
+    {
+      key: 'loanAmount',
+      header: 'Amount',
+      align: 'right',
+      render: (row) => <AmountDisplay amount={Number(row.loanAmount)} />,
+    },
+    {
+      key: 'interestRatePercent',
+      header: 'Rate',
+      render: (row) => (row.interestRatePercent ? `${row.interestRatePercent}%` : '—'),
+    },
+    {
+      key: 'sanctionReference',
+      header: 'Sanction',
+      render: (row) => (
+        <div>
+          <div>{row.sanctionReference ?? '—'}</div>
+          {row.sanctionDate ? (
+            <div className="text-sm text-muted-foreground">
+              <DateDisplay date={row.sanctionDate} />
+            </div>
+          ) : null}
+        </div>
+      ),
+    },
+    {
+      key: 'loanAccountNumber',
+      header: 'Account / IFSC',
+      render: (row) => (
+        <div>
+          <div>{row.loanAccountNumber ?? '—'}</div>
+          <div className="text-sm text-muted-foreground">{row.ifscCode ?? '—'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'lenderValidationStatus',
+      header: 'Validation',
+      render: (row) => row.lenderValidationStatus,
     },
   ];
 
@@ -476,6 +604,36 @@ export default function PortalApplicationDetail(): JSX.Element {
               </CardContent>
             </Card>
           ) : null}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Project funding composition</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable<FundingSourceRow>
+                data={fundingSourceRows}
+                columns={fundingSourceColumns}
+                getRowId={(row) => row.id}
+                emptyTitle="No funding-source rows"
+                emptySubtitle="The borrower has not yet provided the project funding composition."
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Tagged lender loans</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <DataTable<LenderLoanRow>
+                data={lenderLoanRows}
+                columns={lenderLoanColumns}
+                getRowId={(row) => row.id}
+                emptyTitle="No lender loans tagged"
+                emptySubtitle="Tagged lender loan facilities will appear here for lender and SMFCL validation."
+              />
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader>

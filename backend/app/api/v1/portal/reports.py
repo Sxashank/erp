@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.schemas.portal.reporting import PortalReportingResponse
 from app.services.portal.reporting_service import PortalReportingService
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/reports", tags=["Scheme Portal · Reports"])
 )
 async def get_reporting_summary(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> PortalReportingResponse:
     service = PortalReportingService(db)
     return await service.get_summary(user)
@@ -37,7 +37,7 @@ async def get_reporting_summary(
 )
 async def download_reporting_summary_csv(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> StreamingResponse:
     service = PortalReportingService(db)
     summary = await service.get_summary(user)

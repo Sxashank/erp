@@ -109,7 +109,7 @@ export function AccountLedger() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         // Use org ID from URL if provided, otherwise use first org
@@ -126,7 +126,7 @@ export function AccountLedger() {
 
   const fetchFinancialYears = useCallback(async () => {
     try {
-      const response = await financialYearsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await financialYearsApi.list({ pageSize: 100 });
       setFinancialYears(response.data.items);
       const currentFY = response.data.items.find((fy: FinancialYear) => fy.is_current);
       if (currentFY) {
@@ -143,9 +143,8 @@ export function AccountLedger() {
     try {
       setAccountsLoading(true);
       const response = await accountsApi.list({
-        organization_id: selectedOrgId,
-        page_size: 100,
-        include_inactive: false,
+        pageSize: 100,
+        includeInactive: false,
       });
       setAccounts(response.data.items);
     } catch (error) {

@@ -152,7 +152,7 @@ export function EmployeeForm() {
   useEffect(() => {
     const fetchOrgs = async () => {
       try {
-        const response = await organizationsApi.list({ page_size: 100 });
+        const response = await organizationsApi.list({ pageSize: 100 });
         setOrganizations(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch organizations:', error);
@@ -166,7 +166,7 @@ export function EmployeeForm() {
     const fetchDepts = async () => {
       if (!selectedOrgId) return;
       try {
-        const response = await departmentsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+        const response = await departmentsApi.list({ pageSize: 100 });
         setDepartments(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch departments:', error);
@@ -180,7 +180,7 @@ export function EmployeeForm() {
     const fetchDesigs = async () => {
       if (!selectedDeptId) return;
       try {
-        const response = await designationsApi.list({ department_id: selectedDeptId, page_size: 100 });
+        const response = await designationsApi.list({ departmentId: selectedDeptId, pageSize: 100 });
         setDesignations(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch designations:', error);
@@ -194,7 +194,7 @@ export function EmployeeForm() {
     const fetchUnits = async () => {
       if (!selectedOrgId) return;
       try {
-        const response = await unitsApi.list({ organization_id: selectedOrgId, page_size: 100 });
+        const response = await unitsApi.list({ pageSize: 100 });
         setUnits(response.data.items || []);
       } catch (error) {
         logger.error('Failed to fetch units:', error);
@@ -208,7 +208,9 @@ export function EmployeeForm() {
     const fetchShifts = async () => {
       if (!selectedOrgId) return;
       try {
-        const response = await hrisApi.listShifts({ organization_id: selectedOrgId, active_only: true });
+        const response = await hrisApi.listShifts({
+          active_only: true,
+        });
         setShifts(response.data || []);
       } catch (error) {
         logger.error('Failed to fetch shifts:', error);
@@ -223,7 +225,6 @@ export function EmployeeForm() {
       if (!selectedOrgId) return;
       try {
         const response = await hrisApi.listEmployees({
-          organization_id: selectedOrgId,
           employment_status: 'ACTIVE',
           limit: 100,
         });

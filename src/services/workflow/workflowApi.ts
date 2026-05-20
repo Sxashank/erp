@@ -1,8 +1,7 @@
 /**
  * Workflow API service — typed wrappers around `/workflows/*` endpoints.
  *
- * Wire format is snake_case (the BE workflow schemas inherit from
- * `BaseSchema`, not `CamelSchema`). See `backend/app/schemas/workflow/`.
+ * Wire format is camelCase via the backend `BaseSchema` alias contract.
  *
  * Mutating endpoints (POST/PUT/DELETE) send an `Idempotency-Key` header.
  * Workflow approvals trigger downstream maker-checker effects so they are
@@ -55,155 +54,153 @@ export interface PaginatedResponse<T> {
   items: T[];
   total: number;
   page: number;
-  page_size: number;
-  total_pages: number;
+  pageSize: number;
+  totalPages: number;
 }
 
 // ============== Definition shapes ==============
 
 export interface ApprovalRuleCreate {
   sequence?: number;
-  approver_type: ApproverType;
-  user_id?: string | null;
-  role_id?: string | null;
+  approverType: ApproverType;
+  userId?: string | null;
+  roleId?: string | null;
   designation?: string | null;
-  dynamic_field?: string | null;
+  dynamicField?: string | null;
   conditions?: Record<string, unknown> | null;
-  is_mandatory?: boolean;
-  can_self_approve?: boolean;
-  fallback_to_admin?: boolean;
+  isMandatory?: boolean;
+  canSelfApprove?: boolean;
+  fallbackToAdmin?: boolean;
 }
 
 export interface ApprovalRuleResponse {
   id: string;
   sequence: number;
-  approver_type: ApproverType;
-  user_id: string | null;
-  role_id: string | null;
+  approverType: ApproverType;
+  userId: string | null;
+  roleId: string | null;
   designation: string | null;
-  dynamic_field: string | null;
+  dynamicField: string | null;
   conditions: Record<string, unknown> | null;
-  is_mandatory: boolean;
-  can_self_approve: boolean;
-  fallback_to_admin: boolean;
+  isMandatory: boolean;
+  canSelfApprove: boolean;
+  fallbackToAdmin: boolean;
 }
 
 export interface EscalationRuleCreate {
   level?: number;
-  timeout_hours: number;
-  escalation_type: EscalationType;
-  escalate_to_type?: ApproverType | null;
-  escalate_to_user_id?: string | null;
-  escalate_to_role_id?: string | null;
-  notify_current_approver?: boolean;
-  notify_initiator?: boolean;
-  notification_template_id?: string | null;
+  timeoutHours: number;
+  escalationType: EscalationType;
+  escalateToType?: ApproverType | null;
+  escalateToUserId?: string | null;
+  escalateToRoleId?: string | null;
+  notifyCurrentApprover?: boolean;
+  notifyInitiator?: boolean;
+  notificationTemplateId?: string | null;
 }
 
 export interface EscalationRuleResponse {
   id: string;
   level: number;
-  timeout_hours: number;
-  escalation_type: EscalationType;
-  escalate_to_type: ApproverType | null;
-  escalate_to_user_id: string | null;
-  escalate_to_role_id: string | null;
-  notify_current_approver: boolean;
-  notify_initiator: boolean;
-  notification_template_id: string | null;
+  timeoutHours: number;
+  escalationType: EscalationType;
+  escalateToType: ApproverType | null;
+  escalateToUserId: string | null;
+  escalateToRoleId: string | null;
+  notifyCurrentApprover: boolean;
+  notifyInitiator: boolean;
+  notificationTemplateId: string | null;
 }
 
 export interface WorkflowStepCreate {
-  step_number: number;
+  stepNumber: number;
   name: string;
   description?: string | null;
-  step_type?: WorkflowStepType;
-  approval_mode?: ApprovalMode;
-  parent_step_id?: string | null;
-  branch_name?: string | null;
-  entry_conditions?: Record<string, unknown> | null;
-  exit_conditions?: Record<string, unknown> | null;
-  on_approve_step_id?: string | null;
-  on_reject_step_id?: string | null;
-  on_approve_action?: StepAction;
-  on_reject_action?: StepAction;
-  allow_delegation?: boolean;
-  sla_hours?: number | null;
-  reminder_hours?: number | null;
-  approval_rules?: ApprovalRuleCreate[];
-  escalation_rules?: EscalationRuleCreate[];
+  stepType?: WorkflowStepType;
+  approvalMode?: ApprovalMode;
+  parentStepId?: string | null;
+  branchName?: string | null;
+  entryConditions?: Record<string, unknown> | null;
+  exitConditions?: Record<string, unknown> | null;
+  onApproveStepId?: string | null;
+  onRejectStepId?: string | null;
+  onApproveAction?: StepAction;
+  onRejectAction?: StepAction;
+  allowDelegation?: boolean;
+  slaHours?: number | null;
+  reminderHours?: number | null;
+  approvalRules?: ApprovalRuleCreate[];
+  escalationRules?: EscalationRuleCreate[];
 }
 
 export interface WorkflowStepResponse {
   id: string;
-  step_number: number;
+  stepNumber: number;
   name: string;
   description: string | null;
-  step_type: WorkflowStepType;
-  approval_mode: ApprovalMode;
-  parent_step_id: string | null;
-  branch_name: string | null;
-  entry_conditions: Record<string, unknown> | null;
-  exit_conditions: Record<string, unknown> | null;
-  on_approve_step_id: string | null;
-  on_reject_step_id: string | null;
-  on_approve_action: StepAction;
-  on_reject_action: StepAction;
-  allow_delegation: boolean;
-  sla_hours: number | null;
-  reminder_hours: number | null;
-  approval_rules: ApprovalRuleResponse[];
-  escalation_rules: EscalationRuleResponse[];
+  stepType: WorkflowStepType;
+  approvalMode: ApprovalMode;
+  parentStepId: string | null;
+  branchName: string | null;
+  entryConditions: Record<string, unknown> | null;
+  exitConditions: Record<string, unknown> | null;
+  onApproveStepId: string | null;
+  onRejectStepId: string | null;
+  onApproveAction: StepAction;
+  onRejectAction: StepAction;
+  allowDelegation: boolean;
+  slaHours: number | null;
+  reminderHours: number | null;
+  approvalRules: ApprovalRuleResponse[];
+  escalationRules: EscalationRuleResponse[];
 }
 
 export interface WorkflowDefinitionCreate {
-  organization_id: string;
   name: string;
   code: string;
   description?: string | null;
-  entity_type: WorkflowEntityType;
-  is_default?: boolean;
+  entityType: WorkflowEntityType;
+  isDefault?: boolean;
   priority?: number;
-  activation_conditions?: Record<string, unknown> | null;
-  allow_parallel_branches?: boolean;
-  require_comments_on_reject?: boolean;
-  notify_initiator_on_complete?: boolean;
-  allow_withdrawal?: boolean;
+  activationConditions?: Record<string, unknown> | null;
+  allowParallelBranches?: boolean;
+  requireCommentsOnReject?: boolean;
+  notifyInitiatorOnComplete?: boolean;
+  allowWithdrawal?: boolean;
   steps?: WorkflowStepCreate[];
 }
 
 export interface WorkflowDefinitionUpdate {
   name?: string;
   description?: string | null;
-  is_default?: boolean;
+  isDefault?: boolean;
   priority?: number;
-  activation_conditions?: Record<string, unknown> | null;
-  allow_parallel_branches?: boolean;
-  require_comments_on_reject?: boolean;
-  notify_initiator_on_complete?: boolean;
-  allow_withdrawal?: boolean;
+  activationConditions?: Record<string, unknown> | null;
+  allowParallelBranches?: boolean;
+  requireCommentsOnReject?: boolean;
+  notifyInitiatorOnComplete?: boolean;
+  allowWithdrawal?: boolean;
 }
 
 export interface WorkflowDefinitionResponse {
   id: string;
-  organization_id: string;
   name: string;
   code: string;
   description: string | null;
-  entity_type: WorkflowEntityType;
-  is_default: boolean;
+  entityType: WorkflowEntityType;
+  isDefault: boolean;
   priority: number;
-  activation_conditions: Record<string, unknown> | null;
-  allow_parallel_branches: boolean;
-  require_comments_on_reject: boolean;
-  notify_initiator_on_complete: boolean;
-  allow_withdrawal: boolean;
+  activationConditions: Record<string, unknown> | null;
+  allowParallelBranches: boolean;
+  requireCommentsOnReject: boolean;
+  notifyInitiatorOnComplete: boolean;
+  allowWithdrawal: boolean;
   version: number;
-  created_at: string;
-  updated_at: string | null;
-  created_by: string | null;
-  updated_by: string | null;
-  is_active: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  isActive: boolean;
 }
 
 export interface WorkflowDefinitionWithStepsResponse extends WorkflowDefinitionResponse {
@@ -214,77 +211,76 @@ export interface WorkflowDefinitionWithStepsResponse extends WorkflowDefinitionR
 
 export interface WorkflowTaskResponse {
   id: string;
-  workflow_instance_id: string;
-  workflow_step_id: string;
-  step_name: string | null;
-  step_number: number | null;
-  assigned_to: string;
-  assignee_name: string | null;
-  assigned_at: string;
+  workflowInstanceId: string;
+  workflowStepId: string;
+  stepName: string | null;
+  stepNumber: number | null;
+  assignedTo: string;
+  assigneeName: string | null;
+  assignedAt: string;
   status: TaskStatus;
-  action_taken: string | null;
+  actionTaken: string | null;
   comments: string | null;
-  acted_at: string | null;
-  delegated_from: string | null;
-  delegated_reason: string | null;
-  delegated_at: string | null;
-  escalation_level: number;
-  escalated_at: string | null;
-  due_at: string | null;
-  is_overdue: boolean;
+  actedAt: string | null;
+  delegatedFrom: string | null;
+  delegatedReason: string | null;
+  delegatedAt: string | null;
+  escalationLevel: number;
+  escalatedAt: string | null;
+  dueAt: string | null;
+  isOverdue: boolean;
   sequence: number;
-  created_at: string;
-  updated_at: string | null;
-  created_by: string | null;
-  updated_by: string | null;
-  is_active: boolean;
+  createdAt: string;
+  updatedAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  isActive: boolean;
 }
 
 export interface WorkflowHistoryResponse {
   id: string;
   action: string;
-  action_by: string;
-  actor_name: string | null;
-  action_at: string;
-  from_step_id: string | null;
-  from_step_name: string | null;
-  to_step_id: string | null;
-  to_step_name: string | null;
-  from_status: string | null;
-  to_status: string;
+  actionBy: string;
+  actorName: string | null;
+  actionAt: string;
+  fromStepId: string | null;
+  fromStepName: string | null;
+  toStepId: string | null;
+  toStepName: string | null;
+  fromStatus: string | null;
+  toStatus: string;
   comments: string | null;
-  action_metadata: Record<string, unknown> | null;
+  actionMetadata: Record<string, unknown> | null;
 }
 
 export interface WorkflowInstanceResponse {
   id: string;
-  workflow_definition_id: string;
-  workflow_name: string | null;
-  organization_id: string;
-  entity_type: WorkflowEntityType;
-  entity_id: string;
-  entity_reference: string;
-  current_step_id: string | null;
-  current_step_name: string | null;
-  current_step_number: number;
+  workflowDefinitionId: string;
+  workflowName: string | null;
+  entityType: WorkflowEntityType;
+  entityId: string;
+  entityReference: string;
+  currentStepId: string | null;
+  currentStepName: string | null;
+  currentStepNumber: number;
   status: WorkflowInstanceStatus;
-  started_at: string;
-  started_by: string;
-  initiator_name: string | null;
-  completed_at: string | null;
-  completed_by: string | null;
-  cancelled_at: string | null;
-  cancelled_by: string | null;
-  cancellation_reason: string | null;
-  created_at: string;
-  updated_at: string | null;
-  created_by: string | null;
-  updated_by: string | null;
-  is_active: boolean;
+  startedAt: string;
+  startedBy: string;
+  initiatorName: string | null;
+  completedAt: string | null;
+  completedBy: string | null;
+  cancelledAt: string | null;
+  cancelledBy: string | null;
+  cancellationReason: string | null;
+  createdAt: string;
+  updatedAt: string | null;
+  createdBy: string | null;
+  updatedBy: string | null;
+  isActive: boolean;
 }
 
 export interface WorkflowInstanceDetailResponse extends WorkflowInstanceResponse {
-  context_data: Record<string, unknown> | null;
+  contextData: Record<string, unknown> | null;
   tasks: WorkflowTaskResponse[];
   history: WorkflowHistoryResponse[];
 }
@@ -292,23 +288,19 @@ export interface WorkflowInstanceDetailResponse extends WorkflowInstanceResponse
 // ============== Filter shapes ==============
 
 export interface DefinitionListFilters {
-  organization_id: string;
-  entity_type?: WorkflowEntityType;
+  entityType?: WorkflowEntityType;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 export interface InstanceListFilters {
-  organization_id: string;
-  entity_type?: WorkflowEntityType;
+  entityType?: WorkflowEntityType;
   status?: WorkflowInstanceStatus;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
-export interface PendingTaskFilters {
-  organization_id?: string;
-}
+export type PendingTaskFilters = Record<string, never>;
 
 // ============== Action request bodies ==============
 
@@ -318,7 +310,7 @@ export interface ApprovalActionRequest {
 }
 
 export interface DelegateTaskRequest {
-  delegate_to: string;
+  delegateTo: string;
   reason: string;
 }
 

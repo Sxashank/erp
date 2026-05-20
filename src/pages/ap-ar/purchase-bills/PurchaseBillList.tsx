@@ -72,17 +72,17 @@ interface Vendor {
 
 interface PurchaseBill {
   id: string;
-  bill_number: string;
-  vendor_invoice_number: string | null;
-  bill_date: string;
-  due_date: string;
-  vendor_id: string;
-  vendor_name: string | null;
-  total_amount: number;
-  balance_amount: number;
+  billNumber: string;
+  vendorInvoiceNumber: string | null;
+  billDate: string;
+  dueDate: string;
+  vendorId: string;
+  vendorName: string | null;
+  totalAmount: number;
+  balanceAmount: number;
   status: string;
-  payment_status: string;
-  is_posted: boolean;
+  paymentStatus: string;
+  isPosted: boolean;
 }
 
 type PurchaseBillListParams = Parameters<typeof purchaseBillsApi.list>[0];
@@ -144,7 +144,7 @@ export function PurchaseBillList() {
 
   const loadOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page: 1, page_size: 100 });
+      const response = await organizationsApi.list({ page: 1, pageSize: 100 });
       const orgs = response.data.items || [];
       setOrganizations(orgs);
       if (orgs.length > 0) {
@@ -163,7 +163,7 @@ export function PurchaseBillList() {
   const loadVendors = useCallback(async () => {
     if (!selectedOrgId) return;
     try {
-      const response = await vendorsApi.getActive({ organization_id: selectedOrgId });
+      const response = await vendorsApi.getActive({});
       setVendors(response.data || []);
     } catch (error) {
       logger.error('Failed to load vendors:', error);
@@ -175,7 +175,6 @@ export function PurchaseBillList() {
     setLoading(true);
     try {
       const params: PurchaseBillListParams = {
-        organization_id: selectedOrgId,
         page,
         page_size: pageSize,
         include_inactive: includeInactive,
@@ -482,25 +481,25 @@ export function PurchaseBillList() {
             ) : (
               bills.map((bill) => (
                 <TableRow key={bill.id}>
-                  <TableCell className="font-medium">{bill.bill_number}</TableCell>
-                  <TableCell>{bill.vendor_name || '-'}</TableCell>
+                  <TableCell className="font-medium">{bill.billNumber}</TableCell>
+                  <TableCell>{bill.vendorName || '-'}</TableCell>
                   <TableCell className="font-mono text-sm">
-                    {bill.vendor_invoice_number || '-'}
+                    {bill.vendorInvoiceNumber || '-'}
                   </TableCell>
-                  <TableCell><DateDisplay date={bill.bill_date} /></TableCell>
+                  <TableCell><DateDisplay date={bill.billDate} /></TableCell>
                   <TableCell>
-                    <div className={isOverdue(bill.due_date, bill.status) ? 'text-red-600 font-medium' : ''}>
-                      <DateDisplay date={bill.due_date} />
-                      {isOverdue(bill.due_date, bill.status) && (
+                    <div className={isOverdue(bill.dueDate, bill.status) ? 'text-red-600 font-medium' : ''}>
+                      <DateDisplay date={bill.dueDate} />
+                      {isOverdue(bill.dueDate, bill.status) && (
                         <span className="block text-xs">Overdue</span>
                       )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    <AmountDisplay amount={bill.total_amount} />
+                    <AmountDisplay amount={bill.totalAmount} />
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    <AmountDisplay amount={bill.balance_amount} />
+                    <AmountDisplay amount={bill.balanceAmount} />
                   </TableCell>
                   <TableCell>
                     <Badge
@@ -513,9 +512,9 @@ export function PurchaseBillList() {
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      className={paymentStatusColors[bill.payment_status] || 'bg-gray-100'}
+                      className={paymentStatusColors[bill.paymentStatus] || 'bg-gray-100'}
                     >
-                      {paymentStatusLabels[bill.payment_status] || bill.payment_status}
+                      {paymentStatusLabels[bill.paymentStatus] || bill.paymentStatus}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -553,7 +552,7 @@ export function PurchaseBillList() {
                           </DropdownMenuItem>
                         )}
                         <DropdownMenuSeparator />
-                        {bill.status !== 'CANCELLED' && bill.payment_status === 'UNPAID' && (
+                        {bill.status !== 'CANCELLED' && bill.paymentStatus === 'UNPAID' && (
                           <DropdownMenuItem
                             onClick={() => {
                               setBillToCancel(bill);
@@ -624,7 +623,7 @@ export function PurchaseBillList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Purchase Bill</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete bill &quot;{billToDelete?.bill_number}&quot;? This action
+              Are you sure you want to delete bill &quot;{billToDelete?.billNumber}&quot;? This action
               cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -646,7 +645,7 @@ export function PurchaseBillList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Purchase Bill</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to cancel bill &quot;{billToCancel?.bill_number}&quot;?
+              Are you sure you want to cancel bill &quot;{billToCancel?.billNumber}&quot;?
               Please provide a reason for cancellation.
             </AlertDialogDescription>
           </AlertDialogHeader>

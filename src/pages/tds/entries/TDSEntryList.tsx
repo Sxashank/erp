@@ -28,7 +28,6 @@ export function TDSEntryList() {
   const activeOrganizationId = useActiveOrganizationId();
   const [challanStatus, setChallanStatus] = useState('all');
   const tdsEntriesQuery = useTDSEntries({
-    organizationId: activeOrganizationId ?? undefined,
     challanStatus: challanStatus === 'all' ? undefined : challanStatus,
     pageSize: 100,
   });

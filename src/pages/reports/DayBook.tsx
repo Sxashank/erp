@@ -77,7 +77,7 @@ export function DayBook() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
       if (response.data.items.length > 0) {
         setSelectedOrgId(response.data.items[0].id);
@@ -89,7 +89,7 @@ export function DayBook() {
 
   const fetchVoucherTypes = useCallback(async () => {
     try {
-      const response = await voucherTypesApi.list({ organization_id: selectedOrgId, page_size: 100 });
+      const response = await voucherTypesApi.list({ pageSize: 100 });
       setVoucherTypes(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch voucher types:', error);
@@ -117,7 +117,6 @@ export function DayBook() {
     try {
       setLoading(true);
       const params: Parameters<typeof reportsApi.getDayBook>[0] = {
-        organization_id: selectedOrgId,
         from_date: fromDate,
         to_date: toDate,
       };

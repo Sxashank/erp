@@ -79,7 +79,6 @@ export function APAgingDetail() {
 
         // Fetch aging detail
         const response = await agingReportsApi.getAPAgingDetail(vendorId, {
-          organization_id: organizationId,
           as_of_date: asOfDate,
         });
         setReportData(response.data);

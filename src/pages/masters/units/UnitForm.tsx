@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
+import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -25,6 +26,7 @@ import { logger } from "@/lib/logger";
 export function UnitForm() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const isEdit = Boolean(id);
 
   const [loading, setLoading] = useState(false);
@@ -63,7 +65,7 @@ export function UnitForm() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch organizations:', error);
@@ -72,7 +74,7 @@ export function UnitForm() {
 
   const fetchParentUnits = async (orgId: string) => {
     try {
-      const response = await unitsApi.list({ organization_id: orgId, page_size: 100 });
+      const response = await unitsApi.list({ pageSize: 100 });
       setParentUnits(response.data.items.filter((u: Unit) => u.id !== id));
     } catch (error) {
       logger.error('Failed to fetch parent units:', error);
@@ -118,19 +120,31 @@ export function UnitForm() {
   const onSubmit = async (data: UnitCreate | UnitUpdate) => {
     try {
       setSubmitting(true);
-      // Clean up empty strings
-      const cleanData = {
-        ...data,
-        parent_unit_id: data.parent_unit_id || undefined,
-      };
+      // The form keeps optional fields as `''` for controlled-input ergonomics,
+      // but the backend Pydantic schema (`UnitCreate`) rejects empty strings on
+      // typed-optional fields (e.g. `email: Optional[EmailStr]`). Normalise
+      // every empty string to undefined before submit so the server sees the
+      // canonical "not present" representation. See CLAUDE.md §5.3.
+      const cleanData: Record<string, unknown> = {};
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === 'string' && value.trim() === '') continue;
+        cleanData[key] = value;
+      }
       if (isEdit && id) {
         await unitsApi.update(id, cleanData);
+        toast({ title: 'Unit updated', description: 'Changes saved successfully.' });
       } else {
         await unitsApi.create(cleanData);
+        toast({ title: 'Unit created', description: 'The unit was created successfully.' });
       }
       navigate('/admin/units');
     } catch (error) {
       logger.error('Failed to save unit:', error);
+      toast({
+        title: 'Save failed',
+        description: error instanceof Error ? error.message : 'Could not save the unit.',
+        variant: 'destructive',
+      });
     } finally {
       setSubmitting(false);
     }

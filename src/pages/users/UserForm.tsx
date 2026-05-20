@@ -79,7 +79,7 @@ export function UserForm() {
 
   const fetchOrganizations = async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       setOrganizations(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch organizations:', error);
@@ -88,7 +88,7 @@ export function UserForm() {
 
   const fetchUnits = async (orgId: string) => {
     try {
-      const response = await unitsApi.list({ organization_id: orgId, page_size: 100 });
+      const response = await unitsApi.list({ pageSize: 100 });
       setUnits(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch units:', error);

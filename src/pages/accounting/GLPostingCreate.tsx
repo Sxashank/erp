@@ -138,7 +138,6 @@ export default function GLPostingCreate(): JSX.Element {
     mutationFn: async (payload: { data: PostingFormData; action: 'save' | 'submit' }) => {
       const { data, action } = payload;
       const body = {
-        organization_id: organizationId,
         description: data.description,
         posting_date: data.postingDate,
         period_id: data.period,

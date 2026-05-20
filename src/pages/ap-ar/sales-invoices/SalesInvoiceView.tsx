@@ -103,13 +103,13 @@ interface Customer {
   id: string;
   code: string;
   name: string;
-  display_name: string | null;
+  displayName: string | null;
   gstin: string | null;
   pan: string | null;
-  billing_address_line1: string | null;
-  billing_city: string | null;
-  billing_state_code: string | null;
-  billing_pincode: string | null;
+  billingAddressLine1: string | null;
+  billingCity: string | null;
+  billingStateCode: string | null;
+  billingPincode: string | null;
 }
 
 const statusLabels: Record<string, string> = {
@@ -349,15 +349,15 @@ export function SalesInvoiceView() {
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
             <div className="font-medium">{customer?.name}</div>
-            {customer?.display_name && customer.display_name !== customer.name && (
-              <div className="text-slate-500">{customer.display_name}</div>
+            {customer?.displayName && customer.displayName !== customer.name && (
+              <div className="text-slate-500">{customer.displayName}</div>
             )}
-            {customer?.billing_address_line1 && (
+            {customer?.billingAddressLine1 && (
               <div className="text-slate-600">
-                {customer.billing_address_line1}
-                {customer.billing_city && `, ${customer.billing_city}`}
-                {customer.billing_state_code && ` - ${customer.billing_state_code}`}
-                {customer.billing_pincode && `, ${customer.billing_pincode}`}
+                {customer.billingAddressLine1}
+                {customer.billingCity && `, ${customer.billingCity}`}
+                {customer.billingStateCode && ` - ${customer.billingStateCode}`}
+                {customer.billingPincode && `, ${customer.billingPincode}`}
               </div>
             )}
             {customer?.gstin && (

@@ -26,13 +26,7 @@ export const workflowDefinitionQueryKey = (id: string) => ['workflow', 'definiti
 export function useWorkflowDefinitions(filters?: DefinitionListFilters) {
   return useQuery<PaginatedResponse<WorkflowDefinitionResponse>>({
     queryKey: workflowDefinitionsQueryKey(filters),
-    queryFn: () => {
-      if (!filters?.organization_id) {
-        throw new Error('organization_id is required');
-      }
-      return definitionsApi.list(filters);
-    },
-    enabled: Boolean(filters?.organization_id),
+    queryFn: () => definitionsApi.list(filters ?? {}),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });

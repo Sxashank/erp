@@ -36,11 +36,9 @@ import {
   type TDSCertificateFormInput,
   type TDSCertificateFormValues,
 } from '@/schemas/tax/taxSchemas';
-import { useActiveOrganizationId } from '@/stores/organizationStore';
 import { getFinancialYearValue } from '@/utils/financialYears';
 
 const defaultValues: TDSCertificateFormValues = {
-  organizationId: '',
   financialYear: '',
   quarter: 'Q1',
   deducteePan: '',
@@ -54,29 +52,21 @@ function getCandidateValue(deducteePan: string, tdsSectionId: string) {
 export default function TDSCertificateWorkspace() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const activeOrganizationId = useActiveOrganizationId();
-  const financialYearsQuery = useFinancialYears(activeOrganizationId ?? undefined);
-  const certificateQuery = useTDSCertificate(id, activeOrganizationId ?? undefined);
+  const financialYearsQuery = useFinancialYears();
+  const certificateQuery = useTDSCertificate(id);
   const generateCertificate = useGenerateTDSCertificate();
   const generateBulk = useGenerateBulkTDSCertificates();
   const [downloadMarkup, setDownloadMarkup] = useState('');
 
   const form = useForm<TDSCertificateFormValues, unknown, TDSCertificateFormInput>({
     resolver: zodResolver(tdsCertificateSchema),
-    defaultValues: { ...defaultValues, organizationId: activeOrganizationId ?? '' },
+    defaultValues: { ...defaultValues ?? '' },
   });
-  const organizationId = form.watch('organizationId');
   const financialYear = form.watch('financialYear');
   const quarter = form.watch('quarter');
   const deducteePan = form.watch('deducteePan');
   const tdsSectionId = form.watch('tdsSectionId');
-  const candidatesQuery = useTDSCertificateCandidates(organizationId || activeOrganizationId || undefined, financialYear || undefined, quarter);
-
-  useEffect(() => {
-    if (activeOrganizationId) {
-      form.setValue('organizationId', activeOrganizationId);
-    }
-  }, [activeOrganizationId, form]);
+  const candidatesQuery = useTDSCertificateCandidates(financialYear || undefined, quarter);
 
   const selectedCandidate = useMemo(
     () =>
@@ -132,7 +122,7 @@ export default function TDSCertificateWorkspace() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => generateBulk.mutateAsync({ organizationId: organizationId || activeOrganizationId || '', financialYear, quarter })}
+                    onClick={() => generateBulk.mutateAsync({ financialYear, quarter })}
                     disabled={generateBulk.isPending || !financialYear}
                     data-testid="tds-certificate-generate-bulk"
                   >
@@ -147,13 +137,6 @@ export default function TDSCertificateWorkspace() {
               }
             >
               <FormSection title="Certificate Scope">
-                <FormField control={form.control} name="organizationId" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Organization</FormLabel>
-                    <FormControl><Input {...field} disabled /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
                 <FormField control={form.control} name="financialYear" render={({ field }) => (
                   <FormItem>
                     <FormLabel>Financial year</FormLabel>

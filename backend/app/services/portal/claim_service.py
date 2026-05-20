@@ -44,6 +44,7 @@ from app.services.lending.iif.subvention_claim_service import (
     SubventionClaimService,
 )
 from app.services.portal.actor_roles import (
+    CLAIM_SUBMITTER_ROLES,
     CLAIM_RELEASE_ROLES,
     CLAIM_VERIFY_ROLES,
     is_borrower_role,
@@ -73,7 +74,7 @@ class PortalClaimService:
         )
         enrollments = (
             await self.list_enrollments(portal_user)
-            if is_borrower_role(portal_user)
+            if portal_actor_role(portal_user) in CLAIM_SUBMITTER_ROLES
             else BorrowerClaimEnrollmentListResponse(items=[], total=0)
         )
         stats = BorrowerClaimStats(
@@ -110,7 +111,7 @@ class PortalClaimService:
         self,
         portal_user: PortalUser,
     ) -> BorrowerClaimEnrollmentListResponse:
-        self._require_borrower(portal_user)
+        self._require_role(portal_user, CLAIM_SUBMITTER_ROLES)
         accessible_loan_ids = await self._get_accessible_loan_ids(portal_user)
         if not accessible_loan_ids:
             return BorrowerClaimEnrollmentListResponse(items=[], total=0)
@@ -139,7 +140,7 @@ class PortalClaimService:
         portal_user: PortalUser,
         enrollment_id: UUID,
     ) -> BorrowerEligibleClaimPeriodsResponse:
-        self._require_borrower(portal_user)
+        self._require_role(portal_user, CLAIM_SUBMITTER_ROLES)
         enrollment = await self._assert_enrollment_access(portal_user, enrollment_id)
         periods = await self.claim_service.eligible_periods(
             enrollment.organization_id,
@@ -179,7 +180,8 @@ class PortalClaimService:
             )
             .order_by(SubventionClaim.created_at.desc())
         )
-        if is_borrower_role(portal_user):
+        role = portal_actor_role(portal_user)
+        if is_borrower_role(portal_user) or role == "scheme_lender":
             accessible_loan_ids = await self._get_accessible_loan_ids(portal_user)
             if not accessible_loan_ids:
                 return BorrowerClaimListResponse(
@@ -237,7 +239,8 @@ class PortalClaimService:
         portal_user: PortalUser,
         claim_id: UUID,
     ) -> SubventionClaim:
-        if not is_borrower_role(portal_user):
+        role = portal_actor_role(portal_user)
+        if not is_borrower_role(portal_user) and role != "scheme_lender":
             return await self.claim_service.get(
                 portal_user.organization_id,
                 claim_id,
@@ -249,7 +252,7 @@ class PortalClaimService:
         portal_user: PortalUser,
         payload: BorrowerClaimCreateRequest,
     ) -> BorrowerClaimItem:
-        self._require_borrower(portal_user)
+        self._require_role(portal_user, CLAIM_SUBMITTER_ROLES)
         enrollment = await self._assert_enrollment_access(portal_user, payload.enrollment_id)
         claim = await self.claim_service.create_claim(
             enrollment.organization_id,
@@ -268,7 +271,7 @@ class PortalClaimService:
         claim_id: UUID,
         payload: BorrowerClaimSubmitRequest | None = None,
     ) -> BorrowerClaimItem:
-        self._require_borrower(portal_user)
+        self._require_role(portal_user, CLAIM_SUBMITTER_ROLES)
         claim = await self._assert_claim_access(portal_user, claim_id)
         if not claim.documents:
             raise BadRequestException(
@@ -303,7 +306,7 @@ class PortalClaimService:
         document_name: str | None = None,
         document_category: str = "BORROWER_CLAIM_SUPPORTING_DOCUMENT",
     ) -> BorrowerClaimItem:
-        self._require_borrower(portal_user)
+        self._require_role(portal_user, CLAIM_SUBMITTER_ROLES)
         claim = await self._assert_claim_access(portal_user, claim_id)
         if claim.status != SubventionClaimStatus.DRAFT.value:
             raise ForbiddenException(

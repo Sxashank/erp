@@ -152,14 +152,17 @@ export default function ESSExpenseForm() {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Project / Cost Center</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
+                    <Select
+                      onValueChange={(v) => field.onChange(v === '__none__' ? '' : v)}
+                      value={field.value || '__none__'}
+                    >
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select project (optional)" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
                         {projects.map((proj) => (
                           <SelectItem key={proj.id} value={proj.id}>
                             {proj.name}

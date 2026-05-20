@@ -154,14 +154,23 @@ class HolidayService:
         year: Optional[int] = None,
         active_only: bool = True,
     ) -> List[HolidayCalendar]:
-        """List holiday calendars."""
-        query = select(HolidayCalendar).where(
-            HolidayCalendar.organization_id == organization_id
+        """List holiday calendars with their holidays eager-loaded.
+
+        The `HolidayCalendarResponse` schema includes `holidays`; FastAPI
+        serialisation accesses `entity.holidays` which would otherwise lazy-
+        load AFTER the request transaction closes (depending on session
+        scope) → silent `ResponseValidationError`. Eager-loading is the
+        canonical SQLAlchemy fix.
+        """
+        query = (
+            select(HolidayCalendar)
+            .where(HolidayCalendar.organization_id == organization_id)
+            .options(selectinload(HolidayCalendar.holidays))
         )
         if year:
             query = query.where(HolidayCalendar.year == year)
         if active_only:
-            query = query.where(HolidayCalendar.is_active == True)
+            query = query.where(HolidayCalendar.is_active.is_(True))
 
         query = query.order_by(HolidayCalendar.year.desc(), HolidayCalendar.calendar_name)
         result = await self.db.execute(query)

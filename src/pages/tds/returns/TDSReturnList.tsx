@@ -25,9 +25,8 @@ export default function TDSReturnList() {
   const [status, setStatus] = useState('all');
   const [quarter, setQuarter] = useState('all');
   const [financialYearId, setFinancialYearId] = useState('all');
-  const financialYearsQuery = useFinancialYears(activeOrganizationId ?? undefined);
+  const financialYearsQuery = useFinancialYears();
   const returnsQuery = useTDSReturns({
-    organizationId: activeOrganizationId ?? undefined,
     status: status === 'all' ? undefined : status,
     quarter: quarter === 'all' ? undefined : quarter,
     financialYearId: financialYearId === 'all' ? undefined : financialYearId,

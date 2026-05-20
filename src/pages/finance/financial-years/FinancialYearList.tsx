@@ -43,7 +43,7 @@ export function FinancialYearList() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
       if (data.items.length > 0) {
@@ -59,10 +59,9 @@ export function FinancialYearList() {
     try {
       setLoading(true);
       const response = await financialYearsApi.list({
-        organization_id: selectedOrgId,
         page,
-        page_size: 10,
-        include_inactive: true,
+        pageSize: 10,
+        includeInactive: true,
       });
       const data: PaginatedResponse<FinancialYear> = response.data;
       setFinancialYears(data.items);

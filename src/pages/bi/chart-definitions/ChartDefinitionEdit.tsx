@@ -380,7 +380,7 @@ export function ChartDefinitionEdit() {
                     <SelectValue placeholder="Select a data source" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="__none__">None</SelectItem>
                     {dataSources.map((ds) => (
                       <SelectItem key={ds.id} value={ds.id}>
                         {ds.name}

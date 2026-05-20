@@ -53,7 +53,11 @@ function navItemsForRole(role: string) {
     { label: 'Reports', href: '/portal/reports', icon: BarChart3 },
   ];
   if (role === 'scheme_borrower') {
-    return [...base, { label: 'Documents', href: '/portal/applications', icon: FileText }];
+    return [
+      ...base,
+      { label: 'Loans', href: '/portal/loans', icon: Wallet },
+      { label: 'Documents', href: '/portal/documents', icon: FileText },
+    ];
   }
   if (role === 'scheme_smfcl_reviewer' || role === 'scheme_admin') {
     return [...base, { label: 'Registrations', href: '/portal/registrations', icon: FileText }];

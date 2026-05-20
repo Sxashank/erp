@@ -216,7 +216,6 @@ export type TDSChallanOltasFormValues = z.input<typeof tdsChallanOltasSchema>;
 export type TDSChallanOltasFormInput = z.output<typeof tdsChallanOltasSchema>;
 
 export const tdsCertificateSchema = z.object({
-  organizationId: z.string().uuid('Select organization'),
   financialYear: z.string().trim().min(1, 'Required'),
   quarter: z.enum(['Q1', 'Q2', 'Q3', 'Q4']),
   deducteePan: z.string().trim().min(1, 'Select deductee').max(10),

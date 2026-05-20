@@ -68,7 +68,6 @@ export default function FDForm() {
   const organizationId = useRequiredActiveOrganizationId();
 
   const [formData, setFormData] = useState({
-    organization_id: organizationId,
     product_id: '',
     customer_id: '',
     customer_category: 'GENERAL' as FDCustomerCategory,
@@ -95,7 +94,6 @@ export default function FDForm() {
   useEffect(() => {
     setFormData((current) => ({
       ...current,
-      organization_id: organizationId,
     }));
   }, [organizationId]);
 
@@ -103,7 +101,6 @@ export default function FDForm() {
     try {
       setLoading(true);
       const response = await fixedDepositService.listProducts({
-        organization_id: organizationId,
         active_only: true,
       });
       setProducts(response.items);

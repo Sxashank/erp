@@ -56,9 +56,6 @@ export function DataSourceCreate() {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [submitting, setSubmitting] = useState(false);
-
-  const organizationId = localStorage.getItem('organization_id') || '';
-
   const {
     register,
     handleSubmit,
@@ -129,8 +126,7 @@ export function DataSourceCreate() {
       const payload: DataSourceCreateType = {
         code: data.code,
         name: data.name,
-        description: data.description || undefined,
-        organization_id: organizationId || undefined,
+        description: data.description || undefined || undefined,
         source_type: data.source_type,
         api_endpoint: data.source_type === 'API_ENDPOINT' ? data.api_endpoint : undefined,
         api_method: data.source_type === 'API_ENDPOINT' ? data.api_method : undefined,

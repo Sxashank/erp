@@ -8,9 +8,10 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.services.portal.dashboard_service import PortalDashboardService
+from app.services.portal.entity_access import get_accessible_entity_ids
 
 router = APIRouter(prefix="/dashboard", tags=["Portal Dashboard"])
 
@@ -44,6 +45,7 @@ class DashboardResponse(BaseModel):
 class LoanSummary(BaseModel):
     """Loan summary."""
 
+    id: str
     loan_account_id: str
     loan_account_number: str
     product_name: str
@@ -51,6 +53,7 @@ class LoanSummary(BaseModel):
     disbursed_amount: float
     total_outstanding: float
     overdue_amount: float
+    overdue_days: int
     emi_amount: float
     status: str
     dpd: int
@@ -59,6 +62,7 @@ class LoanSummary(BaseModel):
 class LoanDetails(BaseModel):
     """Detailed loan information."""
 
+    id: str
     loan_account_id: str
     loan_account_number: str
     product_name: str
@@ -72,15 +76,29 @@ class LoanDetails(BaseModel):
     rate_type: str
     principal_outstanding: float
     interest_outstanding: float
+    outstanding_principal: float
+    outstanding_interest: float
     charges_outstanding: float
+    charges_due: float
     total_outstanding: float
     overdue_amount: float
     emi_amount: float
     emi_date: int
     next_emi_date: str | None = None
     remaining_emis: int
+    remaining_tenure: int
+    next_emi_amount: float | None = None
     status: str
     dpd: int
+    borrower_name: str
+    co_borrowers: list[str] = []
+    emi_start_date: str | None = None
+    emi_end_date: str | None = None
+    total_paid: float = 0
+    total_principal_paid: float = 0
+    total_interest_paid: float = 0
+    prepaid_amount: float = 0
+    nach_mandate_status: str | None = None
 
 
 class RepaymentScheduleItem(BaseModel):
@@ -91,6 +109,8 @@ class RepaymentScheduleItem(BaseModel):
     emi_amount: float
     principal_component: float
     interest_component: float
+    principal: float
+    interest: float
     opening_balance: float
     closing_balance: float
     status: str
@@ -114,6 +134,7 @@ class UpcomingDue(BaseModel):
 class PaymentHistoryItem(BaseModel):
     """Payment history item."""
 
+    id: str
     receipt_id: str
     receipt_number: str
     payment_date: str
@@ -121,6 +142,10 @@ class PaymentHistoryItem(BaseModel):
     payment_mode: str
     loan_account_number: str
     status: str
+    principal_applied: float = 0
+    interest_applied: float = 0
+    charges_applied: float = 0
+    reference_number: str | None = None
 
 
 class PrepaymentQuote(BaseModel):
@@ -174,13 +199,14 @@ class PaginatedResponse(BaseModel):
 )
 async def get_dashboard(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get portal dashboard summary."""
     service = PortalDashboardService(db)
     dashboard = await service.get_dashboard(
         user_id=user.id,
         customer_id=user.customer_id,
+        entity_ids=await get_accessible_entity_ids(user, db),
     )
 
     return DashboardResponse(
@@ -205,11 +231,14 @@ async def get_dashboard(
 )
 async def get_loans(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get all loans for the customer."""
     service = PortalDashboardService(db)
-    loans = await service.get_loan_summary(user.customer_id)
+    loans = await service.get_loan_summary(
+        user.customer_id,
+        entity_ids=await get_accessible_entity_ids(user, db),
+    )
 
     return [LoanSummary(**loan) for loan in loans]
 
@@ -222,13 +251,14 @@ async def get_loans(
 async def get_loan_details(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get detailed information for a specific loan."""
     service = PortalDashboardService(db)
     loan = await service.get_loan_details(
         loan_account_id=loan_account_id,
         customer_id=user.customer_id,
+        entity_ids=await get_accessible_entity_ids(user, db),
     )
 
     if not loan:
@@ -245,13 +275,14 @@ async def get_loan_details(
 async def get_repayment_schedule(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get EMI repayment schedule for a loan."""
     service = PortalDashboardService(db)
     schedule = await service.get_repayment_schedule(
         loan_account_id=loan_account_id,
         customer_id=user.customer_id,
+        entity_ids=await get_accessible_entity_ids(user, db),
     )
 
     return [RepaymentScheduleItem(**item) for item in schedule]
@@ -270,7 +301,7 @@ async def get_repayment_schedule(
 async def get_upcoming_dues(
     days: int = Query(30, ge=1, le=90),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get upcoming EMI dues across all loans."""
     service = PortalDashboardService(db)
@@ -288,7 +319,7 @@ async def get_upcoming_dues(
 )
 async def get_overdue_summary(
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get summary of overdue amounts."""
     service = PortalDashboardService(db)
@@ -314,7 +345,7 @@ async def get_payment_history(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get payment history for a specific loan."""
     service = PortalDashboardService(db)
@@ -325,6 +356,7 @@ async def get_payment_history(
         to_date=to_date,
         page=page,
         page_size=page_size,
+        entity_ids=await get_accessible_entity_ids(user, db),
     )
 
     return PaginatedResponse(
@@ -351,7 +383,7 @@ async def get_prepayment_quote(
     amount: Decimal,
     prepayment_date: date | None = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Calculate prepayment quote.
@@ -378,7 +410,7 @@ async def get_foreclosure_quote(
     loan_account_id: UUID,
     foreclosure_date: date | None = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Calculate foreclosure quote.
@@ -409,7 +441,7 @@ async def get_account_statement(
     from_date: date,
     to_date: date,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Generate account statement for a loan."""
     service = PortalDashboardService(db)
@@ -505,7 +537,7 @@ def _dpd_for(installment: "_ScheduleInstallment") -> int:
 async def get_failed_installments(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Return installments whose status indicates collection failure.
 
@@ -560,7 +592,7 @@ async def get_failed_installments(
 async def get_missed_installments(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Alias surface for "missed" — currently same query as ``/failed``
     filtered to past-due unpaid lines. Splits once the platform models
@@ -604,7 +636,7 @@ async def get_missed_installments(
 async def get_schedule_csv(
     loan_account_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ) -> _StreamingResponse:
     """Stream the full repayment schedule as CSV."""
     loan = await _assert_loan_access(user, loan_account_id, db)

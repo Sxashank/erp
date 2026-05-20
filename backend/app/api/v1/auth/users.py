@@ -25,8 +25,8 @@ router = APIRouter()
 @router.get("", response_model=PaginatedResponse[UserListResponse], response_model_by_alias=True)
 async def list_users(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("USER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -144,7 +144,7 @@ async def assign_role(
 async def remove_role(
     user_id: UUID,
     role_id: UUID,
-    unit_id: Optional[UUID] = Query(None),
+    unit_id: Optional[UUID] = Query(None, alias="unitId"),
     current_user: User = Depends(RequirePermissions("USER_ROLE_ASSIGN")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -177,8 +177,8 @@ async def unlock_user(
 @router.post("/{user_id}/reset-password", response_model=MessageResponse, response_model_by_alias=True)
 async def reset_user_password(
     user_id: UUID,
-    new_password: str = Query(..., min_length=8),
-    must_change: bool = Query(True),
+    new_password: str = Query(..., min_length=8, alias="newPassword"),
+    must_change: bool = Query(True, alias="mustChange"),
     current_user: User = Depends(RequirePermissions("USER_RESET_PASSWORD")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):

@@ -42,7 +42,7 @@ export default function EmployeeSalaryList() {
     try {
       setLoading(true);
       const response = await payrollService.listEmployeeSalaries({
-        active_only: true,
+        activeOnly: true,
         limit: 100,
       });
       setSalaries(response.items);
@@ -62,9 +62,9 @@ export default function EmployeeSalaryList() {
     if (!searchTerm) return true;
     const search = searchTerm.toLowerCase();
     return (
-      salary.employee?.first_name?.toLowerCase().includes(search) ||
-      salary.employee?.last_name?.toLowerCase().includes(search) ||
-      salary.employee?.employee_code?.toLowerCase().includes(search)
+      salary.employee?.firstName?.toLowerCase().includes(search) ||
+      salary.employee?.lastName?.toLowerCase().includes(search) ||
+      salary.employee?.employeeCode?.toLowerCase().includes(search)
     );
   });
 
@@ -129,27 +129,27 @@ export default function EmployeeSalaryList() {
                     <TableCell>
                       <div>
                         <span className="font-medium">
-                          {salary.employee?.first_name} {salary.employee?.last_name}
+                          {salary.employee?.firstName} {salary.employee?.lastName}
                         </span>
                         <br />
                         <span className="text-sm text-muted-foreground">
-                          {salary.employee?.employee_code}
+                          {salary.employee?.employeeCode}
                         </span>
                       </div>
                     </TableCell>
-                    <TableCell>{salary.structure?.structure_name || '-'}</TableCell>
-                    <TableCell><DateDisplay date={salary.effective_from} /></TableCell>
+                    <TableCell>{salary.structure?.structureName || '-'}</TableCell>
+                    <TableCell><DateDisplay date={salary.effectiveFrom} /></TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={salary.gross_salary} compact />
+                      <AmountDisplay amount={salary.grossSalary} compact />
                     </TableCell>
                     <TableCell className="text-right">
-                      <AmountDisplay amount={salary.net_salary} compact />
+                      <AmountDisplay amount={salary.netSalary} compact />
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       <AmountDisplay amount={salary.ctc} compact />
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">Rev {salary.revision_number}</Badge>
+                      <Badge variant="outline">Rev {salary.revisionNumber}</Badge>
                     </TableCell>
                     <TableCell>
                       <Badge variant={salary.status === 'ACTIVE' ? 'default' : 'secondary'}>

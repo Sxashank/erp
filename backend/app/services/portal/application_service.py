@@ -13,11 +13,12 @@ the camelCase wire model out of the admin LOS service.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from io import BytesIO
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -36,6 +37,8 @@ from app.models.lending.enums import ApplicationStage, ApplicationStatus, Docume
 from app.models.lending.iif.application_utilization import (
     ApplicationUtilization,
 )
+from app.models.lending.iif.application_funding_source import ApplicationFundingSource
+from app.models.lending.iif.application_lender_loan import ApplicationLenderLoan
 from app.models.lending.iif.fund_utilization_category import (
     FundUtilizationCategory,
 )
@@ -50,6 +53,10 @@ from app.schemas.portal.application import (
     ApplicationDetailResponse,
     ApplicationDocumentRequirementResponse,
     ApplicationDocumentResponse,
+    ApplicationFundingSourceLine,
+    ApplicationFundingSourceResponseLine,
+    ApplicationLenderLoanLine,
+    ApplicationLenderLoanResponseLine,
     ApplicationListItem,
     ApplicationListResponse,
     ApplicationStatusEvent,
@@ -206,6 +213,26 @@ class PortalApplicationService:
         )
         utilization_rows = list((await self.db.execute(util_stmt)).scalars().all())
 
+        funding_stmt = (
+            select(ApplicationFundingSource)
+            .where(
+                ApplicationFundingSource.application_id == application_id,
+                ApplicationFundingSource.deleted_at.is_(None),
+            )
+            .order_by(ApplicationFundingSource.created_at.asc(), ApplicationFundingSource.id.asc())
+        )
+        funding_rows = list((await self.db.execute(funding_stmt)).scalars().all())
+
+        lender_loan_stmt = (
+            select(ApplicationLenderLoan)
+            .where(
+                ApplicationLenderLoan.application_id == application_id,
+                ApplicationLenderLoan.deleted_at.is_(None),
+            )
+            .order_by(ApplicationLenderLoan.created_at.asc(), ApplicationLenderLoan.id.asc())
+        )
+        lender_loan_rows = list((await self.db.execute(lender_loan_stmt)).scalars().all())
+
         doc_stmt = (
             select(ApplicationDocument)
             .where(
@@ -280,6 +307,12 @@ class PortalApplicationService:
                     remarks=row.remarks,
                 )
                 for row in utilization_rows
+            ],
+            funding_sources=[
+                self._to_funding_source_response(row) for row in funding_rows
+            ],
+            lender_loans=[
+                self._to_lender_loan_response(row) for row in lender_loan_rows
             ],
             documents=[self._to_doc_response(d) for d in documents],
             document_requirements=self._build_document_requirement_responses(
@@ -392,6 +425,20 @@ class PortalApplicationService:
                 current_user=_ServiceCurrentUser(portal_user.id),
             )
 
+        if payload.funding_sources:
+            await self._replace_funding_sources(
+                organization_id=entity.organization_id,
+                application_id=application.id,
+                lines=payload.funding_sources,
+            )
+
+        if payload.lender_loans:
+            await self._replace_lender_loans(
+                organization_id=entity.organization_id,
+                application_id=application.id,
+                lines=payload.lender_loans,
+            )
+
         return await self.get_application(portal_user, application.id)
 
     async def update_application(
@@ -482,6 +529,20 @@ class PortalApplicationService:
                     submit=False,
                 ),
                 current_user=_ServiceCurrentUser(portal_user.id),
+            )
+
+        if payload.funding_sources is not None:
+            await self._replace_funding_sources(
+                organization_id=application.organization_id,
+                application_id=application.id,
+                lines=payload.funding_sources,
+            )
+
+        if payload.lender_loans is not None:
+            await self._replace_lender_loans(
+                organization_id=application.organization_id,
+                application_id=application.id,
+                lines=payload.lender_loans,
             )
 
         return await self.get_application(portal_user, application.id)
@@ -662,6 +723,23 @@ class PortalApplicationService:
         application.status = ApplicationStatus.UNDER_REVIEW
         application.stage = ApplicationStage.APPLICATION
         application.updated_by = portal_user.id
+        lender_rows = list(
+            (
+                await self.db.execute(
+                    select(ApplicationLenderLoan).where(
+                        ApplicationLenderLoan.application_id == application.id,
+                        ApplicationLenderLoan.deleted_at.is_(None),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for row in lender_rows:
+            row.lender_validation_status = "VALIDATED"
+            row.lender_validation_remarks = remarks
+            row.lender_validated_by = portal_user.id
+            row.lender_validated_at = datetime.now(UTC)
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
@@ -1085,6 +1163,117 @@ class PortalApplicationService:
             download_url=(
                 f"/api/v1/portal/applications/{doc.application_id}/documents/" f"{doc.id}/download"
             ),
+        )
+
+    async def _replace_funding_sources(
+        self,
+        *,
+        organization_id: UUID,
+        application_id: UUID,
+        lines: Sequence[ApplicationFundingSourceLine],
+    ) -> None:
+        await self.db.execute(
+            delete(ApplicationFundingSource).where(
+                ApplicationFundingSource.application_id == application_id
+            )
+        )
+        for line in lines:
+            self.db.add(
+                ApplicationFundingSource(
+                    organization_id=organization_id,
+                    application_id=application_id,
+                    source_code=line.source_code.strip().upper(),
+                    source_label=line.source_label.strip(),
+                    amount=line.amount,
+                    remarks=line.remarks,
+                )
+            )
+        await self.db.flush()
+
+    async def _replace_lender_loans(
+        self,
+        *,
+        organization_id: UUID,
+        application_id: UUID,
+        lines: Sequence[ApplicationLenderLoanLine],
+    ) -> None:
+        await self.db.execute(
+            delete(ApplicationLenderLoan).where(
+                ApplicationLenderLoan.application_id == application_id
+            )
+        )
+        for line in lines:
+            self.db.add(
+                ApplicationLenderLoan(
+                    organization_id=organization_id,
+                    application_id=application_id,
+                    loan_type=line.loan_type.strip(),
+                    loan_amount=line.loan_amount,
+                    lender_name=line.lender_name.strip(),
+                    lender_category=line.lender_category,
+                    lender_contact=line.lender_contact,
+                    lender_email=line.lender_email,
+                    lender_address=line.lender_address,
+                    lender_state=line.lender_state,
+                    lender_district=line.lender_district,
+                    lender_pincode=line.lender_pincode,
+                    sanction_reference=line.sanction_reference,
+                    sanction_date=line.sanction_date,
+                    interest_rate_percent=line.interest_rate_percent,
+                    emi_periodicity=line.emi_periodicity,
+                    interest_debiting_periodicity=line.interest_debiting_periodicity,
+                    loan_account_number=line.loan_account_number,
+                    ifsc_code=line.ifsc_code,
+                    security_type=line.security_type,
+                    disbursement_call_type=line.disbursement_call_type,
+                    emi_amount=line.emi_amount,
+                    emi_due_date=line.emi_due_date,
+                )
+            )
+        await self.db.flush()
+
+    def _to_funding_source_response(
+        self,
+        row: ApplicationFundingSource,
+    ) -> ApplicationFundingSourceResponseLine:
+        return ApplicationFundingSourceResponseLine(
+            id=row.id,
+            source_code=row.source_code,
+            source_label=row.source_label,
+            amount=row.amount,
+            remarks=row.remarks,
+        )
+
+    def _to_lender_loan_response(
+        self,
+        row: ApplicationLenderLoan,
+    ) -> ApplicationLenderLoanResponseLine:
+        return ApplicationLenderLoanResponseLine(
+            id=row.id,
+            loan_type=row.loan_type,
+            loan_amount=row.loan_amount,
+            lender_name=row.lender_name,
+            lender_category=row.lender_category,
+            lender_contact=row.lender_contact,
+            lender_email=row.lender_email,
+            lender_address=row.lender_address,
+            lender_state=row.lender_state,
+            lender_district=row.lender_district,
+            lender_pincode=row.lender_pincode,
+            sanction_reference=row.sanction_reference,
+            sanction_date=row.sanction_date,
+            interest_rate_percent=row.interest_rate_percent,
+            emi_periodicity=row.emi_periodicity,
+            interest_debiting_periodicity=row.interest_debiting_periodicity,
+            loan_account_number=row.loan_account_number,
+            ifsc_code=row.ifsc_code,
+            security_type=row.security_type,
+            disbursement_call_type=row.disbursement_call_type,
+            emi_amount=row.emi_amount,
+            emi_due_date=row.emi_due_date,
+            lender_validation_status=row.lender_validation_status,
+            lender_validation_remarks=row.lender_validation_remarks,
+            lender_validated_at=row.lender_validated_at,
         )
 
     async def _get_document_requirements(

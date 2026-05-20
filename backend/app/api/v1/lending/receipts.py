@@ -428,12 +428,11 @@ async def get_receipts_by_loan(
 
 
 @router.get(
-    "/organization/{organization_id}/summary",
+    "/summary",
     response_model=ReceiptSummaryResponse,
     response_model_by_alias=True,
 )
 async def get_receipt_summary(
-    organization_id: UUID,
     from_date: date | None = None,
     to_date: date | None = None,
     current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),
@@ -441,9 +440,6 @@ async def get_receipt_summary(
 ):
     """Get receipt summary for organization."""
     service = ReceiptService(db)
-
-    if organization_id != current_user.organization_id:
-        raise ForbiddenException(detail="Forbidden", error_code="FORBIDDEN")
 
     summary = await service.get_receipt_summary(
         organization_id=current_user.organization_id,

@@ -49,7 +49,6 @@ export default function StatutorySetupList() {
     try {
       setLoading(true);
       const data = await payrollService.listStatutorySetup({
-        organization_id: organizationId,
       });
       setSetups(data);
     } catch (error) {
@@ -64,7 +63,7 @@ export default function StatutorySetupList() {
   };
 
   const getSetupByType = (type: string) => {
-    return setups.find((s) => s.statutory_type === type);
+    return setups.find((s) => s.statutoryType === type);
   };
 
   return (
@@ -87,8 +86,8 @@ export default function StatutorySetupList() {
                     <CardDescription>{info.description}</CardDescription>
                   </div>
                   {setup ? (
-                    <Badge variant={setup.is_applicable ? 'default' : 'secondary'}>
-                      {setup.is_applicable ? 'Active' : 'Inactive'}
+                    <Badge variant={setup.isApplicable ? 'default' : 'secondary'}>
+                      {setup.isApplicable ? 'Active' : 'Inactive'}
                     </Badge>
                   ) : (
                     <Badge variant="outline">Not Configured</Badge>
@@ -99,36 +98,36 @@ export default function StatutorySetupList() {
                 {setup ? (
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      {setup.employer_contribution_pct !== undefined &&
-                        setup.employer_contribution_pct !== null && (
+                      {setup.employerContributionPct !== undefined &&
+                        setup.employerContributionPct !== null && (
                           <div>
                             <span className="text-muted-foreground">Employer Rate:</span>
-                            <p className="font-medium">{setup.employer_contribution_pct}%</p>
+                            <p className="font-medium">{setup.employerContributionPct}%</p>
                           </div>
                         )}
-                      {setup.employee_contribution_pct !== undefined &&
-                        setup.employee_contribution_pct !== null && (
+                      {setup.employeeContributionPct !== undefined &&
+                        setup.employeeContributionPct !== null && (
                           <div>
                             <span className="text-muted-foreground">Employee Rate:</span>
-                            <p className="font-medium">{setup.employee_contribution_pct}%</p>
+                            <p className="font-medium">{setup.employeeContributionPct}%</p>
                           </div>
                         )}
-                      {setup.wage_ceiling !== undefined && setup.wage_ceiling !== null && (
+                      {setup.wageCeiling !== undefined && setup.wageCeiling !== null && (
                         <div>
                           <span className="text-muted-foreground">Wage Ceiling:</span>
-                          <p className="font-medium">₹{setup.wage_ceiling.toLocaleString()}</p>
+                          <p className="font-medium">₹{setup.wageCeiling.toLocaleString()}</p>
                         </div>
                       )}
-                      {setup.admin_charges_pct !== undefined &&
-                        setup.admin_charges_pct !== null && (
+                      {setup.adminChargesPct !== undefined &&
+                        setup.adminChargesPct !== null && (
                           <div>
                             <span className="text-muted-foreground">Admin Charges:</span>
-                            <p className="font-medium">{setup.admin_charges_pct}%</p>
+                            <p className="font-medium">{setup.adminChargesPct}%</p>
                           </div>
                         )}
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      Effective from: <DateDisplay date={setup.effective_from} />
+                      Effective from: <DateDisplay date={setup.effectiveFrom} />
                     </div>
                     <Button
                       variant="outline"
@@ -193,26 +192,26 @@ export default function StatutorySetupList() {
                 setups.map((setup) => (
                   <TableRow key={setup.id}>
                     <TableCell className="font-medium">
-                      {STATUTORY_TYPES[setup.statutory_type as keyof typeof STATUTORY_TYPES]
-                        ?.label || setup.statutory_type}
+                      {STATUTORY_TYPES[setup.statutoryType as keyof typeof STATUTORY_TYPES]
+                        ?.label || setup.statutoryType}
                     </TableCell>
                     <TableCell>
-                      {setup.employee_contribution_pct !== null
-                        ? `${setup.employee_contribution_pct}%`
+                      {setup.employeeContributionPct !== null
+                        ? `${setup.employeeContributionPct}%`
                         : '-'}
                     </TableCell>
                     <TableCell>
-                      {setup.employer_contribution_pct !== null
-                        ? `${setup.employer_contribution_pct}%`
+                      {setup.employerContributionPct !== null
+                        ? `${setup.employerContributionPct}%`
                         : '-'}
                     </TableCell>
                     <TableCell>
-                      {setup.wage_ceiling != null ? `₹${setup.wage_ceiling.toLocaleString()}` : '-'}
+                      {setup.wageCeiling != null ? `₹${setup.wageCeiling.toLocaleString()}` : '-'}
                     </TableCell>
-                    <TableCell><DateDisplay date={setup.effective_from} /></TableCell>
+                    <TableCell><DateDisplay date={setup.effectiveFrom} /></TableCell>
                     <TableCell>
-                      <Badge variant={setup.is_applicable ? 'default' : 'secondary'}>
-                        {setup.is_applicable ? 'Active' : 'Inactive'}
+                      <Badge variant={setup.isApplicable ? 'default' : 'secondary'}>
+                        {setup.isApplicable ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">

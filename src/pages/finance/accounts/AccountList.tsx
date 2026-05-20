@@ -43,7 +43,7 @@ export function AccountList() {
 
   const fetchOrganizations = useCallback(async () => {
     try {
-      const response = await organizationsApi.list({ page_size: 100 });
+      const response = await organizationsApi.list({ pageSize: 100 });
       const data: PaginatedResponse<Organization> = response.data;
       setOrganizations(data.items);
       if (data.items.length > 0) {
@@ -59,13 +59,12 @@ export function AccountList() {
     try {
       setLoading(true);
       const params: Parameters<typeof accountsApi.list>[0] = {
-        organization_id: selectedOrgId,
         page,
-        page_size: 20,
-        include_inactive: true,
+        pageSize: 20,
+        includeInactive: true,
       };
       if (selectedType && selectedType !== 'all') {
-        params.account_type = selectedType;
+        params.accountType = selectedType;
       }
       const response = await accountsApi.list(params);
       const data: PaginatedResponse<Account> = response.data;

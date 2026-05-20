@@ -77,8 +77,7 @@ export function GSTRegistrationForm() {
   const form = useForm<GSTRegistrationFormValues, unknown, GSTRegistrationFormInput>({
     resolver: zodResolver(gstRegistrationSchema),
     defaultValues: {
-      ...defaultValues,
-      organizationId: activeOrganizationId ?? '',
+      ...defaultValues ?? '',
     },
   });
 

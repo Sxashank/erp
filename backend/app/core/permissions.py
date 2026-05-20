@@ -205,48 +205,17 @@ class PermissionChecker:
                 )
 
 
-def RequirePermissions(permissions: list[str], require_all: bool = True):  # noqa: N802
-    """
-    Decorator for permission checking on FastAPI routes.
-
-    Usage:
-        @router.get("/items")
-        @RequirePermissions(["ITEM_VIEW"])
-        async def get_items(request: Request, current_user: User = Depends(get_current_user)):
-            ...
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        async def wrapper(*args, request: Request = None, **kwargs):
-            # Try to find request in kwargs or args
-            req = request
-            if not req:
-                req = kwargs.get("request")
-            if not req:
-                for arg in args:
-                    if isinstance(arg, Request):
-                        req = arg
-                        break
-
-            user_permissions = await _resolve_permissions_for_call(
-                request=req,
-                args=args,
-                kwargs=kwargs,
-            )
-
-            # Check permissions
-            if require_all:
-                if not has_all_permissions(user_permissions, permissions):
-                    missing = set(permissions) - user_permissions
-                    raise ForbiddenException(
-                        detail=f"Missing required permissions: {', '.join(missing)}"
-                    )
-            else:
-                if not has_any_permission(user_permissions, permissions):
-                    raise ForbiddenException(
-                        detail=f"Requires one of: {', '.join(permissions)}"
-                    )
-
-            return await func(*args, **kwargs)
-        return wrapper
-    return decorator
+# NOTE: A `def RequirePermissions(permissions: list[str], ...)` decorator
+# factory used to live here. It clashed with the canonical
+# `app.api.deps.RequirePermissions` class (the `Depends(...)` style required by
+# CLAUDE.md §6.3) — and when the two were imported into the same module the
+# decorator pattern silently broke FastAPI's signature introspection and made
+# every route return plaintext "Internal Server Error" 500.
+#
+# The function was removed deliberately. There is only one `RequirePermissions`
+# in the codebase now — the class in `app.api.deps`. Any module that needs to
+# gate an endpoint imports `RequirePermissions` from `app.api.deps` and uses:
+#
+#     current_user: User = Depends(RequirePermissions(Permissions.X))
+#
+# Do not re-introduce a function-decorator form here.

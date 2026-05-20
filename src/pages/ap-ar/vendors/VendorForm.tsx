@@ -161,8 +161,8 @@ export function VendorForm() {
   const loadInitialData = useCallback(async () => {
     try {
       const [orgsRes, tdsRes] = await Promise.all([
-        organizationsApi.list({ page: 1, page_size: 100 }),
-        tdsSectionsApi.list({ page: 1, page_size: 100, include_inactive: false }),
+        organizationsApi.list({ page: 1, pageSize: 100 }),
+        tdsSectionsApi.list({ page: 1, pageSize: 100, includeInactive: false }),
       ]);
       setOrganizations(orgsRes.data.items || []);
       setTdsSections(tdsRes.data.items || []);
@@ -184,15 +184,15 @@ export function VendorForm() {
   const loadOrganizationData = useCallback(async (orgId: string) => {
     try {
       const [accountsRes, termsRes] = await Promise.all([
-        accountsApi.list({ organization_id: orgId, page: 1, page_size: 100 }),
-        paymentTermsApi.getActive({ organization_id: orgId }),
+        accountsApi.list({ page: 1, pageSize: 100 }),
+        paymentTermsApi.getActive({}),
       ]);
       setAccounts(accountsRes.data.items || []);
       setPaymentTerms(termsRes.data || []);
 
       // Generate code for new vendor
       if (!isEditMode) {
-        const codeRes = await vendorsApi.generateCode({ organization_id: orgId });
+        const codeRes = await vendorsApi.generateCode();
         setFormData((prev) => ({ ...prev, code: codeRes.data.code }));
       }
     } catch (error) {

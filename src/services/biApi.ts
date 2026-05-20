@@ -37,9 +37,9 @@ import api from './api';
 
 export const biDashboardApi = {
   // List all dashboards
-  list: (organizationId?: string) =>
+  list: () =>
     api.get<DashboardListItem[]>('/bi/dashboards', {
-      params: { organization_id: organizationId },
+      params: {},
     }),
 
   // Get dashboards for landing page
@@ -129,7 +129,7 @@ export const biWidgetApi = {
 
 export const biChartApi = {
   // List all chart definitions
-  list: (params?: { organization_id?: string; module?: BIModule; include_system?: boolean }) =>
+  list: (params?: { module?: BIModule; include_system?: boolean }) =>
     api.get<ChartDefinitionListItem[]>('/bi/chart-definitions', { params }),
 
   // List accessible charts for current user
@@ -165,7 +165,7 @@ export const biChartApi = {
 
 export const biDataSourceApi = {
   // List all data sources
-  list: (params?: { organization_id?: string; include_system?: boolean }) =>
+  list: (params?: { include_system?: boolean }) =>
     api.get<DataSourceListItem[]>('/bi/data-sources', { params }),
 
   // Get single data source

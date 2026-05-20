@@ -8,87 +8,86 @@ import api from './api';
 // Types
 export interface ComplianceItem {
   id: string;
-  organization_id: string;
-  item_code: string;
-  item_name: string;
+  itemCode: string;
+  itemName: string;
   description?: string;
-  regulatory_body: 'RBI' | 'SEBI' | 'MCA' | 'GST' | 'INCOME_TAX' | 'EPFO' | 'ESIC' | 'STATE' | 'OTHER';
-  regulation_reference?: string;
-  section_reference?: string;
+  regulatoryBody: 'RBI' | 'SEBI' | 'MCA' | 'GST' | 'INCOME_TAX' | 'EPFO' | 'ESIC' | 'STATE' | 'OTHER';
+  regulationReference?: string;
+  sectionReference?: string;
   frequency: 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'ANNUALLY' | 'AS_REQUIRED' | 'ONE_TIME';
-  due_day?: number;
-  due_month?: number;
-  grace_days: number;
+  dueDay?: number;
+  dueMonth?: number;
+  graceDays: number;
   priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW';
-  penalty_type?: string;
-  penalty_amount?: number;
-  penalty_rate_per_day?: number;
-  responsible_designation?: string;
+  penaltyType?: string;
+  penaltyAmount?: number;
+  penaltyRatePerDay?: number;
+  responsibleDesignation?: string;
   department?: string;
-  required_documents?: string[];
-  form_name?: string;
-  filing_portal?: string;
-  effective_from?: string;
-  effective_to?: string;
-  is_active: boolean;
-  created_at: string;
+  requiredDocuments?: string[];
+  formName?: string;
+  filingPortal?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface ComplianceInstance {
   id: string;
-  compliance_item_id: string;
-  compliance_item?: ComplianceItem;
-  item_code?: string;
-  item_name?: string;
-  regulatory_body?: string;
-  period_year: number;
-  period_month?: number;
-  period_quarter?: number;
-  period_from?: string;
-  period_to?: string;
-  original_due_date: string;
-  extended_due_date?: string;
-  actual_due_date: string;
+  complianceItemId: string;
+  complianceItem?: ComplianceItem;
+  itemCode?: string;
+  itemName?: string;
+  regulatoryBody?: string;
+  periodYear: number;
+  periodMonth?: number;
+  periodQuarter?: number;
+  periodFrom?: string;
+  periodTo?: string;
+  originalDueDate: string;
+  extendedDueDate?: string;
+  actualDueDate: string;
   status: 'NOT_DUE' | 'PENDING' | 'IN_PROGRESS' | 'PREPARED' | 'UNDER_REVIEW' | 'FILED' | 'ACKNOWLEDGED' | 'DELAYED' | 'NOT_APPLICABLE';
-  filed_date?: string;
-  acknowledgment_number?: string;
-  acknowledgment_date?: string;
-  reference_number?: string;
-  is_delayed: boolean;
-  delay_days?: number;
-  penalty_paid?: number;
-  penalty_reference?: string;
-  assigned_to?: string;
+  filedDate?: string;
+  acknowledgmentNumber?: string;
+  acknowledgmentDate?: string;
+  referenceNumber?: string;
+  isDelayed: boolean;
+  delayDays?: number;
+  penaltyPaid?: number;
+  penaltyReference?: string;
+  assignedTo?: string;
   reviewer?: string;
   remarks?: string;
-  internal_notes?: string;
-  reminder_days?: number;
-  created_at: string;
+  internalNotes?: string;
+  reminderDays?: number;
+  createdAt: string;
 }
 
 export interface ComplianceSummary {
   total: number;
   pending: number;
-  in_progress: number;
+  inProgress: number;
   prepared: number;
   filed: number;
   delayed: number;
-  not_applicable: number;
+  notApplicable: number;
 }
 
 export interface ComplianceCalendarItem {
   id: string;
-  item_code: string;
-  item_name: string;
-  regulatory_body: string;
-  due_date: string;
+  itemCode: string;
+  itemName: string;
+  regulatoryBody: string;
+  dueDate: string;
   status: string;
-  is_delayed: boolean;
+  isDelayed: boolean;
 }
 
 export interface UpcomingCompliance {
-  due_this_week: ComplianceCalendarItem[];
-  due_this_month: ComplianceCalendarItem[];
+  dueThisWeek: ComplianceCalendarItem[];
+  dueThisMonth: ComplianceCalendarItem[];
   overdue: ComplianceCalendarItem[];
 }
 
@@ -97,10 +96,9 @@ class ComplianceService {
   // ============== Compliance Items ==============
 
   async listItems(params: {
-    organization_id: string;
-    regulatory_body?: string;
+    regulatoryBody?: string;
     frequency?: string;
-    active_only?: boolean;
+    activeOnly?: boolean;
     skip?: number;
     limit?: number;
   }): Promise<{ items: ComplianceItem[]; total: number }> {
@@ -130,9 +128,8 @@ class ComplianceService {
   // ============== Compliance Instances ==============
 
   async listInstances(params: {
-    organization_id: string;
-    compliance_item_id?: string;
-    regulatory_body?: string;
+    complianceItemId?: string;
+    regulatoryBody?: string;
     status?: string;
     year?: number;
     month?: number;
@@ -160,27 +157,24 @@ class ComplianceService {
 
   async markInstanceFiled(id: string, acknowledgmentNumber?: string): Promise<ComplianceInstance> {
     const response = await api.post(`/compliance/instances/${id}/file`, null, {
-      params: { acknowledgment_number: acknowledgmentNumber },
+      params: { acknowledgmentNumber: acknowledgmentNumber },
     });
     return response.data;
   }
 
   // ============== Dashboard ==============
 
-  async getSummary(params: { organization_id: string; year?: number }): Promise<ComplianceSummary> {
+  async getSummary(params: { year?: number }): Promise<ComplianceSummary> {
     const response = await api.get('/compliance/summary', { params });
     return response.data;
   }
 
-  async getUpcoming(organization_id: string): Promise<UpcomingCompliance> {
-    const response = await api.get('/compliance/upcoming', {
-      params: { organization_id },
-    });
+  async getUpcoming(): Promise<UpcomingCompliance> {
+    const response = await api.get('/compliance/upcoming');
     return response.data;
   }
 
   async generateInstances(params: {
-    organization_id: string;
     year: number;
     month?: number;
   }): Promise<{ message: string; count: number }> {

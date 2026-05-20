@@ -53,11 +53,10 @@ export default function PayrollBatchForm() {
   const years = Array.from({ length: 3 }, (_, i) => currentYear - i + 1);
 
   const [formData, setFormData] = useState({
-    organization_id: organizationId,
-    payroll_month: currentMonth.toString(),
-    payroll_year: currentYear.toString(),
-    pay_period_from: '',
-    pay_period_to: '',
+    payrollMonth: currentMonth.toString(),
+    payrollYear: currentYear.toString(),
+    payPeriodFrom: '',
+    payPeriodTo: '',
     remarks: '',
   });
 
@@ -71,26 +70,26 @@ export default function PayrollBatchForm() {
 
       setFormData((prev) => ({
         ...prev,
-        pay_period_from: startDate.toISOString().split('T')[0],
-        pay_period_to: endDate.toISOString().split('T')[0],
+        payPeriodFrom: startDate.toISOString().split('T')[0],
+        payPeriodTo: endDate.toISOString().split('T')[0],
       }));
     }
   };
 
   const handleMonthChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, payroll_month: value }));
-    updatePayPeriod(value, formData.payroll_year);
+    setFormData((prev) => ({ ...prev, payrollMonth: value }));
+    updatePayPeriod(value, formData.payrollYear);
   };
 
   const handleYearChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, payroll_year: value }));
-    updatePayPeriod(formData.payroll_month, value);
+    setFormData((prev) => ({ ...prev, payrollYear: value }));
+    updatePayPeriod(formData.payrollMonth, value);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.payroll_month || !formData.payroll_year) {
+    if (!formData.payrollMonth || !formData.payrollYear) {
       toast({
         title: 'Validation Error',
         description: 'Month and year are required',
@@ -99,7 +98,7 @@ export default function PayrollBatchForm() {
       return;
     }
 
-    if (!formData.pay_period_from || !formData.pay_period_to) {
+    if (!formData.payPeriodFrom || !formData.payPeriodTo) {
       toast({
         title: 'Validation Error',
         description: 'Pay period dates are required',
@@ -112,11 +111,10 @@ export default function PayrollBatchForm() {
       setSaving(true);
 
       const payload = {
-        organization_id: formData.organization_id,
-        payroll_month: parseInt(formData.payroll_month),
-        payroll_year: parseInt(formData.payroll_year),
-        pay_period_from: formData.pay_period_from,
-        pay_period_to: formData.pay_period_to,
+        payrollMonth: parseInt(formData.payrollMonth),
+        payrollYear: parseInt(formData.payrollYear),
+        payPeriodFrom: formData.payPeriodFrom,
+        payPeriodTo: formData.payPeriodTo,
         remarks: formData.remarks || undefined,
       };
 
@@ -156,8 +154,8 @@ export default function PayrollBatchForm() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="payroll_month">Month *</Label>
-                  <Select value={formData.payroll_month} onValueChange={handleMonthChange}>
+                  <Label htmlFor="payrollMonth">Month *</Label>
+                  <Select value={formData.payrollMonth} onValueChange={handleMonthChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select month" />
                     </SelectTrigger>
@@ -171,8 +169,8 @@ export default function PayrollBatchForm() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="payroll_year">Year *</Label>
-                  <Select value={formData.payroll_year} onValueChange={handleYearChange}>
+                  <Label htmlFor="payrollYear">Year *</Label>
+                  <Select value={formData.payrollYear} onValueChange={handleYearChange}>
                     <SelectTrigger>
                       <SelectValue placeholder="Select year" />
                     </SelectTrigger>
@@ -197,21 +195,21 @@ export default function PayrollBatchForm() {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="pay_period_from">From Date *</Label>
+                  <Label htmlFor="payPeriodFrom">From Date *</Label>
                   <Input
-                    id="pay_period_from"
+                    id="payPeriodFrom"
                     type="date"
-                    value={formData.pay_period_from}
-                    onChange={(e) => setFormData({ ...formData, pay_period_from: e.target.value })}
+                    value={formData.payPeriodFrom}
+                    onChange={(e) => setFormData({ ...formData, payPeriodFrom: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pay_period_to">To Date *</Label>
+                  <Label htmlFor="payPeriodTo">To Date *</Label>
                   <Input
-                    id="pay_period_to"
+                    id="payPeriodTo"
                     type="date"
-                    value={formData.pay_period_to}
-                    onChange={(e) => setFormData({ ...formData, pay_period_to: e.target.value })}
+                    value={formData.payPeriodTo}
+                    onChange={(e) => setFormData({ ...formData, payPeriodTo: e.target.value })}
                   />
                 </div>
               </div>

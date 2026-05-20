@@ -58,7 +58,8 @@ export function usePortalLoanPayments(loanId: string | undefined) {
     queryKey: portalLoanPaymentsQueryKey(loanId ?? ''),
     queryFn: async () => {
       const res = await portalDashboardApi.getLoanPayments(loanId as string);
-      return res.data as PaymentHistory[];
+      const payload = res.data as PaymentHistory[] | { items?: PaymentHistory[] };
+      return Array.isArray(payload) ? payload : (payload.items ?? []);
     },
     enabled: Boolean(loanId),
     staleTime: 30_000,

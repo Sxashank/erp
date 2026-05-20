@@ -27,6 +27,13 @@ from app.schemas.lending.iif import (
     SubventionSchemeCreate,
     SubventionSchemeUpdate,
 )
+from app.core.iif_rules import (
+    DEFAULT_CALCULATION_RULES,
+    DEFAULT_ELIGIBILITY_RULES,
+    DEFAULT_FUND_RULES,
+    DEFAULT_REQUIRED_DOCUMENTS,
+    DEFAULT_WORKFLOW_RULES,
+)
 
 
 class SubventionSchemeService:
@@ -88,6 +95,11 @@ class SubventionSchemeService:
             eligibility_window_months=data.eligibility_window_months,
             claim_frequency=data.claim_frequency,
             npa_disqualification_dpd_days=data.npa_disqualification_dpd_days,
+            calculation_rules=data.calculation_rules or dict(DEFAULT_CALCULATION_RULES),
+            eligibility_rules=data.eligibility_rules or dict(DEFAULT_ELIGIBILITY_RULES),
+            required_documents=data.required_documents or list(DEFAULT_REQUIRED_DOCUMENTS),
+            workflow_rules=data.workflow_rules or dict(DEFAULT_WORKFLOW_RULES),
+            fund_rules=data.fund_rules or dict(DEFAULT_FUND_RULES),
             description=data.description,
             created_by=current_user.id,
         )

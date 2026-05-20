@@ -26,12 +26,18 @@ test.describe('Masters › Unit', () => {
     db,
   }) => {
     consoleGate.allowStatus(404, '/api/v1');
-    const code = uniqueCode('E2E-UNIT');
+    const code = uniqueCode('UNIT');
     const name = `E2E Unit ${code}`;
 
     // ---------------------------------------------------------------- CREATE
     await loginAsAdmin(page);
     await page.goto('/admin/units/new');
+
+    // Wait for the form to render (the /organizations call resolves and the
+    // RHF state hydrates) before driving fields.
+    await expect(page.getByRole('textbox', { name: /Unit Code/i })).toBeVisible({
+      timeout: 10_000,
+    });
 
     await fillForm(page, {
       'Unit Code': code,
@@ -39,7 +45,7 @@ test.describe('Masters › Unit', () => {
     });
     // Pick the seeded E2E org from the combobox.
     await fillField(page, 'Organization', 'SMFC E2E Sandbox');
-    await fillField(page, 'Unit Type', 'Branch Office');
+    await fillField(page, 'Unit Type', 'Branch');
 
     await submitForm(page);
     await expectSuccessToast(page, /(unit (created|saved)|created successfully)/i);
@@ -48,14 +54,19 @@ test.describe('Masters › Unit', () => {
     await page.waitForURL(/\/admin\/units(\/|$|\?)/, { timeout: 8_000 });
 
     // -------------------------------------------------------------- LIST UI
-    await expect(page.getByRole('cell', { name: code })).toBeVisible();
-    await expect(page.getByRole('cell', { name })).toBeVisible();
+    // The code appears in both the Code column and (substring) inside the
+    // Name column — match the row whose accessible name contains the code
+    // and check that the Code cell within it exactly matches.
+    const listRow = page.getByRole('row').filter({ hasText: code }).first();
+    await expect(listRow).toBeVisible();
+    await expect(listRow.getByRole('cell', { name: code, exact: true })).toBeVisible();
+    await expect(listRow.getByRole('cell', { name, exact: true })).toBeVisible();
 
     // ---------------------------------------------------------- DB ASSERTION
     const row = await db.assertRowExists<{ id: string; name: string; code: string; unit_type: string }>(
       'mst_unit',
       { code },
-      { name, unit_type: 'BRANCH_OFFICE' },
+      { name, unit_type: 'BRANCH' },
     );
 
     // ------------------------------------------------------------------ EDIT
@@ -67,16 +78,30 @@ test.describe('Masters › Unit', () => {
 
     await page.waitForURL(/\/admin\/units\/[\w-]+\/edit/, { timeout: 8_000 });
 
-    // Existing value pre-populated.
+    // Existing value pre-populated — wait for both the value AND the
+    // background `/units/{id}` + `/organizations` + `/units?organization_id=…`
+    // requests to settle. Without this, React Strict-Mode's double-mount can
+    // fire `fetchUnit().then(reset)` a second time *after* our fillField,
+    // wiping out the typed change.
     await expect(page.getByLabel(/^Unit Name/i)).toHaveValue(name);
+    await page.waitForLoadState('networkidle');
 
     const newName = `${name} (renamed)`;
     await fillField(page, 'Unit Name', newName);
     await submitForm(page);
     await expectSuccessToast(page, /(unit (updated|saved)|updated successfully)/i);
 
-    // DB row updated.
-    await db.assertRowMatches('mst_unit', { id: row.id }, { name: newName });
+    // DB row updated. Re-read with a retry to allow the FE-driven PUT to
+    // round-trip and commit before the assertion fires; the toast/redirect
+    // can land before the BE transaction is visible from a separate
+    // connection in the suite's worker.
+    await expect(async () => {
+      const fresh = await db.query<{ id: string; name: string }>(
+        'SELECT id::text, name FROM mst_unit WHERE id = $1',
+        [row.id],
+      );
+      expect(fresh[0]?.name).toBe(newName);
+    }).toPass({ timeout: 10_000, intervals: [200, 500, 1000] });
 
     // ---------------------------------------------------- RELOAD CONFIRMS UI
     await page.goto(`/admin/units/${row.id}/edit`);

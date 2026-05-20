@@ -11,10 +11,10 @@ the enum only covered finance types. We extend with:
   LOAN_SANCTION
   LOAN_RATING
 
-PostgreSQL enums cannot be altered inside a transaction if the new value is
-used in the same transaction. We use ``ALTER TYPE ... ADD VALUE IF NOT EXISTS``
-(Postgres 9.6+) which is idempotent and runs outside a transaction via
-``op.get_context().autocommit_block()``.
+PostgreSQL enum values added in a transaction cannot be used until the
+transaction commits. This migration only adds the values; later migrations and
+runtime code consume them. Keep the operation idempotent so fresh and partially
+advanced databases can continue safely.
 
 Down-migration drops and recreates the enum with the original five values —
 but that only works if no rows reference the new lending values. If lending
@@ -34,10 +34,8 @@ ORIGINAL_VALUES = ("VOUCHER", "PURCHASE_BILL", "SALES_INVOICE", "PAYMENT", "JOUR
 
 
 def upgrade() -> None:
-    # ALTER TYPE ADD VALUE must run outside a transaction.
-    with op.get_context().autocommit_block():
-        for value in NEW_VALUES:
-            op.execute(f"ALTER TYPE workflowentitytype ADD VALUE IF NOT EXISTS '{value}'")
+    for value in NEW_VALUES:
+        op.execute(f"ALTER TYPE workflowentitytype ADD VALUE IF NOT EXISTS '{value}'")
 
 
 def downgrade() -> None:

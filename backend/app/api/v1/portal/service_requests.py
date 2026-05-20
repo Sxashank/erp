@@ -9,8 +9,8 @@ from fastapi import APIRouter, Depends, status, Query, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db, get_db_with_tenant
-from app.api.v1.portal.auth import get_portal_user
+from app.api.deps import get_db
+from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.models.portal.enums import ServiceRequestType, ServiceRequestStatus
 from app.services.portal.service_request_service import PortalServiceRequestService
 from app.core.exceptions import BadRequestException, NotFoundException
@@ -124,7 +124,7 @@ class PaginatedResponse(BaseModel):
 async def create_request(
     request: ServiceRequestCreate,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Create a new service request."""
     service = PortalServiceRequestService(db)
@@ -160,7 +160,7 @@ async def get_requests(
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get service requests."""
     service = PortalServiceRequestService(db)
@@ -190,7 +190,7 @@ async def get_requests(
 async def get_request_details(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Get detailed service request information."""
     service = PortalServiceRequestService(db)
@@ -213,7 +213,7 @@ async def get_request_details(
 async def submit_request(
     request_id: UUID,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Submit a draft service request."""
     service = PortalServiceRequestService(db)
@@ -245,7 +245,7 @@ async def cancel_request(
     request_id: UUID,
     reason: str = "Customer requested",
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Cancel a service request."""
     service = PortalServiceRequestService(db)
@@ -273,7 +273,7 @@ async def cancel_request(
 async def create_prepayment_request(
     request: PrepaymentRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Create a prepayment request with quote.
@@ -305,7 +305,7 @@ async def create_prepayment_request(
 async def create_foreclosure_request(
     request: ForeclosureRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Create a foreclosure request with quote.
@@ -338,7 +338,7 @@ async def create_foreclosure_request(
 async def create_emi_date_change_request(
     request: EMIDateChangeRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Request change in EMI deduction date.
@@ -389,7 +389,7 @@ async def upload_document(
     file: UploadFile = File(...),
     description: Optional[str] = None,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """
     Upload a document for a service request.
@@ -453,7 +453,7 @@ async def submit_feedback(
     request_id: UUID,
     feedback: FeedbackRequest,
     user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_db_with_tenant),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
 ):
     """Submit feedback for a completed service request."""
     service = PortalServiceRequestService(db)
