@@ -1,10 +1,10 @@
 /**
- * Scheme Portal — Application detail and review actions.
+ * Borrower Portal - Application detail and borrower actions.
  */
 
 import { Download, Upload } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 
 import {
   AmountDisplay,
@@ -36,14 +36,9 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  useApprovePortalApplication,
-  useLenderValidatePortalApplication,
   usePortalApplication,
   usePortalApplicationDocuments,
-  useRaisePortalApplicationQuery,
-  useRejectPortalApplication,
   useResubmitPortalApplication,
-  useStartPortalApplicationAppraisal,
   useSubmitPortalApplication,
   useUploadApplicationDocument,
   useWithdrawPortalApplication,
@@ -61,30 +56,7 @@ interface UtilizationRow {
   remarks?: string | null;
 }
 
-interface FundingSourceRow {
-  id: string;
-  sourceCode: string;
-  sourceLabel: string;
-  amount: string;
-  remarks?: string | null;
-}
-
-interface LenderLoanRow {
-  id: string;
-  loanType: string;
-  loanAmount: string;
-  lenderName: string;
-  lenderCategory?: string | null;
-  sanctionReference?: string | null;
-  sanctionDate?: string | null;
-  interestRatePercent?: string | null;
-  emiPeriodicity?: string | null;
-  loanAccountNumber?: string | null;
-  ifscCode?: string | null;
-  lenderValidationStatus: string;
-}
-
-type ReasonAction = 'query' | 'reject' | 'withdraw';
+type ReasonAction = 'withdraw';
 
 export default function PortalApplicationDetail(): JSX.Element {
   const { toast } = useToast();
@@ -95,11 +67,6 @@ export default function PortalApplicationDetail(): JSX.Element {
   const submitApplication = useSubmitPortalApplication();
   const resubmitApplication = useResubmitPortalApplication();
   const withdrawApplication = useWithdrawPortalApplication();
-  const lenderValidate = useLenderValidatePortalApplication();
-  const startAppraisal = useStartPortalApplicationAppraisal();
-  const raiseQuery = useRaisePortalApplicationQuery();
-  const approveApplication = useApprovePortalApplication();
-  const rejectApplication = useRejectPortalApplication();
   const uploadDocument = useUploadApplicationDocument();
 
   const [reasonAction, setReasonAction] = useState<ReasonAction | null>(null);
@@ -117,12 +84,6 @@ export default function PortalApplicationDetail(): JSX.Element {
     (requirement) => requirement.isMandatory && requirement.missing,
   );
   const isBorrower = actorRole === 'scheme_borrower';
-  const isLender = actorRole === 'scheme_lender' || actorRole === 'scheme_admin';
-  const isSmfclReviewer =
-    actorRole === 'scheme_smfcl_reviewer' ||
-    actorRole === 'scheme_admin' ||
-    actorRole === 'scheme_smfcl_approver';
-  const isApprover = actorRole === 'scheme_smfcl_approver' || actorRole === 'scheme_admin';
 
   useEffect(() => {
     if (documentRequirements.length === 0) {
@@ -147,29 +108,6 @@ export default function PortalApplicationDetail(): JSX.Element {
     amount: l.amount,
     approvedAmount: l.approvedAmount,
     remarks: l.remarks,
-  }));
-
-  const fundingSourceRows: FundingSourceRow[] = (application?.fundingSources ?? []).map((row) => ({
-    id: row.id,
-    sourceCode: row.sourceCode,
-    sourceLabel: row.sourceLabel,
-    amount: row.amount,
-    remarks: row.remarks,
-  }));
-
-  const lenderLoanRows: LenderLoanRow[] = (application?.lenderLoans ?? []).map((row) => ({
-    id: row.id,
-    loanType: row.loanType,
-    loanAmount: row.loanAmount,
-    lenderName: row.lenderName,
-    lenderCategory: row.lenderCategory,
-    sanctionReference: row.sanctionReference,
-    sanctionDate: row.sanctionDate,
-    interestRatePercent: row.interestRatePercent,
-    emiPeriodicity: row.emiPeriodicity,
-    loanAccountNumber: row.loanAccountNumber,
-    ifscCode: row.ifscCode,
-    lenderValidationStatus: row.lenderValidationStatus,
   }));
 
   const utilizationColumns: Column<UtilizationRow>[] = [
@@ -199,88 +137,6 @@ export default function PortalApplicationDetail(): JSX.Element {
       key: 'remarks',
       header: 'Remarks',
       render: (r) => r.remarks ?? '',
-    },
-  ];
-
-  const fundingSourceColumns: Column<FundingSourceRow>[] = [
-    {
-      key: 'sourceLabel',
-      header: 'Funding source',
-      render: (row) => (
-        <div>
-          <div className="font-medium">{row.sourceLabel}</div>
-          <div className="text-sm text-muted-foreground">{row.sourceCode}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'amount',
-      header: 'Amount',
-      align: 'right',
-      render: (row) => <AmountDisplay amount={Number(row.amount)} />,
-    },
-    {
-      key: 'remarks',
-      header: 'Remarks',
-      render: (row) => row.remarks ?? '',
-    },
-  ];
-
-  const lenderLoanColumns: Column<LenderLoanRow>[] = [
-    {
-      key: 'lenderName',
-      header: 'Lender',
-      render: (row) => (
-        <div>
-          <div className="font-medium">{row.lenderName}</div>
-          <div className="text-sm text-muted-foreground">{row.lenderCategory ?? '—'}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'loanType',
-      header: 'Facility',
-      render: (row) => row.loanType,
-    },
-    {
-      key: 'loanAmount',
-      header: 'Amount',
-      align: 'right',
-      render: (row) => <AmountDisplay amount={Number(row.loanAmount)} />,
-    },
-    {
-      key: 'interestRatePercent',
-      header: 'Rate',
-      render: (row) => (row.interestRatePercent ? `${row.interestRatePercent}%` : '—'),
-    },
-    {
-      key: 'sanctionReference',
-      header: 'Sanction',
-      render: (row) => (
-        <div>
-          <div>{row.sanctionReference ?? '—'}</div>
-          {row.sanctionDate ? (
-            <div className="text-sm text-muted-foreground">
-              <DateDisplay date={row.sanctionDate} />
-            </div>
-          ) : null}
-        </div>
-      ),
-    },
-    {
-      key: 'loanAccountNumber',
-      header: 'Account / IFSC',
-      render: (row) => (
-        <div>
-          <div>{row.loanAccountNumber ?? '—'}</div>
-          <div className="text-sm text-muted-foreground">{row.ifscCode ?? '—'}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'lenderValidationStatus',
-      header: 'Validation',
-      render: (row) => row.lenderValidationStatus,
     },
   ];
 
@@ -354,26 +210,18 @@ export default function PortalApplicationDetail(): JSX.Element {
     },
   ];
 
-  async function runAction(
-    action: 'submit' | 'resubmit' | 'validate' | 'startAppraisal' | 'approve',
-  ) {
+  async function runAction(action: 'submit' | 'resubmit') {
     if (!application) return;
     try {
       if (action === 'submit') {
         await submitApplication.mutateAsync(application.id);
-      } else if (action === 'resubmit') {
-        await resubmitApplication.mutateAsync(application.id);
-      } else if (action === 'validate') {
-        await lenderValidate.mutateAsync({ id: application.id });
-      } else if (action === 'startAppraisal') {
-        await startAppraisal.mutateAsync({ id: application.id });
       } else {
-        await approveApplication.mutateAsync({ id: application.id });
+        await resubmitApplication.mutateAsync(application.id);
       }
       await appQuery.refetch();
       toast({
         title: 'Application updated',
-        description: 'The scheme application status was updated successfully.',
+        description: 'The SFC application status was updated successfully.',
       });
     } catch (err) {
       showErrorToast(err, toast);
@@ -385,11 +233,7 @@ export default function PortalApplicationDetail(): JSX.Element {
       return;
     }
     try {
-      if (reasonAction === 'query') {
-        await raiseQuery.mutateAsync({ id: application.id, reason: reason.trim() });
-      } else if (reasonAction === 'reject') {
-        await rejectApplication.mutateAsync({ id: application.id, reason: reason.trim() });
-      } else if (reasonAction === 'withdraw') {
+      if (reasonAction === 'withdraw') {
         await withdrawApplication.mutateAsync({ id: application.id, reason: reason.trim() });
       }
       setReason('');
@@ -397,7 +241,7 @@ export default function PortalApplicationDetail(): JSX.Element {
       await appQuery.refetch();
       toast({
         title: 'Application updated',
-        description: 'The scheme application status was updated successfully.',
+        description: 'The SFC application status was updated successfully.',
       });
     } catch (err) {
       showErrorToast(err, toast);
@@ -432,6 +276,16 @@ export default function PortalApplicationDetail(): JSX.Element {
   const headerActions = application ? (
     <div className="flex flex-wrap items-center gap-2">
       <StatusPill type="application" status={application.schemeStatus} />
+      <Link to={`/portal/applications/${application.id}/queries`}>
+        <Button variant="outline" size="sm">
+          Queries
+        </Button>
+      </Link>
+      <Link to={`/portal/applications/${application.id}/kfs`}>
+        <Button variant="outline" size="sm">
+          KFS
+        </Button>
+      </Link>
       {isBorrower && schemeStatus === 'DRAFT' ? (
         <Button
           className="bg-emerald-600 hover:bg-emerald-700"
@@ -458,46 +312,6 @@ export default function PortalApplicationDetail(): JSX.Element {
           Withdraw
         </Button>
       ) : null}
-      {isLender && schemeStatus === 'LENDER_REVIEW' ? (
-        <Button
-          className="bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => void runAction('validate')}
-          disabled={lenderValidate.isPending}
-        >
-          Validate for SMFCL
-        </Button>
-      ) : null}
-      {isSmfclReviewer && ['LENDER_VALIDATED', 'SMFCL_PRELIM_REVIEW'].includes(schemeStatus) ? (
-        <Button
-          className="bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => void runAction('startAppraisal')}
-          disabled={startAppraisal.isPending}
-        >
-          Start appraisal
-        </Button>
-      ) : null}
-      {isApprover && schemeStatus === 'SMFCL_APPRAISAL' ? (
-        <Button
-          className="bg-emerald-600 hover:bg-emerald-700"
-          onClick={() => void runAction('approve')}
-          disabled={approveApplication.isPending}
-        >
-          Approve
-        </Button>
-      ) : null}
-      {!isBorrower &&
-      !['APPROVED', 'REJECTED', 'CLOSED', 'SANCTION_ISSUED', 'CLAIM_OPEN', 'RELEASED'].includes(
-        schemeStatus,
-      ) ? (
-        <>
-          <Button variant="outline" onClick={() => setReasonAction('query')}>
-            Raise query
-          </Button>
-          <Button variant="destructive" onClick={() => setReasonAction('reject')}>
-            Reject
-          </Button>
-        </>
-      ) : null}
     </div>
   ) : undefined;
 
@@ -507,7 +321,7 @@ export default function PortalApplicationDetail(): JSX.Element {
         title={application?.applicationNumber ?? 'Application'}
         subtitle={application?.productName ?? 'Loading…'}
         breadcrumbs={[
-          { label: 'Scheme Portal', to: '/portal/workbench' },
+          { label: 'Borrower Portal', to: '/portal/workbench' },
           { label: 'Applications', to: '/portal/applications' },
           { label: application?.applicationNumber ?? 'Detail' },
         ]}
@@ -572,13 +386,6 @@ export default function PortalApplicationDetail(): JSX.Element {
                     {application.projectLocation ?? 'Location not provided'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Lender</p>
-                  <p className="mt-1 text-sm font-medium">{application.lenderName ?? '—'}</p>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {application.sanctionReference ?? 'Sanction reference not provided'}
-                  </p>
-                </div>
               </div>
             </CardContent>
           </Card>
@@ -607,36 +414,6 @@ export default function PortalApplicationDetail(): JSX.Element {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Project funding composition</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable<FundingSourceRow>
-                data={fundingSourceRows}
-                columns={fundingSourceColumns}
-                getRowId={(row) => row.id}
-                emptyTitle="No funding-source rows"
-                emptySubtitle="The borrower has not yet provided the project funding composition."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Tagged lender loans</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable<LenderLoanRow>
-                data={lenderLoanRows}
-                columns={lenderLoanColumns}
-                getRowId={(row) => row.id}
-                emptyTitle="No lender loans tagged"
-                emptySubtitle="Tagged lender loan facilities will appear here for lender and SMFCL validation."
-              />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
               <CardTitle className="text-base">Fund utilisation</CardTitle>
             </CardHeader>
             <CardContent>
@@ -660,7 +437,7 @@ export default function PortalApplicationDetail(): JSX.Element {
                 columns={requirementColumns}
                 getRowId={(requirement) => requirement.code}
                 emptyTitle="No document checklist configured"
-                emptySubtitle="This scheme product does not yet have an application-stage checklist."
+                emptySubtitle="This SFC product does not yet have an application-stage checklist."
               />
               {hasMissingMandatoryDocuments ? (
                 <p className="mt-4 text-sm text-amber-700">
@@ -741,13 +518,7 @@ export default function PortalApplicationDetail(): JSX.Element {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>
-              {reasonAction === 'query'
-                ? 'Raise borrower query'
-                : reasonAction === 'reject'
-                  ? 'Reject application'
-                  : 'Withdraw application'}
-            </DialogTitle>
+            <DialogTitle>Withdraw application</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="application-reason">Reason</Label>
@@ -770,7 +541,7 @@ export default function PortalApplicationDetail(): JSX.Element {
               Cancel
             </Button>
             <Button
-              variant={reasonAction === 'reject' ? 'destructive' : 'default'}
+              variant="default"
               onClick={() => void submitReasonAction()}
               disabled={reason.trim().length < 5}
             >

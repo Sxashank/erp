@@ -13,6 +13,7 @@ import {
   tdsSectionsApi,
   unitsApi,
 } from '@/services/api';
+import { useActiveOrganizationId } from '@/stores/organizationStore';
 
 export interface PaginatedResponse<T> {
   items: T[];
@@ -1128,28 +1129,30 @@ export function useUnits(organizationId?: string) {
     enabled: !!organizationId,
     queryFn: async () =>
       normalizePage(
-        (
-          await unitsApi.list({ organizationId, pageSize: 100, includeInactive: false })
-        ).data,
+        (await unitsApi.list({ organizationId, pageSize: 100, includeInactive: false })).data,
         mapLookup,
       ),
   });
 }
 
 export function useFinancialYears() {
+  const organizationId = useActiveOrganizationId();
   return useQuery({
-    queryKey: ['tax-financial-years'],
+    queryKey: ['tax-financial-years', organizationId],
+    enabled: !!organizationId,
     queryFn: async () =>
       normalizePage(
-        (
-          await financialYearsApi.list({ pageSize: 100, includeInactive: false })
-        ).data,
+        (await financialYearsApi.list({ pageSize: 100, includeInactive: false })).data,
         mapFinancialYear,
       ),
   });
 }
 
-export function useGSTRates(params?: { page?: number; pageSize?: number; includeInactive?: boolean }) {
+export function useGSTRates(params?: {
+  page?: number;
+  pageSize?: number;
+  includeInactive?: boolean;
+}) {
   return useQuery({
     queryKey: ['gst-rates', params],
     queryFn: async () => {
@@ -1225,7 +1228,8 @@ export function useGSTRegistration(id?: string) {
 export function useCreateGSTRegistration() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: GSTRegistrationInput) => gstRegistrationsApi.create(gstRegistrationToApi(input)),
+    mutationFn: (input: GSTRegistrationInput) =>
+      gstRegistrationsApi.create(gstRegistrationToApi(input)),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gst-registrations'] }),
   });
 }
@@ -1233,7 +1237,8 @@ export function useCreateGSTRegistration() {
 export function useUpdateGSTRegistration(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: GSTRegistrationInput) => gstRegistrationsApi.update(id, gstRegistrationToApi(input)),
+    mutationFn: (input: GSTRegistrationInput) =>
+      gstRegistrationsApi.update(id, gstRegistrationToApi(input)),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gst-registrations'] });
       queryClient.invalidateQueries({ queryKey: ['gst-registration', id] });
@@ -1314,7 +1319,9 @@ export function useTDSSections(params?: {
         page: params?.page ?? 1,
         pageSize: params?.pageSize ?? 50,
         includeInactive: params?.includeInactive ?? true,
-        ...(params?.returnForm && params.returnForm !== 'all' ? { returnForm: params.returnForm } : {}),
+        ...(params?.returnForm && params.returnForm !== 'all'
+          ? { returnForm: params.returnForm }
+          : {}),
       });
       return normalizePage(response.data, mapTdsSection);
     },
@@ -1356,7 +1363,12 @@ export function useDeleteTDSSection() {
   });
 }
 
-export function useTDSEntries(params: { fromDate?: string; toDate?: string; challanStatus?: string; pageSize?: number }) {
+export function useTDSEntries(params: {
+  fromDate?: string;
+  toDate?: string;
+  challanStatus?: string;
+  pageSize?: number;
+}) {
   return useQuery({
     queryKey: ['tds-entries', params],
     queryFn: async () =>
@@ -1446,7 +1458,13 @@ export function useDeleteTDSEntry() {
   });
 }
 
-export function useTDSReturns(params: { returnType?: string; financialYearId?: string; quarter?: string; status?: string; pageSize?: number }) {
+export function useTDSReturns(params: {
+  returnType?: string;
+  financialYearId?: string;
+  quarter?: string;
+  status?: string;
+  pageSize?: number;
+}) {
   return useQuery({
     queryKey: ['tds-returns', params],
     queryFn: async () =>
@@ -1510,7 +1528,9 @@ export function useGenerateTDSReturnFile(id: string) {
     mutationFn: async (): Promise<GeneratedReturnFile> => {
       const response = await tdsReturnsApi.generateFile(id, { includeNilReturn: false });
       return {
-        fileName: normalizeTdsReturnFileName(String(response.data?.fileName ?? `tds-return-${id}.txt`)),
+        fileName: normalizeTdsReturnFileName(
+          String(response.data?.fileName ?? `tds-return-${id}.txt`),
+        ),
         fileContent: String(response.data?.fileContent ?? ''),
         fileSize: Number(response.data?.fileSize ?? 0),
         fileHash: String(response.data?.fileHash ?? ''),
@@ -1529,7 +1549,8 @@ export function useGenerateTDSReturnFile(id: string) {
 export function useUpdateTDSReturnFilingDetails(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: FilingDetailsInput) => mapTdsReturn((await tdsReturnsApi.updateFilingDetails(id, filingDetailsToApi(input))).data),
+    mutationFn: async (input: FilingDetailsInput) =>
+      mapTdsReturn((await tdsReturnsApi.updateFilingDetails(id, filingDetailsToApi(input))).data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tds-return', id] });
       queryClient.invalidateQueries({ queryKey: ['tds-returns'] });
@@ -1540,12 +1561,20 @@ export function useUpdateTDSReturnFilingDetails(id: string) {
 export function useReviseTDSReturn(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (reason: string) => mapTdsReturn((await tdsReturnsApi.revise(id, { reason })).data),
+    mutationFn: async (reason: string) =>
+      mapTdsReturn((await tdsReturnsApi.revise(id, { reason })).data),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['tds-returns'] }),
   });
 }
 
-export function useTDSChallans(params: { fromDate?: string; toDate?: string; status?: string; tdsSectionId?: string; financialYearId?: string; pageSize?: number }) {
+export function useTDSChallans(params: {
+  fromDate?: string;
+  toDate?: string;
+  status?: string;
+  tdsSectionId?: string;
+  financialYearId?: string;
+  pageSize?: number;
+}) {
   return useQuery({
     queryKey: ['tds-challans', params],
     queryFn: async () =>
@@ -1608,7 +1637,8 @@ export function useFinalizeTDSChallan(id: string) {
 export function useRecordTDSChallanPayment(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: TDSChallanPaymentInput) => mapTdsChallan((await tdsChallansApi.recordPayment(id, challanPaymentToApi(input))).data),
+    mutationFn: async (input: TDSChallanPaymentInput) =>
+      mapTdsChallan((await tdsChallansApi.recordPayment(id, challanPaymentToApi(input))).data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tds-challans'] });
       queryClient.invalidateQueries({ queryKey: ['tds-challan', id] });
@@ -1619,7 +1649,8 @@ export function useRecordTDSChallanPayment(id: string) {
 export function useVerifyTDSChallanOLTAS(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: TDSChallanOLTASInput) => mapTdsChallan((await tdsChallansApi.verifyOltas(id, challanOltasToApi(input))).data),
+    mutationFn: async (input: TDSChallanOLTASInput) =>
+      mapTdsChallan((await tdsChallansApi.verifyOltas(id, challanOltasToApi(input))).data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tds-challans'] });
       queryClient.invalidateQueries({ queryKey: ['tds-challan', id] });
@@ -1630,7 +1661,8 @@ export function useVerifyTDSChallanOLTAS(id: string) {
 export function useAddEntriesToTDSChallan(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (entryIds: string[]) => mapTdsChallan((await tdsChallansApi.addEntries(id, { entry_ids: entryIds })).data),
+    mutationFn: async (entryIds: string[]) =>
+      mapTdsChallan((await tdsChallansApi.addEntries(id, { entry_ids: entryIds })).data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tds-challans'] });
       queryClient.invalidateQueries({ queryKey: ['tds-challan', id] });
@@ -1642,7 +1674,8 @@ export function useAddEntriesToTDSChallan(id: string) {
 export function useRemoveEntriesFromTDSChallan(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (entryIds: string[]) => mapTdsChallan((await tdsChallansApi.removeEntries(id, { entry_ids: entryIds })).data),
+    mutationFn: async (entryIds: string[]) =>
+      mapTdsChallan((await tdsChallansApi.removeEntries(id, { entry_ids: entryIds })).data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tds-challans'] });
       queryClient.invalidateQueries({ queryKey: ['tds-challan', id] });
@@ -1656,7 +1689,10 @@ export function useTDSCertificateCandidates(financialYear?: string, quarter?: st
     queryKey: ['tds-certificate-candidates', financialYear, quarter],
     enabled: !!financialYear && !!quarter,
     queryFn: async () => {
-      const response = await tdsForm16AApi.getDeductees({ financial_year: financialYear!, quarter: quarter! });
+      const response = await tdsForm16AApi.getDeductees({
+        financial_year: financialYear!,
+        quarter: quarter!,
+      });
       return (Array.isArray(response.data) ? response.data : []).map(mapCertificateCandidate);
     },
   });
@@ -1687,10 +1723,13 @@ export function useTDSCertificate(certificateNumber?: string) {
 export function useGenerateTDSCertificate() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (input: TDSCertificateGenerateInput) => mapCertificateDetail((await tdsForm16AApi.generate(certificateGenerateToApi(input))).data),
+    mutationFn: async (input: TDSCertificateGenerateInput) =>
+      mapCertificateDetail((await tdsForm16AApi.generate(certificateGenerateToApi(input))).data),
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ['tds-certificates', input.financialYear] });
-      queryClient.invalidateQueries({ queryKey: ['tds-certificate-candidates', input.financialYear, input.quarter] });
+      queryClient.invalidateQueries({
+        queryKey: ['tds-certificate-candidates', input.financialYear, input.quarter],
+      });
     },
   });
 }
@@ -1699,12 +1738,16 @@ export function useGenerateBulkTDSCertificates() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { financialYear: string; quarter: string }) => {
-      const response = await tdsForm16AApi.generateBulk(certificateBulkToApi(input.financialYear, input.quarter));
+      const response = await tdsForm16AApi.generateBulk(
+        certificateBulkToApi(input.financialYear, input.quarter),
+      );
       return (Array.isArray(response.data) ? response.data : []).map(mapCertificateDetail);
     },
     onSuccess: (_, input) => {
       queryClient.invalidateQueries({ queryKey: ['tds-certificates', input.financialYear] });
-      queryClient.invalidateQueries({ queryKey: ['tds-certificate-candidates', input.financialYear, input.quarter] });
+      queryClient.invalidateQueries({
+        queryKey: ['tds-certificate-candidates', input.financialYear, input.quarter],
+      });
     },
   });
 }

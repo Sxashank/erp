@@ -1,10 +1,12 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { CheckCircle, XCircle, AlertTriangle, ArrowRight, Calendar, User } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { AlertTriangle, ArrowRight, CheckCircle, Loader2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
 import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
 import { DateDisplay } from '@/components/lending/common/DateDisplay';
@@ -29,7 +31,10 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { Textarea } from '@/components/ui/textarea';
-import { logger } from '@/lib/logger';
+import { useAuth } from '@/hooks/useAuth';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
+import { collectionApi } from '@/services/lending/collectionApi';
+
 const approvalSchema = z.object({
   decision: z.enum(['APPROVE', 'REJECT']),
   approvalAuthority: z.string().min(1, 'Approval authority is required'),
@@ -38,61 +43,59 @@ const approvalSchema = z.object({
 
 type ApprovalFormValues = z.infer<typeof approvalSchema>;
 
-// Approval page loads the actual restructure proposal via
-// /lending/collections/restructures/{id}. Until that fetch is wired
-// into this page (deferred), the page renders with empty proposal
-// figures so demo doesn't show fabricated terms.
-const mockRestructure = {
-  id: '',
-  restructureReference: '',
-  loanAccountNumber: '',
-  entityName: '',
-  restructureType: 'COMPREHENSIVE',
-  status: 'PENDING_APPROVAL',
-  proposalDate: new Date().toISOString().split('T')[0],
-  preOutstandingPrincipal: 0,
-  preOutstandingInterest: 0,
-  preInterestRate: 0,
-  preTenureMonths: 0,
-  preEmiAmount: 0,
-  preMaturityDate: '',
-  postOutstandingPrincipal: 0,
-  postInterestRate: 0,
-  postTenureMonths: 0,
-  postEmiAmount: 0,
-  postMaturityDate: '',
-  moratoriumMonths: 0,
-  moratoriumStartDate: '',
-  moratoriumEndDate: '',
-  moratoriumInterestTreatment: 'CAPITALIZE',
-  interestWaived: 0,
-  penalWaived: 0,
-  principalConvertedToFitl: 0,
-  isStandardRestructure: true,
-  downgradeRequired: false,
-  preConditions: '',
-  postConditions: '',
-  justification: '',
-  createdBy: '',
-  createdAt: '',
-};
-
-const restructureTypeLabels: Record<string, string> = {
-  TENURE_EXTENSION: 'Tenure Extension',
-  EMI_REDUCTION: 'EMI Reduction',
-  MORATORIUM: 'Moratorium',
-  RATE_REDUCTION: 'Rate Reduction',
-  PRINCIPAL_HAIRCUT: 'Principal Haircut',
-  INTEREST_WAIVER: 'Interest Waiver',
-  COMPREHENSIVE: 'Comprehensive',
-  COVID_RESTRUCTURE: 'COVID Restructure',
-};
+interface RestructureApprovalData {
+  id: string;
+  restructureReference: string;
+  restructureType: string;
+  status: string;
+  proposalDate: string;
+  loanAccountId: string;
+  preOutstandingPrincipal: string | number;
+  preOutstandingInterest: string | number;
+  preInterestRate: string | number;
+  preTenureMonths: number;
+  preEmiAmount?: string | number | null;
+  preMaturityDate: string;
+  postOutstandingPrincipal: string | number;
+  postInterestRate: string | number;
+  postTenureMonths: number;
+  postEmiAmount?: string | number | null;
+  postMaturityDate: string;
+  moratoriumMonths: number;
+  moratoriumStartDate?: string | null;
+  moratoriumEndDate?: string | null;
+  moratoriumInterestTreatment?: string | null;
+  interestWaived: string | number;
+  penalWaived: string | number;
+  principalConvertedToFitl: string | number;
+  isStandardRestructure: boolean;
+  downgradeRequired: boolean;
+  preConditions?: string | null;
+  postConditions?: string | null;
+  justification: string;
+  remarks?: string | null;
+  createdAt: string;
+}
 
 export default function RestructureApproval() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const restructure = mockRestructure;
+  const authorityRows = useLendingOptionRows('APPROVAL_AUTHORITY');
+  const restructureTypeRows = useLendingOptionRows('RESTRUCTURE_TYPE');
+  const moratoriumRows = useLendingOptionRows('MORATORIUM_INTEREST_TREATMENT');
+  const authorityOptions = masterRowsToOptions(authorityRows.data?.items);
+  const restructureTypeOptions = masterRowsToOptions(restructureTypeRows.data?.items);
+  const moratoriumOptions = masterRowsToOptions(moratoriumRows.data?.items);
+
+  const query = useQuery<RestructureApprovalData>({
+    queryKey: ['lending', 'collections', 'restructure', id] as const,
+    queryFn: () => collectionApi.getRestructure(id as string),
+    enabled: Boolean(id),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
 
   const form = useForm<ApprovalFormValues>({
     resolver: zodResolver(approvalSchema),
@@ -104,29 +107,76 @@ export default function RestructureApproval() {
   });
 
   const watchedDecision = form.watch('decision');
+  const restructure = query.data;
+
+  const labelFor = (options: { value: string; label: string }[], value?: string | null) =>
+    options.find((option) => option.value === value)?.label ?? value ?? '—';
 
   const onSubmit = async (data: ApprovalFormValues) => {
+    if (!id || !user) return;
+    if (data.decision === 'REJECT' && !data.remarks?.trim()) {
+      form.setError('remarks', { message: 'Rejection reason is required' });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      logger.debug('Approval data:', data);
-      // API call would go here
+      const displayName = user.fullName || user.username || user.email;
+      if (data.decision === 'APPROVE') {
+        await collectionApi.approveRestructure(id, {
+          approvedById: user.id,
+          approvedByName: displayName,
+          approvalAuthority: data.approvalAuthority,
+        });
+      } else {
+        await collectionApi.rejectRestructure(id, {
+          rejectedById: user.id,
+          rejectedByName: displayName,
+          rejectionReason: data.remarks ?? '',
+          approvalAuthority: data.approvalAuthority,
+        });
+      }
       navigate(`/admin/lending/collections/restructure/${id}`);
-    } catch {
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const rateChange = restructure.postInterestRate - restructure.preInterestRate;
+  if (query.isLoading) {
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-16 text-muted-foreground">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading restructure proposal...
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (query.isError || !restructure) {
+    return (
+      <ErrorState
+        title="Could not load restructure proposal"
+        error={query.error}
+        onRetry={() => query.refetch()}
+      />
+    );
+  }
+
+  const preRate = Number(restructure.preInterestRate);
+  const postRate = Number(restructure.postInterestRate);
+  const rateChange = postRate - preRate;
   const tenureChange = restructure.postTenureMonths - restructure.preTenureMonths;
-  const totalWaiver = restructure.interestWaived + restructure.penalWaived;
-  const emiReduction = restructure.preEmiAmount - restructure.postEmiAmount;
+  const preEmi = Number(restructure.preEmiAmount ?? 0);
+  const postEmi = Number(restructure.postEmiAmount ?? 0);
+  const emiReduction = preEmi - postEmi;
+  const totalWaiver = Number(restructure.interestWaived) + Number(restructure.penalWaived);
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Review Restructure Proposal"
-        subtitle={`${restructure.restructureReference} - ${restructure.entityName}`}
+        subtitle={`${restructure.restructureReference} - ${restructure.status}`}
         breadcrumbs={[
           { label: 'Restructures', to: '/admin/lending/collections/restructure' },
           {
@@ -137,23 +187,21 @@ export default function RestructureApproval() {
         ]}
       />
 
-      {/* Warning Alert */}
       <Alert variant="default" className="border-yellow-500 bg-yellow-50">
         <AlertTriangle className="h-4 w-4 text-yellow-600" />
         <AlertTitle className="text-yellow-800">Approval Required</AlertTitle>
         <AlertDescription className="text-yellow-700">
-          This restructure proposal requires your review and approval. Please carefully review all
-          terms before making a decision.
+          Review the proposed change in economics, relief, classification impact, and conditions
+          before approving or rejecting.
         </AlertDescription>
       </Alert>
 
-      {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardContent className="pt-6">
             <p className="text-xs text-muted-foreground">Restructure Type</p>
             <Badge variant="secondary" className="mt-1">
-              {restructureTypeLabels[restructure.restructureType]}
+              {labelFor(restructureTypeOptions, restructure.restructureType)}
             </Badge>
           </CardContent>
         </Card>
@@ -170,7 +218,7 @@ export default function RestructureApproval() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <p className="text-xs text-muted-foreground">Tenure Extension</p>
+            <p className="text-xs text-muted-foreground">Tenure Change</p>
             <p className="text-xl font-bold">
               {tenureChange > 0 ? '+' : ''}
               {tenureChange} mo
@@ -179,7 +227,7 @@ export default function RestructureApproval() {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <p className="text-xs text-muted-foreground">EMI Reduction</p>
+            <p className="text-xs text-muted-foreground">Instalment Change</p>
             <AmountDisplay amount={emiReduction} className="text-xl font-bold text-green-600" />
           </CardContent>
         </Card>
@@ -191,20 +239,19 @@ export default function RestructureApproval() {
         </Card>
       </div>
 
-      {/* Loan & Entity Info */}
       <Card>
         <CardHeader>
           <CardTitle>Loan Account Information</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid gap-4 md:grid-cols-4">
             <div>
-              <p className="text-xs text-muted-foreground">Account Number</p>
-              <p className="font-mono font-semibold">{restructure.loanAccountNumber}</p>
+              <p className="text-xs text-muted-foreground">Loan Account ID</p>
+              <p className="font-mono font-semibold">{restructure.loanAccountId}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Entity Name</p>
-              <p className="font-semibold">{restructure.entityName}</p>
+              <p className="text-xs text-muted-foreground">Proposal Date</p>
+              <DateDisplay date={restructure.proposalDate} />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Principal Outstanding</p>
@@ -224,11 +271,10 @@ export default function RestructureApproval() {
         </CardContent>
       </Card>
 
-      {/* Terms Comparison */}
       <Card>
         <CardHeader>
           <CardTitle>Terms Comparison</CardTitle>
-          <CardDescription>Review the changes in loan terms</CardDescription>
+          <CardDescription>Current terms versus proposed restructure terms</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -245,14 +291,12 @@ export default function RestructureApproval() {
               <tbody className="divide-y">
                 <tr>
                   <td className="py-3">Interest Rate</td>
-                  <td className="text-right">{restructure.preInterestRate}%</td>
+                  <td className="text-right">{preRate}%</td>
                   <td className="text-center">
                     <ArrowRight className="mx-auto h-4 w-4 text-muted-foreground" />
                   </td>
-                  <td className="text-right">{restructure.postInterestRate}%</td>
-                  <td
-                    className={`text-right font-semibold ${rateChange < 0 ? 'text-green-600' : rateChange > 0 ? 'text-red-600' : ''}`}
-                  >
+                  <td className="text-right">{postRate}%</td>
+                  <td className="text-right font-semibold">
                     {rateChange > 0 ? '+' : ''}
                     {rateChange.toFixed(2)}%
                   </td>
@@ -270,18 +314,18 @@ export default function RestructureApproval() {
                   </td>
                 </tr>
                 <tr>
-                  <td className="py-3">EMI Amount</td>
+                  <td className="py-3">Instalment Amount</td>
                   <td className="text-right">
-                    <AmountDisplay amount={restructure.preEmiAmount} />
+                    <AmountDisplay amount={preEmi} />
                   </td>
                   <td className="text-center">
                     <ArrowRight className="mx-auto h-4 w-4 text-muted-foreground" />
                   </td>
                   <td className="text-right">
-                    <AmountDisplay amount={restructure.postEmiAmount} />
+                    <AmountDisplay amount={postEmi} />
                   </td>
-                  <td className="text-right font-semibold text-green-600">
-                    -<AmountDisplay amount={emiReduction} />
+                  <td className="text-right font-semibold">
+                    <AmountDisplay amount={emiReduction} />
                   </td>
                 </tr>
                 <tr>
@@ -295,7 +339,7 @@ export default function RestructureApproval() {
                   <td className="text-right">
                     <DateDisplay date={restructure.postMaturityDate} />
                   </td>
-                  <td className="text-right font-semibold">Extended</td>
+                  <td className="text-right font-semibold">Revised</td>
                 </tr>
               </tbody>
             </table>
@@ -303,35 +347,24 @@ export default function RestructureApproval() {
         </CardContent>
       </Card>
 
-      {/* Moratorium & Waivers */}
-      <div className="grid grid-cols-2 gap-6">
-        {restructure.moratoriumMonths > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Moratorium
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Duration</span>
-                <span className="font-semibold">{restructure.moratoriumMonths} months</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Period</span>
-                <span className="font-semibold">
-                  <DateDisplay date={restructure.moratoriumStartDate!} /> -{' '}
-                  <DateDisplay date={restructure.moratoriumEndDate!} />
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Interest Treatment</span>
-                <Badge variant="outline">{restructure.moratoriumInterestTreatment}</Badge>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      <div className="grid gap-6 md:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle>Moratorium</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Duration</span>
+              <span className="font-semibold">{restructure.moratoriumMonths} months</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Interest Treatment</span>
+              <Badge variant="outline">
+                {labelFor(moratoriumOptions, restructure.moratoriumInterestTreatment)}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -340,16 +373,17 @@ export default function RestructureApproval() {
           <CardContent className="space-y-2">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Interest Waived</span>
-              <AmountDisplay
-                amount={restructure.interestWaived}
-                className="font-semibold text-red-600"
-              />
+              <AmountDisplay amount={restructure.interestWaived} className="font-semibold" />
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Penal Interest Waived</span>
+              <AmountDisplay amount={restructure.penalWaived} className="font-semibold" />
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">FITL Conversion</span>
               <AmountDisplay
-                amount={restructure.penalWaived}
-                className="font-semibold text-red-600"
+                amount={restructure.principalConvertedToFitl}
+                className="font-semibold"
               />
             </div>
             <Separator />
@@ -361,87 +395,44 @@ export default function RestructureApproval() {
         </Card>
       </div>
 
-      {/* Classification & Compliance */}
       <Card>
         <CardHeader>
-          <CardTitle>Classification & Compliance</CardTitle>
+          <CardTitle>Classification & Conditions</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="flex gap-6">
-            <div className="flex items-center gap-2">
-              {restructure.isStandardRestructure ? (
-                <CheckCircle className="h-5 w-5 text-green-600" />
-              ) : (
-                <XCircle className="h-5 w-5 text-red-600" />
-              )}
-              <span>Standard Restructure (RBI Compliant)</span>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            <Badge variant={restructure.isStandardRestructure ? 'default' : 'destructive'}>
+              {restructure.isStandardRestructure ? 'Standard Restructure' : 'Non-standard'}
+            </Badge>
+            <Badge variant={restructure.downgradeRequired ? 'destructive' : 'outline'}>
+              {restructure.downgradeRequired ? 'Downgrade Required' : 'No Downgrade'}
+            </Badge>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <p className="mb-2 text-sm font-medium">Pre-Conditions</p>
+              <pre className="min-h-[80px] whitespace-pre-wrap rounded bg-muted p-3 text-sm">
+                {restructure.preConditions || '—'}
+              </pre>
             </div>
-            <Separator orientation="vertical" className="h-6" />
-            <div className="flex items-center gap-2">
-              {restructure.downgradeRequired ? (
-                <>
-                  <AlertTriangle className="h-5 w-5 text-yellow-600" />
-                  <span className="text-yellow-700">Downgrade Required</span>
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span>No Downgrade Required</span>
-                </>
-              )}
+            <div>
+              <p className="mb-2 text-sm font-medium">Post-Conditions</p>
+              <pre className="min-h-[80px] whitespace-pre-wrap rounded bg-muted p-3 text-sm">
+                {restructure.postConditions || '—'}
+              </pre>
             </div>
+          </div>
+          <div>
+            <p className="mb-2 text-sm font-medium">Justification</p>
+            <p className="rounded bg-muted p-3 text-sm">{restructure.justification}</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Conditions */}
-      <div className="grid grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Pre-Conditions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="whitespace-pre-wrap rounded bg-muted p-3 text-sm">
-              {restructure.preConditions}
-            </pre>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Post-Conditions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <pre className="whitespace-pre-wrap rounded bg-muted p-3 text-sm">
-              {restructure.postConditions}
-            </pre>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Justification */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Justification</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-sm">{restructure.justification}</p>
-          <Separator className="my-4" />
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <User className="h-4 w-4" />
-            <span>
-              Proposed by {restructure.createdBy} on <DateDisplay date={restructure.createdAt} />
-            </span>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Approval Form */}
       <Card className="border-2 border-primary">
         <CardHeader>
           <CardTitle>Your Decision</CardTitle>
-          <CardDescription>
-            Please review all details above and provide your decision
-          </CardDescription>
+          <CardDescription>Approve or reject this restructure proposal</CardDescription>
         </CardHeader>
         <CardContent>
           <Form {...form}>
@@ -491,11 +482,11 @@ export default function RestructureApproval() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="GM_CREDIT">GM Credit</SelectItem>
-                        <SelectItem value="DGM_CREDIT">DGM Credit</SelectItem>
-                        <SelectItem value="AGM_CREDIT">AGM Credit</SelectItem>
-                        <SelectItem value="CREDIT_COMMITTEE">Credit Committee</SelectItem>
-                        <SelectItem value="BOARD">Board</SelectItem>
+                        {authorityOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
@@ -513,7 +504,7 @@ export default function RestructureApproval() {
                       <Textarea
                         placeholder={
                           watchedDecision === 'REJECT'
-                            ? 'Please provide reasons for rejection...'
+                            ? 'Provide reasons for rejection...'
                             : 'Any additional comments or conditions...'
                         }
                         className="min-h-[100px]"
@@ -531,13 +522,17 @@ export default function RestructureApproval() {
                 </Button>
                 <Button
                   type="submit"
-                  disabled={isSubmitting || !watchedDecision}
+                  disabled={isSubmitting || !watchedDecision || !user}
                   className={watchedDecision === 'APPROVE' ? 'bg-green-600 hover:bg-green-700' : ''}
                   variant={watchedDecision === 'REJECT' ? 'destructive' : 'default'}
                 >
-                  {isSubmitting
-                    ? 'Processing...'
-                    : `Confirm ${watchedDecision === 'APPROVE' ? 'Approval' : watchedDecision === 'REJECT' ? 'Rejection' : 'Decision'}`}
+                  {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Confirm{' '}
+                  {watchedDecision === 'APPROVE'
+                    ? 'Approval'
+                    : watchedDecision === 'REJECT'
+                      ? 'Rejection'
+                      : 'Decision'}
                 </Button>
               </div>
             </form>

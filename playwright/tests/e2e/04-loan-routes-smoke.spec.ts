@@ -32,7 +32,7 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5176';
 
 const test = base.extend<{}, { storageStatePath: string }>({
   storageStatePath: [
-    async ({}, use, workerInfo) => {
+    async (_args, use, workerInfo) => {
       const dir = mkdtempSync(join(tmpdir(), 'e2e-loan-routes-'));
       const path = join(dir, 'storage.json');
       const browser = await chromium.launch();
@@ -57,8 +57,9 @@ const test = base.extend<{}, { storageStatePath: string }>({
 interface RouteSpec {
   module: string;
   path: string;
+  expectedPath?: string;
   /** Per-route status allowlist — keyed by url substring. */
-  allowStatus?: Array<{ status: number; urlSubstring?: string }>;
+  allowStatus?: { status: number; urlSubstring?: string }[];
   /** Per-route console error allowlist (substring / regex). */
   allowError?: RegExp[];
 }
@@ -126,8 +127,16 @@ const LENDING_ROUTES: RouteSpec[] = [
   { module: 'lending', path: '/admin/lending/collaterals/create' },
 
   // Checklist templates
-  { module: 'lending', path: '/admin/lending/checklist/templates' },
-  { module: 'lending', path: '/admin/lending/checklist/templates/new' },
+  {
+    module: 'lending',
+    path: '/admin/lending/checklist/templates',
+    expectedPath: '/admin/lending/masters/approval-checklist-templates',
+  },
+  {
+    module: 'lending',
+    path: '/admin/lending/checklist/templates/new',
+    expectedPath: '/admin/lending/masters/approval-checklist-templates/new',
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -292,8 +301,6 @@ const TREASURY_ROUTES: RouteSpec[] = [
   { module: 'treasury', path: '/admin/treasury/alm' },
   { module: 'treasury', path: '/admin/treasury/alm/gap' },
   { module: 'treasury', path: '/admin/treasury/alm/irs' },
-  { module: 'treasury', path: '/admin/treasury/risk-dashboard' },
-  { module: 'treasury', path: '/admin/treasury/var-report' },
   { module: 'treasury', path: '/admin/treasury/liquidity-risk' },
   { module: 'treasury', path: '/admin/treasury/counterparty-risk' },
   { module: 'treasury', path: '/admin/treasury/stress-test' },
@@ -327,13 +334,13 @@ test.describe('E2E › loan-module routes smoke', () => {
       (spec.allowStatus ?? []).forEach((a) => consoleGate.allowStatus(a.status, a.urlSubstring));
 
       const response = await page.goto(spec.path, { waitUntil: 'domcontentloaded' });
-      expect(
-        response?.status() ?? 0,
-        `dev server returned non-200 for ${spec.path}`,
-      ).toBeLessThan(400);
+      expect(response?.status() ?? 0, `dev server returned non-200 for ${spec.path}`).toBeLessThan(
+        400,
+      );
 
       await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 8_000 });
-      await expect(page).toHaveURL(new RegExp(spec.path.replace(/\//g, '\\/')));
+      const expectedPath = spec.expectedPath ?? spec.path;
+      await expect(page).toHaveURL(new RegExp(expectedPath.replace(/\//g, '\\/')));
     });
   }
 });

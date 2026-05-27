@@ -60,7 +60,9 @@ async function getAdminSession(): Promise<AdminSession> {
 
   const ctx = await pwRequest.newContext();
   const auth = await loginWithBackoff(ctx);
-  const headers = { Authorization: `Bearer ${auth.access_token}` };
+  const accessToken = auth.accessToken ?? auth.access_token;
+  const refreshToken = auth.refreshToken ?? auth.refresh_token;
+  const headers = { Authorization: `Bearer ${accessToken}` };
 
   const meResponse = await ctx.get(`${API_BASE}/auth/me`, { headers });
   if (!meResponse.ok()) {
@@ -76,15 +78,18 @@ async function getAdminSession(): Promise<AdminSession> {
     throw new Error(`organizations failed: ${orgResponse.status()} ${await orgResponse.text()}`);
   }
   const orgBody = await orgResponse.json();
-  const organizations = Array.isArray(orgBody.items) ? orgBody.items : [];
-  const organization = organizations.find((item) => item.id === me.organization_id) ?? organizations[0];
+  const organizations: { id?: string }[] = Array.isArray(orgBody.items) ? orgBody.items : [];
+  const organization =
+    organizations.find(
+      (item: { id?: string }) => item.id === (me.organizationId ?? me.organization_id),
+    ) ?? organizations[0];
   if (!organization?.id) {
     throw new Error('No organization available for live HRIS/payroll smoke');
   }
 
   cachedSession = {
-    accessToken: auth.access_token,
-    refreshToken: auth.refresh_token,
+    accessToken,
+    refreshToken,
     organizationId: organization.id,
   };
 
@@ -121,10 +126,18 @@ const test = base.extend<LiveFixtures>({
 });
 
 test.describe('HRIS, payroll, and ESS live backend smoke', () => {
-  test.skip(!LIVE_BACKEND_ENABLED, 'Set PLAYWRIGHT_LIVE_BACKEND=1 to run live HRIS/payroll/ESS smoke.');
-  test.skip(({ browserName }) => browserName !== 'chromium', 'Runs only in the desktop Chromium project');
+  test.skip(
+    !LIVE_BACKEND_ENABLED,
+    'Set PLAYWRIGHT_LIVE_BACKEND=1 to run live HRIS/payroll/ESS smoke.',
+  );
+  test.skip(
+    ({ browserName }) => browserName !== 'chromium',
+    'Runs only in the desktop Chromium project',
+  );
 
-  test('renders HRIS and payroll admin routes against the live backend', async ({ authedPage: page }) => {
+  test('renders HRIS and payroll admin routes against the live backend', async ({
+    authedPage: page,
+  }) => {
     await page.goto('/admin/hris/employees', { waitUntil: 'domcontentloaded' });
     await expect(page).not.toHaveURL(/\/login$/);
     await expect(page.getByRole('heading', { name: 'Employees' })).toBeVisible();

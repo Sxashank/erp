@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { persistPortalSession, portalAuthApi } from '@/services/portalApi';
-import { getErrorMessage } from "@/lib/errorMessage";
+import { getErrorMessage } from '@/lib/errorMessage';
 
 export default function PortalActivateAccount(): JSX.Element {
   const navigate = useNavigate();
@@ -43,7 +43,7 @@ export default function PortalActivateAccount(): JSX.Element {
         password,
         device_info: {
           device_type: 'WEB',
-          device_name: 'Scheme Portal',
+          device_name: 'Borrower Portal',
         },
       });
       persistPortalSession(response.data);
@@ -62,10 +62,8 @@ export default function PortalActivateAccount(): JSX.Element {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white">
             <ShieldCheck className="h-7 w-7" />
           </div>
-          <CardTitle className="text-2xl">Activate scheme account</CardTitle>
-          <CardDescription>
-            Set the password for your lender, SMFCL, ministry, or scheme-admin portal access.
-          </CardDescription>
+          <CardTitle className="text-2xl">Activate portal account</CardTitle>
+          <CardDescription>Set the password for your authorised SFC portal access.</CardDescription>
         </CardHeader>
         <CardContent>
           {error ? (

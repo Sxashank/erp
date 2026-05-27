@@ -35,16 +35,12 @@ from app.models.lending.enums import (
     DisbursementMode,
     DisbursementStatus,
     InstallmentStatus,
-    InterestType,
     LoanAccountStatus,
     MandateStatus,
     ProvisioningCategory,
-    RateResetFrequency,
     ReceiptMode,
     ReceiptStatus,
     ReceiptType,
-    RepaymentFrequency,
-    RepaymentMode,
     ScheduleType,
     WaiverType,
 )
@@ -179,10 +175,10 @@ class LoanAccount(BaseModel):
     )
 
     # Interest terms
-    interest_type: Mapped[InterestType] = mapped_column(
-        Enum(InterestType),
+    interest_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="FIXED or FLOATING",
+        comment="Interest type code from mst_lending_option(RATE_TYPE)",
     )
     base_rate_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -206,10 +202,10 @@ class LoanAccount(BaseModel):
         nullable=False,
         comment="Current effective interest rate",
     )
-    rate_reset_frequency: Mapped[RateResetFrequency | None] = mapped_column(
-        Enum(RateResetFrequency),
+    rate_reset_frequency: Mapped[str | None] = mapped_column(
+        String(80),
         nullable=True,
-        comment="Rate reset frequency",
+        comment="Rate reset frequency code from mst_lending_option(RATE_RESET_FREQUENCY)",
     )
     next_rate_reset_date: Mapped[date | None] = mapped_column(
         Date,
@@ -231,15 +227,15 @@ class LoanAccount(BaseModel):
     )
 
     # Repayment terms
-    repayment_frequency: Mapped[RepaymentFrequency] = mapped_column(
-        Enum(RepaymentFrequency),
+    repayment_frequency: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="Repayment frequency",
+        comment="Repayment frequency code from mst_lending_option(REPAYMENT_FREQUENCY)",
     )
-    repayment_mode: Mapped[RepaymentMode] = mapped_column(
-        Enum(RepaymentMode),
+    repayment_mode: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="Repayment mode - EMI, STRUCTURED, BULLET",
+        comment="Repayment mode code from mst_lending_option(REPAYMENT_MODE)",
     )
     day_count_convention: Mapped[DayCountConvention] = mapped_column(
         Enum(DayCountConvention),

@@ -5,10 +5,10 @@ from decimal import Decimal
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.models.lending.enums import (
     AssetClassification,
     FollowUpStatus,
@@ -42,6 +42,7 @@ from app.schemas.lending.collections import (
     # Restructure
     LoanRestructureCreate,
     LoanRestructureImplement,
+    LoanRestructureReject,
     LoanRestructureResponse,
     LoanRestructureUpdate,
     NPAAccountListResponse,
@@ -101,9 +102,9 @@ router = APIRouter()
 )
 async def list_legal_cases(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     status: LegalCaseStatus | None = Query(None),
-    case_type: str | None = Query(None),
+    case_type: str | None = Query(None, alias="caseType"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
@@ -129,7 +130,7 @@ async def list_legal_cases(
 )
 async def list_npa_accounts(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     classification: AssetClassification | None = Query(None),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
@@ -155,7 +156,7 @@ async def list_npa_accounts(
 )
 async def list_follow_ups(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     status: FollowUpStatus | None = Query(None),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
@@ -181,7 +182,7 @@ async def list_follow_ups(
 )
 async def list_ots_proposals(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     status: OTSStatus | None = Query(None),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
@@ -207,7 +208,7 @@ async def list_ots_proposals(
 )
 async def list_restructures(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     status: RestructureStatus | None = Query(None),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
@@ -572,14 +573,18 @@ async def approve_penal_waiver(
     dependencies=[Depends(RequirePermissions("OTS_CREATE"))],
 )
 async def create_ots_proposal(
-    data: OTSProposalCreate,
-    payment_schedule: list[OTSPaymentScheduleCreate] | None = None,
+    data: OTSProposalCreate = Body(...),
+    payment_schedule: list[OTSPaymentScheduleCreate] | None = Body(
+        default=None, alias="paymentSchedule"
+    ),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user=Depends(get_current_user),
 ):
     """Create an OTS proposal."""
     service = CollectionsService(db)
-    proposal = await service.create_ots_proposal(data, payment_schedule, current_user.id)
+    proposal = await service.create_ots_proposal(
+        current_user.organization_id, data, payment_schedule, current_user.id
+    )
     return OTSProposalResponse.model_validate(proposal)
 
 
@@ -678,7 +683,9 @@ async def create_restructure(
 ):
     """Create a loan restructure proposal."""
     service = CollectionsService(db)
-    restructure = await service.create_restructure(data, current_user.id)
+    restructure = await service.create_restructure(
+        current_user.organization_id, data, current_user.id
+    )
     return LoanRestructureResponse.model_validate(restructure)
 
 
@@ -697,8 +704,9 @@ async def get_restructure(
     service = CollectionsService(db)
     restructure = await service.restructure_repo.get(restructure_id)
     if not restructure:
-        from fastapi import HTTPException
-
+        raise NotFoundException(detail="Restructure not found", error_code="RESTRUCTURE_NOT_FOUND")
+    loan = await service.loan_account_repo.get(restructure.loan_account_id)
+    if loan is None or loan.organization_id != current_user.organization_id:
         raise NotFoundException(detail="Restructure not found", error_code="RESTRUCTURE_NOT_FOUND")
     return LoanRestructureResponse.model_validate(restructure)
 
@@ -735,7 +743,29 @@ async def approve_restructure(
 ):
     """Approve a restructure."""
     service = CollectionsService(db)
-    restructure = await service.approve_restructure(restructure_id, data, current_user.id)
+    restructure = await service.approve_restructure(
+        current_user.organization_id, restructure_id, data, current_user.id
+    )
+    return LoanRestructureResponse.model_validate(restructure)
+
+
+@router.post(
+    "/restructures/{restructure_id}/reject",
+    response_model=LoanRestructureResponse,
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("RESTRUCTURE_APPROVE"))],
+)
+async def reject_restructure(
+    restructure_id: UUID,
+    data: LoanRestructureReject,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user=Depends(get_current_user),
+):
+    """Reject a restructure."""
+    service = CollectionsService(db)
+    restructure = await service.reject_restructure(
+        current_user.organization_id, restructure_id, data, current_user.id
+    )
     return LoanRestructureResponse.model_validate(restructure)
 
 

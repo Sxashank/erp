@@ -17,9 +17,10 @@ const useBuilt = process.env.PLAYWRIGHT_USE_BUILD === '1';
 // admin user are present. Only opt in for the real-user suite (run via
 // `pnpm test:e2e:real`) — otherwise the smoke + visual specs don't need the
 // dedicated DB.
-const e2eGlobalSetup = process.env.PLAYWRIGHT_E2E === '1'
-  ? fileURLToPath(new URL('./playwright/tests/e2e/globalSetup.ts', import.meta.url))
-  : undefined;
+const e2eGlobalSetup =
+  process.env.PLAYWRIGHT_E2E === '1'
+    ? fileURLToPath(new URL('./playwright/tests/e2e/globalSetup.ts', import.meta.url))
+    : undefined;
 
 export default defineConfig({
   testDir: './playwright/tests',
@@ -74,9 +75,9 @@ export default defineConfig({
   webServer: process.env.PLAYWRIGHT_EXTERNAL_SERVER
     ? undefined
     : {
-        command: useBuilt ? 'pnpm preview --port 5176' : 'pnpm dev --port 5176',
+        command: useBuilt ? 'pnpm build && pnpm preview --port 5176' : 'pnpm dev --port 5176',
         url: baseURL,
-        reuseExistingServer: !process.env.CI,
+        reuseExistingServer: useBuilt ? false : !process.env.CI,
         timeout: 120_000,
         stdout: 'pipe',
         stderr: 'pipe',

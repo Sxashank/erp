@@ -99,9 +99,7 @@ class PortalDashboardService:
             .options(
                 selectinload(LoanAccount.product),
                 selectinload(LoanAccount.entity),
-                selectinload(LoanAccount.schedules).selectinload(
-                    RepaymentSchedule.installments
-                ),
+                selectinload(LoanAccount.schedules).selectinload(RepaymentSchedule.installments),
             )
             .where(
                 LoanAccount.entity_id.in_(entity_ids),
@@ -127,9 +125,7 @@ class PortalDashboardService:
             .options(
                 selectinload(LoanAccount.product),
                 selectinload(LoanAccount.entity),
-                selectinload(LoanAccount.schedules).selectinload(
-                    RepaymentSchedule.installments
-                ),
+                selectinload(LoanAccount.schedules).selectinload(RepaymentSchedule.installments),
             )
             .where(
                 LoanAccount.id == loan_account_id,
@@ -154,14 +150,10 @@ class PortalDashboardService:
                 "co_borrowers": [],
                 "product_type": self._enum_value(getattr(loan.product, "category", "")),
                 "rate_type": self._enum_value(loan.interest_type),
-                "outstanding_interest": float(
-                    loan.interest_outstanding + loan.interest_overdue
-                ),
+                "outstanding_interest": float(loan.interest_outstanding + loan.interest_overdue),
                 "charges_due": float(loan.charges_outstanding),
                 "emi_start_date": (
-                    loan.repayment_start_date.isoformat()
-                    if loan.repayment_start_date
-                    else None
+                    loan.repayment_start_date.isoformat() if loan.repayment_start_date else None
                 ),
                 "emi_end_date": loan.maturity_date.isoformat() if loan.maturity_date else None,
                 "total_paid": float(total_paid),
@@ -309,9 +301,9 @@ class PortalDashboardService:
                 "payment_mode": self._enum_value(row.receipt_mode),
                 "reference_number": row.instrument_number,
                 "loan_account_id": str(row.loan_account_id),
-                "loan_account_number": row.loan_account.loan_account_number
-                if row.loan_account
-                else "",
+                "loan_account_number": (
+                    row.loan_account.loan_account_number if row.loan_account else ""
+                ),
                 "status": self._enum_value(row.status),
             }
             for row in receipts
@@ -325,9 +317,7 @@ class PortalDashboardService:
             .options(
                 selectinload(LoanAccount.product),
                 selectinload(LoanAccount.entity),
-                selectinload(LoanAccount.schedules).selectinload(
-                    RepaymentSchedule.installments
-                ),
+                selectinload(LoanAccount.schedules).selectinload(RepaymentSchedule.installments),
             )
             .where(
                 LoanAccount.id == loan_account_id,
@@ -346,6 +336,12 @@ class PortalDashboardService:
             else loan.tenure_months
         )
         overdue_amount = loan.principal_overdue + loan.interest_overdue
+        next_emi_iso = next_due["due_date"] if next_due else None
+        # Derive day-of-month from next due date; default to 5 (most common).
+        try:
+            emi_day = int(next_emi_iso.split("-")[2]) if next_emi_iso else 5
+        except (ValueError, IndexError):
+            emi_day = 5
         return {
             "id": str(loan.id),
             "loan_account_id": str(loan.id),
@@ -357,18 +353,21 @@ class PortalDashboardService:
             "principal_outstanding": float(loan.principal_outstanding),
             "outstanding_interest": float(loan.interest_outstanding + loan.interest_overdue),
             "interest_outstanding": float(loan.interest_outstanding + loan.interest_overdue),
+            "charges_outstanding": float(loan.charges_outstanding or 0),
+            "charges_due": float(loan.charges_outstanding or 0),
             "total_outstanding": float(loan.total_outstanding),
             "overdue_amount": float(overdue_amount),
             "emi_amount": float(loan.current_emi_amount or 0),
+            "emi_date": emi_day,
             "interest_rate": float(loan.current_interest_rate),
             "tenure_months": loan.tenure_months,
             "remaining_tenure": remaining,
             "remaining_emis": remaining,
-            "disbursement_date": loan.first_disbursement_date.isoformat()
-            if loan.first_disbursement_date
-            else None,
+            "disbursement_date": (
+                loan.first_disbursement_date.isoformat() if loan.first_disbursement_date else None
+            ),
             "maturity_date": loan.maturity_date.isoformat() if loan.maturity_date else None,
-            "next_emi_date": next_due["due_date"] if next_due else None,
+            "next_emi_date": next_emi_iso,
             "next_emi_amount": next_due["emi_amount"] if next_due else None,
             "overdue_days": loan.days_past_due,
             "dpd": loan.days_past_due,

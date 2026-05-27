@@ -35,6 +35,7 @@ from app.core.constants import (
 )
 from app.core.security import get_password_hash
 from app.database import async_session_factory
+from app.db.seeds.lending_masters import seed_for_organization as seed_lending_master_catalog
 from app.models.ap_ar.payment_terms import PaymentTerms
 from app.models.auth.role import Permission, Role, RolePermission, UserRole
 from app.models.auth.user import User
@@ -106,6 +107,7 @@ from app.models.lending import (
     SubventionScheme,
 )
 from app.models.lending.enums import ClaimFrequency, LenderStatus, LenderType
+from app.models.lending.masters import ChecklistItemCatalog
 from app.models.lending.treasury import Lender
 from app.models.masters.department import Department
 from app.models.masters.designation import Designation
@@ -124,6 +126,11 @@ from app.models.payroll.salary_component import (
     SalaryStructureComponent,
 )
 from app.models.tds.tds_section import TDSSection
+from app.services.dms.filing_service import DEFAULT_FILING_RULES, DocumentFilingService
+from app.services.document_studio_service import (
+    DEFAULT_DOCUMENT_TEMPLATES,
+    DocumentStudioService,
+)
 
 # Permission definitions
 PERMISSIONS = [
@@ -2831,6 +2838,48 @@ APPROVAL_CHECKLIST_ITEMS = [
     ),
 ]
 
+DOCUMENT_CHECKLIST_CATALOG_MAP = {
+    "KYC_PAN": "KYC_PAN",
+    "BOARD_RESOLUTION": "KYC_BOARD_RESOLUTION",
+    "AUDITED_FINANCIALS": "FIN_AUDITED_FINANCIALS",
+    "PROJECT_DPR": "PROJECT_DPR",
+    "SECURITY_TITLE": "PROP_TITLE_DEED",
+    "INSURANCE_POLICY": "INS_PROPERTY_POLICY",
+}
+
+APPROVAL_CHECKLIST_CATALOG_MAP = {
+    "KYC_COMPLETE": "KYC_CIN",
+    "FINANCIAL_APPRAISAL": "FIN_CASHFLOW_MODEL",
+    "TECHNICAL_APPRAISAL": "PROJECT_DPR",
+    "SECURITY_PERFECTED": "REG_CERSAI_FILING",
+    "LEGAL_VETTING": "LEGAL_VETTING",
+    "BOARD_APPROVAL": "KYC_BOARD_RESOLUTION",
+}
+
+DOCUMENT_CATEGORY_FROM_CATALOG = {
+    "KYC": DocumentCategory.KYC,
+    "FINANCIAL": DocumentCategory.FINANCIAL,
+    "LEGAL": DocumentCategory.LEGAL,
+    "INSURANCE": DocumentCategory.INSURANCE,
+    "REGULATORY": DocumentCategory.REGULATORY,
+    "PROPERTY": DocumentCategory.SECURITY,
+    "VESSEL": DocumentCategory.SECURITY,
+    "PORT": DocumentCategory.PROJECT,
+    "OTHER": DocumentCategory.PROJECT,
+}
+
+APPROVAL_CATEGORY_FROM_CATALOG = {
+    "KYC": ChecklistItemCategory.KYC.value,
+    "LEGAL": ChecklistItemCategory.LEGAL.value,
+    "INSURANCE": ChecklistItemCategory.INSURANCE.value,
+    "REGULATORY": ChecklistItemCategory.COMPLIANCE.value,
+    "FINANCIAL": ChecklistItemCategory.DOCUMENT.value,
+    "PROPERTY": ChecklistItemCategory.DOCUMENT.value,
+    "VESSEL": ChecklistItemCategory.DOCUMENT.value,
+    "PORT": ChecklistItemCategory.DOCUMENT.value,
+    "OTHER": ChecklistItemCategory.OTHER.value,
+}
+
 SOURCE_LENDERS = [
     {
         "lender_code": "SBI_TERM",
@@ -4395,6 +4444,21 @@ async def seed_payment_terms(session, org_id):
 async def seed_lending_masters(session, org):
     """Seed corporate lending masters so a fresh tenant has usable defaults."""
     print("\nSeeding lending masters...")
+    await seed_lending_master_catalog(session, org.id)
+
+    catalog_rows = (
+        (
+            await session.execute(
+                select(ChecklistItemCatalog).where(
+                    ChecklistItemCatalog.organization_id == org.id,
+                    ChecklistItemCatalog.deleted_at.is_(None),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    checklist_catalog = {row.code: row for row in catalog_rows}
 
     # Base/reference rates
     rate_map = {}
@@ -4568,11 +4632,17 @@ async def seed_lending_masters(session, org):
                 )
                 created_product_fees += 1
 
-        for idx, (code, name, category, stage, mandatory) in enumerate(DOCUMENT_CHECKLIST, start=1):
+        for idx, (code, _name, _category, _stage, mandatory) in enumerate(
+            DOCUMENT_CHECKLIST, start=1
+        ):
+            catalog_code = DOCUMENT_CHECKLIST_CATALOG_MAP[code]
+            catalog_item = checklist_catalog[catalog_code]
+            stage = DocumentStage(catalog_item.stage)
+            category = DOCUMENT_CATEGORY_FROM_CATALOG[catalog_item.category]
             existing_doc = await session.execute(
                 select(DocumentChecklist).where(
                     DocumentChecklist.product_id == product.id,
-                    DocumentChecklist.code == code,
+                    DocumentChecklist.code == catalog_item.code,
                 )
             )
             if existing_doc.scalar_one_or_none():
@@ -4580,9 +4650,10 @@ async def seed_lending_masters(session, org):
             session.add(
                 DocumentChecklist(
                     product_id=product.id,
-                    code=code,
-                    name=name,
-                    description=f"{name} required for {product.name}",
+                    catalog_item_id=catalog_item.id,
+                    code=catalog_item.code,
+                    name=catalog_item.label,
+                    description=f"{catalog_item.label} required for {product.name}",
                     category=category,
                     required_at_stage=stage,
                     is_mandatory=mandatory,
@@ -4625,13 +4696,15 @@ async def seed_lending_masters(session, org):
         session.add(template)
         await session.flush()
 
-    for idx, (code, label, category, mandatory, evidence) in enumerate(
+    for idx, (code, _label, _category, mandatory, evidence) in enumerate(
         APPROVAL_CHECKLIST_ITEMS, start=1
     ):
+        catalog_code = APPROVAL_CHECKLIST_CATALOG_MAP[code]
+        catalog_item = checklist_catalog[catalog_code]
         existing_item = await session.execute(
             select(ApprovalChecklistTemplateItem).where(
                 ApprovalChecklistTemplateItem.template_id == template.id,
-                ApprovalChecklistTemplateItem.code == code,
+                ApprovalChecklistTemplateItem.code == catalog_item.code,
             )
         )
         if existing_item.scalar_one_or_none():
@@ -4639,10 +4712,11 @@ async def seed_lending_masters(session, org):
         session.add(
             ApprovalChecklistTemplateItem(
                 template_id=template.id,
-                code=code,
-                label=label,
-                description=label,
-                category=category.value,
+                catalog_item_id=catalog_item.id,
+                code=catalog_item.code,
+                label=catalog_item.label,
+                description=catalog_item.description,
+                category=APPROVAL_CATEGORY_FROM_CATALOG[catalog_item.category],
                 is_mandatory=mandatory,
                 sort_order=idx,
                 default_due_offset_days=7,
@@ -5149,9 +5223,9 @@ async def seed_fixed_deposit_masters(session, org):
                 compounding_frequency=compounding,
                 tds_threshold=money("40000"),
                 fd_liability_account_id=accounts.get("2104").id if accounts.get("2104") else None,
-                interest_expense_account_id=accounts.get("5001").id
-                if accounts.get("5001")
-                else None,
+                interest_expense_account_id=(
+                    accounts.get("5001").id if accounts.get("5001") else None
+                ),
                 tds_payable_account_id=accounts.get("2201").id if accounts.get("2201") else None,
                 effective_from=date(2026, 4, 1),
             )
@@ -5237,9 +5311,9 @@ async def seed_inventory_masters(session, org, unit_map):
         session.add(
             Warehouse(
                 organization_id=org.id,
-                unit_id=unit_map.get(unit_code).id
-                if unit_code and unit_map.get(unit_code)
-                else None,
+                unit_id=(
+                    unit_map.get(unit_code).id if unit_code and unit_map.get(unit_code) else None
+                ),
                 warehouse_code=code,
                 warehouse_name=name,
                 description="Default warehouse seeded for manual stock workflows.",
@@ -5399,6 +5473,23 @@ async def seed_dms_masters(session, org):
 
     await session.commit()
     print(f"  + DMS masters ready (folders:{created_folders}, tags:{created_tags})")
+
+
+async def seed_document_studio_masters(session, org, admin_user):
+    """Seed editable Document Studio templates and governed DMS filing rules."""
+    print("\nSeeding Document Studio masters...")
+    service = DocumentStudioService(session)
+    filing = DocumentFilingService(session)
+    created_by = admin_user.id if admin_user else None
+
+    await service.ensure_default_templates(organization_id=org.id, created_by=created_by)
+    await filing.ensure_default_rules(organization_id=org.id, created_by=created_by)
+    await session.commit()
+    print(
+        "  + Document Studio ready "
+        f"(templates:{len(DEFAULT_DOCUMENT_TEMPLATES)}, "
+        f"filing-rules:{len(DEFAULT_FILING_RULES)})"
+    )
 
 
 async def seed_ess_masters(session, org):
@@ -6149,6 +6240,7 @@ async def main():
         await seed_inventory_masters(session, org, unit_map)
         await seed_compliance_masters(session, org, admin_user)
         await seed_dms_masters(session, org)
+        await seed_document_studio_masters(session, org, admin_user)
         await seed_ess_masters(session, org)
         await seed_legal_masters(session, org)
         await seed_notification_masters(session, org)

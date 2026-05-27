@@ -1,26 +1,15 @@
-import {
-  ArrowLeft,
-  Target,
-  Save,
-  Send,
-  CheckCircle,
-  Star,
-  MessageSquare,
-  Award,
-  TrendingUp,
-  User,
-  FileText,
-  AlertCircle,
-} from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { StatusPill } from '@/components/common/StatusPill';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -28,541 +17,565 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  useCalibrateAppraisal,
+  useCycleEmployees,
+  useEmployeePerformanceDetail,
+  usePerformanceCycles,
+  useSubmitManagerReview,
+} from '@/hooks/hris/usePerformance';
 import { useToast } from '@/hooks/use-toast';
-import { logger } from '@/lib/logger';
-import { formatDate } from '@/lib/utils';
+import type {
+  AppraisalCycleListItem,
+  PerformanceEmployeeSummary,
+  PerformanceGoal,
+  PerformanceManagerReviewPayload,
+} from '@/services/hris/performanceApi';
 
-interface Goal {
-  id: string;
+interface GoalReviewState {
+  goalId: string;
+  managerRating: number;
+  managerComments: string;
+  finalRating: number;
+}
+
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+}: {
   title: string;
-  description: string;
-  category: string;
-  weightage: number;
-  target_date: string;
-  self_rating: number;
-  self_progress: number;
-  self_comments: string;
-  self_achievements: string;
-  manager_rating?: number;
-  manager_comments?: string;
-}
-
-interface CycleInfo {
-  id: string;
-  name: string;
-  manager_review_deadline: string;
-}
-
-interface EmployeeInfo {
-  id: string;
-  name: string;
-  code: string;
-  department: string;
-  designation: string;
-  date_of_joining: string;
-  reporting_manager: string;
-}
-
-interface SelfAppraisalData {
-  overall_summary: string;
-  key_achievements: string;
-  areas_of_improvement: string;
-  training_needs: string;
-  career_aspirations: string;
-}
-
-const getCycleInfo = (): CycleInfo | null => null;
-const getEmployeeInfo = (): EmployeeInfo | null => null;
-const getSelfAppraisalData = (): SelfAppraisalData | null => null;
-const goals: Goal[] = [];
-
-const ratingLabels: Record<number, { label: string; color: string }> = {
-  1: { label: 'Needs Significant Improvement', color: 'text-red-600' },
-  2: { label: 'Needs Improvement', color: 'text-orange-600' },
-  3: { label: 'Meets Expectations', color: 'text-yellow-600' },
-  4: { label: 'Exceeds Expectations', color: 'text-green-600' },
-  5: { label: 'Outstanding', color: 'text-blue-600' },
-};
-
-const getCategoryColor = (category: string) => {
-  const colors: Record<string, string> = {
-    BUSINESS: 'bg-purple-100 text-purple-800',
-    FUNCTIONAL: 'bg-blue-100 text-blue-800',
-    BEHAVIORAL: 'bg-green-100 text-green-800',
-    DEVELOPMENT: 'bg-orange-100 text-orange-800',
-  };
-  return colors[category] || 'bg-gray-100 text-gray-800';
-};
-
-const renderStars = (rating: number) => {
+  value: string | number;
+  subtitle: string;
+}) {
   return (
-    <div className="flex gap-1">
-      {[1, 2, 3, 4, 5].map((star) => (
-        <Star
-          key={star}
-          className={`h-5 w-5 ${star <= rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
-        />
-      ))}
-    </div>
+    <Card>
+      <CardContent className="pt-6">
+        <p className="text-sm text-muted-foreground">{title}</p>
+        <p className="mt-2 text-3xl font-semibold">{value}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+      </CardContent>
+    </Card>
   );
-};
+}
+
+function ReviewGoalCard({
+  goal,
+  state,
+  readOnly,
+  onChange,
+}: {
+  goal: PerformanceGoal;
+  state: GoalReviewState | undefined;
+  readOnly: boolean;
+  onChange: (goalId: string, patch: Partial<GoalReviewState>) => void;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{goal.title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-4">
+          <div>
+            <Label className="text-muted-foreground">Weightage</Label>
+            <p className="mt-1 font-medium">{goal.weightage}%</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Due Date</Label>
+            <p className="mt-1 font-medium">
+              <DateDisplay date={goal.dueDate ?? null} />
+            </p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Self Rating</Label>
+            <p className="mt-1 font-medium">{goal.selfRating ?? '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Progress</Label>
+            <p className="mt-1 font-medium">{goal.progressPercent}%</p>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-muted-foreground">Self Comments</Label>
+          <p className="text-sm">{goal.selfComments || '—'}</p>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="space-y-2">
+            <Label>Manager Rating</Label>
+            <Select
+              value={String(state?.managerRating ?? goal.managerRating ?? 0)}
+              onValueChange={(value) =>
+                onChange(goal.id, { managerRating: Number(value), finalRating: Number(value) })
+              }
+              disabled={readOnly}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select rating" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1</SelectItem>
+                <SelectItem value="2">2</SelectItem>
+                <SelectItem value="3">3</SelectItem>
+                <SelectItem value="4">4</SelectItem>
+                <SelectItem value="5">5</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label>Final Goal Rating</Label>
+            <Select
+              value={String(state?.finalRating ?? goal.finalRating ?? goal.managerRating ?? 0)}
+              onValueChange={(value) => onChange(goal.id, { finalRating: Number(value) })}
+              disabled={readOnly}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Select final rating" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="1">1</SelectItem>
+                <SelectItem value="2">2</SelectItem>
+                <SelectItem value="3">3</SelectItem>
+                <SelectItem value="4">4</SelectItem>
+                <SelectItem value="5">5</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2 md:col-span-2 xl:col-span-1">
+            <Label>Status</Label>
+            <div className="pt-2">
+              <StatusPill type="application" status={goal.status} />
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Manager Comments</Label>
+          <Textarea
+            rows={4}
+            value={state?.managerComments ?? goal.managerComments ?? ''}
+            onChange={(event) => onChange(goal.id, { managerComments: event.target.value })}
+            disabled={readOnly}
+          />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function ManagerReview() {
   const navigate = useNavigate();
-  const { cycleId, employeeId } = useParams();
   const { toast } = useToast();
-  const cycleInfo = getCycleInfo();
-  const employeeInfo = getEmployeeInfo();
-  const selfAppraisalData = getSelfAppraisalData();
-  const [goalReviews, setGoalReviews] = useState<
-    Record<string, { rating: number; comments: string }>
-  >(
-    goals.reduce(
-      (acc, goal) => ({
-        ...acc,
-        [goal.id]: { rating: 0, comments: '' },
-      }),
-      {},
-    ),
-  );
-  const [overallReview, setOverallReview] = useState({
-    overall_rating: '',
-    strengths: '',
-    development_areas: '',
-    recommendations: '',
-    promotion_ready: '',
-    overall_comments: '',
-  });
+  const { cycleId, employeeId } = useParams();
+  const [cycleSelectionId, setCycleSelectionId] = useState(cycleId ?? '');
 
-  if (!cycleInfo || !employeeInfo || !selfAppraisalData) {
+  const cyclesQuery = usePerformanceCycles({ skip: 0, limit: 100 });
+  const employeesQuery = useCycleEmployees(cycleId);
+  const employeeSelectionQuery = useCycleEmployees(cycleSelectionId || undefined);
+  const detailQuery = useEmployeePerformanceDetail(cycleId, employeeId);
+  const submitReviewMutation = useSubmitManagerReview(cycleId ?? '', employeeId ?? '');
+  const calibrateMutation = useCalibrateAppraisal(cycleId ?? '', employeeId ?? '');
+
+  const [goalReviews, setGoalReviews] = useState<Record<string, GoalReviewState>>({});
+  const [competencyRating, setCompetencyRating] = useState('3');
+  const [managerSummary, setManagerSummary] = useState('');
+  const [managerAchievements, setManagerAchievements] = useState('');
+  const [managerImprovements, setManagerImprovements] = useState('');
+  const [managerRecommendations, setManagerRecommendations] = useState('');
+  const [calibratedRating, setCalibratedRating] = useState('3');
+  const [calibrationNotes, setCalibrationNotes] = useState('');
+  const [finalGrade, setFinalGrade] = useState('');
+
+  useEffect(() => {
+    const detail = detailQuery.data;
+    if (!detail) return;
+    setGoalReviews(
+      Object.fromEntries(
+        detail.goals.map((goal) => [
+          goal.id,
+          {
+            goalId: goal.id,
+            managerRating: goal.managerRating ?? goal.selfRating ?? 0,
+            managerComments: goal.managerComments ?? '',
+            finalRating: goal.finalRating ?? goal.managerRating ?? goal.selfRating ?? 0,
+          },
+        ]),
+      ),
+    );
+    setCompetencyRating(String(detail.appraisal.competencyRating ?? 3));
+    setManagerSummary(detail.appraisal.managerSummary ?? '');
+    setManagerAchievements(detail.appraisal.managerAchievements ?? '');
+    setManagerImprovements(detail.appraisal.managerImprovements ?? '');
+    setManagerRecommendations(detail.appraisal.managerRecommendations ?? '');
+    setCalibratedRating(
+      String(detail.appraisal.calibratedRating ?? detail.appraisal.overallRating ?? 3),
+    );
+    setCalibrationNotes(detail.appraisal.calibrationNotes ?? '');
+    setFinalGrade(detail.appraisal.calibratedGrade ?? detail.appraisal.finalGrade ?? '');
+  }, [detailQuery.data]);
+
+  const selectedCycle = useMemo(
+    () => cyclesQuery.data?.items.find((item) => item.id === cycleId),
+    [cycleId, cyclesQuery.data],
+  );
+  const employeeOptions = useMemo(
+    () => (employeesQuery.data ?? []) as PerformanceEmployeeSummary[],
+    [employeesQuery.data],
+  );
+  const detail = detailQuery.data;
+  const isCalibrationStage = detail?.appraisal.status === 'CALIBRATION';
+  const reviewReadOnly = detail?.appraisal.status !== 'MANAGER_REVIEW';
+
+  const handleGoalChange = (goalId: string, patch: Partial<GoalReviewState>) => {
+    setGoalReviews((current) => ({
+      ...current,
+      [goalId]: {
+        ...(current[goalId] ?? {
+          goalId,
+          managerRating: 0,
+          managerComments: '',
+          finalRating: 0,
+        }),
+        ...patch,
+      },
+    }));
+  };
+
+  const handleSubmitReview = async () => {
+    if (!detail) return;
+    const payload: PerformanceManagerReviewPayload = {
+      goals: detail.goals.map((goal) => ({
+        goalId: goal.id,
+        managerRating: goalReviews[goal.id]?.managerRating ?? 0,
+        managerComments: goalReviews[goal.id]?.managerComments ?? '',
+        finalRating: goalReviews[goal.id]?.finalRating || undefined,
+      })),
+      competencyRating: Number(competencyRating),
+      managerSummary,
+      managerAchievements: managerAchievements || undefined,
+      managerImprovements,
+      managerRecommendations: managerRecommendations || undefined,
+    };
+    await submitReviewMutation.mutateAsync(payload);
+    toast({ title: 'Manager review submitted' });
+  };
+
+  const handleSubmitCalibration = async () => {
+    if (!detail) return;
+    await calibrateMutation.mutateAsync({
+      calibratedRating: Number(calibratedRating),
+      calibrationNotes: calibrationNotes || undefined,
+      finalGrade: finalGrade || undefined,
+    });
+    toast({ title: 'Calibration completed' });
+  };
+
+  if (!cycleId || !employeeId) {
     return (
       <div className="space-y-6">
         <PageHeader
           title="Manager Review"
-          subtitle={employeeId ? `Employee ${employeeId}` : 'Employee details unavailable'}
+          subtitle="Select an appraisal cycle and employee packet to continue."
           breadcrumbs={[
-            { label: 'Appraisal Cycles', to: '/admin/hris/performance/cycles' },
+            { label: 'Performance Cycles', to: '/admin/hris/performance/cycles' },
             { label: 'Manager Review' },
           ]}
         />
         <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Manager review data is pending backend HRIS performance endpoints for cycle{' '}
-            {cycleId ?? 'selected'}.
+          <CardContent className="grid gap-4 pt-6 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Select cycle</Label>
+              <Select value={cycleSelectionId} onValueChange={setCycleSelectionId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a cycle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(cyclesQuery.data?.items ?? []).map((cycle: AppraisalCycleListItem) => (
+                    <SelectItem key={cycle.id} value={cycle.id}>
+                      {cycle.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Select employee</Label>
+              <Select
+                value=""
+                onValueChange={(value) =>
+                  navigate(`/admin/hris/performance/manager-review/${cycleSelectionId}/${value}`)
+                }
+                disabled={!cycleSelectionId}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose an employee packet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(employeeSelectionQuery.data ?? []).map((employee) => (
+                    <SelectItem key={employee.employeeId} value={employee.employeeId}>
+                      {employee.employeeName} ({employee.employeeCode})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const handleSaveDraft = () => {
-    logger.debug('Saving draft...', { goalReviews, overallReview });
-    toast({ title: 'Draft saved successfully' });
-  };
+  if (detailQuery.isError) {
+    return <ErrorState error={detailQuery.error} onRetry={() => void detailQuery.refetch()} />;
+  }
 
-  const handleSubmit = () => {
-    // Validate all goals have manager ratings
-    const incompleteGoals = goals.filter((g) => !goalReviews[g.id]?.rating);
-    if (incompleteGoals.length > 0) {
-      toast({
-        title: 'Ratings required',
-        description: 'Please provide ratings for all goals.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    if (
-      !overallReview.overall_rating ||
-      !overallReview.strengths ||
-      !overallReview.development_areas
-    ) {
-      toast({
-        title: 'Overall review incomplete',
-        description: 'Please complete all required fields in the Overall Review section.',
-        variant: 'destructive',
-      });
-      return;
-    }
-    logger.debug('Submitting...', { goalReviews, overallReview });
-    navigate('/admin/hris/performance/cycles');
-  };
-
-  const calculateSelfRating = () => {
-    let weightedSum = 0;
-    goals.forEach((goal) => {
-      weightedSum += goal.self_rating * goal.weightage;
-    });
-    return (weightedSum / 100).toFixed(1);
-  };
-
-  const calculateManagerRating = () => {
-    let weightedSum = 0;
-    let totalWeight = 0;
-    goals.forEach((goal) => {
-      const rating = goalReviews[goal.id]?.rating || 0;
-      if (rating > 0) {
-        weightedSum += rating * goal.weightage;
-        totalWeight += goal.weightage;
-      }
-    });
-    return totalWeight > 0 ? (weightedSum / totalWeight).toFixed(1) : '-';
-  };
+  if (!detail) {
+    return (
+      <EmptyState
+        title="No manager review packet"
+        subtitle="This employee does not currently have a manager review packet for the selected cycle."
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Manager Review"
-        subtitle={cycleInfo.name}
+        subtitle={selectedCycle?.name ?? detail.cycle.name}
         breadcrumbs={[
           { label: 'Performance Cycles', to: '/admin/hris/performance/cycles' },
           { label: 'Manager Review' },
         ]}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleSaveDraft}>
-              <Save className="mr-2 h-4 w-4" />
-              Save Draft
-            </Button>
-            <Button onClick={handleSubmit}>
-              <Send className="mr-2 h-4 w-4" />
-              Submit Review
-            </Button>
+            <Select
+              value={cycleId}
+              onValueChange={(value) =>
+                navigate(`/admin/hris/performance/manager-review/${value}/${employeeId}`)
+              }
+            >
+              <SelectTrigger className="w-[260px]">
+                <SelectValue placeholder="Select cycle" />
+              </SelectTrigger>
+              <SelectContent>
+                {(cyclesQuery.data?.items ?? []).map((cycle: AppraisalCycleListItem) => (
+                  <SelectItem key={cycle.id} value={cycle.id}>
+                    {cycle.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={employeeId}
+              onValueChange={(value) =>
+                navigate(`/admin/hris/performance/manager-review/${cycleId}/${value}`)
+              }
+            >
+              <SelectTrigger className="w-[320px]">
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employeeOptions.map((employee) => (
+                  <SelectItem key={employee.employeeId} value={employee.employeeId}>
+                    {employee.employeeName} ({employee.employeeCode})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {isCalibrationStage ? (
+              <Button
+                onClick={() => void handleSubmitCalibration()}
+                disabled={calibrateMutation.isPending}
+              >
+                {calibrateMutation.isPending ? 'Calibrating…' : 'Complete Calibration'}
+              </Button>
+            ) : (
+              <Button
+                onClick={() => void handleSubmitReview()}
+                disabled={reviewReadOnly || submitReviewMutation.isPending}
+              >
+                {submitReviewMutation.isPending ? 'Submitting…' : 'Submit Review'}
+              </Button>
+            )}
           </div>
         }
       />
 
-      {/* Employee Info */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <SummaryCard
+          title="Employee"
+          value={detail.employee.employeeName}
+          subtitle={detail.employee.employeeCode}
+        />
+        <SummaryCard
+          title="Current Status"
+          value={detail.appraisal.status}
+          subtitle={detail.employee.reviewerName ?? 'Reviewer not assigned'}
+        />
+        <SummaryCard
+          title="Self Appraisal Date"
+          value={detail.appraisal.selfAppraisalDate ?? '—'}
+          subtitle="Employee submission timestamp"
+        />
+        <SummaryCard
+          title="Manager Review Deadline"
+          value={detail.cycle.managerReviewEnd ?? '—'}
+          subtitle="Cycle manager-review deadline"
+        />
+      </div>
+
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-                <User className="h-8 w-8 text-primary" />
-              </div>
-              <div>
-                <h2 className="text-xl font-semibold">{employeeInfo.name}</h2>
-                <p className="text-sm text-muted-foreground">
-                  {employeeInfo.code} • {employeeInfo.department} • {employeeInfo.designation}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Joined: {formatDate(employeeInfo.date_of_joining)}
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">Review Deadline</div>
-              <div className="font-medium text-red-600">
-                {formatDate(cycleInfo.manager_review_deadline)}
-              </div>
-            </div>
+        <CardHeader>
+          <CardTitle className="text-base">Employee Self Appraisal Summary</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div>
+            <Label className="text-muted-foreground">Self Summary</Label>
+            <p className="mt-1 text-sm">{detail.appraisal.selfSummary || '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Key Achievements</Label>
+            <p className="mt-1 text-sm">{detail.appraisal.selfAchievements || '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Challenges</Label>
+            <p className="mt-1 text-sm">{detail.appraisal.selfChallenges || '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Development Areas</Label>
+            <p className="mt-1 text-sm">{detail.appraisal.selfDevelopmentAreas || '—'}</p>
           </div>
         </CardContent>
       </Card>
 
-      {/* Rating Summary */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <Card className="bg-yellow-50">
-          <CardContent className="pt-6">
-            <div className="text-sm text-yellow-700">Self Rating</div>
-            <div className="text-3xl font-bold text-yellow-800">{calculateSelfRating()}/5</div>
-            <div className="mt-2 flex">{renderStars(parseFloat(calculateSelfRating()))}</div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-blue-50">
-          <CardContent className="pt-6">
-            <div className="text-sm text-blue-700">Manager Rating</div>
-            <div className="text-3xl font-bold text-blue-800">{calculateManagerRating()}/5</div>
-            <div className="mt-2 flex">
-              {renderStars(parseFloat(calculateManagerRating()) || 0)}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Goals Reviewed</div>
-            <div className="text-3xl font-bold">
-              {Object.values(goalReviews).filter((r) => r.rating > 0).length}/{goals.length}
-            </div>
-            <Progress
-              value={
-                (Object.values(goalReviews).filter((r) => r.rating > 0).length / goals.length) * 100
-              }
-              className="mt-2 h-2"
-            />
-          </CardContent>
-        </Card>
+      <div className="space-y-4">
+        {detail.goals.map((goal) => (
+          <ReviewGoalCard
+            key={goal.id}
+            goal={goal}
+            state={goalReviews[goal.id]}
+            readOnly={reviewReadOnly}
+            onChange={handleGoalChange}
+          />
+        ))}
       </div>
 
-      <Tabs defaultValue="goals" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="goals">Goal-wise Review</TabsTrigger>
-          <TabsTrigger value="self-summary">Self Appraisal Summary</TabsTrigger>
-          <TabsTrigger value="overall">Overall Review</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="goals" className="space-y-4">
-          {goals.map((goal) => (
-            <Card key={goal.id}>
-              <CardContent className="pt-6">
-                <div className="mb-4 flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="mb-1 flex items-center gap-2">
-                      <h3 className="font-semibold">{goal.title}</h3>
-                      <Badge variant="secondary" className={getCategoryColor(goal.category)}>
-                        {goal.category}
-                      </Badge>
-                      <Badge variant="outline">{goal.weightage}%</Badge>
-                    </div>
-                    <p className="text-sm text-muted-foreground">{goal.description}</p>
-                  </div>
-                </div>
-
-                {/* Self Assessment Section */}
-                <div className="mb-4 rounded-lg bg-yellow-50 p-4">
-                  <h4 className="mb-2 font-medium text-yellow-800">Self Assessment</h4>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-                    <div>
-                      <p className="text-xs text-yellow-700">Self Rating</p>
-                      <div className="flex items-center gap-2">
-                        {renderStars(goal.self_rating)}
-                        <span className="text-sm font-medium">{goal.self_rating}/5</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-yellow-700">Progress Claimed</p>
-                      <div className="flex items-center gap-2">
-                        <Progress value={goal.self_progress} className="h-2 flex-1" />
-                        <span className="text-sm font-medium">{goal.self_progress}%</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-yellow-700">Achievements</p>
-                      <p className="text-sm">{goal.self_achievements}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-xs text-yellow-700">Self Comments</p>
-                    <p className="text-sm text-yellow-900">{goal.self_comments}</p>
-                  </div>
-                </div>
-
-                {/* Manager Review Section */}
-                <div className="rounded-lg bg-blue-50 p-4">
-                  <h4 className="mb-3 font-medium text-blue-800">Manager Review</h4>
-                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                    <div>
-                      <label className="text-sm font-medium text-blue-700">Manager Rating *</label>
-                      <Select
-                        value={goalReviews[goal.id]?.rating?.toString() || ''}
-                        onValueChange={(value) =>
-                          setGoalReviews({
-                            ...goalReviews,
-                            [goal.id]: { ...goalReviews[goal.id], rating: parseInt(value) },
-                          })
-                        }
-                      >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Select rating" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[5, 4, 3, 2, 1].map((r) => (
-                            <SelectItem key={r} value={r.toString()}>
-                              <span className={ratingLabels[r].color}>
-                                {r} - {ratingLabels[r].label}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium text-blue-700">Manager Comments</label>
-                      <Textarea
-                        placeholder="Provide feedback on the employee's performance..."
-                        className="mt-1"
-                        value={goalReviews[goal.id]?.comments || ''}
-                        onChange={(e) =>
-                          setGoalReviews({
-                            ...goalReviews,
-                            [goal.id]: { ...goalReviews[goal.id], comments: e.target.value },
-                          })
-                        }
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-
-        <TabsContent value="self-summary">
-          <Card>
-            <CardHeader>
-              <CardTitle>Employee's Self Appraisal Summary</CardTitle>
-              <CardDescription>
-                Review the employee's self-assessment before providing your feedback
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <h4 className="mb-2 flex items-center gap-2 font-medium">
-                  <FileText className="h-4 w-4" />
-                  Overall Summary
-                </h4>
-                <p className="rounded-lg bg-muted p-3 text-sm">
-                  {selfAppraisalData.overall_summary}
-                </p>
+      {!isCalibrationStage ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Manager Assessment</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {reviewReadOnly && (
+              <p className="text-sm text-muted-foreground">
+                This packet is currently in <strong>{detail.appraisal.status}</strong>. Review
+                fields remain visible, but they can only be submitted while the packet is in the
+                manager-review stage.
+              </p>
+            )}
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Competency Rating</Label>
+                <Select
+                  value={competencyRating}
+                  onValueChange={setCompetencyRating}
+                  disabled={reviewReadOnly}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select rating" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">1</SelectItem>
+                    <SelectItem value="2">2</SelectItem>
+                    <SelectItem value="3">3</SelectItem>
+                    <SelectItem value="4">4</SelectItem>
+                    <SelectItem value="5">5</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-
-              <div>
-                <h4 className="mb-2 flex items-center gap-2 font-medium">
-                  <Award className="h-4 w-4" />
-                  Key Achievements
-                </h4>
-                <p className="whitespace-pre-line rounded-lg bg-green-50 p-3 text-sm">
-                  {selfAppraisalData.key_achievements}
-                </p>
-              </div>
-
-              <div>
-                <h4 className="mb-2 flex items-center gap-2 font-medium">
-                  <TrendingUp className="h-4 w-4" />
-                  Areas of Improvement (Self-Identified)
-                </h4>
-                <p className="rounded-lg bg-yellow-50 p-3 text-sm">
-                  {selfAppraisalData.areas_of_improvement}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <h4 className="mb-2 font-medium">Training Needs</h4>
-                  <p className="rounded-lg bg-muted p-3 text-sm">
-                    {selfAppraisalData.training_needs}
-                  </p>
-                </div>
-                <div>
-                  <h4 className="mb-2 font-medium">Career Aspirations</h4>
-                  <p className="rounded-lg bg-muted p-3 text-sm">
-                    {selfAppraisalData.career_aspirations}
-                  </p>
+              <div className="space-y-2">
+                <Label>Employee Review Date</Label>
+                <div className="pt-2">
+                  <DateDisplay date={detail.appraisal.selfAppraisalDate ?? null} />
                 </div>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="overall">
-          <Card>
-            <CardHeader>
-              <CardTitle>Overall Review & Recommendations</CardTitle>
-              <CardDescription>
-                Provide overall assessment and development recommendations
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="text-sm font-medium">Overall Performance Rating *</label>
-                  <Select
-                    value={overallReview.overall_rating}
-                    onValueChange={(value) =>
-                      setOverallReview({ ...overallReview, overall_rating: value })
-                    }
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select overall rating" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[5, 4, 3, 2, 1].map((r) => (
-                        <SelectItem key={r} value={r.toString()}>
-                          <span className={ratingLabels[r].color}>
-                            {r} - {ratingLabels[r].label}
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <label className="text-sm font-medium">Promotion Readiness</label>
-                  <Select
-                    value={overallReview.promotion_ready}
-                    onValueChange={(value) =>
-                      setOverallReview({ ...overallReview, promotion_ready: value })
-                    }
-                  >
-                    <SelectTrigger className="mt-1">
-                      <SelectValue placeholder="Select readiness level" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="READY_NOW">Ready Now</SelectItem>
-                      <SelectItem value="READY_IN_1_YEAR">Ready in 1 Year</SelectItem>
-                      <SelectItem value="READY_IN_2_YEARS">Ready in 2+ Years</SelectItem>
-                      <SelectItem value="NOT_READY">Not Ready</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Key Strengths *</label>
-                <Textarea
-                  placeholder="Highlight the employee's key strengths and positive contributions..."
-                  className="mt-1 min-h-[100px]"
-                  value={overallReview.strengths}
-                  onChange={(e) =>
-                    setOverallReview({ ...overallReview, strengths: e.target.value })
-                  }
+            </div>
+            <div className="space-y-2">
+              <Label>Manager Summary</Label>
+              <Textarea
+                rows={4}
+                value={managerSummary}
+                onChange={(event) => setManagerSummary(event.target.value)}
+                disabled={reviewReadOnly}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Manager View of Achievements</Label>
+              <Textarea
+                rows={4}
+                value={managerAchievements}
+                onChange={(event) => setManagerAchievements(event.target.value)}
+                disabled={reviewReadOnly}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Improvement Areas</Label>
+              <Textarea
+                rows={4}
+                value={managerImprovements}
+                onChange={(event) => setManagerImprovements(event.target.value)}
+                disabled={reviewReadOnly}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Recommendations</Label>
+              <Textarea
+                rows={4}
+                value={managerRecommendations}
+                onChange={(event) => setManagerRecommendations(event.target.value)}
+                disabled={reviewReadOnly}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Calibration</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Calibrated Rating</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={5}
+                  step="0.01"
+                  value={calibratedRating}
+                  onChange={(event) => setCalibratedRating(event.target.value)}
                 />
               </div>
-
-              <div>
-                <label className="text-sm font-medium">Development Areas *</label>
-                <Textarea
-                  placeholder="Identify areas where the employee needs to improve..."
-                  className="mt-1 min-h-[100px]"
-                  value={overallReview.development_areas}
-                  onChange={(e) =>
-                    setOverallReview({ ...overallReview, development_areas: e.target.value })
-                  }
-                />
+              <div className="space-y-2">
+                <Label>Final Grade</Label>
+                <Input value={finalGrade} onChange={(event) => setFinalGrade(event.target.value)} />
               </div>
-
-              <div>
-                <label className="text-sm font-medium">Recommendations</label>
-                <Textarea
-                  placeholder="Provide specific recommendations for development, training, or career growth..."
-                  className="mt-1 min-h-[100px]"
-                  value={overallReview.recommendations}
-                  onChange={(e) =>
-                    setOverallReview({ ...overallReview, recommendations: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="text-sm font-medium">Overall Comments</label>
-                <Textarea
-                  placeholder="Any additional comments or feedback..."
-                  className="mt-1"
-                  value={overallReview.overall_comments}
-                  onChange={(e) =>
-                    setOverallReview({ ...overallReview, overall_comments: e.target.value })
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </div>
+            <div className="space-y-2">
+              <Label>Calibration Notes</Label>
+              <Textarea
+                rows={4}
+                value={calibrationNotes}
+                onChange={(event) => setCalibrationNotes(event.target.value)}
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

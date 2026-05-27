@@ -18,10 +18,8 @@ from app.models.lending.enums import (
     LegalCaseType,
     LegalForumType,
     NPAStatus,
-    OTSPaymentMode,
     OTSStatus,
     RestructureStatus,
-    RestructureType,
     SARFAESIStage,
     WriteOffStatus,
     WriteOffType,
@@ -367,7 +365,7 @@ class OTSProposalCreate(CamelSchema):
     interest_waiver: Decimal = Decimal("0")
     penal_waiver: Decimal = Decimal("0")
     charges_waiver: Decimal = Decimal("0")
-    payment_mode: OTSPaymentMode
+    payment_mode: str
     upfront_amount: Decimal = Decimal("0")
     upfront_due_date: date | None = None
     number_of_installments: int = 1
@@ -382,7 +380,7 @@ class OTSProposalUpdate(CamelSchema):
 
     status: OTSStatus | None = None
     ots_amount: Decimal | None = None
-    payment_mode: OTSPaymentMode | None = None
+    payment_mode: str | None = None
     upfront_amount: Decimal | None = None
     upfront_due_date: date | None = None
     number_of_installments: int | None = None
@@ -451,7 +449,7 @@ class OTSProposalResponse(CamelSchema):
     interest_waiver: Decimal
     penal_waiver: Decimal
     charges_waiver: Decimal
-    payment_mode: OTSPaymentMode
+    payment_mode: str
     upfront_amount: Decimal
     upfront_due_date: date | None
     number_of_installments: int
@@ -482,7 +480,7 @@ class LoanRestructureCreate(CamelSchema):
     """Schema for creating a loan restructure."""
 
     loan_account_id: UUID
-    restructure_type: RestructureType
+    restructure_type: str
     proposal_date: date
     pre_outstanding_principal: Decimal
     pre_outstanding_interest: Decimal
@@ -536,6 +534,15 @@ class LoanRestructureApprove(CamelSchema):
     approval_authority: str
 
 
+class LoanRestructureReject(CamelSchema):
+    """Schema for rejecting a restructure."""
+
+    rejected_by_id: UUID
+    rejected_by_name: str
+    rejection_reason: str
+    approval_authority: str | None = None
+
+
 class LoanRestructureImplement(CamelSchema):
     """Schema for implementing a restructure."""
 
@@ -549,7 +556,7 @@ class LoanRestructureResponse(CamelSchema):
     id: UUID
     loan_account_id: UUID
     restructure_reference: str
-    restructure_type: RestructureType
+    restructure_type: str
     status: RestructureStatus
     proposal_date: date
     pre_outstanding_principal: Decimal
@@ -1128,7 +1135,7 @@ class RestructureListResponse(CamelSchema):
 
     id: UUID
     restructure_reference: str
-    restructure_type: RestructureType
+    restructure_type: str
     loan_account_id: UUID
     loan_account_number: str | None = None
     entity_id: UUID | None = None

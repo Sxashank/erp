@@ -31,19 +31,24 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useLenders, type LenderFilters } from '@/hooks/lending/useLenders';
 import type { LenderListItem } from '@/types/lending';
 
-const lenderTypeLabels: Record<string, { label: string; color: string }> = {
-  BANK: { label: 'Bank', color: 'bg-blue-100 text-blue-700' },
-  DFI: { label: 'DFI', color: 'bg-green-100 text-green-700' },
-  MF: { label: 'Mutual Fund', color: 'bg-purple-100 text-purple-700' },
-  NCD: { label: 'NCD', color: 'bg-orange-100 text-orange-700' },
-  CP: { label: 'Commercial Paper', color: 'bg-pink-100 text-pink-700' },
-  SECURITIZATION: { label: 'Securitization', color: 'bg-indigo-100 text-indigo-700' },
-  SUBORDINATED_DEBT: { label: 'Sub Debt', color: 'bg-amber-100 text-amber-700' },
-  OTHER: { label: 'Other', color: 'bg-gray-100 text-gray-700' },
-};
+const badgePalette = [
+  'bg-blue-100 text-blue-700',
+  'bg-green-100 text-green-700',
+  'bg-purple-100 text-purple-700',
+  'bg-orange-100 text-orange-700',
+  'bg-pink-100 text-pink-700',
+  'bg-indigo-100 text-indigo-700',
+  'bg-amber-100 text-amber-700',
+  'bg-teal-100 text-teal-700',
+];
+
+function fallbackLabel(value: string): string {
+  return value.replace(/_/g, ' ');
+}
 
 export default function LenderList() {
   const navigate = useNavigate();
@@ -54,7 +59,20 @@ export default function LenderList() {
     pageSize: 100,
     ...(typeFilter !== 'ALL' && { lenderType: typeFilter }),
   };
-  const { data, isLoading: loading, isError, error, refetch } = useLenders(filters);
+  const { data, isLoading: lendersLoading, isError, error, refetch } = useLenders(filters);
+  const lenderTypesQuery = useLendingOptionRows('LENDER_TYPE');
+  const lenderTypeOptions =
+    lenderTypesQuery.data?.items.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.code ?? ''),
+    })) ?? [];
+  const loading = lendersLoading || lenderTypesQuery.isLoading;
+  const lenderTypeLabel = (value: string) =>
+    lenderTypeOptions.find((option) => option.value === value)?.label ?? fallbackLabel(value);
+  const lenderTypeColor = (value: string) => {
+    const index = lenderTypeOptions.findIndex((option) => option.value === value);
+    return index >= 0 ? badgePalette[index % badgePalette.length] : 'bg-gray-100 text-gray-700';
+  };
 
   // Client-side search-as-you-type — BE doesn't filter by name on this endpoint.
   const allLenders: LenderListItem[] = data?.items ?? [];
@@ -160,12 +178,11 @@ export default function LenderList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Types</SelectItem>
-                  <SelectItem value="BANK">Bank</SelectItem>
-                  <SelectItem value="DFI">DFI</SelectItem>
-                  <SelectItem value="MF">Mutual Fund</SelectItem>
-                  <SelectItem value="NCD">NCD</SelectItem>
-                  <SelectItem value="CP">Commercial Paper</SelectItem>
-                  <SelectItem value="SECURITIZATION">Securitization</SelectItem>
+                  {lenderTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -198,13 +215,16 @@ export default function LenderList() {
                     Loading lenders...
                   </TableCell>
                 </TableRow>
-              ) : isError ? (
+              ) : isError || lenderTypesQuery.isError ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8">
                     <ErrorState
                       title="Could not load lenders"
-                      error={error}
-                      onRetry={() => refetch()}
+                      error={error ?? lenderTypesQuery.error}
+                      onRetry={() => {
+                        refetch();
+                        lenderTypesQuery.refetch();
+                      }}
                     />
                   </TableCell>
                 </TableRow>
@@ -216,7 +236,6 @@ export default function LenderList() {
                 </TableRow>
               ) : (
                 lenders.map((lender) => {
-                  const typeConfig = lenderTypeLabels[lender.lenderType] ?? lenderTypeLabels.OTHER;
                   const sanctioned = Number(lender.totalSanctionLimit ?? 0);
                   const available = Number(lender.availableLimit ?? 0);
                   const utilized = sanctioned - available;
@@ -238,8 +257,8 @@ export default function LenderList() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline" className={typeConfig.color}>
-                          {typeConfig.label}
+                        <Badge variant="outline" className={lenderTypeColor(lender.lenderType)}>
+                          {lenderTypeLabel(lender.lenderType)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

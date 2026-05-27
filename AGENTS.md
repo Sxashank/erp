@@ -19,6 +19,8 @@ If a rule here conflicts with a prompt, habit, or external style guide, this fil
 
 **What this is.** SMFC ERP is a **multi-tenant SaaS** serving Indian NBFCs under RBI Scale-Based Regulation. One deployment runs many NBFCs; each NBFC is one `Organization` row and its data is isolated by PostgreSQL Row-Level Security keyed on `app.current_org_id`. It covers the full NBFC back office and front office: general ledger, loan origination (LOS), loan management (LMS), collections, NPA and legal, treasury and ALM, HRIS and payroll, fixed assets, TDS, GST, bank reconciliation, fixed deposits, compliance, document management, notifications, BI, and portals for borrowers, employees, and vendors.
 
+**NBFC-first lending invariant — not an aggregator.** The lending platform represents the tenant NBFC, such as SFC, as the lender of record. Borrowers apply to the NBFC, receive sanction/KFS/loan documents from the NBFC, repay the NBFC, and raise servicing requests with the NBFC. Borrower-facing flows must never expose source lenders, SFC borrowing facilities, lender loans, cost of funds, funding-source mappings, internal loan account generation, treasury repayment obligations, spread/NIM, or ALM data. Treasury lenders/funding sources, borrowings, drawdowns, lender repayment schedules, ALM, spread analytics, and source-of-funds deployments are internal admin/treasury workflows only. Customer-facing loan application language must use "SFC review", "SFC sanction", "SFC loan account", and "SFC certificate"; terms such as "aggregator", "marketplace lender", "scheme lender review", or "source lender" are forbidden in borrower application paths unless the feature is an explicit post-loan transfer-out flow.
+
 **Current client rollout scope — all modules, manual-first.** The client has confirmed that the application must show the full ERP module set, not only loan modules. Loan-only routing, loan-only sidebars, or feature gates that hide non-loan ERP modules are temporary development aids only and must not be the shipped default. Every module must remain usable through a **manual operational flow** first: users can create, approve, post, upload, reconcile, record, and report data manually without requiring any external bank, tax, bureau, payment, or government portal integration. Automated flows may be added later, but they must sit beside the manual flow and must not replace it until the client explicitly approves the release.
 
 **Automation stance for this phase.** Internal automation is allowed where it needs no external integration and improves correctness or productivity, for example schedule generation, accrual calculation, ageing buckets, DPD/NPA classification, provisioning calculations, dashboard rollups, report exports, voucher generation from approved internal events, reminders, validations, and workflow routing. External integrations are release-gated future capabilities. Until released, the UI may expose configuration or status only where useful, but operational screens must continue to work manually and must clearly avoid pretending that a live external connection exists.
@@ -68,7 +70,8 @@ erp/
 ├── tailwind.config.cjs · postcss.config.cjs
 ├── playwright.config.ts             # Playwright config (to be added)
 ├── docker-compose.yml               # dev services
-├── start.sh                         # one-shot dev bringup
+├── start.sh                         # legacy one-shot dev bringup
+├── dev.sh                           # canonical local frontend/backend runner
 ├── index.html                       # Vite entry
 ├── src/                             # frontend (see §5)
 ├── backend/                         # backend (see §6)
@@ -154,6 +157,7 @@ Violations (e.g. an endpoint calling a repository directly, a service issuing an
 - **New request schemas are camelCase-compatible.** Frontend-facing mutation bodies should inherit `CamelSchema` so Pydantic accepts both canonical Python `snake_case` and frontend `camelCase`; new frontend services must send one documented shape, preferably `camelCase`.
 - **Legacy `BaseSchema` endpoints are migration debt.** If a touched endpoint still emits or requires `snake_case` JSON for the frontend, migrate the backend schema/route contract to `CamelSchema` instead of adding client aliases.
 - **Frontend types use camelCase only.** Shared TypeScript DTOs and page code must not define duplicate `snake_case`/`camelCase` fields, local mappers, or fallback aliases. The service layer consumes one documented API contract and pages consume typed service output.
+- **Multipart/form-data keys are part of the same contract.** Upload endpoints consumed by React should expose camelCase aliases such as `documentCode`, `documentName`, and `documentCategory`; frontend services must not send snake_case form keys.
 
 ### 3.4 Multi-tenancy
 
@@ -166,12 +170,12 @@ Violations (e.g. an endpoint calling a repository directly, a service issuing an
 
 | Env            | Frontend URL          | Backend URL           | DB                      | Notes                          |
 | -------------- | --------------------- | --------------------- | ----------------------- | ------------------------------ |
-| local          | http://localhost:5176 | http://localhost:8001 | Docker postgres:15      | Set by `start.sh`              |
+| local          | http://localhost:5176 | http://localhost:8001 | Docker postgres:15      | Managed by `./dev.sh`          |
 | docker-compose | http://localhost:3000 | http://localhost:8000 | container `db`          | `docker compose up`            |
 | staging        | TBD                   | TBD                   | managed Postgres        | per-branch previews encouraged |
 | production     | TBD                   | TBD                   | managed Postgres + PITR | blue/green; locked migrations  |
 
-Frontend dev port is **5176** (set in `vite.config.ts`). Backend dev port is **8001** (set in `start.sh`). `VITE_API_URL` defaults to `http://localhost:8001/api/v1` (see `src/services/api.ts`).
+Frontend dev port is **5176** (set in `vite.config.ts`). Backend dev port is **8001** (managed by `./dev.sh`). `VITE_API_URL` defaults to `http://localhost:8001/api/v1` (see `src/services/api.ts`).
 
 ---
 
@@ -240,6 +244,26 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Services: `app/services/lending/{entity,application,appraisal,sanction,kyc}_service.py`.
 - Integrations: CKYC, AA, CIBIL/Experian/Crif, CERSAI (charge registration at sanction acceptance).
 - Spec: `refdocs/Phase2_*`.
+
+#### Lending/Treasury setup SSOT rules
+
+- `/admin/lending/masters` is the canonical setup command center for lending, checklist, treasury option sets, borrowing option sets, rate/day-count masters, provisions, fees, lifecycle events, templates, and workflow controls. Settings links may point here, but must not create a parallel setup surface.
+- Backend master APIs have one typed family only: `GET /lending/masters/catalog` and `GET/POST/PUT/DELETE /lending/masters/{masterKey}/rows`. Do not reintroduce parallel generic/rich master routers or frontend calls to `/lending/masters/generic`.
+- SSOT ownership is explicit:
+  - **Code-owned:** workflow states, audit state transitions, permission constants, accounting event types, immutable RBI/state-machine semantics, and internal lifecycle event codes.
+  - **Tenant-owned masters:** option sets, policy thresholds, DPD/SMA/NPA/provision buckets, ALM buckets, templates, document catalogs, sector/rating/security lists, IIF categories, and treasury/borrowing option sets.
+  - **Product-owned policy:** borrower applicant fields, eligibility rules, amount/tenure/rate bounds, repayment choices, moratorium/prepayment/security rules, required borrower documents, sanction checklist templates, and disbursement gates.
+- Every finite enum/option in loan modules must declare one SSOT. Code-owned enums live in backend state-machine/permission/event modules and frontend types must be derived from the API/shared type, not hand-written page arrays. Business-policy enums live in tenant masters or product policy rows; seed values are editable defaults, not source code. Frontend `z.enum([...])`, Python `Literal[...]`, page constants, or silent fallback labels are forbidden for business-policy choices such as rate type, repayment mode, document type, security type, covenant type, DPD/provision/ALM buckets, and IIF scheme/claim choices.
+- Master dropdown values come from DB/catalog rows, never page-level constants. Loan product category, entity type, maritime/industry sector, loan rate type, rate reset frequency, repayment frequency, repayment mode, moratorium type, day-count convention, security category/type/nature, charge type, valuation method, treasury lender type, borrowing type, rating agency, rate benchmark, condition/covenant type, waiver/approval authority, OTS payment mode, restructure type, collection/legal type, and IIF scheme/claim/document type dropdowns are governed master data when exposed to users.
+- Policy-changing validation must read product policy and tenant masters. Hardcoded fallbacks for rate, repayment, document, provisioning, ageing, ALM, legal, IIF, or treasury business choices are defects unless the value is explicitly code-owned above.
+- Checklist taxonomy is non-negotiable:
+  - `Checklist Item Catalog` (`mst_checklist_item_catalog`) is the reusable SSOT.
+  - `Product Document Requirements` (`los_document_checklist`) are product-specific borrower upload requirements sourced from catalog items.
+  - `Approval Checklist Templates` (`mst_approval_checklist_template` + items) are sanction/appraisal gates sourced from catalog items.
+  - `Loan Checklist` rows are transactional per-application snapshots, not master data.
+- Free-text checklist rows are blocked. Add or edit the catalog item first, then attach it to a product requirement or approval template.
+- Treasury lenders/funding sources are operational party records. Borrowing facilities, drawdowns, schedules, repayments, and source-of-funds deployments are transaction/facility lifecycle records. Do not move them into generic master tables.
+- Tenant-scoped lending/treasury APIs must derive organization context from auth/RLS. No `organizationId` request-body/query parameter is allowed except audited platform-admin routes.
 
 ### 4.8 Lending — LMS, Collections, NPA, Legal
 
@@ -432,7 +456,7 @@ Every form in this codebase uses react-hook-form + zod, rendered through shadcn'
 - **Percentage fields**: `z.coerce.number().min(0).max(100)` for rates. Render with `<PercentageInput>`.
 - **Date fields**: `z.string().date()` for business dates (ISO `yyyy-MM-dd`). Render with `<DatePicker>`.
 - **PII fields**: `<PANField>`, `<AadhaarField>`, `<PhoneField>`, `<EmailField>`, `<GSTINField>` — these validate format AND mask display by default.
-- **Required validation**: use `z.string().min(1, "Required")` + trim; for selects, `z.string().uuid()` or a `z.enum([...])`.
+- **Required validation**: use `z.string().min(1, "Required")` + trim; for selects, use `z.string().uuid()` for ID-backed masters and `z.enum([...])` only for code-owned enums. Master-backed business options, especially loan policy options, must validate against API/product-policy data rather than hardcoded enum arrays.
 - **Cross-field rules**: `.superRefine((val, ctx) => {...})`. Never write ad-hoc `useEffect` validation in the component.
 - **Multi-step**: `<WizardShell>` with step-scoped schemas; final submit validates the merged result. Each step's `onNext` triggers `form.trigger([...fieldNames])`.
 - **Submit buttons**: `disabled={form.formState.isSubmitting}`, with a spinner inside. The `<FormShell>` renders the action bar; pages do not add their own submit row.
@@ -593,6 +617,8 @@ A blank screen during fetch is a defect. A silent failure is a defect. "It was b
 **Current phase: no live external integrations by default.** Do not build a workflow that requires a bank feed, GSTN/e-waybill portal, TRACES/NSDL, CKYC, bureau, NACH, payment gateway, EPFO/ESIC, SMS provider, e-sign, CERSAI, NeSL, or any other third-party system to complete the user's job. The manual path is the canonical path until the client approves that integration for release. When an external integration is added, it must be optional, tenant-scoped, feature-flagged, auditable, and must fall back to the manual workflow without data loss.
 
 **Manual and automated flows share the same domain model.** Do not create a separate "manual-only" data structure or a parallel "automated-only" workflow. Store the business event once, with source metadata such as manual entry, file import, system calculation, or external webhook. This lets the organization start manual and later automate without migration-heavy rewrites.
+
+**Legacy loan onboarding is a first-class flow.** A client may already have corporate/project loans in Excel before go-live. Do not force those records through the new-application wizard or rewrite their dates to today. Import them through a cutover-aware LMS onboarding path that records the original sanction/account dates, current outstanding balances, all historical EMI/EPI schedule rows, and manual receipt history. Historical receipts are operational LMS history; GL accounting starts from the approved cutover opening balances unless a separate accounting migration is explicitly approved.
 
 Each external vendor lives under `app/integrations/<vendor>/` with:
 
@@ -1248,13 +1274,19 @@ pnpm install
 ### 14.2 Everyday dev
 
 ```bash
-# One shot:
-./start.sh            # checks PG/Redis, brings up backend + frontend
-
-# Or separately:
-cd backend && source .venv/bin/activate && uvicorn app.main:app --reload --port 8001
-pnpm dev              # http://localhost:5176
+# Canonical local stack lifecycle (required):
+./dev.sh start        # idempotent start; checks PG/Redis, starts missing services, writes /tmp logs
+./dev.sh restart      # restart both services through the shared runner
+./dev.sh status       # show listeners + HTTP health
+./dev.sh logs         # tail both service logs
+./dev.sh stop         # stop both service processes
 ```
+
+**Service-management rule (non-negotiable):**
+
+- Local frontend/backend lifecycle must go through `./dev.sh`.
+- Do **not** ad hoc start, stop, or kill `uvicorn`, `vite`, `pnpm dev`, or `pnpm preview` directly while verifying the product, unless you are editing `dev.sh` itself.
+- Browser/E2E/manual verification must target the stack currently managed by `./dev.sh`, not a parallel local server.
 
 ### 14.3 Tests
 

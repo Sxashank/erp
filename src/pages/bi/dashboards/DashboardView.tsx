@@ -12,9 +12,10 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { hasPermission, Permissions } from '@/lib/permissions';
 import { biDashboardApi } from '@/services/biApi';
+import { useAuthStore } from '@/stores/authStore';
 import type { Dashboard } from '@/types/bi';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export function DashboardView() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -23,8 +24,7 @@ export function DashboardView() {
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Get user permissions
-  const userPermissions = JSON.parse(localStorage.getItem('user_permissions') || '["SUPER_ADMIN"]');
+  const userPermissions = Array.from(useAuthStore((state) => state.permissions));
   const canEdit = hasPermission(userPermissions, Permissions.BI_DASHBOARD_UPDATE);
 
   const fetchDashboard = async () => {

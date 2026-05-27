@@ -115,13 +115,10 @@ class ReceiptService:
         mode = _receipt_mode(receipt_mode or payment_mode or ReceiptMode.NEFT)
         instrument = instrument_number or reference_number
         bank = instrument_bank or bank_name
-        resolved_receipt_account_id = (
-            receipt_account_id
-            or await self._resolve_bank_ledger_account(
-                organization_id=loan.organization_id,
-                allow_flag="allow_receipts",
-                account_label="receipt",
-            )
+        resolved_receipt_account_id = receipt_account_id or await self._resolve_bank_ledger_account(
+            organization_id=loan.organization_id,
+            allow_flag="allow_receipts",
+            account_label="receipt",
         )
         resolved_suspense_account_id = (
             receipt_suspense_account_id or loan.receipt_suspense_account_id
@@ -215,7 +212,9 @@ class ReceiptService:
             "interest_allocated": receipt.interest_allocated,
             "penal_interest_allocated": receipt.penal_interest_allocated,
             "charges_allocated": receipt.charges_allocated,
-            "status": receipt.status.value if hasattr(receipt.status, "value") else str(receipt.status),
+            "status": (
+                receipt.status.value if hasattr(receipt.status, "value") else str(receipt.status)
+            ),
         }
 
         if allocation_method == "specific" and specific_allocations:
@@ -224,7 +223,9 @@ class ReceiptService:
             allocations = await self._allocate_fifo(receipt, user_id=user_id)
 
         loan = (
-            await self.db.execute(select(LoanAccount).where(LoanAccount.id == receipt.loan_account_id))
+            await self.db.execute(
+                select(LoanAccount).where(LoanAccount.id == receipt.loan_account_id)
+            )
         ).scalar_one()
         if not receipt.voucher_id:
             cash_entries = await self._post_receipt_cash_to_gl(
@@ -254,7 +255,11 @@ class ReceiptService:
                 "interest_allocated": receipt.interest_allocated,
                 "penal_interest_allocated": receipt.penal_interest_allocated,
                 "charges_allocated": receipt.charges_allocated,
-                "status": receipt.status.value if hasattr(receipt.status, "value") else str(receipt.status),
+                "status": (
+                    receipt.status.value
+                    if hasattr(receipt.status, "value")
+                    else str(receipt.status)
+                ),
             }
             await record_financial_action(
                 self.db,
@@ -273,12 +278,16 @@ class ReceiptService:
                     "loan_account_number": loan.loan_account_number,
                     "allocation_breakdown": [
                         {
-                            "installment_id": str(a.installment_id)
-                            if getattr(a, "installment_id", None) is not None
-                            else None,
-                            "component": a.allocation_component.value
-                            if hasattr(getattr(a, "allocation_component", None), "value")
-                            else str(getattr(a, "allocation_component", "")),
+                            "installment_id": (
+                                str(a.installment_id)
+                                if getattr(a, "installment_id", None) is not None
+                                else None
+                            ),
+                            "component": (
+                                a.allocation_component.value
+                                if hasattr(getattr(a, "allocation_component", None), "value")
+                                else str(getattr(a, "allocation_component", ""))
+                            ),
                             "allocated_amount": str(getattr(a, "allocated_amount", "")),
                             "sequence": getattr(a, "allocation_sequence", None),
                         }
@@ -288,6 +297,33 @@ class ReceiptService:
                 },
                 change_reason="Receipt allocated to dues",
             )
+
+        # Lifecycle event — RECEIPT_ALLOCATED on the loan account.
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.db).record_event(
+            organization_id=receipt.organization_id,
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=receipt.loan_account_id,
+            event_type="RECEIPT_ALLOCATED",
+            actor_kind=LifecycleActorKind.LENDER if user_id else LifecycleActorKind.SYSTEM,
+            actor_user_id=user_id,
+            business_number=receipt.receipt_number,
+            payload={
+                "receipt_id": str(receipt.id),
+                "receipt_amount": float(receipt.receipt_amount),
+                "principal": float(receipt.principal_allocated or 0),
+                "interest": float(receipt.interest_allocated or 0),
+                "penal_interest": float(receipt.penal_interest_allocated or 0),
+                "charges": float(receipt.charges_allocated or 0),
+                "allocation_method": allocation_method,
+                "allocation_count": len(allocations),
+            },
+        )
 
         return allocations
 
@@ -766,6 +802,32 @@ class ReceiptService:
 
         await self._update_loan_status(receipt.loan_account_id)
         await self.db.flush()
+
+        # Lifecycle event — RECEIPT_BOUNCED captures the reversal so the
+        # timeline reflects what happened to the borrower's money.
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.db).record_event(
+            organization_id=receipt.organization_id,
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=receipt.loan_account_id,
+            event_type="RECEIPT_BOUNCED",
+            actor_kind=LifecycleActorKind.LENDER if user_id else LifecycleActorKind.SYSTEM,
+            actor_user_id=user_id,
+            business_number=receipt.receipt_number,
+            reason_text=reversal_reason or reason,
+            payload={
+                "receipt_id": str(receipt.id),
+                "reversal_date": (reversal_date or date.today()).isoformat(),
+                "allocations_reversed": len(allocations),
+            },
+            regulatory_tags=["RECEIPT_REVERSED"],
+        )
+
         await self.db.refresh(receipt)
         return receipt
 

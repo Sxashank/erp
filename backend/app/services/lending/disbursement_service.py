@@ -181,6 +181,8 @@ class DisbursementService:
         """
         from app.core.maker_checker import ensure_maker_is_not_checker
 
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
         result = await self.db.execute(
             select(Disbursement).where(Disbursement.id == disbursement_id)
         )
@@ -193,6 +195,13 @@ class DisbursementService:
 
         if not disbursement.conditions_verified:
             raise ValueError("Pre-disbursement conditions must be verified before approval")
+
+        # §8.4 maker-checker: the operations user who raised the disbursement
+        # request cannot also approve it — this is a cash-movement action.
+        ensure_maker_is_not_checker(
+            maker_user_id=disbursement.created_by,
+            checker_user_id=user_id,
+        )
 
         # §8.4 maker-checker: the operations user who raised the disbursement
         # request cannot also approve it — this is a cash-movement action.
@@ -326,9 +335,11 @@ class DisbursementService:
         # domain audit row (§8.5) so reviewers can see the APPROVED → PROCESSED
         # transition with UTR + processed_date.
         before_snapshot = {
-            "status": disbursement.status.value
-            if hasattr(disbursement.status, "value")
-            else str(disbursement.status),
+            "status": (
+                disbursement.status.value
+                if hasattr(disbursement.status, "value")
+                else str(disbursement.status)
+            ),
             "approved_amount": disbursement.approved_amount,
             "disbursed_amount": disbursement.disbursed_amount,
             "disbursement_charges": disbursement.disbursement_charges,
@@ -389,6 +400,49 @@ class DisbursementService:
         await self.db.refresh(disbursement)
         await self.db.refresh(loan)
 
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.db).record_event(
+            organization_id=loan.organization_id,
+            subject_type=LifecycleSubjectType.DISBURSEMENT,
+            subject_id=disbursement.id,
+            event_type="DISBURSEMENT_PROCESSED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=user_id,
+            business_number=disbursement.disbursement_reference,
+            state_from="APPROVED",
+            state_to="PROCESSED",
+            payload={
+                "disbursed_amount": float(disbursed_amount),
+                "disbursement_charges": float(disbursement_charges or 0),
+                "net_disbursement": float(disbursement.net_disbursement or 0),
+                "utr_number": utr_number,
+                "cheque_number": cheque_number,
+                "disbursement_date": actual_date.isoformat(),
+                "loan_account_id": str(loan.id),
+            },
+            regulatory_tags=["DISBURSEMENT_PROCESSED"],
+        )
+        # Also emit against the LoanAccount so the loan timeline shows it.
+        await LifecycleService(self.db).record_event(
+            organization_id=loan.organization_id,
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=loan.id,
+            event_type="DISBURSEMENT_PROCESSED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=user_id,
+            business_number=getattr(loan, "loan_account_number", None),
+            payload={
+                "disbursement_id": str(disbursement.id),
+                "disbursement_reference": disbursement.disbursement_reference,
+                "disbursed_amount": float(disbursed_amount),
+            },
+        )
+
         # Domain audit: disbursement processed — §8.5 / §4.8.
         # Captures the APPROVED → PROCESSED transition with UTR + processed_date.
         if user_id is not None:
@@ -402,9 +456,11 @@ class DisbursementService:
                 user_id=user_id,
                 before=before_snapshot,
                 after={
-                    "status": disbursement.status.value
-                    if hasattr(disbursement.status, "value")
-                    else str(disbursement.status),
+                    "status": (
+                        disbursement.status.value
+                        if hasattr(disbursement.status, "value")
+                        else str(disbursement.status)
+                    ),
                     "approved_amount": disbursement.approved_amount,
                     "disbursed_amount": disbursement.disbursed_amount,
                     "disbursement_charges": disbursement.disbursement_charges,
@@ -420,9 +476,7 @@ class DisbursementService:
                     "loan_account_id": str(loan.id),
                     "loan_account_number": loan.loan_account_number,
                     "source_account_id": str(resolved_source_account_id),
-                    "voucher_id": str(disbursement.voucher_id)
-                    if disbursement.voucher_id
-                    else None,
+                    "voucher_id": str(disbursement.voucher_id) if disbursement.voucher_id else None,
                     "gl_entry_count": len(gl_entries) if gl_entries else 0,
                 },
                 change_reason="Disbursement processed and funds released",
@@ -682,6 +736,25 @@ class DisbursementService:
             base_query.order_by(Disbursement.request_date.desc()).offset(skip).limit(limit)
         )
         return list(result.scalars().all()), total
+
+    async def get_disbursement_for_org(
+        self,
+        organization_id: UUID,
+        disbursement_id: UUID,
+    ) -> Disbursement | None:
+        """Fetch a single disbursement with tenant ownership enforced."""
+        result = await self.db.execute(
+            select(Disbursement)
+            .join(LoanAccount, Disbursement.loan_account_id == LoanAccount.id)
+            .where(
+                Disbursement.id == disbursement_id,
+                LoanAccount.organization_id == organization_id,
+            )
+            .options(
+                selectinload(Disbursement.loan_account).selectinload(LoanAccount.entity),
+            )
+        )
+        return result.scalar_one_or_none()
 
     async def get_disbursements(
         self,

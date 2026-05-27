@@ -55,34 +55,18 @@ import {
 import {
   useEntities,
   type EntityFilters,
-  type EntityTypeValue,
   type EntityStatusValue,
-  type RiskCategoryValue,
 } from '@/hooks/lending/useEntities';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from '@/lib/logger';
 import { entityApi } from '@/services/lending';
-
-const ENTITY_TYPES: { value: EntityTypeValue; label: string }[] = [
-  { value: 'CORPORATE', label: 'Corporate' },
-  { value: 'LLP', label: 'LLP' },
-  { value: 'PARTNERSHIP', label: 'Partnership Firm' },
-  { value: 'TRUST', label: 'Trust' },
-  { value: 'PROPRIETORSHIP', label: 'Proprietorship' },
-  { value: 'SOCIETY', label: 'Society' },
-];
 
 const ENTITY_STATUSES: { value: EntityStatusValue; label: string }[] = [
   { value: 'PROSPECT', label: 'Prospect' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'INACTIVE', label: 'Inactive' },
   { value: 'BLACKLISTED', label: 'Blacklisted' },
-];
-
-const RISK_CATEGORIES: { value: RiskCategoryValue; label: string }[] = [
-  { value: 'LOW', label: 'Low Risk' },
-  { value: 'MEDIUM', label: 'Medium Risk' },
-  { value: 'HIGH', label: 'High Risk' },
 ];
 
 const PAGE_SIZES = [10, 25, 50, 100];
@@ -94,15 +78,19 @@ export default function EntityList() {
   const [searchParams, setSearchParams] = useSearchParams();
 
   const [searchInput, setSearchInput] = useState(searchParams.get('search') ?? '');
+  const entityTypesQuery = useLendingOptionRows('ENTITY_TYPE_CORPORATE');
+  const riskGradesQuery = useLendingOptionRows('RISK_GRADE');
+  const entityTypes = masterRowsToOptions(entityTypesQuery.data?.items);
+  const riskGrades = masterRowsToOptions(riskGradesQuery.data?.items);
 
   const filters: EntityFilters = useMemo(
     () => ({
       search: searchParams.get('search') || undefined,
-      entityType: (searchParams.get('entity_type') as EntityTypeValue) || undefined,
+      entityType: searchParams.get('entityType') || undefined,
       status: (searchParams.get('status') as EntityStatusValue) || undefined,
-      riskCategory: (searchParams.get('risk_category') as RiskCategoryValue) || undefined,
+      riskCategory: searchParams.get('riskCategory') || undefined,
       page: parseInt(searchParams.get('page') ?? '1', 10),
-      pageSize: parseInt(searchParams.get('page_size') ?? '25', 10),
+      pageSize: parseInt(searchParams.get('pageSize') ?? '25', 10),
     }),
     [searchParams],
   );
@@ -192,14 +180,14 @@ export default function EntityList() {
             </div>
             <Select
               value={filters.entityType || 'all'}
-              onValueChange={(v) => updateParam('entity_type', v === 'all' ? undefined : v)}
+              onValueChange={(v) => updateParam('entityType', v === 'all' ? undefined : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Entity Type" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                {ENTITY_TYPES.map((t) => (
+                {entityTypes.map((t) => (
                   <SelectItem key={t.value} value={t.value}>
                     {t.label}
                   </SelectItem>
@@ -224,14 +212,14 @@ export default function EntityList() {
             </Select>
             <Select
               value={filters.riskCategory || 'all'}
-              onValueChange={(v) => updateParam('risk_category', v === 'all' ? undefined : v)}
+              onValueChange={(v) => updateParam('riskCategory', v === 'all' ? undefined : v)}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Risk Category" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Risk Levels</SelectItem>
-                {RISK_CATEGORIES.map((r) => (
+                {riskGrades.map((r) => (
                   <SelectItem key={r.value} value={r.value}>
                     {r.label}
                   </SelectItem>
@@ -245,7 +233,7 @@ export default function EntityList() {
               {filters.search && <Badge variant="secondary">Search: {filters.search}</Badge>}
               {filters.entityType && (
                 <Badge variant="secondary">
-                  Type: {ENTITY_TYPES.find((t) => t.value === filters.entityType)?.label}
+                  Type: {entityTypes.find((t) => t.value === filters.entityType)?.label}
                 </Badge>
               )}
               {filters.status && (
@@ -255,7 +243,7 @@ export default function EntityList() {
               )}
               {filters.riskCategory && (
                 <Badge variant="secondary">
-                  Risk: {RISK_CATEGORIES.find((r) => r.value === filters.riskCategory)?.label}
+                  Risk: {riskGrades.find((r) => r.value === filters.riskCategory)?.label}
                 </Badge>
               )}
               <Button variant="ghost" size="sm" onClick={clearFilters}>
@@ -338,7 +326,7 @@ export default function EntityList() {
                     </TableCell>
                     <TableCell>
                       <Badge variant="outline">
-                        {ENTITY_TYPES.find((t) => t.value === entity.entityType)?.label ??
+                        {entityTypes.find((t) => t.value === entity.entityType)?.label ??
                           entity.entityType}
                       </Badge>
                     </TableCell>
@@ -406,7 +394,7 @@ export default function EntityList() {
                 <span className="text-sm text-muted-foreground">Rows per page:</span>
                 <Select
                   value={String(filters.pageSize ?? 25)}
-                  onValueChange={(v) => updateParam('page_size', v)}
+                  onValueChange={(v) => updateParam('pageSize', v)}
                 >
                   <SelectTrigger className="w-[70px]">
                     <SelectValue />

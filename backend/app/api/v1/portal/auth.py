@@ -9,14 +9,21 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_db
-from app.database import clear_tenant_context, set_tenant_context
 from app.config import settings
+from app.core.exceptions import (
+    AppException,
+    BadRequestException,
+    NotFoundException,
+    ServiceUnavailableException,
+    UnauthorizedException,
+)
+from app.core.exceptions import ForbiddenException as _ForbiddenException
 from app.core.rate_limit import portal_generic_limit, portal_login_limit
+from app.database import clear_tenant_context, set_tenant_context
 from app.models.masters.organization import Organization
 from app.models.portal.enums import ConsentType, DeviceType, OTPPurpose
 from app.models.portal.portal_user import PortalUser
 from app.services.portal.auth_service import PortalAuthService
-from app.core.exceptions import AppException, BadRequestException, ForbiddenException as _ForbiddenException, NotFoundException, ServiceUnavailableException, UnauthorizedException
 
 router = APIRouter(prefix="/auth", tags=["Portal Auth"])
 
@@ -229,7 +236,7 @@ async def _resolve_portal_organization_id(
     mobile: str,
     explicit_org_id: UUID | None,
 ) -> UUID:
-    """Resolve the scheme portal's organization for login-related OTP flows."""
+    """Resolve the borrower portal's organization for login-related OTP flows."""
 
     if explicit_org_id is not None:
         return explicit_org_id
@@ -273,9 +280,9 @@ async def _resolve_portal_organization_id(
         return active_orgs[0]
 
     raise BadRequestException(
-        detail="Unable to resolve scheme organization for login. "
-            "Provide organization_id or configure PORTAL_DEFAULT_ORGANIZATION_ID.",
-        error_code="UNABLE_TO_RESOLVE_SCHEME_ORGANIZATION_FOR",
+        detail="Unable to resolve portal organization for login. "
+        "Provide organization_id or configure PORTAL_DEFAULT_ORGANIZATION_ID.",
+        error_code="UNABLE_TO_RESOLVE_PORTAL_ORGANIZATION_FOR",
     )
 
 
@@ -284,7 +291,7 @@ async def _resolve_portal_organization_id_for_email(
     email: str,
     explicit_org_id: UUID | None,
 ) -> UUID:
-    """Resolve the scheme portal's organization for internal actor login flows."""
+    """Resolve the borrower portal's organization for internal actor login flows."""
 
     if explicit_org_id is not None:
         return explicit_org_id
@@ -328,9 +335,9 @@ async def _resolve_portal_organization_id_for_email(
         return active_orgs[0]
 
     raise BadRequestException(
-        detail="Unable to resolve scheme organization for this email. "
-            "Provide organization_id or configure PORTAL_DEFAULT_ORGANIZATION_ID.",
-        error_code="UNABLE_TO_RESOLVE_SCHEME_ORGANIZATION_FOR",
+        detail="Unable to resolve portal organization for this email. "
+        "Provide organization_id or configure PORTAL_DEFAULT_ORGANIZATION_ID.",
+        error_code="UNABLE_TO_RESOLVE_PORTAL_ORGANIZATION_FOR",
     )
 
 
@@ -341,7 +348,8 @@ async def _resolve_portal_organization_id_for_email(
 
 @router.post(
     "/send-otp",
-    response_model=SendOTPResponse, response_model_by_alias=True,
+    response_model=SendOTPResponse,
+    response_model_by_alias=True,
     summary="Send OTP",
 )
 @portal_login_limit()
@@ -394,7 +402,8 @@ async def send_otp(
 
 @router.post(
     "/verify-otp",
-    response_model=LoginResponse, response_model_by_alias=True,
+    response_model=LoginResponse,
+    response_model_by_alias=True,
     summary="Verify OTP & Login",
 )
 @portal_login_limit()
@@ -425,7 +434,10 @@ async def verify_otp(
     )
 
     if not is_valid:
-        raise UnauthorizedException(detail=error or "OTP verification failed", error_code="UNAUTHORIZED")
+        raise UnauthorizedException(
+            detail=error or "OTP verification failed",
+            error_code="UNAUTHORIZED",
+        )
 
     # Create session
     login_result = await service.login(
@@ -445,7 +457,8 @@ async def verify_otp(
 
 @router.post(
     "/login/password",
-    response_model=LoginResponse, response_model_by_alias=True,
+    response_model=LoginResponse,
+    response_model_by_alias=True,
     summary="Login internal scheme actor with email and password",
 )
 @portal_login_limit()
@@ -454,7 +467,7 @@ async def login_with_password(
     data: PasswordLoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
-    """Authenticate an invited lender, SMFCL, ministry, or admin actor."""
+    """Authenticate an invited SFC, ministry, or admin portal actor."""
     service = PortalAuthService(db)
     org_id = await _resolve_portal_organization_id_for_email(
         db,
@@ -480,7 +493,8 @@ async def login_with_password(
 
 @router.post(
     "/activate-invite",
-    response_model=LoginResponse, response_model_by_alias=True,
+    response_model=LoginResponse,
+    response_model_by_alias=True,
     summary="Activate an invited internal scheme actor account",
 )
 @portal_generic_limit()
@@ -507,7 +521,8 @@ async def activate_invite(
 
 @router.post(
     "/forgot-password",
-    response_model=ForgotPasswordResponse, response_model_by_alias=True,
+    response_model=ForgotPasswordResponse,
+    response_model_by_alias=True,
     summary="Request a password-reset link for an internal scheme actor",
 )
 @portal_generic_limit()
@@ -525,7 +540,10 @@ async def forgot_password(
     try:
         result = await service.create_password_reset(org_id, data.email)
     except ValueError as exc:
-        raise ServiceUnavailableException(detail=str(exc), error_code="SERVICE_UNAVAILABLE") from exc
+        raise ServiceUnavailableException(
+            detail=str(exc),
+            error_code="SERVICE_UNAVAILABLE",
+        ) from exc
     await db.commit()
 
     if result is None:
@@ -545,7 +563,8 @@ async def forgot_password(
 
 @router.post(
     "/reset-password",
-    response_model=ForgotPasswordResponse, response_model_by_alias=True,
+    response_model=ForgotPasswordResponse,
+    response_model_by_alias=True,
     summary="Reset password using a scheme-portal reset link",
 )
 @portal_generic_limit()
@@ -574,7 +593,8 @@ async def reset_password(
 
 @router.post(
     "/refresh",
-    response_model=LoginResponse, response_model_by_alias=True,
+    response_model=LoginResponse,
+    response_model_by_alias=True,
     summary="Refresh Session",
 )
 @portal_generic_limit()
@@ -643,7 +663,8 @@ async def me(
 
 @router.get(
     "/sessions",
-    response_model=list[SessionResponse], response_model_by_alias=True,
+    response_model=list[SessionResponse],
+    response_model_by_alias=True,
     summary="Get Active Sessions",
 )
 async def get_sessions(
@@ -691,7 +712,8 @@ async def logout_all_sessions(
 
 @router.post(
     "/mfa/setup",
-    response_model=MfaSetupResponse, response_model_by_alias=True,
+    response_model=MfaSetupResponse,
+    response_model_by_alias=True,
     summary="Generate the TOTP secret for the current scheme-portal user",
 )
 async def setup_mfa(
@@ -734,7 +756,8 @@ async def verify_mfa(
 
 @router.get(
     "/devices",
-    response_model=list[DeviceResponse], response_model_by_alias=True,
+    response_model=list[DeviceResponse],
+    response_model_by_alias=True,
     summary="Get Registered Devices",
 )
 async def get_devices(
@@ -832,7 +855,8 @@ async def record_consent(
 
 @router.get(
     "/consents",
-    response_model=ConsentResponse, response_model_by_alias=True,
+    response_model=ConsentResponse,
+    response_model_by_alias=True,
     summary="Get Consents",
 )
 async def get_consents(

@@ -97,10 +97,10 @@ export default function ApplicationList() {
       search: searchParams.get('search') || undefined,
       stage: (searchParams.get('stage') as ApplicationStageValue) || undefined,
       status: (searchParams.get('status') as ApplicationStatusValue) || undefined,
-      fromDate: searchParams.get('date_from') || undefined,
-      toDate: searchParams.get('date_to') || undefined,
+      fromDate: searchParams.get('fromDate') || undefined,
+      toDate: searchParams.get('toDate') || undefined,
       page: parseInt(searchParams.get('page') ?? '1', 10),
-      pageSize: parseInt(searchParams.get('page_size') ?? '25', 10),
+      pageSize: parseInt(searchParams.get('pageSize') ?? '25', 10),
     }),
     [searchParams],
   );
@@ -230,12 +230,12 @@ export default function ApplicationList() {
             <Input
               type="date"
               value={filters.fromDate || ''}
-              onChange={(e) => updateParam('date_from', e.target.value || undefined)}
+              onChange={(e) => updateParam('fromDate', e.target.value || undefined)}
             />
             <Input
               type="date"
               value={filters.toDate || ''}
-              onChange={(e) => updateParam('date_to', e.target.value || undefined)}
+              onChange={(e) => updateParam('toDate', e.target.value || undefined)}
             />
           </div>
           {hasActiveFilters && (
@@ -399,7 +399,7 @@ export default function ApplicationList() {
                 <span className="text-sm text-muted-foreground">Rows per page:</span>
                 <Select
                   value={String(filters.pageSize ?? 25)}
-                  onValueChange={(v) => updateParam('page_size', v)}
+                  onValueChange={(v) => updateParam('pageSize', v)}
                 >
                   <SelectTrigger className="w-[70px]">
                     <SelectValue />

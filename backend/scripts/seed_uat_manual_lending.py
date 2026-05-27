@@ -18,16 +18,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.models  # noqa: F401 - ensure common ORM models are registered
 import app.models.lending  # noqa: F401 - ensure lending ORM models are registered
-from app.core.constants import ALL_PERMISSIONS, Permissions
+from app.core.constants import ALL_PERMISSIONS, Permissions, UserStatus
 from app.core.constants import EntityStatus as OrgStatus
-from app.core.constants import UserStatus
+from app.core.iif_rules import DEFAULT_REQUIRED_DOCUMENTS
 from app.core.security import get_password_hash
 from app.database import async_session_factory
+from app.db.seeds.lending_masters import seed_for_organization as seed_lending_master_catalog
 from app.models.auth.role import Permission, Role, RolePermission, UserRole
 from app.models.auth.user import User
 from app.models.finance.account import Account
@@ -37,13 +38,20 @@ from app.models.lending import (
     ApplicationLenderLoan,
     ApplicationStage,
     ApplicationStatus,
+    ApprovalChecklistTemplate,
+    ApprovalChecklistTemplateItem,
     AssetClassification,
     ChargeType,
+    ChecklistAppliesTo,
+    ChecklistItemCategory,
     ContactType,
     DayCountConvention,
     Disbursement,
     DisbursementMode,
     DisbursementStatus,
+    DocumentCategory,
+    DocumentChecklist,
+    DocumentStage,
     Entity,
     EntityContact,
     EntityStatus,
@@ -94,6 +102,7 @@ from app.models.lending.enums import (
     SubventionClaimStatus,
     SubventionEnrollmentStatus,
 )
+from app.models.lending.masters import ChecklistItemCatalog
 from app.models.lending.treasury import (
     Borrowing,
     BorrowingSchedule,
@@ -113,6 +122,48 @@ ADMIN_USERNAME = "krishna"
 ADMIN_PASSWORD = "ChangeMe123!"
 PORTAL_EMAIL = "borrower.portal.uat@smfc.com"
 PORTAL_PASSWORD = "Portal@123"
+PORTAL_ADMIN_EMAIL = "scheme.admin.uat@smfc.com"
+PORTAL_ADMIN_PASSWORD = "PortalAdmin@123"
+
+PORTAL_DOC_CATALOG_MAP = {
+    "BOARD_RESOLUTION": "KYC_BOARD_RESOLUTION",
+    "FINANCIAL_STATEMENT": "FIN_AUDITED_FINANCIALS",
+    "PROJECT_PROPOSAL": "PROJECT_DPR",
+    "SUPPORTING_DOCUMENT": "SUPPORTING_DOCUMENT",
+}
+
+DOCUMENT_CATEGORY_FROM_CATALOG = {
+    "KYC": DocumentCategory.KYC,
+    "FINANCIAL": DocumentCategory.FINANCIAL,
+    "LEGAL": DocumentCategory.LEGAL,
+    "INSURANCE": DocumentCategory.INSURANCE,
+    "REGULATORY": DocumentCategory.REGULATORY,
+    "PROPERTY": DocumentCategory.SECURITY,
+    "VESSEL": DocumentCategory.SECURITY,
+    "PORT": DocumentCategory.PROJECT,
+    "OTHER": DocumentCategory.PROJECT,
+}
+
+APPROVAL_CHECKLIST_TEMPLATE_ITEMS = [
+    ("KYC_CIN", True, True),
+    ("FIN_CASHFLOW_MODEL", True, True),
+    ("PROJECT_DPR", True, True),
+    ("REG_CERSAI_FILING", True, True),
+    ("LEGAL_VETTING", True, True),
+    ("KYC_BOARD_RESOLUTION", True, True),
+]
+
+APPROVAL_CATEGORY_FROM_CATALOG = {
+    "KYC": ChecklistItemCategory.KYC.value,
+    "LEGAL": ChecklistItemCategory.LEGAL.value,
+    "INSURANCE": ChecklistItemCategory.INSURANCE.value,
+    "REGULATORY": ChecklistItemCategory.COMPLIANCE.value,
+    "FINANCIAL": ChecklistItemCategory.DOCUMENT.value,
+    "PROPERTY": ChecklistItemCategory.DOCUMENT.value,
+    "VESSEL": ChecklistItemCategory.DOCUMENT.value,
+    "PORT": ChecklistItemCategory.DOCUMENT.value,
+    "OTHER": ChecklistItemCategory.OTHER.value,
+}
 
 
 def money(value: str | int | float) -> Decimal:
@@ -356,7 +407,226 @@ async def ensure_product(
         )
         session.add(product)
         await session.flush()
+    await ensure_product_document_checklist(session, product)
     return product
+
+
+async def ensure_product_document_checklist(
+    session: AsyncSession,
+    product: LoanProduct,
+) -> None:
+    """Seed borrower-facing application documents for the portal demo.
+
+    These are application-stage documents only. Sanction, schedule, security,
+    source-of-funds and lender repayment documents remain in internal admin
+    workflows.
+    """
+
+    checklist = [
+        {
+            "code": "BOARD_RESOLUTION",
+            "name": "Board resolution / borrowing authority",
+            "category": DocumentCategory.LEGAL,
+            "mandatory": True,
+            "help": "Upload the board or equivalent authorisation approving the proposed SFC borrowing.",
+            "order": 10,
+        },
+        {
+            "code": "FINANCIAL_STATEMENT",
+            "name": "Audited financial statements",
+            "category": DocumentCategory.FINANCIAL,
+            "mandatory": True,
+            "help": "Upload the latest audited financial statements used for credit appraisal.",
+            "order": 20,
+        },
+        {
+            "code": "PROJECT_PROPOSAL",
+            "name": "Project proposal / DPR",
+            "category": DocumentCategory.PROJECT,
+            "mandatory": True,
+            "help": "Upload the project proposal, DPR, cost estimates or equivalent project note.",
+            "order": 30,
+        },
+        {
+            "code": "SUPPORTING_DOCUMENT",
+            "name": "Additional supporting document",
+            "category": DocumentCategory.PROJECT,
+            "mandatory": False,
+            "help": "Use this for any additional borrower-side project or eligibility document requested by SFC.",
+            "order": 90,
+        },
+    ]
+
+    for item in checklist:
+        catalog_code = PORTAL_DOC_CATALOG_MAP[item["code"]]
+        catalog_item = await scalar_one_or_none(
+            session,
+            select(ChecklistItemCatalog).where(
+                ChecklistItemCatalog.organization_id == product.organization_id,
+                ChecklistItemCatalog.code == catalog_code,
+                ChecklistItemCatalog.deleted_at.is_(None),
+            ),
+        )
+        if catalog_item is None:
+            raise RuntimeError(f"Missing checklist catalog item {catalog_code}")
+        category = DOCUMENT_CATEGORY_FROM_CATALOG[catalog_item.category]
+        stage = DocumentStage(catalog_item.stage)
+        existing = await scalar_one_or_none(
+            session,
+            select(DocumentChecklist).where(
+                DocumentChecklist.product_id == product.id,
+                DocumentChecklist.code == catalog_item.code,
+            ),
+        )
+        if existing:
+            existing.catalog_item_id = catalog_item.id
+            existing.name = catalog_item.label
+            existing.description = item["help"]
+            existing.category = category
+            existing.required_at_stage = stage
+            existing.is_mandatory = item["mandatory"]
+            existing.applicable_entity_types = ["CORPORATE", "LLP"]
+            existing.allowed_file_types = ["pdf", "jpg", "jpeg", "png", "xlsx", "xls"]
+            existing.max_file_size_mb = 50
+            existing.min_file_count = 1
+            existing.max_file_count = 5
+            existing.display_order = item["order"]
+            existing.help_text = item["help"]
+            existing.is_active = True
+            continue
+        session.add(
+            DocumentChecklist(
+                product_id=product.id,
+                catalog_item_id=catalog_item.id,
+                code=catalog_item.code,
+                name=catalog_item.label,
+                description=item["help"],
+                category=category,
+                required_at_stage=stage,
+                is_mandatory=item["mandatory"],
+                is_mandatory_for_disbursement=False,
+                applicable_entity_types=["CORPORATE", "LLP"],
+                allowed_file_types=["pdf", "jpg", "jpeg", "png", "xlsx", "xls"],
+                max_file_size_mb=50,
+                min_file_count=1,
+                max_file_count=5,
+                requires_verification=True,
+                display_order=item["order"],
+                help_text=item["help"],
+            )
+        )
+
+
+async def ensure_active_products_have_application_checklist(
+    session: AsyncSession,
+    org: Organization,
+) -> None:
+    """Backfill borrower-facing requirements for all active demo products.
+
+    Focused E2E seed chains can add products that are still visible in the
+    borrower portal. Demo-visible products must not appear without
+    product-driven application document requirements.
+    """
+
+    products = (
+        (
+            await session.execute(
+                select(LoanProduct).where(
+                    LoanProduct.organization_id == org.id,
+                    LoanProduct.is_active_for_new_loans.is_(True),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for product in products:
+        await ensure_product_document_checklist(session, product)
+
+
+async def ensure_approval_checklist_template(
+    session: AsyncSession,
+    org: Organization,
+) -> None:
+    template = await scalar_one_or_none(
+        session,
+        select(ApprovalChecklistTemplate).where(
+            ApprovalChecklistTemplate.organization_id == org.id,
+            ApprovalChecklistTemplate.code == "UAT_CORP_LOAN_APPROVAL",
+            ApprovalChecklistTemplate.deleted_at.is_(None),
+        ),
+    )
+    if template is None:
+        template = ApprovalChecklistTemplate(
+            organization_id=org.id,
+            code="UAT_CORP_LOAN_APPROVAL",
+            name="UAT Corporate Loan Approval Checklist",
+            description="Default appraisal and sanction gating checklist for the UAT loan demo.",
+            applies_to=ChecklistAppliesTo.LOAN_APPLICATION.value,
+            is_default=True,
+        )
+        session.add(template)
+        await session.flush()
+    else:
+        template.name = "UAT Corporate Loan Approval Checklist"
+        template.description = (
+            "Default appraisal and sanction gating checklist for the UAT loan demo."
+        )
+        template.applies_to = ChecklistAppliesTo.LOAN_APPLICATION.value
+        template.is_default = True
+
+    for sort_order, (catalog_code, mandatory, evidence) in enumerate(
+        APPROVAL_CHECKLIST_TEMPLATE_ITEMS,
+        start=1,
+    ):
+        catalog_item = await scalar_one_or_none(
+            session,
+            select(ChecklistItemCatalog).where(
+                ChecklistItemCatalog.organization_id == org.id,
+                ChecklistItemCatalog.code == catalog_code,
+                ChecklistItemCatalog.deleted_at.is_(None),
+            ),
+        )
+        if catalog_item is None:
+            raise RuntimeError(f"Missing approval checklist catalog item {catalog_code}")
+
+        item = await scalar_one_or_none(
+            session,
+            select(ApprovalChecklistTemplateItem).where(
+                ApprovalChecklistTemplateItem.template_id == template.id,
+                ApprovalChecklistTemplateItem.code == catalog_item.code,
+                ApprovalChecklistTemplateItem.deleted_at.is_(None),
+            ),
+        )
+        category = APPROVAL_CATEGORY_FROM_CATALOG.get(
+            catalog_item.category,
+            ChecklistItemCategory.OTHER.value,
+        )
+        if item is None:
+            session.add(
+                ApprovalChecklistTemplateItem(
+                    template_id=template.id,
+                    catalog_item_id=catalog_item.id,
+                    code=catalog_item.code,
+                    label=catalog_item.label,
+                    description=catalog_item.description,
+                    category=category,
+                    is_mandatory=mandatory,
+                    sort_order=sort_order,
+                    default_due_offset_days=7,
+                    requires_evidence=evidence,
+                )
+            )
+            continue
+
+        item.catalog_item_id = catalog_item.id
+        item.label = catalog_item.label
+        item.description = catalog_item.description
+        item.category = category
+        item.is_mandatory = mandatory
+        item.sort_order = sort_order
+        item.default_due_offset_days = 7
+        item.requires_evidence = evidence
 
 
 async def ensure_entity(
@@ -606,73 +876,67 @@ async def ensure_application_iif_details(
     app: LoanApplication,
     amount: Decimal,
 ) -> None:
-    funding_exists = await scalar_one_or_none(
-        session,
-        select(ApplicationFundingSource).where(
+    await session.execute(
+        delete(ApplicationFundingSource).where(
             ApplicationFundingSource.organization_id == org.id,
             ApplicationFundingSource.application_id == app.id,
-            ApplicationFundingSource.deleted_at.is_(None),
-        ),
+        )
     )
-    if funding_exists is None:
-        project_cost = app.project_cost or (amount * Decimal("1.35")).quantize(Decimal("0.01"))
-        funding_rows = [
-            ("EQUITY_SHARE_CAPITAL", "Equity share capital", money("30000000")),
-            ("PROMOTER_CONTRIBUTION", "Promoter contribution", money("20000000")),
-            ("BANK_TERM_LOAN", "Bank / FI term loan", amount),
-            ("INTERNAL_ACCRUALS", "Internal accruals", project_cost - amount - money("50000000")),
-        ]
-        for source_code, source_label, source_amount in funding_rows:
-            session.add(
-                ApplicationFundingSource(
-                    organization_id=org.id,
-                    application_id=app.id,
-                    source_code=source_code,
-                    source_label=source_label,
-                    amount=source_amount,
-                    remarks="Seeded for IIF project funding composition demo.",
-                )
-            )
-
-    lender_loan_exists = await scalar_one_or_none(
-        session,
-        select(ApplicationLenderLoan).where(
-            ApplicationLenderLoan.organization_id == org.id,
-            ApplicationLenderLoan.application_id == app.id,
-            ApplicationLenderLoan.deleted_at.is_(None),
-        ),
-    )
-    if lender_loan_exists is None:
+    project_cost = app.project_cost or (amount * Decimal("1.35")).quantize(Decimal("0.01"))
+    funding_rows = [
+        ("EQUITY_SHARE_CAPITAL", "Equity share capital", money("30000000")),
+        ("PROMOTER_CONTRIBUTION", "Promoter contribution", money("20000000")),
+        ("BANK_TERM_LOAN", "Bank / FI term loan", amount),
+        ("INTERNAL_ACCRUALS", "Internal accruals", project_cost - amount - money("50000000")),
+    ]
+    for source_code, source_label, source_amount in funding_rows:
         session.add(
-            ApplicationLenderLoan(
+            ApplicationFundingSource(
                 organization_id=org.id,
                 application_id=app.id,
-                loan_type="Term Loan",
-                loan_amount=amount,
-                lender_name="UAT National Bank",
-                lender_category="Bank",
-                lender_contact="Credit Desk",
-                lender_email="creditdesk@uatnationalbank.example.com",
-                lender_address="Mumbai Corporate Banking Branch",
-                lender_state="Maharashtra",
-                lender_district="Mumbai",
-                lender_pincode="400001",
-                sanction_reference=f"{app.application_number}/SANCTION",
-                sanction_date=today() - timedelta(days=30),
-                interest_rate_percent=money("10.75"),
-                emi_periodicity="Quarterly",
-                interest_debiting_periodicity="Monthly",
-                loan_account_number="UATBNKTL0001",
-                ifsc_code="UTNB0000001",
-                security_type="First charge on project assets",
-                disbursement_call_type="Tranche based",
-                emi_amount=money("18500000"),
-                emi_due_date=add_months(today(), 3),
-                lender_validation_status="VALIDATED",
-                lender_validation_remarks="Seeded lender validation for client demo.",
-                lender_validated_at=datetime.now(UTC) - timedelta(days=20),
+                source_code=source_code,
+                source_label=source_label,
+                amount=source_amount,
+                remarks="Seeded for IIF project funding composition demo.",
             )
         )
+
+    await session.execute(
+        delete(ApplicationLenderLoan).where(
+            ApplicationLenderLoan.organization_id == org.id,
+            ApplicationLenderLoan.application_id == app.id,
+        )
+    )
+    session.add(
+        ApplicationLenderLoan(
+            organization_id=org.id,
+            application_id=app.id,
+            loan_type="Term Loan",
+            loan_amount=amount,
+            lender_name="UAT National Bank",
+            lender_category="Bank",
+            lender_contact="Credit Desk",
+            lender_email="creditdesk@uatnationalbank.example.com",
+            lender_address="Mumbai Corporate Banking Branch",
+            lender_state="Maharashtra",
+            lender_district="Mumbai",
+            lender_pincode="400001",
+            sanction_reference=f"{app.application_number}/SANCTION",
+            sanction_date=today() - timedelta(days=30),
+            interest_rate_percent=money("10.75"),
+            emi_periodicity="Quarterly",
+            interest_debiting_periodicity="Monthly",
+            loan_account_number="UATBNKTL0001",
+            ifsc_code="UTNB0000001",
+            security_type="First charge on project assets",
+            disbursement_call_type="Tranche based",
+            emi_amount=money("18500000"),
+            emi_due_date=add_months(today(), 3),
+            lender_validation_status="VALIDATED",
+            lender_validation_remarks="Seeded lender validation for client demo.",
+            lender_validated_at=datetime.now(UTC) - timedelta(days=20),
+        )
+    )
     await session.flush()
 
 
@@ -924,9 +1188,7 @@ async def ensure_disbursement(
             ),
             disbursement_mode=DisbursementMode.RTGS,
             source_account_id=(
-                gl_accounts.get("source_bank")
-                if status == DisbursementStatus.PROCESSED
-                else None
+                gl_accounts.get("source_bank") if status == DisbursementStatus.PROCESSED else None
             ),
             beneficiary_name=account.entity.legal_name if account.entity else "UAT Borrower",
             beneficiary_account_number="1234567890123456",
@@ -1043,6 +1305,15 @@ async def ensure_schedule_and_receipt(
                     paid_date=due_date + timedelta(days=2) if paid else None,
                 )
             )
+        await session.flush()
+
+    first_installment = await scalar_one_or_none(
+        session,
+        select(ScheduleInstallment)
+        .where(ScheduleInstallment.schedule_id == schedule.id)
+        .order_by(ScheduleInstallment.installment_number.asc())
+        .limit(1),
+    )
 
     receipt = await scalar_one_or_none(
         session,
@@ -1082,6 +1353,7 @@ async def ensure_schedule_and_receipt(
         session.add(
             ReceiptAllocation(
                 receipt_id=receipt.id,
+                installment_id=first_installment.id if first_installment else None,
                 allocation_component=AllocationComponent.PRINCIPAL,
                 allocated_amount=receipt.principal_allocated,
                 allocation_sequence=1,
@@ -1091,12 +1363,25 @@ async def ensure_schedule_and_receipt(
         session.add(
             ReceiptAllocation(
                 receipt_id=receipt.id,
+                installment_id=first_installment.id if first_installment else None,
                 allocation_component=AllocationComponent.INTEREST,
                 allocated_amount=receipt.interest_allocated,
                 allocation_sequence=2,
                 remarks="UAT interest allocation",
             )
         )
+    elif receipt and first_installment:
+        allocations = list(
+            (
+                await session.execute(
+                    select(ReceiptAllocation).where(ReceiptAllocation.receipt_id == receipt.id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for allocation in allocations:
+            allocation.installment_id = allocation.installment_id or first_installment.id
 
 
 async def ensure_treasury(session: AsyncSession, org: Organization, account: LoanAccount) -> None:
@@ -1350,6 +1635,17 @@ async def ensure_iif_basics(
         session.add(enrollment)
         await session.flush()
 
+    claim_documents = [
+        {
+            "name": str(doc.get("label") or doc.get("code")),
+            "file_name": f"{str(doc.get('code')).lower()}.pdf",
+            "document_category": str(doc.get("code")),
+            "path": f"/manual-uat/iif/{str(doc.get('code')).lower()}.pdf",
+            "uploaded_at": now_utc().isoformat(),
+        }
+        for doc in DEFAULT_REQUIRED_DOCUMENTS
+        if str(doc.get("stage", "")).upper() == "CLAIM_SUBMISSION"
+    ]
     claim = await scalar_one_or_none(
         session,
         select(SubventionClaim).where(
@@ -1369,15 +1665,14 @@ async def ensure_iif_basics(
                 interest_paid_in_period=money("187500000"),
                 applicable_subvention_amount=money("5625000"),
                 status=SubventionClaimStatus.DRAFT.value,
-                documents=[
-                    {
-                        "name": "Manual UAT claim worksheet",
-                        "path": "/manual-uat/iif/claim-workbook.pdf",
-                        "uploaded_at": now_utc().isoformat(),
-                    }
-                ],
+                documents=claim_documents,
             )
         )
+    else:
+        claim.documents = claim_documents
+        if claim.status == SubventionClaimStatus.REJECTED.value:
+            claim.status = SubventionClaimStatus.DRAFT.value
+            claim.rejection_reason = None
 
 
 async def ensure_workflow_definitions(session: AsyncSession, org: Organization) -> None:
@@ -1473,6 +1768,53 @@ async def ensure_portal_user(
                 is_link_active=True,
             )
         )
+    return user
+
+
+async def ensure_portal_admin_user(
+    session: AsyncSession,
+    org: Organization,
+    *,
+    reset_password: bool,
+) -> PortalUser:
+    user = await scalar_one_or_none(
+        session,
+        select(PortalUser).where(
+            PortalUser.organization_id == org.id,
+            PortalUser.email == PORTAL_ADMIN_EMAIL,
+        ),
+    )
+    if not user:
+        user = PortalUser(
+            organization_id=org.id,
+            mobile="9876501299",
+            mobile_verified=True,
+            mobile_verified_at=now_naive(),
+            email=PORTAL_ADMIN_EMAIL,
+            email_verified=True,
+            email_verified_at=now_naive(),
+            status=PortalUserStatus.ACTIVE,
+            registration_status=PortalRegistrationStatus.ACTIVE,
+            actor_role=PortalActorRole.SCHEME_ADMIN,
+            registration_authorized_signatory_name="UAT SFC Portal Admin",
+            registered_at=now_utc() - timedelta(days=30),
+            approved_at=now_utc() - timedelta(days=20),
+            registration_reference="REG/UAT/ADMIN/000001",
+            password_hash=get_password_hash(PORTAL_ADMIN_PASSWORD),
+            password_changed_at=now_utc(),
+            activated_at=now_utc(),
+            preferred_language="en",
+        )
+        session.add(user)
+        await session.flush()
+    else:
+        user.status = PortalUserStatus.ACTIVE
+        user.registration_status = PortalRegistrationStatus.ACTIVE
+        user.actor_role = PortalActorRole.SCHEME_ADMIN
+        user.locked_until = None
+        user.failed_login_attempts = 0
+        if reset_password:
+            user.password_hash = get_password_hash(PORTAL_ADMIN_PASSWORD)
     return user
 
 
@@ -1606,6 +1948,7 @@ async def ensure_portal_audit_user(
 async def seed(reset_password: bool) -> None:
     async with async_session_factory() as session:
         org, admin = await ensure_base_access(session, reset_password=reset_password)
+        await seed_lending_master_catalog(session, org.id)
 
         project_product = await ensure_product(
             session,
@@ -1623,6 +1966,8 @@ async def seed(reset_password: bool) -> None:
             category=ProductCategory.TERM_LOAN,
             repayment_mode=RepaymentMode.EMI,
         )
+        await ensure_active_products_have_application_checklist(session, org)
+        await ensure_approval_checklist_template(session, org)
 
         active_entity = await ensure_entity(
             session,
@@ -1811,17 +2156,25 @@ async def seed(reset_password: bool) -> None:
         portal_user = await ensure_portal_user(
             session, org, active_entity, reset_password=reset_password
         )
+        portal_admin_user = await ensure_portal_admin_user(
+            session,
+            org,
+            reset_password=reset_password,
+        )
         await ensure_portal_link_contacts(session)
         await ensure_portal_audit_user(session, org, portal_user)
+        await ensure_portal_audit_user(session, org, portal_admin_user)
 
         await session.commit()
 
     print("Manual lending UAT seed completed.")
     print(f"Admin login: {ADMIN_USERNAME} / {ADMIN_PASSWORD}")
     print(f"Portal login: {PORTAL_EMAIL} / {PORTAL_PASSWORD}")
+    print(f"Portal admin login: {PORTAL_ADMIN_EMAIL} / {PORTAL_ADMIN_PASSWORD}")
     print(f"Organization: {org.code} ({org.id})")
     print(f"Admin user id: {admin.id}")
     print(f"Portal user id: {portal_user.id}")
+    print(f"Portal admin user id: {portal_admin_user.id}")
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:

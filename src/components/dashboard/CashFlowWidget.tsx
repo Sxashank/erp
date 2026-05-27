@@ -17,16 +17,6 @@ interface CashFlowProps {
   pendingChequeReceipts?: number;
   pendingChequePayments?: number;
 }
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
 const formatCompact = (amount: number | undefined | null) => {
   const num = Number(amount) || 0;
   const absAmount = Math.abs(num);
@@ -59,23 +49,23 @@ export function CashFlowWidget({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg font-semibold flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 text-lg font-semibold">
           <Wallet className="h-5 w-5 text-green-500" />
           Cash Flow
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Bank Balance */}
-        <div className="bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg p-4 text-white">
+        <div className="rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 p-4 text-white">
           <p className="text-sm opacity-90">Total Bank Balance</p>
-          <p className="text-3xl font-bold mt-1">{formatCurrency(totalBankBalance)}</p>
+          <p className="mt-1 text-3xl font-bold">{formatIndianCompactCurrency(totalBankBalance)}</p>
         </div>
 
         {/* Period Breakdown */}
         <div className="space-y-3">
           {/* Today */}
-          <div className="border rounded-lg p-3">
-            <p className="text-sm font-medium text-muted-foreground mb-2">Today</p>
+          <div className="rounded-lg border p-3">
+            <p className="mb-2 text-sm font-medium text-muted-foreground">Today</p>
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div>
                 <div className="flex items-center gap-1 text-green-600">
@@ -96,10 +86,7 @@ export function CashFlowWidget({
                   <Minus className="h-3 w-3" />
                   <span>Net</span>
                 </div>
-                <p className={cn(
-                  'font-medium',
-                  netToday >= 0 ? 'text-green-600' : 'text-red-600'
-                )}>
+                <p className={cn('font-medium', netToday >= 0 ? 'text-green-600' : 'text-red-600')}>
                   {formatCompact(netToday)}
                 </p>
               </div>
@@ -107,8 +94,8 @@ export function CashFlowWidget({
           </div>
 
           {/* This Week */}
-          <div className="border rounded-lg p-3">
-            <p className="text-sm font-medium text-muted-foreground mb-2">This Week</p>
+          <div className="rounded-lg border p-3">
+            <p className="mb-2 text-sm font-medium text-muted-foreground">This Week</p>
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div>
                 <div className="flex items-center gap-1 text-green-600">
@@ -129,10 +116,7 @@ export function CashFlowWidget({
                   <Minus className="h-3 w-3" />
                   <span>Net</span>
                 </div>
-                <p className={cn(
-                  'font-medium',
-                  netWeek >= 0 ? 'text-green-600' : 'text-red-600'
-                )}>
+                <p className={cn('font-medium', netWeek >= 0 ? 'text-green-600' : 'text-red-600')}>
                   {formatCompact(netWeek)}
                 </p>
               </div>
@@ -140,8 +124,8 @@ export function CashFlowWidget({
           </div>
 
           {/* This Month */}
-          <div className="border rounded-lg p-3">
-            <p className="text-sm font-medium text-muted-foreground mb-2">This Month</p>
+          <div className="rounded-lg border p-3">
+            <p className="mb-2 text-sm font-medium text-muted-foreground">This Month</p>
             <div className="grid grid-cols-3 gap-2 text-sm">
               <div>
                 <div className="flex items-center gap-1 text-green-600">
@@ -162,10 +146,7 @@ export function CashFlowWidget({
                   <Minus className="h-3 w-3" />
                   <span>Net</span>
                 </div>
-                <p className={cn(
-                  'font-medium',
-                  netMonth >= 0 ? 'text-green-600' : 'text-red-600'
-                )}>
+                <p className={cn('font-medium', netMonth >= 0 ? 'text-green-600' : 'text-red-600')}>
                   {formatCompact(netMonth)}
                 </p>
               </div>
@@ -175,8 +156,8 @@ export function CashFlowWidget({
 
         {/* Pending Cheques */}
         {(pendingChequeReceipts || pendingChequePayments) && (
-          <div className="bg-yellow-50 rounded-lg p-3">
-            <p className="text-sm font-medium text-yellow-800 mb-2">Pending Cheques</p>
+          <div className="rounded-lg bg-yellow-50 p-3">
+            <p className="mb-2 text-sm font-medium text-yellow-800">Pending Cheques</p>
             <div className="grid grid-cols-2 gap-4 text-sm">
               {pendingChequeReceipts !== undefined && pendingChequeReceipts > 0 && (
                 <div>

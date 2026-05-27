@@ -1,6 +1,6 @@
 """Lending dashboard aggregator.
 
-Composes the Lending Dashboard widgets:
+Composes the 6 widgets the Lending Dashboard surfaces:
   1. Portfolio KPIs — Total AUM, Active Accounts, Pipeline, NPAs, Collection
      Efficiency.
   2. Disbursement trend — last 6 months of disbursed amounts (in ₹ Cr).
@@ -21,35 +21,25 @@ via Pydantic so frontend gets a stable typed contract.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from typing import Optional
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lending.application import LoanApplication
-from app.models.lending.entity import Entity
 from app.models.lending.enums import (
     ApplicationStatus,
     AssetClassification,
     DisbursementStatus,
-    InstallmentStatus,
     LoanAccountStatus,
-    ReceiptStatus,
     SanctionStatus,
 )
-from app.models.lending.loan_account import (
-    Disbursement,
-    LoanAccount,
-    LoanReceipt,
-    RepaymentSchedule,
-    ScheduleInstallment,
-)
+from app.models.lending.entity import Entity
+from app.models.lending.loan_account import Disbursement, LoanAccount
 from app.models.lending.sanction import LoanSanction
-from app.models.lending.treasury import Borrowing, BorrowingSchedule
-from app.services.lending.fund_deployment_service import FundDeploymentService
-from app.services.lending.repayment_matching_service import RepaymentMatchingService
 
 # Asset-classification → render colour (Tailwind class). Kept on the BE so the
 # frontend gets a fully-rendered widget without each FE needing its own table.
@@ -99,12 +89,6 @@ class DashboardData:
     """Plain data carrier; Pydantic schema converts on the wire."""
 
     portfolio_kpis: dict
-    lifecycle_pipeline: list[dict] = field(default_factory=list)
-    treasury_funding: dict = field(default_factory=dict)
-    source_of_funds: dict = field(default_factory=dict)
-    margin_summary: dict = field(default_factory=dict)
-    collection_summary: dict = field(default_factory=dict)
-    cashflow_buckets: list[dict] = field(default_factory=list)
     monthly_disbursements: list[dict] = field(default_factory=list)
     portfolio_by_product: list[dict] = field(default_factory=list)
     asset_classification: list[dict] = field(default_factory=list)
@@ -122,19 +106,8 @@ class LendingDashboardService:
         """Compose the dashboard payload for one org. RLS already constrains
         every query because the caller uses get_db_with_tenant."""
         portfolio_kpis = await self._portfolio_kpis(organization_id)
-        collection_summary = await self._collection_summary(organization_id)
-        portfolio_kpis["collection_efficiency"] = collection_summary["collection_efficiency"]
-        portfolio_kpis["overdue_amount"] = collection_summary["overdue_amount"]
         return DashboardData(
             portfolio_kpis=portfolio_kpis,
-            lifecycle_pipeline=await self._lifecycle_pipeline(organization_id),
-            treasury_funding=await self._treasury_funding(organization_id),
-            source_of_funds=(
-                await FundDeploymentService(self.session).get_summary(organization_id)
-            ).model_dump(),
-            margin_summary=await self._margin_summary(organization_id),
-            collection_summary=collection_summary,
-            cashflow_buckets=await self._cashflow_buckets(organization_id),
             monthly_disbursements=await self._monthly_disbursements(organization_id),
             portfolio_by_product=await self._portfolio_by_product(organization_id),
             asset_classification=await self._asset_classification(organization_id),
@@ -191,27 +164,6 @@ class LendingDashboardService:
         npa_outstanding = (await self.session.execute(npa_q)).scalar() or 0
         total_aum = active.total_aum or 0
 
-        pending_disbursement_q = (
-            select(
-                func.coalesce(
-                    func.sum(
-                        func.coalesce(
-                            Disbursement.approved_amount,
-                            Disbursement.requested_amount,
-                            0,
-                        )
-                    ),
-                    0,
-                )
-            )
-            .join(LoanAccount, LoanAccount.id == Disbursement.loan_account_id)
-            .where(
-                LoanAccount.organization_id == organization_id,
-                Disbursement.status.in_([DisbursementStatus.PENDING, DisbursementStatus.APPROVED]),
-            )
-        )
-        pending_disbursements = (await self.session.execute(pending_disbursement_q)).scalar() or 0
-
         # Decimal throughout per CLAUDE.md §6.2 — Pydantic CamelSchema serializes
         # Decimal to JSON as a string, preserving precision.
         npa_dec = (
@@ -229,8 +181,8 @@ class LendingDashboardService:
         )
         # Net NPA = Gross NPA minus provisioning. We don't have provisioning
         # rolled up here yet (separate provisioning_service); return 0 until
-        # that's wired. Same with PCR — defaulted to 0 so the UI shows a muted
-        # KPI rather than a fake number.
+        # that's wired. Same with PCR and collection efficiency — defaulted
+        # to 0 so the UI shows a muted KPI rather than a fake number.
         return {
             "total_aum": total_aum_dec,
             "aum_growth_mom": Decimal("0"),
@@ -240,7 +192,7 @@ class LendingDashboardService:
                 if isinstance(sanctioned_pipeline, Decimal)
                 else Decimal(str(sanctioned_pipeline or 0))
             ),
-            "pending_disbursements": _decimal(pending_disbursements),
+            "pending_disbursements": Decimal("0"),
             "collection_efficiency": Decimal("0"),
             "overdue_amount": Decimal("0"),
             "gross_npa": gross_npa_pct,
@@ -248,342 +200,12 @@ class LendingDashboardService:
             "provision_coverage": Decimal("0"),
         }
 
-    async def _lifecycle_pipeline(self, organization_id: UUID) -> list[dict]:
-        active_application_statuses = [
-            ApplicationStatus.SUBMITTED,
-            ApplicationStatus.UNDER_REVIEW,
-            ApplicationStatus.ADDITIONAL_INFO_REQUIRED,
-        ]
-        app_q = select(
-            func.count(LoanApplication.id),
-            func.coalesce(func.sum(LoanApplication.requested_amount), 0),
-        ).where(
-            LoanApplication.organization_id == organization_id,
-            LoanApplication.status.in_(active_application_statuses),
-        )
-        app_count, app_amount = (await self.session.execute(app_q)).one()
-
-        sanction_q = select(
-            func.count(LoanSanction.id),
-            func.coalesce(func.sum(LoanSanction.sanctioned_amount), 0),
-        ).where(
-            LoanSanction.organization_id == organization_id,
-            LoanSanction.status.in_([SanctionStatus.APPROVED, SanctionStatus.ACCEPTED]),
-        )
-        sanction_count, sanction_amount = (await self.session.execute(sanction_q)).one()
-
-        active_q = select(
-            func.count(LoanAccount.id),
-            func.coalesce(func.sum(LoanAccount.total_outstanding), 0),
-        ).where(
-            LoanAccount.organization_id == organization_id,
-            LoanAccount.status == LoanAccountStatus.ACTIVE,
-        )
-        active_count, active_amount = (await self.session.execute(active_q)).one()
-
-        overdue_q = select(
-            func.count(LoanAccount.id),
-            func.coalesce(
-                func.sum(
-                    LoanAccount.principal_overdue
-                    + LoanAccount.interest_overdue
-                    + LoanAccount.penal_interest_outstanding
-                    + LoanAccount.charges_outstanding
-                ),
-                0,
-            ),
-        ).where(
-            LoanAccount.organization_id == organization_id,
-            LoanAccount.status == LoanAccountStatus.ACTIVE,
-            LoanAccount.days_past_due > 0,
-        )
-        overdue_count, overdue_amount = (await self.session.execute(overdue_q)).one()
-
-        return [
-            {
-                "stage": "Application Pipeline",
-                "count": int(app_count or 0),
-                "amount": _decimal(app_amount),
-            },
-            {
-                "stage": "Sanctioned / Accepted",
-                "count": int(sanction_count or 0),
-                "amount": _decimal(sanction_amount),
-            },
-            {
-                "stage": "Live Loan Assets",
-                "count": int(active_count or 0),
-                "amount": _decimal(active_amount),
-            },
-            {
-                "stage": "Overdue / Collection",
-                "count": int(overdue_count or 0),
-                "amount": _decimal(overdue_amount),
-            },
-        ]
-
-    async def _treasury_funding(self, organization_id: UUID) -> dict:
-        active_statuses = ["ACTIVE", "FULLY_DRAWN", "REPAYING", "SANCTIONED"]
-        q = select(
-            func.count(Borrowing.id),
-            func.coalesce(func.sum(Borrowing.sanctioned_amount), 0),
-            func.coalesce(func.sum(Borrowing.drawn_amount), 0),
-            func.coalesce(func.sum(Borrowing.available_amount), 0),
-            func.coalesce(func.sum(Borrowing.principal_outstanding), 0),
-            func.coalesce(
-                func.sum(Borrowing.principal_outstanding * Borrowing.effective_rate),
-                0,
-            ),
-        ).where(
-            Borrowing.organization_id == organization_id,
-            Borrowing.status.in_(active_statuses),
-        )
-        (
-            active_borrowings,
-            sanctioned_borrowings,
-            drawn_borrowings,
-            available_borrowings,
-            borrowing_outstanding,
-            weighted_rate_numerator,
-        ) = (await self.session.execute(q)).one()
-        borrowing_outstanding_dec = _decimal(borrowing_outstanding)
-        weighted_cost = (
-            (_decimal(weighted_rate_numerator) / borrowing_outstanding_dec).quantize(
-                Decimal("0.01")
-            )
-            if borrowing_outstanding_dec > 0
-            else Decimal("0")
-        )
-        return {
-            "active_borrowings": int(active_borrowings or 0),
-            "sanctioned_borrowings": _decimal(sanctioned_borrowings),
-            "drawn_borrowings": _decimal(drawn_borrowings),
-            "available_borrowings": _decimal(available_borrowings),
-            "borrowing_outstanding": borrowing_outstanding_dec,
-            "weighted_cost_of_funds": weighted_cost,
-        }
-
-    async def _margin_summary(self, organization_id: UUID) -> dict:
-        asset_q = select(
-            func.coalesce(func.sum(LoanAccount.principal_outstanding), 0),
-            func.coalesce(
-                func.sum(LoanAccount.principal_outstanding * LoanAccount.current_interest_rate),
-                0,
-            ),
-            func.coalesce(
-                func.sum(LoanAccount.interest_outstanding + LoanAccount.interest_accrued_not_due),
-                0,
-            ),
-        ).where(
-            LoanAccount.organization_id == organization_id,
-            LoanAccount.status == LoanAccountStatus.ACTIVE,
-        )
-        asset_principal, asset_rate_numerator, interest_receivable = (
-            await self.session.execute(asset_q)
-        ).one()
-
-        liability_q = select(
-            func.coalesce(func.sum(Borrowing.principal_outstanding), 0),
-            func.coalesce(
-                func.sum(Borrowing.principal_outstanding * Borrowing.effective_rate),
-                0,
-            ),
-        ).where(
-            Borrowing.organization_id == organization_id,
-            Borrowing.status.in_(["ACTIVE", "FULLY_DRAWN", "REPAYING", "SANCTIONED"]),
-        )
-        liability_principal, liability_rate_numerator = (
-            await self.session.execute(liability_q)
-        ).one()
-
-        today = datetime.now(UTC).date()
-        interest_payable_q = (
-            select(
-                func.coalesce(
-                    func.sum(BorrowingSchedule.interest_due - BorrowingSchedule.interest_paid),
-                    0,
-                )
-            )
-            .join(Borrowing, Borrowing.id == BorrowingSchedule.borrowing_id)
-            .where(
-                Borrowing.organization_id == organization_id,
-                BorrowingSchedule.due_date <= today,
-                BorrowingSchedule.status != "PAID",
-            )
-        )
-        interest_payable = (await self.session.execute(interest_payable_q)).scalar() or 0
-
-        asset_principal_dec = _decimal(asset_principal)
-        liability_principal_dec = _decimal(liability_principal)
-        lending_yield = (
-            (_decimal(asset_rate_numerator) / asset_principal_dec).quantize(Decimal("0.01"))
-            if asset_principal_dec > 0
-            else Decimal("0")
-        )
-        cost_of_funds = (
-            (_decimal(liability_rate_numerator) / liability_principal_dec).quantize(Decimal("0.01"))
-            if liability_principal_dec > 0
-            else Decimal("0")
-        )
-        gross_spread_bps = ((lending_yield - cost_of_funds) * Decimal("100")).quantize(Decimal("1"))
-        interest_receivable_dec = _decimal(interest_receivable)
-        interest_payable_dec = _decimal(interest_payable)
-        return {
-            "lending_yield": lending_yield,
-            "cost_of_funds": cost_of_funds,
-            "gross_spread_bps": gross_spread_bps,
-            "interest_receivable": interest_receivable_dec,
-            "interest_payable": interest_payable_dec,
-            "net_interest_position": interest_receivable_dec - interest_payable_dec,
-        }
-
-    async def _collection_summary(self, organization_id: UUID) -> dict:
-        today = datetime.now(UTC).date()
-        period_start = today.replace(day=1)
-        due_q = (
-            select(
-                func.coalesce(
-                    func.sum(
-                        ScheduleInstallment.principal_amount
-                        + ScheduleInstallment.interest_amount
-                        + ScheduleInstallment.penal_interest_due
-                    ),
-                    0,
-                )
-            )
-            .join(RepaymentSchedule, RepaymentSchedule.id == ScheduleInstallment.schedule_id)
-            .join(LoanAccount, LoanAccount.id == RepaymentSchedule.loan_account_id)
-            .where(
-                LoanAccount.organization_id == organization_id,
-                RepaymentSchedule.is_current.is_(True),
-                ScheduleInstallment.due_date >= period_start,
-                ScheduleInstallment.due_date <= today,
-            )
-        )
-        due_this_month = (await self.session.execute(due_q)).scalar() or 0
-
-        receipt_q = select(
-            func.coalesce(func.sum(LoanReceipt.receipt_amount), 0),
-            func.coalesce(func.sum(LoanReceipt.unallocated_amount), 0),
-        ).where(
-            LoanReceipt.organization_id == organization_id,
-            LoanReceipt.receipt_date >= period_start,
-            LoanReceipt.receipt_date <= today,
-            LoanReceipt.status.in_([ReceiptStatus.ALLOCATED, ReceiptStatus.PENDING]),
-            LoanReceipt.bounced.is_(False),
-        )
-        collected_this_month, unallocated_receipts = (await self.session.execute(receipt_q)).one()
-
-        overdue_q = select(
-            func.coalesce(
-                func.sum(
-                    LoanAccount.principal_overdue
-                    + LoanAccount.interest_overdue
-                    + LoanAccount.penal_interest_outstanding
-                    + LoanAccount.charges_outstanding
-                ),
-                0,
-            )
-        ).where(
-            LoanAccount.organization_id == organization_id,
-            LoanAccount.status == LoanAccountStatus.ACTIVE,
-        )
-        overdue_amount = (await self.session.execute(overdue_q)).scalar() or 0
-        matching_summary = await RepaymentMatchingService(self.session).get_summary(
-            organization_id=organization_id
-        )
-
-        due_dec = _decimal(due_this_month)
-        collected_dec = _decimal(collected_this_month)
-        efficiency = (
-            (collected_dec / due_dec * Decimal("100")).quantize(Decimal("0.01"))
-            if due_dec > 0
-            else Decimal("0")
-        )
-        return {
-            "due_this_month": due_dec,
-            "collected_this_month": collected_dec,
-            "collection_efficiency": efficiency,
-            "overdue_amount": _decimal(overdue_amount),
-            "unallocated_receipts": _decimal(unallocated_receipts),
-            "unmatched_bank_credit_count": matching_summary.unmatched_credit_count,
-            "unmatched_bank_credit_amount": matching_summary.unmatched_credit_amount,
-            "auto_match_candidate_count": matching_summary.high_confidence_count,
-            "match_review_required_count": matching_summary.review_required_count,
-        }
-
-    async def _cashflow_buckets(self, organization_id: UUID) -> list[dict]:
-        today = datetime.now(UTC).date()
-        buckets = [
-            ("0-7 Days", 0, 7),
-            ("8-30 Days", 8, 30),
-            ("31-90 Days", 31, 90),
-            ("91-180 Days", 91, 180),
-        ]
-        out: list[dict] = []
-        for label, start_days, end_days in buckets:
-            start_date = today + timedelta(days=start_days)
-            end_date = today + timedelta(days=end_days)
-            borrower_q = (
-                select(
-                    func.coalesce(
-                        func.sum(
-                            ScheduleInstallment.principal_amount
-                            + ScheduleInstallment.interest_amount
-                            + ScheduleInstallment.penal_interest_due
-                            - ScheduleInstallment.principal_paid
-                            - ScheduleInstallment.interest_paid
-                            - ScheduleInstallment.penal_interest_paid
-                        ),
-                        0,
-                    )
-                )
-                .join(RepaymentSchedule, RepaymentSchedule.id == ScheduleInstallment.schedule_id)
-                .join(LoanAccount, LoanAccount.id == RepaymentSchedule.loan_account_id)
-                .where(
-                    LoanAccount.organization_id == organization_id,
-                    RepaymentSchedule.is_current.is_(True),
-                    ScheduleInstallment.due_date >= start_date,
-                    ScheduleInstallment.due_date <= end_date,
-                    ScheduleInstallment.status != InstallmentStatus.PAID,
-                )
-            )
-            borrower_inflows = (await self.session.execute(borrower_q)).scalar() or 0
-
-            lender_q = (
-                select(
-                    func.coalesce(
-                        func.sum(BorrowingSchedule.total_due - BorrowingSchedule.total_paid),
-                        0,
-                    )
-                )
-                .join(Borrowing, Borrowing.id == BorrowingSchedule.borrowing_id)
-                .where(
-                    Borrowing.organization_id == organization_id,
-                    BorrowingSchedule.due_date >= start_date,
-                    BorrowingSchedule.due_date <= end_date,
-                    BorrowingSchedule.status != "PAID",
-                )
-            )
-            lender_outflows = (await self.session.execute(lender_q)).scalar() or 0
-            borrower_dec = _decimal(borrower_inflows)
-            lender_dec = _decimal(lender_outflows)
-            out.append(
-                {
-                    "bucket": label,
-                    "borrower_inflows": borrower_dec,
-                    "lender_outflows": lender_dec,
-                    "net_gap": borrower_dec - lender_dec,
-                }
-            )
-        return out
-
     # -----------------------------------------------------------------
     # Monthly disbursement trend (last 6 months).
     # -----------------------------------------------------------------
 
     async def _monthly_disbursements(self, organization_id: UUID) -> list[dict]:
-        today = datetime.now(UTC).date()
+        today = datetime.now(timezone.utc).date()
         # 6 calendar months ending this month. Anchor at the first-of-month so
         # partial-month results are still attributable.
         first_of_this_month = today.replace(day=1)
@@ -758,7 +380,7 @@ class LendingDashboardService:
     async def _upcoming_maturities(
         self, organization_id: UUID, days_ahead: int = 30, limit: int = 5
     ) -> list[dict]:
-        today = datetime.now(UTC).date()
+        today = datetime.now(timezone.utc).date()
         horizon = today + timedelta(days=days_ahead)
         q = (
             select(
@@ -797,12 +419,3 @@ def _format_month_label(d: date | datetime) -> str:
     if isinstance(d, datetime):
         d = d.date()
     return d.strftime("%b")
-
-
-def _decimal(value: Decimal | int | float | str | None) -> Decimal:
-    """Convert DB aggregate values to Decimal without losing money precision."""
-    if value is None:
-        return Decimal("0")
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))

@@ -33,6 +33,7 @@ import {
   useUpdateBorrowing,
 } from '@/hooks/lending/useBorrowings';
 import { useLenders } from '@/hooks/lending/useLenders';
+import { useLendingMasterRows, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import {
   borrowingDetailToFormValues,
   borrowingFormSchema,
@@ -42,50 +43,17 @@ import {
   type BorrowingFormInput,
 } from '@/schemas/lending/treasuryBorrowingSchema';
 
-const BORROWING_TYPES = [
-  { value: 'TERM_LOAN', label: 'Term Loan' },
-  { value: 'WORKING_CAPITAL', label: 'Working Capital Loan' },
-  { value: 'CASH_CREDIT', label: 'Cash Credit / Overdraft' },
-  { value: 'NCD', label: 'Non-Convertible Debentures' },
-  { value: 'CP', label: 'Commercial Paper' },
-  { value: 'SUBORDINATED_DEBT', label: 'Subordinated Debt / Tier-II' },
-  { value: 'ECB', label: 'External Commercial Borrowing' },
-  { value: 'REFINANCE', label: 'Refinance Facility' },
-  { value: 'ICD', label: 'Inter-Corporate Deposit' },
-];
-
-const RATE_TYPES = [
-  { value: 'FIXED', label: 'Fixed Rate' },
-  { value: 'FLOATING', label: 'Floating Rate' },
-];
-
-const BASE_RATE_TYPES = [
-  { value: 'MCLR', label: 'MCLR' },
-  { value: 'REPO', label: 'Repo Rate' },
-  { value: 'T_BILL', label: 'T-Bill Rate' },
-  { value: 'LIBOR', label: 'LIBOR' },
-  { value: 'SOFR', label: 'SOFR' },
-  { value: 'OTHER', label: 'Other' },
-];
-
-const REPAYMENT_FREQUENCIES = [
-  { value: 'MONTHLY', label: 'Monthly' },
-  { value: 'QUARTERLY', label: 'Quarterly' },
-  { value: 'HALF_YEARLY', label: 'Half-Yearly' },
-  { value: 'YEARLY', label: 'Yearly' },
-  { value: 'BULLET', label: 'Bullet' },
-];
-
-const DAY_COUNT_CONVENTIONS = [
-  { value: 'ACT_365', label: 'Actual/365' },
-  { value: 'ACT_360', label: 'Actual/360' },
-  { value: 'THIRTY_360', label: '30/360' },
-];
-
-const SECURITY_TYPES = [
-  { value: 'SECURED', label: 'Secured' },
-  { value: 'UNSECURED', label: 'Unsecured' },
-];
+function toOptions(
+  rows: { data: Record<string, unknown> }[] | undefined,
+  labelKey: 'label' | 'name' = 'label',
+) {
+  return (
+    rows?.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data[labelKey] ?? row.data.label ?? row.data.name ?? row.data.code ?? ''),
+    })) ?? []
+  );
+}
 
 export default function BorrowingForm() {
   const navigate = useNavigate();
@@ -106,10 +74,29 @@ export default function BorrowingForm() {
     error: lendersError,
     refetch: refetchLenders,
   } = useLenders({ pageSize: 200 });
+  const borrowingTypesQuery = useLendingOptionRows('BORROWING_TYPE');
+  const rateTypesQuery = useLendingOptionRows('RATE_TYPE');
+  const repaymentFrequenciesQuery = useLendingOptionRows('REPAYMENT_FREQUENCY');
+  const securityTypesQuery = useLendingOptionRows('SECURITY_TYPE');
+  const dayCountConventionsQuery = useLendingMasterRows('day-count-conventions', {
+    pageSize: 100,
+  });
+  const rateBenchmarksQuery = useLendingMasterRows('rate-reset-benchmarks', {
+    pageSize: 100,
+  });
   const createBorrowingMutation = useCreateBorrowing();
   const updateBorrowingMutation = useUpdateBorrowing();
   const saving = createBorrowingMutation.isPending || updateBorrowingMutation.isPending;
   const lenders = lendersResponse?.items ?? [];
+  const borrowingTypeOptions = toOptions(borrowingTypesQuery.data?.items);
+  const rateTypeOptions = toOptions(rateTypesQuery.data?.items);
+  const repaymentFrequencyOptions = toOptions(repaymentFrequenciesQuery.data?.items);
+  const rateResetFrequencyOptions = repaymentFrequencyOptions.filter(
+    (option) => option.value !== 'BULLET',
+  );
+  const securityTypeOptions = toOptions(securityTypesQuery.data?.items);
+  const dayCountConventionOptions = toOptions(dayCountConventionsQuery.data?.items, 'name');
+  const rateBenchmarkOptions = toOptions(rateBenchmarksQuery.data?.items, 'name');
 
   const form = useForm<BorrowingFormInput, unknown, BorrowingFormData>({
     resolver: zodResolver(borrowingFormSchema),
@@ -172,7 +159,15 @@ export default function BorrowingForm() {
     }
   };
 
-  if (isLendersLoading || (isEditMode && isBorrowingLoading)) {
+  const isMasterLoading =
+    borrowingTypesQuery.isLoading ||
+    rateTypesQuery.isLoading ||
+    repaymentFrequenciesQuery.isLoading ||
+    securityTypesQuery.isLoading ||
+    dayCountConventionsQuery.isLoading ||
+    rateBenchmarksQuery.isLoading;
+
+  if (isLendersLoading || isMasterLoading || (isEditMode && isBorrowingLoading)) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -186,6 +181,31 @@ export default function BorrowingForm() {
         title="Could not load treasury lenders"
         error={lendersError}
         onRetry={() => void refetchLenders()}
+      />
+    );
+  }
+
+  const firstMasterError =
+    borrowingTypesQuery.error ??
+    rateTypesQuery.error ??
+    repaymentFrequenciesQuery.error ??
+    securityTypesQuery.error ??
+    dayCountConventionsQuery.error ??
+    rateBenchmarksQuery.error;
+
+  if (firstMasterError) {
+    return (
+      <ErrorState
+        title="Could not load borrowing master data"
+        error={firstMasterError}
+        onRetry={() => {
+          borrowingTypesQuery.refetch();
+          rateTypesQuery.refetch();
+          repaymentFrequenciesQuery.refetch();
+          securityTypesQuery.refetch();
+          dayCountConventionsQuery.refetch();
+          rateBenchmarksQuery.refetch();
+        }}
       />
     );
   }
@@ -260,7 +280,7 @@ export default function BorrowingForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {BORROWING_TYPES.map((type) => (
+                          {borrowingTypeOptions.map((type) => (
                             <SelectItem key={type.value} value={type.value}>
                               {type.label}
                             </SelectItem>
@@ -346,7 +366,7 @@ export default function BorrowingForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {RATE_TYPES.map((type) => (
+                          {rateTypeOptions.map((type) => (
                             <SelectItem key={type.value} value={type.value}>
                               {type.label}
                             </SelectItem>
@@ -370,7 +390,7 @@ export default function BorrowingForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {DAY_COUNT_CONVENTIONS.map((conv) => (
+                          {dayCountConventionOptions.map((conv) => (
                             <SelectItem key={conv.value} value={conv.value}>
                               {conv.label}
                             </SelectItem>
@@ -398,7 +418,7 @@ export default function BorrowingForm() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {BASE_RATE_TYPES.map((type) => (
+                            {rateBenchmarkOptions.map((type) => (
                               <SelectItem key={type.value} value={type.value}>
                                 {type.label}
                               </SelectItem>
@@ -492,7 +512,7 @@ export default function BorrowingForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {REPAYMENT_FREQUENCIES.map((freq) => (
+                          {repaymentFrequencyOptions.map((freq) => (
                             <SelectItem key={freq.value} value={freq.value}>
                               {freq.label}
                             </SelectItem>
@@ -517,7 +537,7 @@ export default function BorrowingForm() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {REPAYMENT_FREQUENCIES.slice(0, -1).map((freq) => (
+                            {rateResetFrequencyOptions.map((freq) => (
                               <SelectItem key={freq.value} value={freq.value}>
                                 {freq.label}
                               </SelectItem>
@@ -610,7 +630,7 @@ export default function BorrowingForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {REPAYMENT_FREQUENCIES.map((freq) => (
+                          {repaymentFrequencyOptions.map((freq) => (
                             <SelectItem key={freq.value} value={freq.value}>
                               {freq.label}
                             </SelectItem>
@@ -675,7 +695,7 @@ export default function BorrowingForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {SECURITY_TYPES.map((type) => (
+                          {securityTypeOptions.map((type) => (
                             <SelectItem key={type.value} value={type.value}>
                               {type.label}
                             </SelectItem>

@@ -84,7 +84,7 @@ export default function InvestmentList() {
   // follow-up.
   const investmentsQuery = useInvestments({
     category: categoryFilter === 'all' ? undefined : (categoryFilter as InvestmentCategory),
-    page_size: 200,
+    pageSize: 200,
   });
   const summaryQuery = usePortfolioSummary();
 
@@ -383,12 +383,14 @@ export default function InvestmentList() {
             </CardContent>
           </Card>
         </Link>
-        <Link to="/admin/treasury/risk-dashboard">
+        <Link to="/admin/treasury/counterparty-risk">
           <Card className="cursor-pointer transition-colors hover:bg-muted/50">
             <CardContent className="pt-6">
               <Briefcase className="mb-2 h-8 w-8 text-primary" />
-              <h3 className="font-medium">Risk Analysis</h3>
-              <p className="text-sm text-muted-foreground">Investment risk metrics</p>
+              <h3 className="font-medium">Counterparty Risk</h3>
+              <p className="text-sm text-muted-foreground">
+                Review live exposure and limit monitoring
+              </p>
             </CardContent>
           </Card>
         </Link>

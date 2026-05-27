@@ -98,15 +98,17 @@ class TDSReturnService:
         days_late = (today - due_date).days if is_late else 0
 
         return_data = data.model_dump()
-        return_data.update({
-            "period_from": period_from,
-            "period_to": period_to,
-            "assessment_year": assessment_year,
-            "due_date": due_date,
-            "is_late": is_late,
-            "days_late": days_late,
-            "created_by": created_by,
-        })
+        return_data.update(
+            {
+                "period_from": period_from,
+                "period_to": period_to,
+                "assessment_year": assessment_year,
+                "due_date": due_date,
+                "is_late": is_late,
+                "days_late": days_late,
+                "created_by": created_by,
+            }
+        )
 
         tds_return = TDSReturn(**return_data)
         self.session.add(tds_return)
@@ -214,27 +216,33 @@ class TDSReturnService:
         # Validation rules
         # 1. Check if TAN is valid format
         if not self._validate_tan(tds_return.deductor_tan):
-            errors.append(ValidationError(
-                code="INVALID_TAN",
-                message="Invalid TAN format",
-                field="deductor_tan",
-            ))
+            errors.append(
+                ValidationError(
+                    code="INVALID_TAN",
+                    message="Invalid TAN format",
+                    field="deductor_tan",
+                )
+            )
 
         # 2. Check if there are challans
         if tds_return.total_challans == 0:
-            warnings.append(ValidationError(
-                code="NO_CHALLANS",
-                message="No challans found for this period. This will be a NIL return.",
-            ))
+            warnings.append(
+                ValidationError(
+                    code="NO_CHALLANS",
+                    message="No challans found for this period. This will be a NIL return.",
+                )
+            )
 
         # 3. Check TDS deposited vs deducted
         if tds_return.total_tds_deposited < tds_return.total_tds_deducted:
             diff = tds_return.total_tds_deducted - tds_return.total_tds_deposited
-            errors.append(ValidationError(
-                code="TDS_SHORTFALL",
-                message=f"TDS deposited ({tds_return.total_tds_deposited}) is less than "
-                        f"TDS deducted ({tds_return.total_tds_deducted}). Shortfall: {diff}",
-            ))
+            errors.append(
+                ValidationError(
+                    code="TDS_SHORTFALL",
+                    message=f"TDS deposited ({tds_return.total_tds_deposited}) is less than "
+                    f"TDS deducted ({tds_return.total_tds_deducted}). Shortfall: {diff}",
+                )
+            )
 
         # 4. Check PAN for all deductees
         entries = await self.repo.get_entries_for_return(
@@ -246,26 +254,32 @@ class TDSReturnService:
 
         for idx, entry in enumerate(entries):
             if not entry.deductee_pan:
-                warnings.append(ValidationError(
-                    code="MISSING_PAN",
-                    message=f"PAN missing for deductee: {entry.deductee_name}",
-                    row=idx + 1,
-                ))
+                warnings.append(
+                    ValidationError(
+                        code="MISSING_PAN",
+                        message=f"PAN missing for deductee: {entry.deductee_name}",
+                        row=idx + 1,
+                    )
+                )
             elif not self._validate_pan(entry.deductee_pan):
-                errors.append(ValidationError(
-                    code="INVALID_PAN",
-                    message=f"Invalid PAN format for: {entry.deductee_name}",
-                    field="deductee_pan",
-                    row=idx + 1,
-                ))
+                errors.append(
+                    ValidationError(
+                        code="INVALID_PAN",
+                        message=f"Invalid PAN format for: {entry.deductee_name}",
+                        field="deductee_pan",
+                        row=idx + 1,
+                    )
+                )
 
         # 5. Check late filing
         if tds_return.is_late:
-            warnings.append(ValidationError(
-                code="LATE_FILING",
-                message=f"Return is {tds_return.days_late} days late. "
-                        f"Late fee of Rs. {tds_return.calculate_late_fee()} will apply.",
-            ))
+            warnings.append(
+                ValidationError(
+                    code="LATE_FILING",
+                    message=f"Return is {tds_return.days_late} days late. "
+                    f"Late fee of Rs. {tds_return.calculate_late_fee()} will apply.",
+                )
+            )
 
         # Store validation results
         tds_return.validation_errors = [e.model_dump() for e in errors]
@@ -294,21 +308,13 @@ class TDSReturnService:
         """Validate TAN format (4 letters + 5 digits + 1 letter)."""
         if not tan or len(tan) != 10:
             return False
-        return (
-            tan[:4].isalpha() and
-            tan[4:9].isdigit() and
-            tan[9].isalpha()
-        )
+        return tan[:4].isalpha() and tan[4:9].isdigit() and tan[9].isalpha()
 
     def _validate_pan(self, pan: str) -> bool:
         """Validate PAN format (5 letters + 4 digits + 1 letter)."""
         if not pan or len(pan) != 10:
             return False
-        return (
-            pan[:5].isalpha() and
-            pan[5:9].isdigit() and
-            pan[9].isalpha()
-        )
+        return pan[:5].isalpha() and pan[5:9].isdigit() and pan[9].isalpha()
 
     def _calculate_file_hash(self, file_content: str) -> str:
         """Calculate deterministic SHA256 hash for generated file content."""
@@ -319,24 +325,20 @@ class TDSReturnService:
         id: UUID,
         updated_by: UUID,
         include_nil: bool = False,
-    ) -> Tuple[str, str]:
+    ) -> Tuple[str, str, str, datetime]:
         """Generate return file in NSDL format.
 
-        Returns tuple of (file_name, file_path).
+        Returns tuple of (file_name, file_content, file_hash, generated_at).
         """
         tds_return = await self.repo.get_with_details(id)
         if not tds_return:
             raise NotFoundException("TDS return not found")
 
         if tds_return.status not in [ReturnStatus.VALIDATED, ReturnStatus.GENERATED]:
-            raise ValidationException(
-                "Return must be validated before file generation"
-            )
+            raise ValidationException("Return must be validated before file generation")
 
         if tds_return.total_challans == 0 and not include_nil:
-            raise ValidationException(
-                "No challans found. Set include_nil=true for NIL return."
-            )
+            raise ValidationException("No challans found. Set include_nil=true for NIL return.")
 
         # Get data for file generation
         challans = await self.repo.get_challans_for_return(
@@ -373,14 +375,15 @@ class TDSReturnService:
         tds_return.file_name = file_name
         tds_return.file_path = f"/tds-returns/{file_name}"
         tds_return.file_hash = file_hash
-        tds_return.file_generated_at = datetime.utcnow()
+        generated_at = datetime.utcnow()
+        tds_return.file_generated_at = generated_at
         tds_return.status = ReturnStatus.GENERATED
         tds_return.updated_by = updated_by
 
-        await self.session.flush()
+        await self.session.commit()
         await self.session.refresh(tds_return)
 
-        return file_name, file_content
+        return file_name, file_content, file_hash, generated_at
 
     def _generate_nsdl_file(
         self,
@@ -396,7 +399,9 @@ class TDSReturnService:
         lines = []
 
         # Header record (simplified)
-        lines.append(f"^FH^{tds_return.return_type.value}^{tds_return.financial_year}^{tds_return.quarter.value}^")
+        lines.append(
+            f"^FH^{tds_return.return_type.value}^{tds_return.financial_year}^{tds_return.quarter.value}^"
+        )
 
         # Batch header
         lines.append(
@@ -481,9 +486,7 @@ class TDSReturnService:
             raise NotFoundException("Original return not found")
 
         if original.status not in [ReturnStatus.FILED, ReturnStatus.ACCEPTED]:
-            raise ValidationException(
-                "Can only revise filed/accepted returns"
-            )
+            raise ValidationException("Can only revise filed/accepted returns")
 
         # Get latest revision number
         latest = await self.repo.get_latest_revision(

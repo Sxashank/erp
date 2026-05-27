@@ -7,24 +7,32 @@ from fastapi import APIRouter, Depends, status, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import (
+    ESSUserContext,
+    get_current_ess_user,
+    get_ess_db_with_tenant,
+    oauth2_scheme,
+)
 from app.core.database import get_session
 from app.core.rate_limit import portal_generic_limit, portal_login_limit
 from app.services.ess.auth_service import ESSAuthService
 from app.core.exceptions import NotFoundException, UnauthorizedException
-
 
 router = APIRouter(prefix="/auth", tags=["ESS Authentication"])
 
 
 # ==================== Schemas ====================
 
+
 class SendOTPRequest(BaseModel):
     """Request to send OTP."""
+
     mobile: str = Field(..., pattern=r"^\d{10}$", description="10-digit mobile number")
 
 
 class SendOTPResponse(BaseModel):
     """Response after sending OTP."""
+
     success: bool
     message: str
     expires_in_seconds: int = 300
@@ -32,12 +40,14 @@ class SendOTPResponse(BaseModel):
 
 class VerifyOTPRequest(BaseModel):
     """Request to verify OTP and login."""
+
     mobile: str = Field(..., pattern=r"^\d{10}$")
     otp: str = Field(..., min_length=6, max_length=6)
 
 
 class DeviceInfo(BaseModel):
     """Device information for session."""
+
     device_type: Optional[str] = None
     device_name: Optional[str] = None
     os_name: Optional[str] = None
@@ -48,6 +58,7 @@ class DeviceInfo(BaseModel):
 
 class LoginRequest(BaseModel):
     """Login request with OTP."""
+
     mobile: str = Field(..., pattern=r"^\d{10}$")
     otp: str = Field(..., min_length=6, max_length=6)
     device_info: Optional[DeviceInfo] = None
@@ -55,6 +66,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     """Token response after successful login."""
+
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
@@ -64,11 +76,13 @@ class TokenResponse(BaseModel):
 
 class RefreshTokenRequest(BaseModel):
     """Request to refresh token."""
+
     refresh_token: str
 
 
 class RegisterDeviceRequest(BaseModel):
     """Request to register device for push notifications."""
+
     device_uuid: str
     device_name: str
     device_type: str
@@ -81,6 +95,7 @@ class RegisterDeviceRequest(BaseModel):
 
 class SessionResponse(BaseModel):
     """Active session information."""
+
     id: str
     device_type: Optional[str]
     device_name: Optional[str]
@@ -91,6 +106,7 @@ class SessionResponse(BaseModel):
 
 
 # ==================== Endpoints ====================
+
 
 @router.post("/send-otp", response_model=SendOTPResponse, response_model_by_alias=True)
 @portal_login_limit()
@@ -193,18 +209,16 @@ async def refresh_token(
 
 @router.post("/logout")
 async def logout(
-    authorization: str = None,  # Get from header
-    session: AsyncSession = Depends(get_session),
+    token: str | None = Depends(oauth2_scheme),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
 ):
     """Logout current session."""
-    if not authorization:
+    if not token:
         raise UnauthorizedException(
             detail="No authorization token provided",
             error_code="NO_AUTHORIZATION_TOKEN_PROVIDED",
         )
-
-    # Extract token from header
-    token = authorization.replace("Bearer ", "") if authorization.startswith("Bearer ") else authorization
 
     service = ESSAuthService(session)
     await service.logout(token)
@@ -215,12 +229,12 @@ async def logout(
 
 @router.post("/logout-all")
 async def logout_all_sessions(
-    ess_user_id: UUID,  # This would come from authenticated user
-    session: AsyncSession = Depends(get_session),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
 ):
     """Logout all sessions for the user."""
     service = ESSAuthService(session)
-    count = await service.logout_all_sessions(ess_user_id)
+    count = await service.logout_all_sessions(ess_context.ess_user_id)
     await session.commit()
 
     return {"success": True, "message": f"Logged out from {count} sessions"}
@@ -228,12 +242,13 @@ async def logout_all_sessions(
 
 @router.get("/sessions", response_model=list[SessionResponse], response_model_by_alias=True)
 async def get_active_sessions(
-    ess_user_id: UUID,  # This would come from authenticated user
-    session: AsyncSession = Depends(get_session),
+    token: str | None = Depends(oauth2_scheme),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
 ):
     """Get all active sessions."""
     service = ESSAuthService(session)
-    sessions = await service.get_active_sessions(ess_user_id)
+    sessions = await service.get_active_sessions(ess_context.ess_user_id)
 
     return [
         SessionResponse(
@@ -243,23 +258,44 @@ async def get_active_sessions(
             ip_address=s.ip_address,
             login_at=s.login_at.isoformat() if s.login_at else None,
             last_activity=s.last_activity.isoformat() if s.last_activity else None,
+            is_current=bool(token and s.session_token == token),
         )
         for s in sessions
     ]
 
 
+@router.delete("/sessions/{session_id}")
+async def revoke_session(
+    session_id: UUID,
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+):
+    """Revoke one active session owned by the authenticated user."""
+    service = ESSAuthService(session)
+    revoked = await service.revoke_session(ess_context.ess_user_id, session_id)
+    await session.commit()
+
+    if not revoked:
+        raise NotFoundException(
+            detail="Session not found",
+            error_code="ESS_SESSION_NOT_FOUND",
+        )
+
+    return {"success": True, "message": "Session revoked successfully"}
+
+
+@router.post("/devices")
 @router.post("/register-device")
 async def register_device(
     request: RegisterDeviceRequest,
-    ess_user_id: UUID,  # This would come from authenticated user
-    session: AsyncSession = Depends(get_session),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
 ):
     """Register device for push notifications."""
     service = ESSAuthService(session)
 
     device = await service.register_device(
-        ess_user_id=ess_user_id,
-        **request.model_dump()
+        ess_user_id=ess_context.ess_user_id, **request.model_dump()
     )
 
     await session.commit()

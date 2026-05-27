@@ -1,13 +1,4 @@
-import {
-  Edit,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Download,
-  Printer,
-  User,
-  FileText,
-} from 'lucide-react';
+import { Edit, CheckCircle, XCircle, Clock, Download, Printer, User, FileText } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
@@ -27,15 +18,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { vouchersApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
+import { logger } from '@/lib/logger';
 interface PostingDetail {
   id: string;
   postingId: string;
@@ -153,13 +136,33 @@ export default function GLPostingDetail() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'POSTED':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Posted</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <CheckCircle className="mr-1 h-3 w-3" />
+            Posted
+          </Badge>
+        );
       case 'PENDING_APPROVAL':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pending Approval</Badge>;
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Pending Approval
+          </Badge>
+        );
       case 'DRAFT':
-        return <Badge variant="outline"><Edit className="h-3 w-3 mr-1" />Draft</Badge>;
+        return (
+          <Badge variant="outline">
+            <Edit className="mr-1 h-3 w-3" />
+            Draft
+          </Badge>
+        );
       case 'REJECTED':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Rejected</Badge>;
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Rejected
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -174,20 +177,27 @@ export default function GLPostingDetail() {
 
   const handleReject = async () => {
     if (!postingDetail) return;
-    await vouchersApi.reject(postingDetail.id, approvalRemarks || 'Rejected during approval review');
+    await vouchersApi.reject(
+      postingDetail.id,
+      approvalRemarks || 'Rejected during approval review',
+    );
     navigate('/admin/accounting/gl-postings');
   };
 
   if (loading) {
-    return <div className="container mx-auto py-6 text-muted-foreground">Loading GL posting...</div>;
+    return (
+      <div className="container mx-auto py-6 text-muted-foreground">Loading GL posting...</div>
+    );
   }
 
   if (!postingDetail) {
-    return <div className="container mx-auto py-6 text-muted-foreground">GL posting not found.</div>;
+    return (
+      <div className="container mx-auto py-6 text-muted-foreground">GL posting not found.</div>
+    );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={postingDetail.postingId}
         subtitle={postingDetail.description}
@@ -199,27 +209,27 @@ export default function GLPostingDetail() {
           <div className="flex items-center gap-2">
             {getStatusBadge(postingDetail.status)}
             <Button variant="outline" size="sm">
-              <Printer className="h-4 w-4 mr-2" />
+              <Printer className="mr-2 h-4 w-4" />
               Print
             </Button>
             <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
           </div>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Content */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Posting Details */}
           <Card>
             <CardHeader>
               <CardTitle>Posting Details</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                 <div>
                   <p className="text-muted-foreground">Posting ID</p>
                   <p className="font-mono font-medium">{postingDetail.postingId}</p>
@@ -238,8 +248,8 @@ export default function GLPostingDetail() {
                 </div>
               </div>
               {postingDetail.narration && (
-                <div className="mt-4 p-3 bg-muted rounded-lg">
-                  <p className="text-sm text-muted-foreground mb-1">Narration</p>
+                <div className="mt-4 rounded-lg bg-muted p-3">
+                  <p className="mb-1 text-sm text-muted-foreground">Narration</p>
                   <p className="text-sm">{postingDetail.narration}</p>
                 </div>
               )}
@@ -275,29 +285,33 @@ export default function GLPostingDetail() {
                       <TableCell className="text-sm">{entry.description}</TableCell>
                       <TableCell className="text-sm">{entry.costCenter}</TableCell>
                       <TableCell className="text-right font-medium">
-                        {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                        {entry.debit > 0 ? formatIndianCompactCurrency(entry.debit) : '-'}
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                        {entry.credit > 0 ? formatIndianCompactCurrency(entry.credit) : '-'}
                       </TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="bg-muted/50 font-bold">
-                    <TableCell colSpan={3} className="text-right">Total</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totalDebit)}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totalCredit)}</TableCell>
+                    <TableCell colSpan={3} className="text-right">
+                      Total
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(totalDebit)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(totalCredit)}
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
 
-              <div className="mt-4 p-4 bg-green-50 rounded-lg flex items-center justify-between">
+              <div className="mt-4 flex items-center justify-between rounded-lg bg-green-50 p-4">
                 <div className="flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-green-600" />
-                  <span className="text-green-800 font-medium">Entries are balanced</span>
+                  <span className="font-medium text-green-800">Entries are balanced</span>
                 </div>
-                <span className="text-green-700">
-                  {formatCurrency(totalDebit)}
-                </span>
+                <span className="text-green-700">{formatIndianCompactCurrency(totalDebit)}</span>
               </div>
             </CardContent>
           </Card>
@@ -320,11 +334,11 @@ export default function GLPostingDetail() {
                 </div>
                 <div className="flex gap-2">
                   <Button onClick={handleApprove} className="bg-green-600 hover:bg-green-700">
-                    <CheckCircle className="h-4 w-4 mr-2" />
+                    <CheckCircle className="mr-2 h-4 w-4" />
                     Approve & Post
                   </Button>
                   <Button variant="destructive" onClick={handleReject}>
-                    <XCircle className="h-4 w-4 mr-2" />
+                    <XCircle className="mr-2 h-4 w-4" />
                     Reject
                   </Button>
                 </div>
@@ -341,15 +355,17 @@ export default function GLPostingDetail() {
               <CardTitle>Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Total Debit</span>
-                <span className="font-bold text-lg">{formatCurrency(totalDebit)}</span>
+                <span className="text-lg font-bold">{formatIndianCompactCurrency(totalDebit)}</span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Total Credit</span>
-                <span className="font-bold text-lg">{formatCurrency(totalCredit)}</span>
+                <span className="text-lg font-bold">
+                  {formatIndianCompactCurrency(totalCredit)}
+                </span>
               </div>
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Line Items</span>
                 <span className="font-bold">{postingDetail.entries.length}</span>
               </div>
@@ -402,9 +418,11 @@ export default function GLPostingDetail() {
                 {postingDetail.history.map((entry, index) => (
                   <div key={index} className="flex gap-3 text-sm">
                     <div className="flex flex-col items-center">
-                      <div className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      <div
+                        className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-green-500' : 'bg-gray-300'}`}
+                      />
                       {index < postingDetail.history.length - 1 && (
-                        <div className="w-px h-full bg-gray-200" />
+                        <div className="h-full w-px bg-gray-200" />
                       )}
                     </div>
                     <div className="flex-1 pb-4">
@@ -412,7 +430,7 @@ export default function GLPostingDetail() {
                       <p className="text-muted-foreground">by {entry.by}</p>
                       <p className="text-xs text-muted-foreground">{entry.at}</p>
                       {entry.remarks && (
-                        <p className="text-xs mt-1 p-2 bg-muted rounded">{entry.remarks}</p>
+                        <p className="mt-1 rounded bg-muted p-2 text-xs">{entry.remarks}</p>
                       )}
                     </div>
                   </div>

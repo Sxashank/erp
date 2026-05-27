@@ -45,7 +45,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { portalDashboardApi, portalPaymentApi } from '@/services/portalApi';
 import type { LoanSummary, UpcomingDue, PrepaymentQuote, ForeclosureQuote } from '@/types/portal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 type PaymentType = 'emi' | 'prepayment' | 'foreclosure';
 type PaymentMode = 'UPI' | 'NETBANKING' | 'CARD';
 
@@ -91,15 +91,6 @@ export default function PortalPayments() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const selectedLoanData = loans.find((l) => l.id === selectedLoan);
   const selectedDue = upcomingDues.find((d) => d.loan_account_id === selectedLoan);
 
@@ -207,7 +198,7 @@ export default function PortalPayments() {
                       <div className="flex w-full items-center justify-between">
                         <span>{loan.loan_account_number}</span>
                         <span className="ml-4 text-gray-500">
-                          {formatCurrency(loan.total_outstanding)} outstanding
+                          {formatIndianCompactCurrency(loan.total_outstanding)} outstanding
                         </span>
                       </div>
                     </SelectItem>
@@ -224,12 +215,14 @@ export default function PortalPayments() {
                     </div>
                     <div>
                       <p className="text-gray-500">EMI Amount</p>
-                      <p className="font-medium">{formatCurrency(selectedLoanData.emi_amount)}</p>
+                      <p className="font-medium">
+                        {formatIndianCompactCurrency(selectedLoanData.emi_amount)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-gray-500">Outstanding</p>
                       <p className="font-medium">
-                        {formatCurrency(selectedLoanData.total_outstanding)}
+                        {formatIndianCompactCurrency(selectedLoanData.total_outstanding)}
                       </p>
                     </div>
                   </div>
@@ -266,7 +259,7 @@ export default function PortalPayments() {
                           <div>
                             <p className="text-sm text-emerald-700">Amount Due</p>
                             <p className="text-2xl font-bold text-emerald-800">
-                              {formatCurrency(selectedDue.total_due)}
+                              {formatIndianCompactCurrency(selectedDue.total_due)}
                             </p>
                             <p className="text-sm text-emerald-600">
                               Due Date: <DateDisplay date={selectedDue.due_date} />
@@ -276,7 +269,8 @@ export default function PortalPayments() {
                         </div>
                         {selectedDue.overdue_amount > 0 && (
                           <p className="mt-2 text-sm text-red-600">
-                            Includes overdue: {formatCurrency(selectedDue.overdue_amount)}
+                            Includes overdue:{' '}
+                            {formatIndianCompactCurrency(selectedDue.overdue_amount)}
                           </p>
                         )}
                       </div>
@@ -326,25 +320,25 @@ export default function PortalPayments() {
                           <div>
                             <p className="text-gray-600">Prepayment Amount</p>
                             <p className="font-medium">
-                              {formatCurrency(prepaymentQuote.prepayment_amount)}
+                              {formatIndianCompactCurrency(prepaymentQuote.prepayment_amount)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">Accrued Interest</p>
                             <p className="font-medium">
-                              {formatCurrency(prepaymentQuote.accrued_interest)}
+                              {formatIndianCompactCurrency(prepaymentQuote.accrued_interest)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">Prepayment Charges</p>
                             <p className="font-medium">
-                              {formatCurrency(prepaymentQuote.prepayment_charges)}
+                              {formatIndianCompactCurrency(prepaymentQuote.prepayment_charges)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">GST on Charges</p>
                             <p className="font-medium">
-                              {formatCurrency(prepaymentQuote.gst_on_charges)}
+                              {formatIndianCompactCurrency(prepaymentQuote.gst_on_charges)}
                             </p>
                           </div>
                         </div>
@@ -352,11 +346,12 @@ export default function PortalPayments() {
                           <div className="flex justify-between">
                             <span className="font-medium text-blue-800">Total Payable</span>
                             <span className="text-xl font-bold text-blue-800">
-                              {formatCurrency(prepaymentQuote.total_payable)}
+                              {formatIndianCompactCurrency(prepaymentQuote.total_payable)}
                             </span>
                           </div>
                           <p className="mt-1 text-sm text-green-600">
-                            Interest Savings: {formatCurrency(prepaymentQuote.interest_savings)}
+                            Interest Savings:{' '}
+                            {formatIndianCompactCurrency(prepaymentQuote.interest_savings)}
                           </p>
                         </div>
                       </div>
@@ -384,31 +379,31 @@ export default function PortalPayments() {
                           <div>
                             <p className="text-gray-600">Outstanding Principal</p>
                             <p className="font-medium">
-                              {formatCurrency(foreclosureQuote.outstanding_principal)}
+                              {formatIndianCompactCurrency(foreclosureQuote.outstanding_principal)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">Accrued Interest</p>
                             <p className="font-medium">
-                              {formatCurrency(foreclosureQuote.accrued_interest)}
+                              {formatIndianCompactCurrency(foreclosureQuote.accrued_interest)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">Pending Charges</p>
                             <p className="font-medium">
-                              {formatCurrency(foreclosureQuote.pending_charges)}
+                              {formatIndianCompactCurrency(foreclosureQuote.pending_charges)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">Foreclosure Charges</p>
                             <p className="font-medium">
-                              {formatCurrency(foreclosureQuote.foreclosure_charges)}
+                              {formatIndianCompactCurrency(foreclosureQuote.foreclosure_charges)}
                             </p>
                           </div>
                           <div>
                             <p className="text-gray-600">GST on Charges</p>
                             <p className="font-medium">
-                              {formatCurrency(foreclosureQuote.gst_on_charges)}
+                              {formatIndianCompactCurrency(foreclosureQuote.gst_on_charges)}
                             </p>
                           </div>
                         </div>
@@ -416,11 +411,12 @@ export default function PortalPayments() {
                           <div className="flex justify-between">
                             <span className="font-medium text-purple-800">Total Payable</span>
                             <span className="text-xl font-bold text-purple-800">
-                              {formatCurrency(foreclosureQuote.total_payable)}
+                              {formatIndianCompactCurrency(foreclosureQuote.total_payable)}
                             </span>
                           </div>
                           <p className="mt-1 text-sm text-green-600">
-                            Interest Savings: {formatCurrency(foreclosureQuote.interest_savings)}
+                            Interest Savings:{' '}
+                            {formatIndianCompactCurrency(foreclosureQuote.interest_savings)}
                           </p>
                           <p className="mt-1 text-xs text-gray-500">
                             Valid until: <DateDisplay date={foreclosureQuote.valid_until} />
@@ -527,7 +523,7 @@ export default function PortalPayments() {
                     <div className="flex justify-between">
                       <span className="font-medium">Amount to Pay</span>
                       <span className="text-2xl font-bold text-emerald-600">
-                        {formatCurrency(getPaymentAmount())}
+                        {formatIndianCompactCurrency(getPaymentAmount())}
                       </span>
                     </div>
                   </div>
@@ -545,7 +541,7 @@ export default function PortalPayments() {
                       </>
                     ) : (
                       <>
-                        Pay {formatCurrency(getPaymentAmount())}
+                        Pay {formatIndianCompactCurrency(getPaymentAmount())}
                         <ArrowRight className="ml-2 h-4 w-4" />
                       </>
                     )}
@@ -591,7 +587,7 @@ export default function PortalPayments() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold">{formatCurrency(due.total_due)}</p>
+                        <p className="font-bold">{formatIndianCompactCurrency(due.total_due)}</p>
                         {due.is_overdue && (
                           <Badge variant="destructive" className="text-xs">
                             Overdue
@@ -644,7 +640,7 @@ export default function PortalPayments() {
             <div className="flex justify-between border-t pt-4">
               <span className="font-medium">Total Amount</span>
               <span className="text-xl font-bold text-emerald-600">
-                {formatCurrency(getPaymentAmount())}
+                {formatIndianCompactCurrency(getPaymentAmount())}
               </span>
             </div>
           </div>

@@ -24,24 +24,27 @@ from fastapi import (
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
 from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.core.exceptions import BadRequestException
 from app.core.upload_validation import DOCUMENT_MIME_TYPES, validate_upload
+from app.schemas.lending.lifecycle import (
+    ApplicationQueryListResponse,
+    ApplicationQueryResponse,
+    RespondToQueryRequest,
+)
 from app.schemas.portal.application import (
     ApplicationDetailResponse,
     ApplicationDocumentResponse,
     ApplicationListResponse,
-    ApplicationQueryRequest,
-    ApplicationRejectRequest,
-    ApplicationReviewActionRequest,
     ApplicationWithdrawRequest,
     CreateApplicationRequest,
     UpdateApplicationRequest,
     UploadDocumentResponse,
 )
 from app.services.dms.document_service import DocumentService
+from app.services.lending.application_query_service import ApplicationQueryService
 from app.services.portal.application_service import PortalApplicationService
+from app.services.portal.entity_access import assert_application_access
 
 router = APIRouter(prefix="/applications", tags=["Borrower Portal · Applications"])
 
@@ -97,7 +100,7 @@ async def get_application(
     "",
     response_model=ApplicationDetailResponse,
     response_model_by_alias=True,
-    summary="Create a draft scheme application",
+    summary="Create a draft SFC loan application",
 )
 async def create_application(
     payload: CreateApplicationRequest,
@@ -116,7 +119,7 @@ async def create_application(
     "/{application_id}",
     response_model=ApplicationDetailResponse,
     response_model_by_alias=True,
-    summary="Update a draft scheme application",
+    summary="Update a draft SFC loan application",
 )
 async def update_application(
     application_id: UUID,
@@ -140,7 +143,7 @@ async def update_application(
     "/{application_id}/submit",
     response_model=ApplicationDetailResponse,
     response_model_by_alias=True,
-    summary="Submit a draft scheme application for review",
+    summary="Submit a draft SFC loan application for review",
 )
 async def submit_application(
     application_id: UUID,
@@ -162,7 +165,7 @@ async def submit_application(
     "/{application_id}/resubmit",
     response_model=ApplicationDetailResponse,
     response_model_by_alias=True,
-    summary="Resubmit a queried scheme application",
+    summary="Resubmit a queried SFC loan application",
 )
 async def resubmit_application(
     application_id: UUID,
@@ -204,124 +207,60 @@ async def withdraw_application(
     return result
 
 
-@router.post(
-    "/{application_id}/lender-validate",
-    response_model=ApplicationDetailResponse,
+@router.get(
+    "/{application_id}/queries",
+    response_model=ApplicationQueryListResponse,
     response_model_by_alias=True,
-    summary="Validate an application at lender review",
+    summary="List borrower-visible application queries",
 )
-async def lender_validate_application(
+async def list_application_queries(
     application_id: UUID,
-    payload: ApplicationReviewActionRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
     db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> ApplicationDetailResponse:
-    _require_idempotency_key(idempotency_key)
-    service = PortalApplicationService(db)
-    result = await service.lender_validate_application(
-        portal_user=user,
+) -> ApplicationQueryListResponse:
+    application = await assert_application_access(user, application_id, db)
+    service = ApplicationQueryService(db)
+    rows = await service.list_for_application(
+        organization_id=application.organization_id,
         application_id=application_id,
-        remarks=payload.remarks,
     )
-    await db.commit()
-    return result
+    items = [ApplicationQueryResponse.model_validate(row) for row in rows]
+    return ApplicationQueryListResponse(items=items, total=len(items))
 
 
 @router.post(
-    "/{application_id}/start-appraisal",
-    response_model=ApplicationDetailResponse,
+    "/{application_id}/queries/{query_id}/respond",
+    response_model=ApplicationQueryResponse,
     response_model_by_alias=True,
-    summary="Move a validated application into SMFCL appraisal",
+    summary="Respond to a borrower application query",
 )
-async def start_appraisal(
+async def respond_to_application_query(
     application_id: UUID,
-    payload: ApplicationReviewActionRequest,
+    query_id: UUID,
+    payload: RespondToQueryRequest,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
     db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> ApplicationDetailResponse:
+) -> ApplicationQueryResponse:
     _require_idempotency_key(idempotency_key)
-    service = PortalApplicationService(db)
-    result = await service.start_appraisal(
-        portal_user=user,
-        application_id=application_id,
-        remarks=payload.remarks,
+    application = await assert_application_access(user, application_id, db)
+    service = ApplicationQueryService(db)
+    query = await service.get(organization_id=application.organization_id, query_id=query_id)
+    if query.application_id != application_id:
+        raise BadRequestException(
+            "Application query was not found for this application",
+            error_code="APPLICATION_QUERY_NOT_FOUND",
+        )
+    result = await service.respond_to_query(
+        organization_id=application.organization_id,
+        query_id=query_id,
+        portal_user_id=user.id,
+        response_text=payload.response_text,
+        response_attachments=payload.response_attachments,
     )
     await db.commit()
-    return result
-
-
-@router.post(
-    "/{application_id}/query",
-    response_model=ApplicationDetailResponse,
-    response_model_by_alias=True,
-    summary="Raise a borrower query on an application",
-)
-async def raise_application_query(
-    application_id: UUID,
-    payload: ApplicationQueryRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> ApplicationDetailResponse:
-    _require_idempotency_key(idempotency_key)
-    service = PortalApplicationService(db)
-    result = await service.raise_query(
-        portal_user=user,
-        application_id=application_id,
-        reason=payload.reason,
-    )
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/{application_id}/approve",
-    response_model=ApplicationDetailResponse,
-    response_model_by_alias=True,
-    summary="Approve an application for sanction",
-)
-async def approve_application(
-    application_id: UUID,
-    payload: ApplicationReviewActionRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> ApplicationDetailResponse:
-    _require_idempotency_key(idempotency_key)
-    service = PortalApplicationService(db)
-    result = await service.approve_application(
-        portal_user=user,
-        application_id=application_id,
-        remarks=payload.remarks,
-    )
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/{application_id}/reject",
-    response_model=ApplicationDetailResponse,
-    response_model_by_alias=True,
-    summary="Reject an application",
-)
-async def reject_application(
-    application_id: UUID,
-    payload: ApplicationRejectRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> ApplicationDetailResponse:
-    _require_idempotency_key(idempotency_key)
-    service = PortalApplicationService(db)
-    result = await service.reject_application(
-        portal_user=user,
-        application_id=application_id,
-        reason=payload.reason,
-    )
-    await db.commit()
-    return result
+    await db.refresh(result)
+    return ApplicationQueryResponse.model_validate(result)
 
 
 @router.post(
@@ -333,8 +272,8 @@ async def reject_application(
 async def upload_application_document(
     application_id: UUID,
     file: UploadFile = File(...),
-    document_code: str = Form(default="BORROWER_UPLOAD"),
-    document_name: str | None = Form(default=None),
+    document_code: str = Form(default="BORROWER_UPLOAD", alias="documentCode"),
+    document_name: str | None = Form(default=None, alias="documentName"),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
     db: AsyncSession = Depends(get_portal_db_with_tenant),

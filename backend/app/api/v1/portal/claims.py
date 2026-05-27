@@ -7,19 +7,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Form, Header, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
 from app.api.v1.lending.iif.claims import _report_to_csv, _report_to_pdf, _report_to_xlsx
 from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.core.exceptions import BadRequestException
 from app.core.upload_validation import DOCUMENT_MIME_TYPES, validate_upload
-from app.schemas.lending.iif import (
-    SubventionClaimInitiateReleaseRequest,
-    SubventionClaimMarkPaidRequest,
-    SubventionClaimMarkReleasedRequest,
-    SubventionClaimVerifyRequest,
-)
+from app.models.lending.masters import LendingOption
+from app.schemas.base import CamelSchema
 from app.schemas.portal.claim import (
     BorrowerClaimCreateRequest,
     BorrowerClaimDocument,
@@ -37,6 +33,11 @@ from app.services.lending.iif.subvention_claim_service import (
 from app.services.portal.claim_service import PortalClaimService
 
 router = APIRouter(prefix="/claims", tags=["Borrower Portal · Claims"])
+
+
+class PortalClaimDocumentTypeOption(CamelSchema):
+    code: str
+    label: str
 
 
 def _require_idempotency_key(key: str | None) -> None:
@@ -59,6 +60,29 @@ async def claim_workbench(
 ) -> BorrowerClaimsWorkbenchResponse:
     service = PortalClaimService(db)
     return await service.get_workbench(user)
+
+
+@router.get(
+    "/document-types",
+    response_model=list[PortalClaimDocumentTypeOption],
+    response_model_by_alias=True,
+    summary="List configured claim document types",
+)
+async def list_claim_document_types(
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
+) -> list[PortalClaimDocumentTypeOption]:
+    stmt = (
+        select(LendingOption)
+        .where(
+            LendingOption.organization_id == user.organization_id,
+            LendingOption.option_group == "IIF_CLAIM_DOCUMENT_TYPE",
+            LendingOption.is_active.is_(True),
+        )
+        .order_by(LendingOption.sort_order.asc(), LendingOption.label.asc())
+    )
+    rows = list((await db.execute(stmt)).scalars().all())
+    return [PortalClaimDocumentTypeOption(code=row.code, label=row.label) for row in rows]
 
 
 @router.get(
@@ -157,8 +181,10 @@ async def create_claim(
 async def upload_claim_document(
     claim_id: UUID,
     file: UploadFile = File(...),
-    document_name: str | None = Form(default=None),
-    document_category: str = Form(default="BORROWER_CLAIM_SUPPORTING_DOCUMENT"),
+    document_name: str | None = Form(default=None, alias="documentName"),
+    document_category: str = Form(
+        default="BORROWER_CLAIM_SUPPORTING_DOCUMENT", alias="documentCategory"
+    ),
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
     user=Depends(get_portal_user),
     db: AsyncSession = Depends(get_portal_db_with_tenant),
@@ -202,107 +228,6 @@ async def submit_claim(
     _require_idempotency_key(idempotency_key)
     service = PortalClaimService(db)
     result = await service.submit_claim(user, claim_id, payload)
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/{claim_id}/verify",
-    response_model=BorrowerClaimItem,
-    response_model_by_alias=True,
-    summary="Verify or reject a submitted scheme claim",
-)
-async def verify_claim(
-    claim_id: UUID,
-    payload: SubventionClaimVerifyRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> BorrowerClaimItem:
-    _require_idempotency_key(idempotency_key)
-    service = PortalClaimService(db)
-    result = await service.verify_claim(
-        user,
-        claim_id,
-        decision=payload.decision,
-        reason=payload.reason,
-    )
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/{claim_id}/initiate-release",
-    response_model=BorrowerClaimItem,
-    response_model_by_alias=True,
-    summary="Initiate release for a verified scheme claim",
-)
-async def initiate_release(
-    claim_id: UUID,
-    payload: SubventionClaimInitiateReleaseRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> BorrowerClaimItem:
-    _require_idempotency_key(idempotency_key)
-    service = PortalClaimService(db)
-    result = await service.initiate_release(
-        user,
-        claim_id,
-        release_instruction_reference=payload.release_instruction_reference,
-        release_initiated_date=payload.release_initiated_date,
-        release_instruction_notes=payload.release_instruction_notes,
-    )
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/{claim_id}/mark-released",
-    response_model=BorrowerClaimItem,
-    response_model_by_alias=True,
-    summary="Mark a release-in-progress scheme claim as released",
-)
-async def mark_released(
-    claim_id: UUID,
-    payload: SubventionClaimMarkReleasedRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> BorrowerClaimItem:
-    _require_idempotency_key(idempotency_key)
-    service = PortalClaimService(db)
-    result = await service.mark_released(
-        user,
-        claim_id,
-        release_reference=payload.release_reference,
-        released_date=payload.released_date,
-    )
-    await db.commit()
-    return result
-
-
-@router.post(
-    "/{claim_id}/mark-paid",
-    response_model=BorrowerClaimItem,
-    response_model_by_alias=True,
-    summary="Legacy alias for mark-released",
-)
-async def mark_paid_alias(
-    claim_id: UUID,
-    payload: SubventionClaimMarkPaidRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    user=Depends(get_portal_user),
-    db: AsyncSession = Depends(get_portal_db_with_tenant),
-) -> BorrowerClaimItem:
-    _require_idempotency_key(idempotency_key)
-    service = PortalClaimService(db)
-    result = await service.mark_released(
-        user,
-        claim_id,
-        release_reference=payload.utr_reference,
-        released_date=payload.paid_date,
-    )
     await db.commit()
     return result
 
@@ -375,6 +300,45 @@ async def claim_report_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get(
+    "/{claim_id}/certificate.pdf",
+    summary="Download the generated SFC IIF claim certificate",
+)
+async def claim_certificate_pdf(
+    claim_id: UUID,
+    user=Depends(get_portal_user),
+    db: AsyncSession = Depends(get_portal_db_with_tenant),
+) -> FileResponse:
+    portal_service = PortalClaimService(db)
+    claim = await portal_service.get_claim_record(user, claim_id)
+
+    service = SubventionClaimService(db)
+    generated = await service.latest_claim_certificate(
+        claim.organization_id,
+        claim.id,
+        portal_visible_only=True,
+    )
+    dms_service = DocumentService(db)
+    result = await dms_service.download_document(
+        generated.dms_document_id,
+        user_id=user.id,
+    )
+    if result is None:
+        raise BadRequestException(
+            "Generated certificate file is not available",
+            error_code="IIF_CLAIM_CERTIFICATE_FILE_NOT_FOUND",
+        )
+    storage_path, file_name, mime_type = result
+    full_path = os.path.join(dms_service.upload_path, storage_path)
+    if not os.path.exists(full_path):
+        raise BadRequestException(
+            "Generated certificate file is not available",
+            error_code="IIF_CLAIM_CERTIFICATE_FILE_NOT_FOUND",
+        )
+
+    return FileResponse(path=full_path, filename=file_name, media_type=mime_type)
 
 
 @router.get(

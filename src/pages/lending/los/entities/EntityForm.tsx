@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useToast } from '@/hooks/use-toast';
 import { getErrorMessage } from '@/lib/errorMessage';
 import { logger } from '@/lib/logger';
@@ -46,42 +47,11 @@ import type { Entity } from '@/types/lending';
 
 // Sub-components for each tab
 
-// Entity types for corporate/wholesale lending (Individual hidden per NBFC-IFC model)
-const ENTITY_TYPES = [
-  { value: 'CORPORATE', label: 'Corporate / Company' },
-  { value: 'LLP', label: 'Limited Liability Partnership' },
-  { value: 'PARTNERSHIP', label: 'Partnership Firm' },
-  { value: 'TRUST', label: 'Trust' },
-  { value: 'PROPRIETORSHIP', label: 'Proprietorship Firm' },
-  { value: 'SOCIETY', label: 'Society / Association' },
-];
-
-// Infrastructure sectors for NBFC-IFC classification
-const INFRASTRUCTURE_SECTORS = [
-  { value: 'POWER', label: 'Power Generation & Distribution' },
-  { value: 'ROADS', label: 'Roads & Highways' },
-  { value: 'PORTS', label: 'Ports & Shipping' },
-  { value: 'AIRPORTS', label: 'Airports' },
-  { value: 'RAILWAYS', label: 'Railways' },
-  { value: 'TELECOM', label: 'Telecommunications' },
-  { value: 'INDUSTRIAL', label: 'Industrial Infrastructure' },
-  { value: 'WATER', label: 'Water Supply & Sanitation' },
-  { value: 'URBAN', label: 'Urban Infrastructure' },
-  { value: 'OTHER_INFRA', label: 'Other Infrastructure' },
-  { value: 'NON_INFRA', label: 'Non-Infrastructure' },
-];
-
 const ENTITY_STATUSES = [
   { value: 'PROSPECT', label: 'Prospect' },
   { value: 'ACTIVE', label: 'Active' },
   { value: 'INACTIVE', label: 'Inactive' },
   { value: 'BLACKLISTED', label: 'Blacklisted' },
-];
-
-const RISK_CATEGORIES = [
-  { value: 'LOW', label: 'Low Risk' },
-  { value: 'MEDIUM', label: 'Medium Risk' },
-  { value: 'HIGH', label: 'High Risk' },
 ];
 
 export default function EntityForm() {
@@ -96,6 +66,10 @@ export default function EntityForm() {
   const savingRef = useRef(false);
   const [entity, setEntity] = useState<Entity | null>(null);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'basic');
+  const entityTypesQuery = useLendingOptionRows('ENTITY_TYPE_CORPORATE');
+  const riskGradesQuery = useLendingOptionRows('RISK_GRADE');
+  const entityTypes = masterRowsToOptions(entityTypesQuery.data?.items);
+  const riskGrades = masterRowsToOptions(riskGradesQuery.data?.items);
 
   // Form setup
   const form = useForm<CreateEntityInput>({
@@ -218,7 +192,7 @@ export default function EntityForm() {
 
   // Watch entity type to show/hide CIN field
   const entityType = form.watch('entityType');
-  const showCIN = entityType === 'CORPORATE' || entityType === 'LLP';
+  const showCIN = ['CORPORATE', 'COMPANY', 'LLP'].includes(entityType);
 
   if (loading) {
     return (
@@ -279,7 +253,7 @@ export default function EntityForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {ENTITY_TYPES.map((type) => (
+                              {entityTypes.map((type) => (
                                 <SelectItem key={type.value} value={type.value}>
                                   {type.label}
                                 </SelectItem>
@@ -442,7 +416,7 @@ export default function EntityForm() {
                               </SelectTrigger>
                             </FormControl>
                             <SelectContent>
-                              {RISK_CATEGORIES.map((risk) => (
+                              {riskGrades.map((risk) => (
                                 <SelectItem key={risk.value} value={risk.value}>
                                   {risk.label}
                                 </SelectItem>

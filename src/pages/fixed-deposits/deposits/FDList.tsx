@@ -29,14 +29,10 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
-import type {
-  FixedDeposit,
-  FDStatus,
-  FDProduct,
-} from '@/services/fixedDepositService';
+import type { FixedDeposit, FDStatus, FDProduct } from '@/services/fixedDepositService';
 import fixedDepositService from '@/services/fixedDepositService';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 const ALL_FILTER_VALUE = '__all__';
 
 const STATUS_OPTIONS: { value: FDStatus | typeof ALL_FILTER_VALUE; label: string }[] = [
@@ -118,19 +114,10 @@ export default function FDList() {
   const filteredFDs = fds.filter(
     (fd) =>
       fd.fd_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      fd.customer_name?.toLowerCase().includes(searchTerm.toLowerCase())
+      fd.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()),
   );
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Fixed Deposits"
         subtitle={`Manage customer fixed deposits (${total} total)`}
@@ -144,9 +131,9 @@ export default function FDList() {
 
       <Card>
         <CardHeader>
-          <div className="flex flex-col md:flex-row gap-4 justify-between">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <div className="flex flex-col justify-between gap-4 md:flex-row">
+            <div className="relative max-w-sm flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search by FD number or customer..."
                 value={searchTerm}
@@ -205,13 +192,13 @@ export default function FDList() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
+                  <TableCell colSpan={10} className="py-8 text-center">
                     Loading...
                   </TableCell>
                 </TableRow>
               ) : filteredFDs.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-center py-8">
+                  <TableCell colSpan={10} className="py-8 text-center">
                     No fixed deposits found
                   </TableCell>
                 </TableRow>
@@ -223,13 +210,11 @@ export default function FDList() {
                     <TableCell>
                       <div>
                         <p className="font-medium">{fd.customer_name || '-'}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {fd.customer_category}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{fd.customer_category}</p>
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(fd.deposit_amount)}
+                      {formatIndianCompactCurrency(fd.deposit_amount)}
                     </TableCell>
                     <TableCell>{fd.interest_rate.toFixed(2)}%</TableCell>
                     <TableCell>{fd.tenure_days} days</TableCell>
@@ -237,7 +222,7 @@ export default function FDList() {
                       <DateDisplay date={fd.maturity_date} />
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(fd.maturity_amount)}
+                      {formatIndianCompactCurrency(fd.maturity_amount)}
                     </TableCell>
                     <TableCell>
                       <Badge variant={STATUS_COLORS[fd.status]}>

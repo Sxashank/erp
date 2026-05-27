@@ -27,9 +27,8 @@ describe('cn', () => {
 });
 
 describe('formatCurrency', () => {
-  it('formats positive INR amount with 2 decimals', () => {
-    // en-IN uses narrow no-break space (U+00A0 or U+202F) between symbol and digits.
-    expect(formatCurrency(1234567.89)).toMatch(/₹[\s\u00A0\u202F]?12,34,567\.89/);
+  it('formats positive INR amount using the compact Indian helper', () => {
+    expect(formatCurrency(1234567.89)).toBe('₹12.35 L');
   });
   it('returns dash for null/undefined/empty', () => {
     expect(formatCurrency(null)).toBe('-');
@@ -37,7 +36,7 @@ describe('formatCurrency', () => {
     expect(formatCurrency('')).toBe('-');
   });
   it('parses string inputs', () => {
-    expect(formatCurrency('100')).toMatch(/100\.00/);
+    expect(formatCurrency('100')).toBe('₹100');
   });
   it('returns dash for NaN input', () => {
     expect(formatCurrency('not-a-number')).toBe('-');

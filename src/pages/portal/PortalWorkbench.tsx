@@ -1,5 +1,5 @@
 /**
- * Scheme Portal — borrower workbench.
+ * Borrower Portal - workbench.
  */
 
 import { ArrowRight, Building2, FileSignature, ShieldCheck } from 'lucide-react';
@@ -31,7 +31,7 @@ const ROLE_COPY: Record<
   }
 > = {
   scheme_borrower: {
-    title: 'Scheme Workbench',
+    title: 'Borrower Workbench',
     subtitle:
       'Track institutional applications, answer review queries, and monitor sanction progress.',
     badge: 'Borrower workbench',
@@ -39,19 +39,19 @@ const ROLE_COPY: Record<
     primaryLabel: 'New application',
   },
   scheme_lender: {
-    title: 'Lender Workbench',
-    subtitle: 'Validate submitted borrower applications and monitor lender-side review throughput.',
-    badge: 'Lender review queue',
+    title: 'SFC Review Workbench',
+    subtitle: 'Review submitted borrower applications and monitor SFC review throughput.',
+    badge: 'SFC review queue',
   },
   scheme_smfcl_reviewer: {
-    title: 'SMFCL Review Workbench',
+    title: 'SFC Review Workbench',
     subtitle: 'Process registrations, application review, and submitted subsidy claims.',
-    badge: 'SMFCL reviewer',
+    badge: 'SFC reviewer',
   },
   scheme_smfcl_approver: {
-    title: 'SMFCL Approval Workbench',
+    title: 'SFC Approval Workbench',
     subtitle: 'Approve appraised applications and release verified subsidy claims.',
-    badge: 'SMFCL approver',
+    badge: 'SFC approver',
   },
   scheme_ministry_viewer: {
     title: 'Ministry Monitoring Workbench',
@@ -59,9 +59,9 @@ const ROLE_COPY: Record<
     badge: 'Ministry view',
   },
   scheme_admin: {
-    title: 'Scheme Administration Workbench',
+    title: 'SFC Administration Workbench',
     subtitle: 'Oversee registrations, reviews, approvals, and claim release activity.',
-    badge: 'Scheme admin',
+    badge: 'SFC admin',
   },
 };
 
@@ -83,7 +83,7 @@ const columns: Column<PortalWorkbenchApplication>[] = [
   },
   {
     key: 'schemeStatus',
-    header: 'Scheme status',
+    header: 'Status',
     render: (row) => <StatusPill type="application" status={row.schemeStatus} />,
   },
   {
@@ -104,7 +104,7 @@ export default function PortalWorkbench(): JSX.Element {
       <PageHeader
         title={roleCopy.title}
         subtitle={roleCopy.subtitle}
-        breadcrumbs={[{ label: 'Scheme Portal' }, { label: 'Workbench' }]}
+        breadcrumbs={[{ label: 'Borrower Portal' }, { label: 'Workbench' }]}
         actions={
           roleCopy.primaryHref && roleCopy.primaryLabel ? (
             <Button asChild className="bg-emerald-600 hover:bg-emerald-700">
@@ -135,7 +135,7 @@ export default function PortalWorkbench(): JSX.Element {
               <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-3 text-emerald-700">
                 <ShieldCheck className="h-5 w-5" />
                 <div>
-                  <div className="text-sm font-medium">Scheme role</div>
+                  <div className="text-sm font-medium">Portal role</div>
                   <div className="text-sm">{roleCopy.badge}</div>
                 </div>
               </div>
@@ -168,7 +168,7 @@ export default function PortalWorkbench(): JSX.Element {
                   getRowId={(row) => row.id}
                   onRowClick={(row) => navigate(`/portal/applications/${row.id}`)}
                   emptyTitle="No applications yet"
-                  emptySubtitle="Start your first institutional scheme application to begin lender review."
+                  emptySubtitle="Start your first institutional loan application for SFC review."
                 />
               </CardContent>
             </Card>

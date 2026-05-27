@@ -11,7 +11,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import Field, model_validator
+from pydantic import ConfigDict, Field, model_validator
 
 from app.schemas.base import CamelSchema
 
@@ -26,41 +26,6 @@ class FundUtilizationLine(CamelSchema):
     category_id: UUID
     amount: Decimal = Field(..., ge=0)
     remarks: str | None = Field(None, max_length=500)
-
-
-class ApplicationFundingSourceLine(CamelSchema):
-    """One source-of-funds row in the project funding composition."""
-
-    source_code: str = Field(..., min_length=2, max_length=50)
-    source_label: str = Field(..., min_length=2, max_length=200)
-    amount: Decimal = Field(..., ge=0)
-    remarks: str | None = Field(None, max_length=500)
-
-
-class ApplicationLenderLoanLine(CamelSchema):
-    """One lender loan facility tagged to the scheme application."""
-
-    loan_type: str = Field(..., min_length=2, max_length=80)
-    loan_amount: Decimal = Field(..., gt=0)
-    lender_name: str = Field(..., min_length=2, max_length=200)
-    lender_category: str | None = Field(None, max_length=80)
-    lender_contact: str | None = Field(None, max_length=50)
-    lender_email: str | None = Field(None, max_length=255)
-    lender_address: str | None = Field(None, max_length=500)
-    lender_state: str | None = Field(None, max_length=100)
-    lender_district: str | None = Field(None, max_length=100)
-    lender_pincode: str | None = Field(None, max_length=20)
-    sanction_reference: str | None = Field(None, max_length=100)
-    sanction_date: date | None = None
-    interest_rate_percent: Decimal | None = Field(None, ge=0, le=100)
-    emi_periodicity: str | None = Field(None, max_length=30)
-    interest_debiting_periodicity: str | None = Field(None, max_length=30)
-    loan_account_number: str | None = Field(None, max_length=80)
-    ifsc_code: str | None = Field(None, max_length=20)
-    security_type: str | None = Field(None, max_length=100)
-    disbursement_call_type: str | None = Field(None, max_length=40)
-    emi_amount: Decimal | None = Field(None, ge=0)
-    emi_due_date: date | None = None
 
 
 class CreateApplicationRequest(CamelSchema):
@@ -82,16 +47,13 @@ class CreateApplicationRequest(CamelSchema):
     project_cost: Decimal | None = Field(None, ge=0)
     shipyard_name: str | None = Field(None, max_length=200)
     maritime_segment: str | None = Field(None, max_length=200)
-    lender_name: str | None = Field(None, max_length=200)
-    lender_branch: str | None = Field(None, max_length=200)
-    sanction_reference: str | None = Field(None, max_length=100)
     declaration_accepted: bool = Field(
         ...,
-        description="Borrower confirms scheme declarations and document truthfulness.",
+        description="Borrower confirms SFC declarations and document truthfulness.",
     )
     fund_utilization: list[FundUtilizationLine] = Field(default_factory=list)
-    funding_sources: list[ApplicationFundingSourceLine] = Field(default_factory=list)
-    lender_loans: list[ApplicationLenderLoanLine] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="forbid")
 
     @model_validator(mode="after")
     def _sum_matches_request(self) -> CreateApplicationRequest:
@@ -101,20 +63,6 @@ class CreateApplicationRequest(CamelSchema):
         if abs(total - self.requested_amount) > Decimal("0.01"):
             raise ValueError(
                 "Sum of fund_utilization amounts must equal requested_amount " "(±0.01)"
-            )
-        loan_total = sum((ln.loan_amount for ln in self.lender_loans), start=Decimal("0"))
-        if self.lender_loans and abs(loan_total - self.requested_amount) > Decimal("0.01"):
-            raise ValueError(
-                "Sum of lender_loans loan_amount must equal requested_amount " "(±0.01)"
-            )
-        funding_total = sum((ln.amount for ln in self.funding_sources), start=Decimal("0"))
-        if (
-            self.funding_sources
-            and self.project_cost is not None
-            and abs(funding_total - self.project_cost) > Decimal("0.01")
-        ):
-            raise ValueError(
-                "Sum of funding_sources amounts must equal project_cost " "(±0.01)"
             )
         return self
 
@@ -131,31 +79,10 @@ class UpdateApplicationRequest(CamelSchema):
     project_cost: Decimal | None = Field(None, ge=0)
     shipyard_name: str | None = Field(None, max_length=200)
     maritime_segment: str | None = Field(None, max_length=200)
-    lender_name: str | None = Field(None, max_length=200)
-    lender_branch: str | None = Field(None, max_length=200)
-    sanction_reference: str | None = Field(None, max_length=100)
     declaration_accepted: bool | None = None
     fund_utilization: list[FundUtilizationLine] | None = None
-    funding_sources: list[ApplicationFundingSourceLine] | None = None
-    lender_loans: list[ApplicationLenderLoanLine] | None = None
 
-
-class ApplicationReviewActionRequest(CamelSchema):
-    """Optional remarks payload for non-destructive review actions."""
-
-    remarks: str | None = Field(None, max_length=1000)
-
-
-class ApplicationQueryRequest(CamelSchema):
-    """Raise a borrower query on an application."""
-
-    reason: str = Field(..., min_length=5, max_length=1000)
-
-
-class ApplicationRejectRequest(CamelSchema):
-    """Reject an application with an auditable reason."""
-
-    reason: str = Field(..., min_length=5, max_length=1000)
+    model_config = ConfigDict(extra="forbid")
 
 
 class ApplicationWithdrawRequest(CamelSchema):
@@ -254,46 +181,6 @@ class FundUtilizationResponseLine(CamelSchema):
     remarks: str | None = None
 
 
-class ApplicationFundingSourceResponseLine(CamelSchema):
-    """One persisted source-of-funds row in a detail view."""
-
-    id: UUID
-    source_code: str
-    source_label: str
-    amount: Decimal
-    remarks: str | None = None
-
-
-class ApplicationLenderLoanResponseLine(CamelSchema):
-    """One persisted lender facility row in a detail view."""
-
-    id: UUID
-    loan_type: str
-    loan_amount: Decimal
-    lender_name: str
-    lender_category: str | None = None
-    lender_contact: str | None = None
-    lender_email: str | None = None
-    lender_address: str | None = None
-    lender_state: str | None = None
-    lender_district: str | None = None
-    lender_pincode: str | None = None
-    sanction_reference: str | None = None
-    sanction_date: date | None = None
-    interest_rate_percent: Decimal | None = None
-    emi_periodicity: str | None = None
-    interest_debiting_periodicity: str | None = None
-    loan_account_number: str | None = None
-    ifsc_code: str | None = None
-    security_type: str | None = None
-    disbursement_call_type: str | None = None
-    emi_amount: Decimal | None = None
-    emi_due_date: date | None = None
-    lender_validation_status: str
-    lender_validation_remarks: str | None = None
-    lender_validated_at: datetime | None = None
-
-
 class ApplicationDetailResponse(CamelSchema):
     """Detail response for one application."""
 
@@ -319,16 +206,11 @@ class ApplicationDetailResponse(CamelSchema):
     project_cost: Decimal | None = None
     shipyard_name: str | None = None
     maritime_segment: str | None = None
-    lender_name: str | None = None
-    lender_branch: str | None = None
-    sanction_reference: str | None = None
     declaration_accepted: bool | None = None
     review_remarks: str | None = None
     rejection_reason: str | None = None
 
     fund_utilization: list[FundUtilizationResponseLine] = Field(default_factory=list)
-    funding_sources: list[ApplicationFundingSourceResponseLine] = Field(default_factory=list)
-    lender_loans: list[ApplicationLenderLoanResponseLine] = Field(default_factory=list)
     documents: list[ApplicationDocumentResponse] = Field(default_factory=list)
     document_requirements: list[ApplicationDocumentRequirementResponse] = Field(
         default_factory=list
@@ -337,7 +219,7 @@ class ApplicationDetailResponse(CamelSchema):
 
 
 class ProductListItem(CamelSchema):
-    """Borrower-visible product row for the scheme portal."""
+    """Borrower-visible product row for the SFC borrower portal."""
 
     id: UUID
     code: str
@@ -347,6 +229,17 @@ class ProductListItem(CamelSchema):
     max_amount: Decimal
     min_tenure_months: int
     max_tenure_months: int
+    default_tenure_months: int | None = None
+    allows_moratorium: bool = False
+    max_moratorium_months: int | None = None
+    interest_type: str | None = None
+    allowed_repayment_frequencies: list[str] = Field(default_factory=list)
+    default_repayment_frequency: str | None = None
+    allowed_repayment_modes: list[str] = Field(default_factory=list)
+    default_repayment_mode: str | None = None
+    document_requirements: list[ApplicationDocumentRequirementResponse] = Field(
+        default_factory=list
+    )
 
 
 class UtilizationCategoryListItem(CamelSchema):

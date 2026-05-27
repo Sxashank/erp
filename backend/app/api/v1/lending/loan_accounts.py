@@ -1,13 +1,17 @@
 """Loan Account API endpoints for Phase 2 - Loan Accounting."""
 
+import csv
+import io
+from collections import OrderedDict
 from datetime import date
+from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequirePermissions, get_db_with_tenant
-from app.database import get_db
+from app.core.exceptions import AppException, BadRequestException, InternalServerException
 from app.models.auth.user import User
 from app.models.lending.enums import (
     AssetClassification,
@@ -21,6 +25,9 @@ from app.schemas.lending.loan_account import (
     DisbursementProcess,
     DisbursementResponse,
     DPDBucket,
+    HistoricalLoanOnboardingBatchResponse,
+    HistoricalLoanOnboardingCreate,
+    HistoricalLoanOnboardingResult,
     LoanAccountCreate,
     LoanAccountDetailResponse,
     LoanAccountListResponse,
@@ -49,6 +56,174 @@ from app.services.lending.loan_account_service import LoanAccountService
 router = APIRouter()
 
 
+HISTORICAL_LOAN_TEMPLATE_HEADERS = [
+    "loanAccountNumber",
+    "legacyLoanNumber",
+    "entityCode",
+    "entityId",
+    "productCode",
+    "productId",
+    "applicationDate",
+    "sanctionDate",
+    "accountOpenDate",
+    "firstDisbursementDate",
+    "lastDisbursementDate",
+    "repaymentStartDate",
+    "maturityDate",
+    "cutoverDate",
+    "sanctionedAmount",
+    "totalDisbursedAmount",
+    "principalOutstanding",
+    "interestOutstanding",
+    "interestOverdue",
+    "principalOverdue",
+    "penalInterestOutstanding",
+    "chargesOutstanding",
+    "totalOutstanding",
+    "tenureMonths",
+    "moratoriumMonths",
+    "interestType",
+    "currentInterestRate",
+    "penalInterestRate",
+    "repaymentFrequency",
+    "repaymentMode",
+    "dayCountConvention",
+    "currentEmiAmount",
+    "daysPastDue",
+    "assetClassification",
+    "npaDate",
+    "purpose",
+    "projectName",
+    "remarks",
+    "createHistoricalReceipts",
+    "postHistoricalAccounting",
+    "installmentNumber",
+    "dueDate",
+    "openingBalance",
+    "principalAmount",
+    "interestAmount",
+    "emiAmount",
+    "closingBalance",
+    "principalPaid",
+    "interestPaid",
+    "penalInterestDue",
+    "penalInterestPaid",
+    "status",
+    "paidDate",
+    "receiptReference",
+    "receiptMode",
+]
+
+HISTORICAL_INSTALLMENT_FIELDS = {
+    "installmentNumber",
+    "dueDate",
+    "openingBalance",
+    "principalAmount",
+    "interestAmount",
+    "emiAmount",
+    "closingBalance",
+    "principalPaid",
+    "interestPaid",
+    "penalInterestDue",
+    "penalInterestPaid",
+    "status",
+    "paidDate",
+    "receiptReference",
+    "receiptMode",
+}
+HISTORICAL_ACCOUNT_FIELDS = set(HISTORICAL_LOAN_TEMPLATE_HEADERS) - HISTORICAL_INSTALLMENT_FIELDS
+HISTORICAL_HEADER_MAP = {
+    "".join(ch for ch in header.lower() if ch.isalnum()): header
+    for header in HISTORICAL_LOAN_TEMPLATE_HEADERS
+}
+
+
+def _blank_to_none(value: Any) -> Any:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        value = value.strip()
+        return value if value else None
+    return value
+
+
+def _normalise_historical_row(row: dict[str, Any]) -> dict[str, Any]:
+    cleaned: dict[str, Any] = {}
+    for raw_key, raw_value in row.items():
+        if raw_key is None:
+            continue
+        key = "".join(ch for ch in str(raw_key).lower() if ch.isalnum())
+        field = HISTORICAL_HEADER_MAP.get(key)
+        if not field:
+            continue
+        value = _blank_to_none(raw_value)
+        if value is not None:
+            cleaned[field] = value
+    return cleaned
+
+
+def _group_historical_rows(rows: list[dict[str, Any]]) -> list[HistoricalLoanOnboardingCreate]:
+    grouped: OrderedDict[str, dict[str, Any]] = OrderedDict()
+
+    for raw in rows:
+        row = _normalise_historical_row(raw)
+        if not row:
+            continue
+        key = str(
+            row.get("loanAccountNumber")
+            or row.get("legacyLoanNumber")
+            or row.get("loanReferenceNumber")
+            or ""
+        ).strip()
+        if not key:
+            raise BadRequestException("Each import row needs loanAccountNumber or legacyLoanNumber")
+        if key not in grouped:
+            grouped[key] = {
+                "installments": [],
+            }
+        target = grouped[key]
+        for field in HISTORICAL_ACCOUNT_FIELDS:
+            if field in row and field not in target:
+                target[field] = row[field]
+
+        has_installment = any(row.get(field) is not None for field in HISTORICAL_INSTALLMENT_FIELDS)
+        if has_installment:
+            target["installments"].append(
+                {field: row[field] for field in HISTORICAL_INSTALLMENT_FIELDS if field in row}
+            )
+
+    try:
+        return [
+            HistoricalLoanOnboardingCreate.model_validate(payload) for payload in grouped.values()
+        ]
+    except ValueError as exc:
+        raise BadRequestException(str(exc)) from exc
+
+
+async def _read_historical_import_rows(file: UploadFile) -> list[dict[str, Any]]:
+    filename = (file.filename or "").lower()
+    content = await file.read()
+    if filename.endswith(".xlsx"):
+        try:
+            from openpyxl import load_workbook
+        except ImportError as exc:
+            raise InternalServerException(
+                "XLSX import requires openpyxl to be installed on the backend."
+            ) from exc
+        workbook = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+        worksheet = workbook.active
+        iterator = worksheet.iter_rows(values_only=True)
+        headers = [str(cell).strip() if cell is not None else "" for cell in next(iterator, [])]
+        return [
+            dict(zip(headers, row, strict=False))
+            for row in iterator
+            if any(cell is not None and str(cell).strip() for cell in row)
+        ]
+
+    text = content.decode("utf-8-sig")
+    return list(csv.DictReader(io.StringIO(text)))
+
+
 # =============================================================================
 # Loan Account CRUD Endpoints
 # =============================================================================
@@ -61,15 +236,15 @@ router = APIRouter()
 )
 async def list_loan_accounts(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     search: str | None = Query(None, description="Search in account number"),
-    entity_id: UUID | None = Query(None),
-    product_id: UUID | None = Query(None),
+    entity_id: UUID | None = Query(None, alias="entityId"),
+    product_id: UUID | None = Query(None, alias="productId"),
     status: LoanAccountStatus | None = Query(None),
-    asset_classification: AssetClassification | None = Query(None),
-    min_dpd: int | None = Query(None),
-    max_dpd: int | None = Query(None),
+    asset_classification: AssetClassification | None = Query(None, alias="assetClassification"),
+    min_dpd: int | None = Query(None, alias="minDpd"),
+    max_dpd: int | None = Query(None, alias="maxDpd"),
     current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -137,6 +312,197 @@ async def create_loan_account(
     service = LoanAccountService(db)
     account = await service.create_loan_account(data, current_user.id)
     return LoanAccountResponse.model_validate(account)
+
+
+@router.get(
+    "/historical-onboarding/template.csv",
+    response_model_by_alias=True,
+)
+async def historical_onboarding_template(
+    current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_CREATE")),
+):
+    """Download the Excel-ready CSV template for legacy loan onboarding."""
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(HISTORICAL_LOAN_TEMPLATE_HEADERS)
+    writer.writerow(
+        [
+            "LEGACY-LA-001",
+            "OLD-LA-001",
+            "ENT/UAT/001",
+            "",
+            "UAT-CORP-TL",
+            "",
+            "2023-04-01",
+            "2023-04-15",
+            "2023-05-01",
+            "2023-05-05",
+            "2023-05-05",
+            "2023-06-05",
+            "2028-05-05",
+            "2026-04-01",
+            "100000000",
+            "100000000",
+            "82000000",
+            "0",
+            "0",
+            "0",
+            "0",
+            "0",
+            "82000000",
+            "60",
+            "0",
+            "FIXED",
+            "10.50",
+            "2.00",
+            "MONTHLY",
+            "EMI",
+            "ACT_365",
+            "2149428.11",
+            "0",
+            "STANDARD",
+            "",
+            "Legacy loan onboarding",
+            "Port capacity expansion",
+            "Opening loan migrated from client Excel register",
+            "true",
+            "false",
+            "1",
+            "2023-06-05",
+            "100000000",
+            "1274428.11",
+            "875000",
+            "2149428.11",
+            "98725571.89",
+            "1274428.11",
+            "875000",
+            "0",
+            "0",
+            "PAID",
+            "2023-06-05",
+            "UTR123456",
+            "RTGS",
+        ]
+    )
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=historical-loan-onboarding-template.csv"
+        },
+    )
+
+
+@router.post(
+    "/historical-onboarding",
+    response_model=HistoricalLoanOnboardingResult,
+    response_model_by_alias=True,
+)
+async def onboard_historical_loan(
+    data: HistoricalLoanOnboardingCreate,
+    dry_run: bool = Query(False, alias="dryRun"),
+    current_user: User = Depends(
+        RequirePermissions("LMS_ACCOUNT_CREATE", "LMS_SCHEDULE_CREATE", "LMS_RECEIPT_CREATE")
+    ),
+    db: AsyncSession = Depends(get_db_with_tenant),
+):
+    """Create one historical loan account and its imported EMI history."""
+    service = LoanAccountService(db)
+    result = await service.onboard_historical_loan(
+        data,
+        current_user.organization_id,
+        current_user.id,
+        dry_run=dry_run,
+    )
+    if not dry_run:
+        await db.commit()
+    return result
+
+
+@router.post(
+    "/historical-onboarding/import",
+    response_model=HistoricalLoanOnboardingBatchResponse,
+    response_model_by_alias=True,
+)
+async def import_historical_loans(
+    dry_run: bool = Query(True, alias="dryRun"),
+    file: UploadFile = File(...),
+    current_user: User = Depends(
+        RequirePermissions("LMS_ACCOUNT_CREATE", "LMS_SCHEDULE_CREATE", "LMS_RECEIPT_CREATE")
+    ),
+    db: AsyncSession = Depends(get_db_with_tenant),
+):
+    """Import historical loan and EMI rows from Excel/CSV."""
+    rows = await _read_historical_import_rows(file)
+    loans = _group_historical_rows(rows)
+    service = LoanAccountService(db)
+    results: list[HistoricalLoanOnboardingResult] = []
+
+    if not dry_run:
+        validation_results: list[HistoricalLoanOnboardingResult] = []
+        for loan in loans:
+            try:
+                validation_results.append(
+                    await service.onboard_historical_loan(
+                        loan,
+                        current_user.organization_id,
+                        current_user.id,
+                        dry_run=True,
+                    )
+                )
+            except AppException as exc:
+                validation_results.append(
+                    HistoricalLoanOnboardingResult(
+                        loan_account_number=loan.loan_account_number or loan.legacy_loan_number,
+                        dry_run=False,
+                        errors=[str(exc.detail)],
+                    )
+                )
+        if any(result.errors for result in validation_results):
+            return HistoricalLoanOnboardingBatchResponse(
+                dry_run=False,
+                total_loans=len(loans),
+                imported_loans=0,
+                total_installments=sum(
+                    result.imported_installments for result in validation_results
+                ),
+                imported_receipts=0,
+                results=validation_results,
+            )
+
+    for loan in loans:
+        try:
+            results.append(
+                await service.onboard_historical_loan(
+                    loan,
+                    current_user.organization_id,
+                    current_user.id,
+                    dry_run=dry_run,
+                )
+            )
+        except AppException as exc:
+            results.append(
+                HistoricalLoanOnboardingResult(
+                    loan_account_number=loan.loan_account_number or loan.legacy_loan_number,
+                    dry_run=dry_run,
+                    errors=[str(exc.detail)],
+                )
+            )
+
+    has_errors = any(result.errors for result in results)
+    if not dry_run and has_errors:
+        await db.rollback()
+    elif not dry_run:
+        await db.commit()
+
+    return HistoricalLoanOnboardingBatchResponse(
+        dry_run=dry_run,
+        total_loans=len(loans),
+        imported_loans=sum(1 for result in results if result.loan_account_id is not None),
+        total_installments=sum(result.imported_installments for result in results),
+        imported_receipts=sum(result.imported_receipts for result in results),
+        results=results,
+    )
 
 
 @router.get(

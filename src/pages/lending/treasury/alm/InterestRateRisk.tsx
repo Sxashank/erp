@@ -205,11 +205,7 @@ export default function InterestRateRisk() {
                         const numeric = Array.isArray(value)
                           ? Number(value[0])
                           : Number(value ?? 0);
-                        return new Intl.NumberFormat('en-IN', {
-                          style: 'currency',
-                          currency: 'INR',
-                          maximumFractionDigits: 0,
-                        }).format(numeric);
+                        return formatIndianCompactCurrency(numeric);
                       }}
                     />
                     <Bar dataKey="niiImpact" name="NII Impact">

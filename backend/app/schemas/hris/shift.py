@@ -15,6 +15,7 @@ from app.schemas.base import CamelSchema
 # ============================================
 class ShiftBase(CamelSchema):
     """Base schema for shift."""
+
     shift_code: str = Field(..., max_length=20)
     shift_name: str = Field(..., max_length=100)
     shift_type: ShiftType = ShiftType.GENERAL
@@ -55,11 +56,13 @@ class ShiftBase(CamelSchema):
 
 class ShiftCreate(ShiftBase):
     """Schema for creating shift."""
-    organization_id: UUID
+
+    organization_id: Optional[UUID] = None
 
 
 class ShiftUpdate(CamelSchema):
     """Schema for updating shift."""
+
     shift_name: Optional[str] = None
     shift_type: Optional[ShiftType] = None
     start_time: Optional[time] = None
@@ -83,6 +86,7 @@ class ShiftUpdate(CamelSchema):
 
 class ShiftResponse(ShiftBase):
     """Response schema for shift."""
+
     id: UUID
     organization_id: UUID
     total_shift_minutes: Optional[int] = None
@@ -93,6 +97,7 @@ class ShiftResponse(ShiftBase):
 # ============================================
 class HolidayCalendarBase(CamelSchema):
     """Base schema for holiday calendar."""
+
     year: int
     calendar_name: str = Field("DEFAULT", max_length=100)
     description: Optional[str] = None
@@ -102,11 +107,13 @@ class HolidayCalendarBase(CamelSchema):
 
 class HolidayCalendarCreate(HolidayCalendarBase):
     """Schema for creating holiday calendar."""
-    organization_id: UUID
+
+    organization_id: Optional[UUID] = None
 
 
 class HolidayCalendarUpdate(CamelSchema):
     """Schema for updating holiday calendar."""
+
     calendar_name: Optional[str] = None
     description: Optional[str] = None
     applicable_unit_ids: Optional[List[UUID]] = None
@@ -115,6 +122,7 @@ class HolidayCalendarUpdate(CamelSchema):
 
 class HolidayCalendarResponse(HolidayCalendarBase):
     """Response schema for holiday calendar."""
+
     id: UUID
     organization_id: UUID
     holidays: Optional[List["HolidayResponse"]] = None
@@ -125,6 +133,7 @@ class HolidayCalendarResponse(HolidayCalendarBase):
 # ============================================
 class HolidayBase(CamelSchema):
     """Base schema for holiday."""
+
     holiday_date: date
     holiday_name: str = Field(..., max_length=200)
     holiday_type: HolidayType = HolidayType.COMPANY
@@ -137,17 +146,20 @@ class HolidayBase(CamelSchema):
 
 class HolidayCreate(HolidayBase):
     """Schema for creating holiday."""
+
     calendar_id: UUID
 
 
 class HolidayBulkCreate(CamelSchema):
     """Schema for bulk creating holidays."""
+
     calendar_id: UUID
     holidays: List[HolidayBase]
 
 
 class HolidayUpdate(CamelSchema):
     """Schema for updating holiday."""
+
     holiday_date: Optional[date] = None
     holiday_name: Optional[str] = None
     holiday_type: Optional[HolidayType] = None
@@ -160,6 +172,7 @@ class HolidayUpdate(CamelSchema):
 
 class HolidayResponse(HolidayBase):
     """Response schema for holiday."""
+
     id: UUID
     calendar_id: UUID
 

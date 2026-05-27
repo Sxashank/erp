@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   XCircle,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect, useRef } from 'react';
 
 import { DateDisplay } from '@/components/lending/common/DateDisplay';
@@ -34,25 +35,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { entityApi } from '@/services/lending';
 import type { EntityKYCDocument } from '@/types/lending';
 
-const KYC_DOCUMENT_TYPES = [
-  { value: 'PAN_CARD', label: 'PAN Card' },
-  { value: 'AADHAAR', label: 'Aadhaar Card' },
-  { value: 'PASSPORT', label: 'Passport' },
-  { value: 'VOTER_ID', label: 'Voter ID' },
-  { value: 'DRIVING_LICENSE', label: 'Driving License' },
-  { value: 'COI', label: 'Certificate of Incorporation' },
-  { value: 'MOA', label: 'Memorandum of Association' },
-  { value: 'AOA', label: 'Articles of Association' },
-  { value: 'PARTNERSHIP_DEED', label: 'Partnership Deed' },
-  { value: 'LLP_AGREEMENT', label: 'LLP Agreement' },
-  { value: 'BOARD_RESOLUTION', label: 'Board Resolution' },
-  { value: 'GSTIN_CERTIFICATE', label: 'GSTIN Certificate' },
-  { value: 'ITR', label: 'Income Tax Return' },
-  { value: 'AUDITED_FINANCIALS', label: 'Audited Financial Statements' },
-  { value: 'BANK_STATEMENT', label: 'Bank Statement' },
-  { value: 'OTHER', label: 'Other' },
-];
-
 interface EntityKYCTabProps {
   entityId: string;
 }
@@ -64,6 +46,12 @@ export default function EntityKYCTab({ entityId }: EntityKYCTabProps) {
   const [saving, setSaving] = useState(false);
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const documentTypesQuery = useQuery({
+    queryKey: ['lending', 'entities', 'kyc-document-types'],
+    queryFn: entityApi.getEntityKYCDocumentTypes,
+    staleTime: 5 * 60 * 1000,
+  });
+  const documentTypes = documentTypesQuery.data ?? [];
 
   // Upload form state
   const [uploadForm, setUploadForm] = useState({
@@ -132,12 +120,12 @@ export default function EntityKYCTab({ entityId }: EntityKYCTabProps) {
     try {
       const formData = new FormData();
       formData.append('file', uploadForm.file);
-      formData.append('document_type', uploadForm.documentType);
+      formData.append('documentType', uploadForm.documentType);
       if (uploadForm.documentNumber) {
-        formData.append('document_number', uploadForm.documentNumber);
+        formData.append('documentNumber', uploadForm.documentNumber);
       }
       if (uploadForm.expiryDate) {
-        formData.append('expiry_date', uploadForm.expiryDate);
+        formData.append('expiryDate', uploadForm.expiryDate);
       }
 
       await entityApi.uploadKYCDocument(entityId, formData);
@@ -225,9 +213,9 @@ export default function EntityKYCTab({ entityId }: EntityKYCTabProps) {
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {KYC_DOCUMENT_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
-                          {type.label}
+                      {documentTypes.map((type) => (
+                        <SelectItem key={type.code} value={type.code}>
+                          {type.name}
                         </SelectItem>
                       ))}
                     </SelectContent>

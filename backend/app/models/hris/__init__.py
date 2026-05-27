@@ -38,6 +38,16 @@ from app.models.hris.separation import (
     FnFSettlement,
     FnFStatus,
 )
+from app.models.hris.training import (
+    TrainingProgram,
+    TrainingNomination,
+    TrainingFeedback,
+)
+from app.models.hris.performance import (
+    AppraisalCycle,
+    PerformanceGoal,
+    EmployeeAppraisal,
+)
 
 __all__ = [
     # Employee
@@ -73,4 +83,12 @@ __all__ = [
     "ClearanceStatus",
     "FnFSettlement",
     "FnFStatus",
+    # Training
+    "TrainingProgram",
+    "TrainingNomination",
+    "TrainingFeedback",
+    # Performance
+    "AppraisalCycle",
+    "PerformanceGoal",
+    "EmployeeAppraisal",
 ]

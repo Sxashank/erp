@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import BadRequestException, NotFoundException
 from app.models.lending.enums import InterestType, LoanAccountStatus
 from app.models.lending.loan_account import LoanAccount
+from app.models.lending.masters import DayCountConvention, LendingOption, RateResetBenchmark
 from app.models.lending.treasury import (
     ALMLiability,
     ALMPosition,
@@ -98,6 +99,90 @@ class TreasuryService:
     # Lender Operations
     # =========================================================================
 
+    async def _get_lender_for_org(self, organization_id: UUID, lender_id: UUID) -> Lender:
+        lender = await self.lender_repo.get(lender_id)
+        if not lender or lender.organization_id != organization_id:
+            raise NotFoundException("Lender not found")
+        return lender
+
+    async def _get_borrowing_for_org(self, organization_id: UUID, borrowing_id: UUID) -> Borrowing:
+        borrowing = await self.borrowing_repo.get(borrowing_id)
+        if not borrowing or borrowing.organization_id != organization_id:
+            raise NotFoundException("Borrowing not found")
+        return borrowing
+
+    async def _get_borrowing_with_details_for_org(
+        self,
+        organization_id: UUID,
+        borrowing_id: UUID,
+    ) -> Borrowing:
+        borrowing = await self.borrowing_repo.get_with_details(borrowing_id)
+        if not borrowing or borrowing.organization_id != organization_id:
+            raise NotFoundException("Borrowing not found")
+        return borrowing
+
+    async def _require_lending_option(
+        self,
+        organization_id: UUID,
+        option_group: str,
+        code: str | None,
+        *,
+        field_name: str,
+    ) -> None:
+        if not code:
+            return
+        result = await self.session.execute(
+            select(LendingOption).where(
+                LendingOption.organization_id == organization_id,
+                LendingOption.option_group == option_group,
+                LendingOption.code == code,
+                LendingOption.deleted_at.is_(None),
+                LendingOption.is_active.is_(True),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise BadRequestException(
+                f"{field_name} '{code}' is not configured in lending master data"
+            )
+
+    async def _require_day_count_convention(
+        self,
+        organization_id: UUID,
+        code: str,
+    ) -> None:
+        result = await self.session.execute(
+            select(DayCountConvention).where(
+                DayCountConvention.organization_id == organization_id,
+                DayCountConvention.code == code,
+                DayCountConvention.deleted_at.is_(None),
+                DayCountConvention.is_active.is_(True),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise BadRequestException(
+                f"dayCountConvention '{code}' is not configured in lending master data"
+            )
+
+    async def _require_rate_benchmark(
+        self,
+        organization_id: UUID,
+        code: str | None,
+    ) -> None:
+        if not code:
+            return
+        result = await self.session.execute(
+            select(RateResetBenchmark).where(
+                RateResetBenchmark.organization_id == organization_id,
+                RateResetBenchmark.code == code,
+                RateResetBenchmark.deleted_at.is_(None),
+                RateResetBenchmark.is_active.is_(True),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise BadRequestException(
+                f"baseRateName '{code}' is not configured in rate reset benchmarks"
+            )
+
     async def create_lender(
         self,
         organization_id: UUID,
@@ -105,6 +190,18 @@ class TreasuryService:
         created_by: UUID | None = None,
     ) -> Lender:
         """Create a new lender."""
+        await self._require_lending_option(
+            organization_id,
+            "LENDER_TYPE",
+            data.lender_type,
+            field_name="lenderType",
+        )
+        await self._require_lending_option(
+            organization_id,
+            "RATING_AGENCY",
+            data.rating_agency,
+            field_name="ratingAgency",
+        )
         lender_code = await self.lender_repo.generate_lender_code(organization_id)
 
         lender = Lender(
@@ -122,16 +219,29 @@ class TreasuryService:
 
     async def update_lender(
         self,
+        organization_id: UUID,
         lender_id: UUID,
         data: LenderUpdate,
         updated_by: UUID | None = None,
     ) -> Lender:
         """Update a lender."""
-        lender = await self.lender_repo.get(lender_id)
-        if not lender:
-            raise NotFoundException("Lender not found")
+        lender = await self._get_lender_for_org(organization_id, lender_id)
 
         update_data = data.model_dump(exclude_unset=True)
+        if "lender_type" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "LENDER_TYPE",
+                update_data["lender_type"],
+                field_name="lenderType",
+            )
+        if "rating_agency" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "RATING_AGENCY",
+                update_data["rating_agency"],
+                field_name="ratingAgency",
+            )
         for field, value in update_data.items():
             setattr(lender, field, value)
 
@@ -145,6 +255,10 @@ class TreasuryService:
         if not lender:
             raise NotFoundException("Lender not found")
         return lender
+
+    async def get_lender_for_org(self, organization_id: UUID, lender_id: UUID) -> Lender:
+        """Get a lender by ID within the current tenant."""
+        return await self._get_lender_for_org(organization_id, lender_id)
 
     async def list_lenders(
         self,
@@ -173,6 +287,47 @@ class TreasuryService:
         lender = await self.lender_repo.get(data.lender_id)
         if not lender:
             raise NotFoundException("Lender not found")
+        if lender.organization_id != organization_id:
+            raise NotFoundException("Lender not found")
+
+        await self._require_lending_option(
+            organization_id,
+            "BORROWING_TYPE",
+            data.borrowing_type,
+            field_name="borrowingType",
+        )
+        await self._require_lending_option(
+            organization_id,
+            "RATE_TYPE",
+            data.rate_type,
+            field_name="rateType",
+        )
+        await self._require_lending_option(
+            organization_id,
+            "REPAYMENT_FREQUENCY",
+            data.interest_payment_frequency,
+            field_name="interestPaymentFrequency",
+        )
+        await self._require_lending_option(
+            organization_id,
+            "REPAYMENT_FREQUENCY",
+            data.principal_payment_frequency,
+            field_name="principalPaymentFrequency",
+        )
+        await self._require_lending_option(
+            organization_id,
+            "REPAYMENT_FREQUENCY",
+            data.rate_reset_frequency,
+            field_name="rateResetFrequency",
+        )
+        await self._require_lending_option(
+            organization_id,
+            "SECURITY_TYPE",
+            data.security_type,
+            field_name="securityType",
+        )
+        await self._require_day_count_convention(organization_id, data.day_count_convention)
+        await self._require_rate_benchmark(organization_id, data.base_rate_name)
 
         borrowing_number = await self.borrowing_repo.generate_borrowing_number(
             organization_id, data.borrowing_type
@@ -193,16 +348,66 @@ class TreasuryService:
 
     async def update_borrowing(
         self,
+        organization_id: UUID,
         borrowing_id: UUID,
         data: BorrowingUpdate,
         updated_by: UUID | None = None,
     ) -> Borrowing:
         """Update a borrowing."""
-        borrowing = await self.borrowing_repo.get(borrowing_id)
-        if not borrowing:
-            raise NotFoundException("Borrowing not found")
+        borrowing = await self._get_borrowing_for_org(organization_id, borrowing_id)
 
         update_data = data.model_dump(exclude_unset=True)
+        if update_data.get("lender_id") is not None:
+            await self._get_lender_for_org(organization_id, update_data["lender_id"])
+        if "borrowing_type" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "BORROWING_TYPE",
+                update_data["borrowing_type"],
+                field_name="borrowingType",
+            )
+        if "rate_type" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "RATE_TYPE",
+                update_data["rate_type"],
+                field_name="rateType",
+            )
+        if "interest_payment_frequency" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "REPAYMENT_FREQUENCY",
+                update_data["interest_payment_frequency"],
+                field_name="interestPaymentFrequency",
+            )
+        if "principal_payment_frequency" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "REPAYMENT_FREQUENCY",
+                update_data["principal_payment_frequency"],
+                field_name="principalPaymentFrequency",
+            )
+        if "rate_reset_frequency" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "REPAYMENT_FREQUENCY",
+                update_data["rate_reset_frequency"],
+                field_name="rateResetFrequency",
+            )
+        if "security_type" in update_data:
+            await self._require_lending_option(
+                organization_id,
+                "SECURITY_TYPE",
+                update_data["security_type"],
+                field_name="securityType",
+            )
+        if update_data.get("day_count_convention") is not None:
+            await self._require_day_count_convention(
+                organization_id,
+                update_data["day_count_convention"],
+            )
+        if "base_rate_name" in update_data:
+            await self._require_rate_benchmark(organization_id, update_data["base_rate_name"])
         for field, value in update_data.items():
             setattr(borrowing, field, value)
 
@@ -217,12 +422,28 @@ class TreasuryService:
             raise NotFoundException("Borrowing not found")
         return borrowing
 
+    async def get_borrowing_for_org(
+        self,
+        organization_id: UUID,
+        borrowing_id: UUID,
+    ) -> Borrowing:
+        """Get a borrowing by ID within the current tenant."""
+        return await self._get_borrowing_for_org(organization_id, borrowing_id)
+
     async def get_borrowing_with_details(self, borrowing_id: UUID) -> Borrowing:
         """Get borrowing with all related data."""
         borrowing = await self.borrowing_repo.get_with_details(borrowing_id)
         if not borrowing:
             raise NotFoundException("Borrowing not found")
         return borrowing
+
+    async def get_borrowing_with_details_for_org(
+        self,
+        organization_id: UUID,
+        borrowing_id: UUID,
+    ) -> Borrowing:
+        """Get borrowing with all related data within the current tenant."""
+        return await self._get_borrowing_with_details_for_org(organization_id, borrowing_id)
 
     async def list_borrowings(
         self,

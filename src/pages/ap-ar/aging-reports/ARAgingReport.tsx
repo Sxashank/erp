@@ -1,10 +1,5 @@
 import { format } from 'date-fns';
-import {
-  ChevronRight,
-  FileSpreadsheet,
-  Printer,
-  RefreshCw,
-} from 'lucide-react';
+import { ChevronRight, FileSpreadsheet, Printer, RefreshCw } from 'lucide-react';
 import { useCallback, useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -34,7 +29,7 @@ import { showErrorToast } from '@/lib/errorToast';
 import { agingReportsApi, customersApi } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface AgingCustomer {
   customer_id: string;
   customer_code: string;
@@ -124,11 +119,7 @@ export function ARAgingReport() {
   }, [fetchReport]);
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   const getPercentage = (amount: number, total: number) => {

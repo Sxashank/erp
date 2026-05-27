@@ -19,7 +19,7 @@ import { vouchersApi } from '@/services/api';
 import type { Voucher } from '@/types';
 import { VOUCHER_STATUSES } from '@/types';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export function VoucherView() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -146,11 +146,7 @@ export function VoucherView() {
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   if (loading) {
@@ -283,7 +279,9 @@ export function VoucherView() {
               </div>
               <div>
                 <p className="text-sm text-slate-500">Voucher Date</p>
-                <p className="font-medium"><DateDisplay date={voucher.voucher_date} /></p>
+                <p className="font-medium">
+                  <DateDisplay date={voucher.voucher_date} />
+                </p>
               </div>
               <div>
                 <p className="text-sm text-slate-500">Voucher Type</p>

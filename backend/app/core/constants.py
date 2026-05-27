@@ -5,6 +5,7 @@ from enum import Enum
 
 class UserStatus(str, Enum):
     """User account status."""
+
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     LOCKED = "LOCKED"
@@ -13,6 +14,7 @@ class UserStatus(str, Enum):
 
 class AuthType(str, Enum):
     """Authentication type."""
+
     LOCAL = "LOCAL"
     LDAP = "LDAP"
     SSO = "SSO"
@@ -20,6 +22,7 @@ class AuthType(str, Enum):
 
 class UnitType(str, Enum):
     """Organization unit type."""
+
     HEAD_OFFICE = "HEAD_OFFICE"
     BRANCH = "BRANCH"
     REGIONAL_OFFICE = "REGIONAL_OFFICE"
@@ -28,6 +31,7 @@ class UnitType(str, Enum):
 
 class EntityStatus(str, Enum):
     """Generic entity status."""
+
     ACTIVE = "ACTIVE"
     INACTIVE = "INACTIVE"
     DRAFT = "DRAFT"
@@ -35,6 +39,7 @@ class EntityStatus(str, Enum):
 
 class PermissionAction(str, Enum):
     """Permission action types."""
+
     CREATE = "CREATE"
     READ = "READ"
     UPDATE = "UPDATE"
@@ -46,6 +51,7 @@ class PermissionAction(str, Enum):
 # Permission Modules
 class PermissionModule(str, Enum):
     """Permission module categories."""
+
     MASTERS = "MASTERS"
     USER_MGMT = "USER_MGMT"
     FINANCE = "FINANCE"
@@ -74,6 +80,7 @@ SYSTEM_ROLES = [
 # Token Types
 class TokenType(str, Enum):
     """Token types for JWT."""
+
     ACCESS = "access"
     REFRESH = "refresh"
     RESET_PASSWORD = "reset_password"
@@ -83,6 +90,7 @@ class TokenType(str, Enum):
 # Finance Module Enums
 class AccountNature(str, Enum):
     """Account nature/category in COA."""
+
     ASSETS = "ASSETS"
     LIABILITIES = "LIABILITIES"
     INCOME = "INCOME"
@@ -92,6 +100,7 @@ class AccountNature(str, Enum):
 
 class AccountType(str, Enum):
     """Type of account in COA."""
+
     GROUP = "GROUP"
     LEDGER = "LEDGER"
     BANK = "BANK"
@@ -101,6 +110,7 @@ class AccountType(str, Enum):
 
 class ControlAccountType(str, Enum):
     """Type of control account for sub-ledgers."""
+
     CUSTOMER = "CUSTOMER"
     VENDOR = "VENDOR"
     BANK = "BANK"
@@ -109,12 +119,14 @@ class ControlAccountType(str, Enum):
 
 class BalanceType(str, Enum):
     """Balance type - Debit or Credit."""
+
     DEBIT = "DR"
     CREDIT = "CR"
 
 
 class VoucherClass(str, Enum):
     """Classification of voucher types."""
+
     JOURNAL = "JOURNAL"
     PAYMENT = "PAYMENT"
     RECEIPT = "RECEIPT"
@@ -127,6 +139,7 @@ class VoucherClass(str, Enum):
 
 class VoucherStatus(str, Enum):
     """Status of a voucher in workflow."""
+
     DRAFT = "DRAFT"
     PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
@@ -137,6 +150,7 @@ class VoucherStatus(str, Enum):
 
 class PartyType(str, Enum):
     """Type of party for voucher lines."""
+
     CUSTOMER = "CUSTOMER"
     VENDOR = "VENDOR"
     EMPLOYEE = "EMPLOYEE"
@@ -144,6 +158,7 @@ class PartyType(str, Enum):
 
 class GSTRegistrationType(str, Enum):
     """GST registration type."""
+
     REGULAR = "REGULAR"
     COMPOSITION = "COMPOSITION"
     SEZ = "SEZ"
@@ -155,12 +170,14 @@ class GSTRegistrationType(str, Enum):
 
 class HSNSACType(str, Enum):
     """Type of code - HSN for goods, SAC for services."""
+
     HSN = "HSN"
     SAC = "SAC"
 
 
 class GSTTransactionType(str, Enum):
     """GST transaction type for invoice."""
+
     B2B = "B2B"  # Business to Business
     B2C_LARGE = "B2C_LARGE"  # B2C Large (>2.5L)
     B2C_SMALL = "B2C_SMALL"  # B2C Small
@@ -172,6 +189,7 @@ class GSTTransactionType(str, Enum):
 
 class TDSDeducteeType(str, Enum):
     """TDS deductee type for rate determination."""
+
     INDIVIDUAL = "INDIVIDUAL"
     HUF = "HUF"
     COMPANY = "COMPANY"
@@ -185,6 +203,7 @@ class TDSDeducteeType(str, Enum):
 
 class TDSChallanStatus(str, Enum):
     """TDS challan payment status."""
+
     PENDING = "PENDING"
     PAID = "PAID"
     VERIFIED = "VERIFIED"
@@ -192,6 +211,7 @@ class TDSChallanStatus(str, Enum):
 
 class TDSReturnType(str, Enum):
     """TDS return form type."""
+
     FORM_24Q = "24Q"  # Salary
     FORM_26Q = "26Q"  # Non-salary
     FORM_27Q = "27Q"  # Non-resident
@@ -200,6 +220,7 @@ class TDSReturnType(str, Enum):
 
 class RecurrenceFrequency(str, Enum):
     """Frequency for recurring vouchers."""
+
     DAILY = "DAILY"
     WEEKLY = "WEEKLY"
     MONTHLY = "MONTHLY"
@@ -210,6 +231,7 @@ class RecurrenceFrequency(str, Enum):
 
 class GLEntryType(str, Enum):
     """Type of GL entry for audit trail."""
+
     NORMAL = "NORMAL"  # Regular posting
     REVERSAL = "REVERSAL"  # Reversal of a previous entry
     OPENING = "OPENING"  # Opening balance entry
@@ -225,6 +247,7 @@ class GLEntryType(str, Enum):
 # ============================================
 class AssetType(str, Enum):
     """Type of fixed asset."""
+
     TANGIBLE = "TANGIBLE"
     INTANGIBLE = "INTANGIBLE"
     RIGHT_OF_USE = "RIGHT_OF_USE"
@@ -232,6 +255,7 @@ class AssetType(str, Enum):
 
 class DepreciationMethod(str, Enum):
     """Depreciation calculation method."""
+
     SLM = "SLM"  # Straight Line Method
     WDV = "WDV"  # Written Down Value
     UNIT_OF_PRODUCTION = "UNIT_OF_PRODUCTION"
@@ -240,6 +264,7 @@ class DepreciationMethod(str, Enum):
 
 class AssetAcquisitionType(str, Enum):
     """How the asset was acquired."""
+
     PURCHASE = "PURCHASE"
     LEASE = "LEASE"
     DONATION = "DONATION"
@@ -250,6 +275,7 @@ class AssetAcquisitionType(str, Enum):
 
 class AssetStatus(str, Enum):
     """Status of a fixed asset."""
+
     DRAFT = "DRAFT"  # Not yet capitalized
     ACTIVE = "ACTIVE"  # In use
     DISPOSED = "DISPOSED"  # Sold/scrapped
@@ -260,6 +286,7 @@ class AssetStatus(str, Enum):
 
 class AssetDisposalType(str, Enum):
     """Type of asset disposal."""
+
     SALE = "SALE"
     SCRAP = "SCRAP"
     WRITE_OFF = "WRITE_OFF"
@@ -270,6 +297,7 @@ class AssetDisposalType(str, Enum):
 
 class DepreciationType(str, Enum):
     """Type of depreciation entry."""
+
     REGULAR = "REGULAR"  # Normal monthly depreciation
     ADDITIONAL = "ADDITIONAL"  # Additional depreciation (IT Act)
     REVERSAL = "REVERSAL"  # Correction/reversal
@@ -278,12 +306,14 @@ class DepreciationType(str, Enum):
 
 class DepreciationBook(str, Enum):
     """Depreciation book type for dual depreciation tracking."""
+
     COMPANIES_ACT = "COMPANIES_ACT"  # As per Companies Act (financial statements)
     IT_ACT = "IT_ACT"  # As per Income Tax Act (tax computation)
 
 
 class ITActAssetBlock(str, Enum):
     """IT Act asset blocks as per Schedule II (Section 32)."""
+
     # Tangible Assets
     BLOCK_1 = "BLOCK_1"  # Buildings (5% - Residential)
     BLOCK_2 = "BLOCK_2"  # Buildings (10% - Non-residential)
@@ -302,6 +332,7 @@ class ITActAssetBlock(str, Enum):
 
 class AssetTransferStatus(str, Enum):
     """Status of asset transfer."""
+
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     COMPLETED = "COMPLETED"
@@ -310,6 +341,7 @@ class AssetTransferStatus(str, Enum):
 
 class RevaluationType(str, Enum):
     """Type of asset revaluation."""
+
     INCREASE = "INCREASE"
     DECREASE = "DECREASE"
     IMPAIRMENT = "IMPAIRMENT"
@@ -317,6 +349,7 @@ class RevaluationType(str, Enum):
 
 class GLEntrySourceType(str, Enum):
     """Source of GL entry - tracks where the entry originated."""
+
     MANUAL = "MANUAL"  # Manual voucher entry
     PURCHASE_BILL = "PURCHASE_BILL"  # From purchase bill approval
     SALES_INVOICE = "SALES_INVOICE"  # From sales invoice approval
@@ -342,6 +375,7 @@ class GLEntrySourceType(str, Enum):
 
 class RecurringVoucherStatus(str, Enum):
     """Status of recurring voucher template."""
+
     ACTIVE = "ACTIVE"
     PAUSED = "PAUSED"
     COMPLETED = "COMPLETED"
@@ -353,6 +387,7 @@ class RecurringVoucherStatus(str, Enum):
 # ============================================
 class Gender(str, Enum):
     """Gender options."""
+
     MALE = "MALE"
     FEMALE = "FEMALE"
     OTHER = "OTHER"
@@ -360,6 +395,7 @@ class Gender(str, Enum):
 
 class MaritalStatus(str, Enum):
     """Marital status options."""
+
     SINGLE = "SINGLE"
     MARRIED = "MARRIED"
     DIVORCED = "DIVORCED"
@@ -368,6 +404,7 @@ class MaritalStatus(str, Enum):
 
 class Salutation(str, Enum):
     """Name salutation."""
+
     MR = "MR"
     MS = "MS"
     MRS = "MRS"
@@ -377,6 +414,7 @@ class Salutation(str, Enum):
 
 class EmploymentType(str, Enum):
     """Type of employment."""
+
     PERMANENT = "PERMANENT"
     CONTRACT = "CONTRACT"
     TRAINEE = "TRAINEE"
@@ -387,6 +425,7 @@ class EmploymentType(str, Enum):
 
 class EmploymentStatus(str, Enum):
     """Employee status in organization."""
+
     ACTIVE = "ACTIVE"
     PROBATION = "PROBATION"
     NOTICE_PERIOD = "NOTICE_PERIOD"
@@ -398,6 +437,7 @@ class EmploymentStatus(str, Enum):
 
 class DocumentType(str, Enum):
     """Types of employee documents."""
+
     AADHAAR = "AADHAAR"
     PAN = "PAN"
     PASSPORT = "PASSPORT"
@@ -415,6 +455,7 @@ class DocumentType(str, Enum):
 
 class FamilyRelation(str, Enum):
     """Family member relationship."""
+
     FATHER = "FATHER"
     MOTHER = "MOTHER"
     SPOUSE = "SPOUSE"
@@ -428,6 +469,7 @@ class FamilyRelation(str, Enum):
 
 class EducationLevel(str, Enum):
     """Education qualification level."""
+
     HIGH_SCHOOL = "HIGH_SCHOOL"
     INTERMEDIATE = "INTERMEDIATE"
     DIPLOMA = "DIPLOMA"
@@ -440,6 +482,7 @@ class EducationLevel(str, Enum):
 
 class LifecycleEventType(str, Enum):
     """Types of employee lifecycle events."""
+
     JOINING = "JOINING"
     CONFIRMATION = "CONFIRMATION"
     PROMOTION = "PROMOTION"
@@ -458,6 +501,7 @@ class LifecycleEventType(str, Enum):
 
 class ShiftType(str, Enum):
     """Type of work shift."""
+
     GENERAL = "GENERAL"
     MORNING = "MORNING"
     AFTERNOON = "AFTERNOON"
@@ -468,6 +512,7 @@ class ShiftType(str, Enum):
 
 class HolidayType(str, Enum):
     """Type of holiday."""
+
     NATIONAL = "NATIONAL"
     STATE = "STATE"
     RESTRICTED = "RESTRICTED"
@@ -477,6 +522,7 @@ class HolidayType(str, Enum):
 
 class LeaveCategory(str, Enum):
     """Category of leave type."""
+
     EARNED = "EARNED"
     CASUAL = "CASUAL"
     SICK = "SICK"
@@ -491,6 +537,7 @@ class LeaveCategory(str, Enum):
 
 class LeaveApplicationStatus(str, Enum):
     """Status of leave application."""
+
     DRAFT = "DRAFT"
     PENDING = "PENDING"
     APPROVED = "APPROVED"
@@ -501,6 +548,7 @@ class LeaveApplicationStatus(str, Enum):
 
 class AttendanceStatus(str, Enum):
     """Daily attendance status."""
+
     PRESENT = "PRESENT"
     ABSENT = "ABSENT"
     HALF_DAY = "HALF_DAY"
@@ -515,6 +563,7 @@ class AttendanceStatus(str, Enum):
 
 class AttendanceSource(str, Enum):
     """Source of attendance marking."""
+
     BIOMETRIC = "BIOMETRIC"
     WEB = "WEB"
     MOBILE = "MOBILE"
@@ -525,6 +574,7 @@ class AttendanceSource(str, Enum):
 
 class RegularizationStatus(str, Enum):
     """Status of attendance regularization."""
+
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
@@ -532,6 +582,7 @@ class RegularizationStatus(str, Enum):
 
 class SalaryComponentType(str, Enum):
     """Type of salary component."""
+
     EARNING = "EARNING"
     DEDUCTION = "DEDUCTION"
     EMPLOYER_CONTRIBUTION = "EMPLOYER_CONTRIBUTION"
@@ -540,6 +591,7 @@ class SalaryComponentType(str, Enum):
 
 class SalaryComponentCategory(str, Enum):
     """Category of salary component."""
+
     BASIC = "BASIC"
     HRA = "HRA"
     DA = "DA"
@@ -560,6 +612,7 @@ class SalaryComponentCategory(str, Enum):
 
 class PayrollRunStatus(str, Enum):
     """Status of payroll processing run."""
+
     DRAFT = "DRAFT"
     PROCESSING = "PROCESSING"
     COMPLETED = "COMPLETED"
@@ -570,6 +623,7 @@ class PayrollRunStatus(str, Enum):
 
 class PayslipStatus(str, Enum):
     """Status of individual payslip."""
+
     DRAFT = "DRAFT"
     PROCESSED = "PROCESSED"
     LOCKED = "LOCKED"
@@ -579,6 +633,7 @@ class PayslipStatus(str, Enum):
 
 class SeparationType(str, Enum):
     """Type of employee separation."""
+
     RESIGNATION = "RESIGNATION"
     TERMINATION = "TERMINATION"
     RETIREMENT = "RETIREMENT"
@@ -589,6 +644,7 @@ class SeparationType(str, Enum):
 
 class SeparationStatus(str, Enum):
     """Status of separation process."""
+
     INITIATED = "INITIATED"
     NOTICE_PERIOD = "NOTICE_PERIOD"
     CLEARANCE_PENDING = "CLEARANCE_PENDING"
@@ -599,6 +655,7 @@ class SeparationStatus(str, Enum):
 
 class ClearanceStatus(str, Enum):
     """Status of clearance item."""
+
     PENDING = "PENDING"
     CLEARED = "CLEARED"
     NOT_APPLICABLE = "NOT_APPLICABLE"
@@ -609,6 +666,7 @@ class ClearanceStatus(str, Enum):
 # ============================================
 class ApprovalWorkflowType(str, Enum):
     """Types of transactions requiring maker-checker approval."""
+
     # Fixed Assets
     FA_ASSET_CREATION = "FA_ASSET_CREATION"
     FA_ASSET_CAPITALIZATION = "FA_ASSET_CAPITALIZATION"
@@ -637,6 +695,7 @@ class ApprovalWorkflowType(str, Enum):
 
 class ApprovalRequestStatus(str, Enum):
     """Status of an approval request."""
+
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
@@ -647,6 +706,7 @@ class ApprovalRequestStatus(str, Enum):
 
 class ApprovalAction(str, Enum):
     """Action taken by approver."""
+
     APPROVE = "APPROVE"
     REJECT = "REJECT"
     RETURN = "RETURN"  # Return to maker for changes
@@ -657,6 +717,7 @@ class ApprovalAction(str, Enum):
 # Permission Constants
 # Single source of truth - matches exactly what's used in API endpoints
 # ============================================
+
 
 class Permissions:
     """
@@ -858,6 +919,10 @@ class Permissions:
     LOS_SANCTION_CREATE = "LOS_SANCTION_CREATE"
     LOS_SANCTION_UPDATE = "LOS_SANCTION_UPDATE"
     LOS_SANCTION_APPROVE = "LOS_SANCTION_APPROVE"
+
+    # Lending master-data SSOT
+    LENDING_MASTER_READ = "LENDING_MASTER_READ"
+    LENDING_MASTER_WRITE = "LENDING_MASTER_WRITE"
 
     # ==========================================
     # LENDING - LMS (Loan Management System)
@@ -1507,6 +1572,8 @@ ALL_PERMISSIONS = {
         Permissions.LOS_SANCTION_CREATE,
         Permissions.LOS_SANCTION_UPDATE,
         Permissions.LOS_SANCTION_APPROVE,
+        Permissions.LENDING_MASTER_READ,
+        Permissions.LENDING_MASTER_WRITE,
     ],
     "LMS (Loan Management)": [
         Permissions.LMS_ACCOUNT_VIEW,

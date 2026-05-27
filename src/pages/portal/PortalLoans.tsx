@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { portalDashboardApi } from '@/services/portalApi';
 import type { LoanSummary } from '@/types/portal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function PortalLoans() {
   const [loading, setLoading] = useState(true);
   const [loans, setLoans] = useState<LoanSummary[]>([]);
@@ -46,15 +46,6 @@ export default function PortalLoans() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const filteredLoans = loans.filter((loan) => {
     if (activeTab === 'all') return true;
     if (activeTab === 'active') return loan.status === 'ACTIVE';
@@ -72,7 +63,7 @@ export default function PortalLoans() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-emerald-600" />
       </div>
     );
@@ -80,17 +71,14 @@ export default function PortalLoans() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="My Loans"
-        subtitle="View and manage your loan accounts"
-      />
+      <PageHeader title="My Loans" subtitle="View and manage your loan accounts" />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <Wallet className="h-5 w-5 text-blue-600" />
               </div>
               <div>
@@ -103,7 +91,7 @@ export default function PortalLoans() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 rounded-lg">
+              <div className="rounded-lg bg-emerald-100 p-2">
                 <TrendingUp className="h-5 w-5 text-emerald-600" />
               </div>
               <div>
@@ -116,12 +104,14 @@ export default function PortalLoans() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
+              <div className="rounded-lg bg-purple-100 p-2">
                 <IndianRupee className="h-5 w-5 text-purple-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Outstanding</p>
-                <p className="text-lg font-bold">{formatCurrency(summaryStats.totalOutstanding)}</p>
+                <p className="text-lg font-bold">
+                  {formatIndianCompactCurrency(summaryStats.totalOutstanding)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -129,7 +119,7 @@ export default function PortalLoans() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
+              <div className="rounded-lg bg-red-100 p-2">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
               <div>
@@ -161,8 +151,8 @@ export default function PortalLoans() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-12 text-gray-500">
-              <Wallet className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <div className="py-12 text-center text-gray-500">
+              <Wallet className="mx-auto mb-4 h-12 w-12 opacity-50" />
               <p className="text-lg">No loans found</p>
               <p className="text-sm">
                 {activeTab === 'all'
@@ -178,14 +168,6 @@ export default function PortalLoans() {
 }
 
 function LoanCard({ loan }: { loan: LoanSummary }) {
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const paidPercentage =
     loan.disbursed_amount > 0
       ? ((loan.disbursed_amount - loan.outstanding_principal) / loan.disbursed_amount) * 100
@@ -207,11 +189,11 @@ function LoanCard({ loan }: { loan: LoanSummary }) {
 
   return (
     <Link to={`/portal/loans/${loan.id}`}>
-      <div className="p-4 border rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
-        <div className="flex items-start justify-between mb-4">
+      <div className="cursor-pointer rounded-lg border p-4 transition-colors hover:bg-gray-50">
+        <div className="mb-4 flex items-start justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold text-lg">{loan.loan_account_number}</h3>
+              <h3 className="text-lg font-semibold">{loan.loan_account_number}</h3>
               {getStatusBadge()}
             </div>
             <p className="text-sm text-gray-500">{loan.product_name}</p>
@@ -219,18 +201,18 @@ function LoanCard({ loan }: { loan: LoanSummary }) {
           <ChevronRight className="h-5 w-5 text-gray-400" />
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
           <div>
             <p className="text-xs text-gray-500">Sanctioned</p>
-            <p className="font-medium">{formatCurrency(loan.sanctioned_amount)}</p>
+            <p className="font-medium">{formatIndianCompactCurrency(loan.sanctioned_amount)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Outstanding</p>
-            <p className="font-medium">{formatCurrency(loan.total_outstanding)}</p>
+            <p className="font-medium">{formatIndianCompactCurrency(loan.total_outstanding)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">EMI Amount</p>
-            <p className="font-medium">{formatCurrency(loan.emi_amount)}</p>
+            <p className="font-medium">{formatIndianCompactCurrency(loan.emi_amount)}</p>
           </div>
           <div>
             <p className="text-xs text-gray-500">Next EMI Date</p>
@@ -239,7 +221,7 @@ function LoanCard({ loan }: { loan: LoanSummary }) {
         </div>
 
         <div className="mb-3">
-          <div className="flex justify-between text-sm text-gray-500 mb-1">
+          <div className="mb-1 flex justify-between text-sm text-gray-500">
             <span>Repayment Progress</span>
             <span>{paidPercentage.toFixed(0)}%</span>
           </div>
@@ -259,7 +241,8 @@ function LoanCard({ loan }: { loan: LoanSummary }) {
             <div className="flex items-center gap-1 text-red-600">
               <AlertTriangle className="h-4 w-4" />
               <span>
-                {formatCurrency(loan.overdue_amount)} overdue ({loan.overdue_days} days)
+                {formatIndianCompactCurrency(loan.overdue_amount)} overdue ({loan.overdue_days}{' '}
+                days)
               </span>
             </div>
           )}

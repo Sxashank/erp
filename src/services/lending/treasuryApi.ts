@@ -9,6 +9,10 @@ import type { LenderListItem, ALMPosition, PaginatedResponse } from '@/types/len
 
 const BASE_URL = '/lending/treasury';
 
+function idempotencyHeaders(): { 'Idempotency-Key': string } {
+  return { 'Idempotency-Key': crypto.randomUUID() };
+}
+
 // ============== Lenders ==============
 
 export interface LenderFilters {
@@ -54,10 +58,10 @@ export async function getLenders(
   const params = new URLSearchParams();
 
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.lenderType) params.append('lender_type', filters.lenderType);
+  if (filters?.lenderType) params.append('lenderType', filters.lenderType);
   if (filters?.status) params.append('status', filters.status);
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+  if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
   const response = await api.get<PaginatedResponse<LenderListItem>>(
     `${BASE_URL}/lenders?${params.toString()}`,
@@ -93,7 +97,9 @@ export interface CreateLenderRequest {
 }
 
 export async function createLender(data: CreateLenderRequest): Promise<LenderDetail> {
-  const response = await api.post<LenderDetail>(`${BASE_URL}/lenders`, data);
+  const response = await api.post<LenderDetail>(`${BASE_URL}/lenders`, data, {
+    headers: idempotencyHeaders(),
+  });
   return response.data;
 }
 
@@ -101,12 +107,14 @@ export async function updateLender(
   lenderId: string,
   data: Partial<CreateLenderRequest>,
 ): Promise<LenderDetail> {
-  const response = await api.put<LenderDetail>(`${BASE_URL}/lenders/${lenderId}`, data);
+  const response = await api.put<LenderDetail>(`${BASE_URL}/lenders/${lenderId}`, data, {
+    headers: idempotencyHeaders(),
+  });
   return response.data;
 }
 
 export async function deleteLender(lenderId: string): Promise<void> {
-  await api.delete(`${BASE_URL}/lenders/${lenderId}`);
+  await api.delete(`${BASE_URL}/lenders/${lenderId}`, { headers: idempotencyHeaders() });
 }
 
 // ============== Borrowings ==============
@@ -149,13 +157,13 @@ export async function getBorrowings(
   const params = new URLSearchParams();
 
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.lenderId) params.append('lender_id', filters.lenderId);
-  if (filters?.borrowingType) params.append('borrowing_type', filters.borrowingType);
+  if (filters?.lenderId) params.append('lenderId', filters.lenderId);
+  if (filters?.borrowingType) params.append('borrowingType', filters.borrowingType);
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.dateFrom) params.append('date_from', filters.dateFrom);
-  if (filters?.dateTo) params.append('date_to', filters.dateTo);
+  if (filters?.dateFrom) params.append('dateFrom', filters.dateFrom);
+  if (filters?.dateTo) params.append('dateTo', filters.dateTo);
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+  if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
   const response = await api.get<PaginatedResponse<BorrowingListItem>>(
     `${BASE_URL}/borrowings?${params.toString()}`,
@@ -219,21 +227,12 @@ export async function getBorrowing(borrowingId: string): Promise<BorrowingDetail
 
 export interface CreateBorrowingRequest {
   lenderId: string;
-  borrowingType:
-    | 'TERM_LOAN'
-    | 'WORKING_CAPITAL'
-    | 'CASH_CREDIT'
-    | 'NCD'
-    | 'CP'
-    | 'SUBORDINATED_DEBT'
-    | 'ECB'
-    | 'REFINANCE'
-    | 'ICD';
+  borrowingType: string;
   sanctionDate: string;
   sanctionReference?: string;
   sanctionedAmount: number;
   currency: string;
-  rateType: 'FIXED' | 'FLOATING';
+  rateType: string;
   baseRateName?: string;
   baseRateValue?: number;
   spreadBps?: number;
@@ -241,7 +240,7 @@ export interface CreateBorrowingRequest {
   rateResetFrequency?: string;
   dayCountConvention: string;
   interestPaymentFrequency: string;
-  principalPaymentFrequency: 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY' | 'BULLET';
+  principalPaymentFrequency: string;
   tenureMonths: number;
   moratoriumMonths: number;
   firstInterestDate?: string;
@@ -257,7 +256,9 @@ export interface CreateBorrowingRequest {
 }
 
 export async function createBorrowing(data: CreateBorrowingRequest): Promise<BorrowingDetail> {
-  const response = await api.post<BorrowingDetail>(`${BASE_URL}/borrowings`, data);
+  const response = await api.post<BorrowingDetail>(`${BASE_URL}/borrowings`, data, {
+    headers: idempotencyHeaders(),
+  });
   return response.data;
 }
 
@@ -265,7 +266,9 @@ export async function updateBorrowing(
   borrowingId: string,
   data: Partial<CreateBorrowingRequest>,
 ): Promise<BorrowingDetail> {
-  const response = await api.put<BorrowingDetail>(`${BASE_URL}/borrowings/${borrowingId}`, data);
+  const response = await api.put<BorrowingDetail>(`${BASE_URL}/borrowings/${borrowingId}`, data, {
+    headers: idempotencyHeaders(),
+  });
   return response.data;
 }
 
@@ -290,12 +293,16 @@ export async function recordDrawdown(
   borrowingId: string,
   data: { amount: number; drawdownDate: string; interestRate?: number; remarks?: string },
 ): Promise<BorrowingTranche> {
-  const response = await api.post<BorrowingTranche>(`${BASE_URL}/tranches`, {
-    borrowingId,
-    requestDate: data.drawdownDate,
-    requestedAmount: data.amount,
-    purpose: data.remarks,
-  });
+  const response = await api.post<BorrowingTranche>(
+    `${BASE_URL}/tranches`,
+    {
+      borrowingId,
+      requestDate: data.drawdownDate,
+      requestedAmount: data.amount,
+      purpose: data.remarks,
+    },
+    { headers: idempotencyHeaders() },
+  );
   return response.data;
 }
 
@@ -334,18 +341,22 @@ export async function recordRepayment(
     remarks?: string;
   },
 ): Promise<BorrowingRepayment> {
-  const response = await api.post<BorrowingRepayment>(`${BASE_URL}/payments`, {
-    borrowingId,
-    paymentType: 'MANUAL',
-    scheduleId: data.trancheId,
-    paymentDate: data.paymentDate,
-    valueDate: data.paymentDate,
-    principalAmount: data.principalAmount,
-    interestAmount: data.interestAmount,
-    paymentMode: 'BANK_TRANSFER',
-    utrNumber: data.referenceNumber,
-    remarks: data.remarks,
-  });
+  const response = await api.post<BorrowingRepayment>(
+    `${BASE_URL}/payments`,
+    {
+      borrowingId,
+      paymentType: 'MANUAL',
+      scheduleId: data.trancheId,
+      paymentDate: data.paymentDate,
+      valueDate: data.paymentDate,
+      principalAmount: data.principalAmount,
+      interestAmount: data.interestAmount,
+      paymentMode: 'BANK_TRANSFER',
+      utrNumber: data.referenceNumber,
+      remarks: data.remarks,
+    },
+    { headers: idempotencyHeaders() },
+  );
   return response.data;
 }
 
@@ -385,17 +396,21 @@ export async function getBorrowingSchedule(borrowingId: string): Promise<Borrowi
 export async function regenerateBorrowingSchedule(
   borrowingId: string,
 ): Promise<BorrowingScheduleEntry[]> {
-  const response = await api.post<BorrowingScheduleEntry[]>(
-    `${BASE_URL}/borrowings/${borrowingId}/schedule/regenerate`,
+  const response = await api.post<PaginatedResponse<BorrowingScheduleEntry>>(
+    `${BASE_URL}/borrowings/${borrowingId}/schedule/generate`,
+    undefined,
+    { headers: idempotencyHeaders() },
   );
-  return response.data;
+  return response.data.items;
 }
 
 // ============== ALM (Asset Liability Management) ==============
 
 export async function generateALMPosition(asOfDate?: string): Promise<ALMPosition> {
   const params = asOfDate ? `?as_of_date=${asOfDate}` : '';
-  const response = await api.post<ALMPosition>(`${BASE_URL}/alm/generate${params}`);
+  const response = await api.post<ALMPosition>(`${BASE_URL}/alm/generate${params}`, undefined, {
+    headers: idempotencyHeaders(),
+  });
   return response.data;
 }
 

@@ -1,4 +1,4 @@
-"""Scheme-portal borrower-visible products."""
+"""SFC borrower-portal borrower-visible products."""
 
 from __future__ import annotations
 
@@ -7,12 +7,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
 from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.schemas.portal.application import ProductListItem
 from app.services.portal.application_service import PortalApplicationService
 
-router = APIRouter(prefix="/products", tags=["Scheme Portal · Products"])
+router = APIRouter(prefix="/products", tags=["Borrower Portal · Products"])
 
 
 @router.get(

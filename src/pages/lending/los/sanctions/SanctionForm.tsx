@@ -28,12 +28,13 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useSanction } from '@/hooks/lending/useSanction';
 import { useCreateSanction, useUpdateSanction } from '@/hooks/lending/useSanctionMutations';
 import { sanctionSchema, type SanctionFormData } from '@/schemas/lending/sanctionSchema';
 
-// Default values for the form fields. No example/mock conditions, securities
-// or covenants — the user starts with an empty form and adds rows as needed.
+// Default values for form fields. Conditions, securities and covenants start
+// empty; the user adds rows as needed.
 const defaultValues: Partial<SanctionFormData> = {
   interestType: 'FLOATING',
   spreadBps: 0,
@@ -53,6 +54,15 @@ const addDays = (date: Date, days: number) => {
   return nextDate.toISOString().slice(0, 10);
 };
 
+function toOptionRows(rows: { data: Record<string, unknown> }[] | undefined) {
+  return (
+    rows?.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.name ?? row.data.code ?? ''),
+    })) ?? []
+  );
+}
+
 export default function SanctionForm() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -63,6 +73,21 @@ export default function SanctionForm() {
   const { data: existingSanction } = useSanction(isEdit ? id : undefined);
   const createMutation = useCreateSanction();
   const updateMutation = useUpdateSanction(id);
+  const interestTypesQuery = useLendingOptionRows('RATE_TYPE');
+  const repaymentFrequenciesQuery = useLendingOptionRows('REPAYMENT_FREQUENCY');
+  const repaymentModesQuery = useLendingOptionRows('REPAYMENT_MODE');
+  const securityNaturesQuery = useLendingOptionRows('SECURITY_NATURE');
+  const securityCategoriesQuery = useLendingOptionRows('SECURITY_CATEGORY');
+  const covenantTypesQuery = useLendingOptionRows('COVENANT_TYPE');
+  const covenantFrequenciesQuery = useLendingOptionRows('COVENANT_FREQUENCY');
+
+  const interestTypeOptions = toOptionRows(interestTypesQuery.data?.items);
+  const repaymentFrequencyOptions = toOptionRows(repaymentFrequenciesQuery.data?.items);
+  const repaymentModeOptions = toOptionRows(repaymentModesQuery.data?.items);
+  const securityNatureOptions = toOptionRows(securityNaturesQuery.data?.items);
+  const securityCategoryOptions = toOptionRows(securityCategoriesQuery.data?.items);
+  const covenantTypeOptions = toOptionRows(covenantTypesQuery.data?.items);
+  const covenantFrequencyOptions = toOptionRows(covenantFrequenciesQuery.data?.items);
 
   const {
     register,
@@ -130,12 +155,7 @@ export default function SanctionForm() {
       tenureMonths: existingSanction.tenureMonths,
       moratoriumMonths: existingSanction.moratoriumMonths,
       repaymentFrequency: existingSanction.repaymentFrequency,
-      repaymentMode:
-        existingSanction.repaymentMode === 'BALLOON' ||
-        existingSanction.repaymentMode === 'STEP_UP' ||
-        existingSanction.repaymentMode === 'STEP_DOWN'
-          ? 'STRUCTURED'
-          : existingSanction.repaymentMode,
+      repaymentMode: existingSanction.repaymentMode,
       validityDays,
       conditions: [],
       securities: [],
@@ -315,8 +335,11 @@ export default function SanctionForm() {
                         <SelectValue placeholder="Select interest type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="FIXED">Fixed Rate</SelectItem>
-                        <SelectItem value="FLOATING">Floating Rate</SelectItem>
+                        {interestTypeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -369,11 +392,11 @@ export default function SanctionForm() {
                         <SelectValue placeholder="Select frequency" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="MONTHLY">Monthly</SelectItem>
-                        <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-                        <SelectItem value="HALF_YEARLY">Half Yearly</SelectItem>
-                        <SelectItem value="YEARLY">Yearly</SelectItem>
-                        <SelectItem value="BULLET">Bullet</SelectItem>
+                        {repaymentFrequencyOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -389,9 +412,11 @@ export default function SanctionForm() {
                         <SelectValue placeholder="Select mode" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="EMI">EMI (Equated Monthly Installment)</SelectItem>
-                        <SelectItem value="STRUCTURED">Structured Repayment</SelectItem>
-                        <SelectItem value="BULLET">Bullet Payment</SelectItem>
+                        {repaymentModeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -606,18 +631,18 @@ export default function SanctionForm() {
                             <Select
                               value={watch(`securities.${index}.securityCategory`)}
                               onValueChange={(v) =>
-                                setValue(
-                                  `securities.${index}.securityCategory`,
-                                  v as 'PRIMARY' | 'COLLATERAL',
-                                )
+                                setValue(`securities.${index}.securityCategory`, v)
                               }
                             >
                               <SelectTrigger className="w-[130px]">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="PRIMARY">Primary</SelectItem>
-                                <SelectItem value="COLLATERAL">Collateral</SelectItem>
+                                {securityNatureOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -630,12 +655,11 @@ export default function SanctionForm() {
                                 <SelectValue placeholder="Select nature" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="PROPERTY">Property</SelectItem>
-                                <SelectItem value="PLANT_MACHINERY">Plant & Machinery</SelectItem>
-                                <SelectItem value="FIXED_DEPOSIT">Fixed Deposit</SelectItem>
-                                <SelectItem value="RECEIVABLES">Receivables</SelectItem>
-                                <SelectItem value="INVENTORY">Inventory</SelectItem>
-                                <SelectItem value="GUARANTEE">Guarantee</SelectItem>
+                                {securityCategoryOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -686,8 +710,8 @@ export default function SanctionForm() {
                   className="mt-4"
                   onClick={() =>
                     appendSecurity({
-                      securityCategory: 'PRIMARY',
-                      securityType: '',
+                      securityCategory: securityNatureOptions[0]?.value ?? '',
+                      securityType: securityCategoryOptions[0]?.value ?? '',
                       description: '',
                       acceptableValue: 0,
                       marginPercentage: 0,
@@ -734,21 +758,17 @@ export default function SanctionForm() {
                           <TableCell>
                             <Select
                               value={watch(`covenants.${index}.covenantType`)}
-                              onValueChange={(v) =>
-                                setValue(
-                                  `covenants.${index}.covenantType`,
-                                  v as SanctionFormData['covenants'][number]['covenantType'],
-                                )
-                              }
+                              onValueChange={(v) => setValue(`covenants.${index}.covenantType`, v)}
                             >
                               <SelectTrigger className="w-[130px]">
                                 <SelectValue placeholder="Type" />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="FINANCIAL">Financial</SelectItem>
-                                <SelectItem value="REPORTING">Reporting</SelectItem>
-                                <SelectItem value="OPERATIONAL">Operational</SelectItem>
-                                <SelectItem value="NEGATIVE">Negative</SelectItem>
+                                {covenantTypeOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -761,21 +781,17 @@ export default function SanctionForm() {
                           <TableCell>
                             <Select
                               value={watch(`covenants.${index}.frequency`)}
-                              onValueChange={(v) =>
-                                setValue(
-                                  `covenants.${index}.frequency`,
-                                  v as 'MONTHLY' | 'QUARTERLY' | 'YEARLY' | 'ONE_TIME',
-                                )
-                              }
+                              onValueChange={(v) => setValue(`covenants.${index}.frequency`, v)}
                             >
                               <SelectTrigger className="w-[120px]">
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                <SelectItem value="MONTHLY">Monthly</SelectItem>
-                                <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-                                <SelectItem value="YEARLY">Yearly</SelectItem>
-                                <SelectItem value="ONE_TIME">One Time</SelectItem>
+                                {covenantFrequencyOptions.map((option) => (
+                                  <SelectItem key={option.value} value={option.value}>
+                                    {option.label}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
@@ -807,9 +823,9 @@ export default function SanctionForm() {
                   className="mt-4"
                   onClick={() =>
                     appendCovenant({
-                      covenantType: 'FINANCIAL',
+                      covenantType: covenantTypeOptions[0]?.value ?? '',
                       description: '',
-                      frequency: 'YEARLY',
+                      frequency: covenantFrequencyOptions[0]?.value ?? '',
                       threshold: '',
                     })
                   }

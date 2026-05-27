@@ -10,7 +10,9 @@ from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
+from app.schemas.fixed_assets.common import OffsetPaginatedResponse
 from app.schemas.fixed_assets.depreciation import (
+    DepreciationPostingActionResponse,
     DepreciationRunCreate,
     DepreciationRunResponse,
     DepreciationResponse,
@@ -87,10 +89,13 @@ def _dep_to_response(dep) -> DepreciationResponse:
     )
 
 
-@router.get("/runs", response_model=dict, response_model_by_alias=True)
+@router.get(
+    "/runs",
+    response_model=OffsetPaginatedResponse[DepreciationRunResponse],
+    response_model_by_alias=True,
+)
 async def list_depreciation_runs(
     request: Request,
-    organization_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -99,14 +104,14 @@ async def list_depreciation_runs(
 ):
     """List depreciation runs for an organization."""
     service = DepreciationService(db)
-    runs, total = await service.list_runs(organization_id, skip, limit)
+    runs, total = await service.list_runs(current_user.organization_id, skip, limit)
 
-    return {
-        "items": [_run_to_response(run) for run in runs],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    return OffsetPaginatedResponse(
+        items=[_run_to_response(run) for run in runs],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/runs/{run_id}", response_model=DepreciationRunResponse, response_model_by_alias=True)
@@ -128,7 +133,12 @@ async def get_depreciation_run(
     return _run_to_response(run)
 
 
-@router.post("/run", response_model=DepreciationRunResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/run",
+    response_model=DepreciationRunResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def run_depreciation(
     request: Request,
     data: DepreciationRunCreate,
@@ -145,8 +155,7 @@ async def run_depreciation(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/runs/{run_id}/post", response_model=DepreciationRunResponse, response_model_by_alias=True)
-async def post_depreciation_run(
+async def _post_depreciation_run_impl(
     request: Request,
     run_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -157,12 +166,52 @@ async def post_depreciation_run(
     service = DepreciationService(db)
     try:
         run = await service.post_depreciation_run(run_id, posted_by=current_user.id)
-        return _run_to_response(run)
+        return DepreciationPostingActionResponse(
+            mode="posted",
+            message="Depreciation posted to GL",
+            run=_run_to_response(run),
+        )
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/runs/{run_id}/entries", response_model=dict, response_model_by_alias=True)
+@router.post(
+    "/runs/{run_id}/post",
+    response_model=DepreciationPostingActionResponse,
+    response_model_by_alias=True,
+)
+async def post_depreciation_run(
+    request: Request,
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
+):
+    """Post depreciation run to GL using the legacy endpoint path."""
+    return await _post_depreciation_run_impl(request, run_id, db, current_user)
+
+
+@router.post(
+    "/runs/{run_id}/submit-posting",
+    response_model=DepreciationPostingActionResponse,
+    response_model_by_alias=True,
+)
+async def submit_depreciation_posting(
+    request: Request,
+    run_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+    _: None = Depends(PermissionChecker([Permissions.FA_DEPRECIATION_RUN])),
+):
+    """Canonical UI endpoint for depreciation posting."""
+    return await _post_depreciation_run_impl(request, run_id, db, current_user)
+
+
+@router.get(
+    "/runs/{run_id}/entries",
+    response_model=OffsetPaginatedResponse[DepreciationResponse],
+    response_model_by_alias=True,
+)
 async def get_run_entries(
     request: Request,
     run_id: UUID,
@@ -181,18 +230,22 @@ async def get_run_entries(
             error_code="DEPRECIATION_RUN_NOT_FOUND",
         )
 
-    entries = run.entries[skip:skip + limit] if run.entries else []
+    entries = run.entries[skip : skip + limit] if run.entries else []
     total = len(run.entries) if run.entries else 0
 
-    return {
-        "items": [_dep_to_response(entry) for entry in entries],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    return OffsetPaginatedResponse(
+        items=[_dep_to_response(entry) for entry in entries],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
-@router.get("/history/{asset_id}", response_model=dict, response_model_by_alias=True)
+@router.get(
+    "/history/{asset_id}",
+    response_model=OffsetPaginatedResponse[DepreciationResponse],
+    response_model_by_alias=True,
+)
 async def get_asset_depreciation_history(
     request: Request,
     asset_id: UUID,
@@ -206,15 +259,19 @@ async def get_asset_depreciation_history(
     service = DepreciationService(db)
     entries, total = await service.get_depreciation_history(asset_id, skip, limit)
 
-    return {
-        "items": [_dep_to_response(entry) for entry in entries],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    return OffsetPaginatedResponse(
+        items=[_dep_to_response(entry) for entry in entries],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
-@router.get("/schedule/{asset_id}", response_model=DepreciationScheduleResponse, response_model_by_alias=True)
+@router.get(
+    "/schedule/{asset_id}",
+    response_model=DepreciationScheduleResponse,
+    response_model_by_alias=True,
+)
 async def get_depreciation_schedule(
     request: Request,
     asset_id: UUID,
@@ -232,7 +289,9 @@ async def get_depreciation_schedule(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/{depreciation_id}/reverse", response_model=DepreciationResponse, response_model_by_alias=True)
+@router.post(
+    "/{depreciation_id}/reverse", response_model=DepreciationResponse, response_model_by_alias=True
+)
 async def reverse_depreciation(
     request: Request,
     depreciation_id: UUID,

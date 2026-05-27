@@ -1,6 +1,6 @@
 /**
- * Scheme Portal Layout
- * Common layout wrapper with navigation for scheme portal pages
+ * Borrower Portal Layout
+ * Common layout wrapper with navigation for borrower portal pages
  */
 
 import {
@@ -44,7 +44,7 @@ import { resolvePortalActorRole } from '@/hooks/portal/usePortalSession';
 import { clearPortalSession, portalAuthApi, portalCommunicationApi } from '@/services/portalApi';
 import type { PortalUser, Notification } from '@/types/portal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 function navItemsForRole(role: string) {
   const base = [
     { label: 'Workbench', href: '/portal/workbench', icon: LayoutDashboard },
@@ -151,7 +151,7 @@ export default function PortalLayout() {
               <div className="rounded-lg bg-emerald-600 p-2">
                 <Wallet className="h-5 w-5 text-white" />
               </div>
-              <span className="text-lg font-bold text-gray-900">Scheme Portal</span>
+              <span className="text-lg font-bold text-gray-900">Borrower Portal</span>
             </div>
 
             {/* Desktop Navigation */}
@@ -224,7 +224,10 @@ export default function PortalLayout() {
                         <span className="line-clamp-2 text-xs text-gray-500">
                           {notification.message}
                         </span>
-                        <DateDisplay date={notification.created_at} className="text-xs text-gray-400" />
+                        <DateDisplay
+                          date={notification.created_at}
+                          className="text-xs text-gray-400"
+                        />
                       </DropdownMenuItem>
                     ))
                   ) : (
@@ -315,8 +318,8 @@ export default function PortalLayout() {
             <p>&copy; {new Date().getFullYear()} TalentFino. All rights reserved.</p>
             <div className="flex items-center gap-4">
               <span>Institutional borrower access only</span>
-              <span>SMFCL scheme operations</span>
-              <span>Support via scheme administrator</span>
+              <span>SFC loan operations</span>
+              <span>Support via SFC</span>
             </div>
           </div>
         </div>

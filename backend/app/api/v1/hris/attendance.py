@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.core.constants import Permissions, AttendanceStatus, RegularizationStatus
 from app.models.auth.user import User
 from app.schemas.hris.attendance import (
@@ -35,10 +35,24 @@ from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter()
 
 
+def _require_organization_id(current_user: User) -> UUID:
+    if not current_user.organization_id:
+        raise BadRequestException(
+            detail="Current user is not assigned to an organization",
+            error_code="ORGANIZATION_CONTEXT_REQUIRED",
+        )
+    return current_user.organization_id
+
+
 # ============================================
 # Punches
 # ============================================
-@router.post("/punch", response_model=AttendancePunchResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/punch",
+    response_model=AttendancePunchResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def record_punch(
     data: AttendancePunchCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -50,7 +64,11 @@ async def record_punch(
     return punch
 
 
-@router.get("/punches/{employee_id}", response_model=List[AttendancePunchResponse], response_model_by_alias=True)
+@router.get(
+    "/punches/{employee_id}",
+    response_model=List[AttendancePunchResponse],
+    response_model_by_alias=True,
+)
 async def get_punches(
     employee_id: UUID,
     punch_date: date,
@@ -68,7 +86,6 @@ async def get_punches(
 # ============================================
 @router.get("", response_model=PaginatedResponse[AttendanceResponse], response_model_by_alias=True)
 async def list_attendance(
-    organization_id: Optional[UUID] = None,
     employee_id: Optional[UUID] = None,
     department_id: Optional[UUID] = None,
     shift_id: Optional[UUID] = None,
@@ -85,7 +102,7 @@ async def list_attendance(
     """List attendance records."""
     service = AttendanceService(db)
     filters = AttendanceFilters(
-        organization_id=organization_id,
+        organization_id=_require_organization_id(current_user),
         employee_id=employee_id,
         department_id=department_id,
         shift_id=shift_id,
@@ -102,6 +119,182 @@ async def list_attendance(
         items.append(_build_attendance_response(rec))
 
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+# ============================================
+# Regularization
+# ============================================
+@router.get(
+    "/regularizations",
+    response_model=PaginatedResponse[AttendanceRegularizationResponse],
+    response_model_by_alias=True,
+)
+async def list_regularizations(
+    employee_id: Optional[UUID] = None,
+    department_id: Optional[UUID] = None,
+    status: Optional[RegularizationStatus] = None,
+    request_type: Optional[str] = None,
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_VIEW)),
+):
+    """List regularization requests."""
+    service = AttendanceService(db)
+    filters = AttendanceRegularizationFilters(
+        organization_id=_require_organization_id(current_user),
+        employee_id=employee_id,
+        department_id=department_id,
+        status=status,
+        request_type=request_type,
+        from_date=from_date,
+        to_date=to_date,
+    )
+    records, total = await service.list_regularizations(filters, skip, limit)
+
+    items = []
+    for rec in records:
+        items.append(_build_regularization_response(rec))
+
+    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
+
+
+@router.post(
+    "/regularizations",
+    response_model=AttendanceRegularizationResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_regularization(
+    data: AttendanceRegularizationCreate,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_REGULARIZE)),
+):
+    """Create regularization request."""
+    service = AttendanceService(db)
+    regularization = await service.create_regularization(data, current_user.id)
+    return _build_regularization_response(regularization)
+
+
+@router.get(
+    "/regularizations/{regularization_id}",
+    response_model=AttendanceRegularizationResponse,
+    response_model_by_alias=True,
+)
+async def get_regularization(
+    regularization_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_VIEW)),
+):
+    """Get regularization by ID."""
+    service = AttendanceService(db)
+    regularization = await service.get_regularization(regularization_id)
+    if not regularization:
+        raise NotFoundException(
+            detail="Regularization not found", error_code="REGULARIZATION_NOT_FOUND"
+        )
+    return _build_regularization_response(regularization)
+
+
+@router.post(
+    "/regularizations/{regularization_id}/approve",
+    response_model=AttendanceRegularizationResponse,
+    response_model_by_alias=True,
+)
+async def approve_regularization(
+    regularization_id: UUID,
+    data: AttendanceRegularizationApprove,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_APPROVE)),
+):
+    """Approve regularization request."""
+    service = AttendanceService(db)
+    try:
+        regularization = await service.approve_regularization(
+            regularization_id, data.remarks, current_user.id
+        )
+        if not regularization:
+            raise NotFoundException(
+                detail="Regularization not found",
+                error_code="REGULARIZATION_NOT_FOUND",
+            )
+        return _build_regularization_response(regularization)
+    except ValueError as e:
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
+
+
+@router.post(
+    "/regularizations/{regularization_id}/reject",
+    response_model=AttendanceRegularizationResponse,
+    response_model_by_alias=True,
+)
+async def reject_regularization(
+    regularization_id: UUID,
+    data: AttendanceRegularizationReject,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_APPROVE)),
+):
+    """Reject regularization request."""
+    service = AttendanceService(db)
+    try:
+        regularization = await service.reject_regularization(
+            regularization_id, data.reason, current_user.id
+        )
+        if not regularization:
+            raise NotFoundException(
+                detail="Regularization not found",
+                error_code="REGULARIZATION_NOT_FOUND",
+            )
+        return _build_regularization_response(regularization)
+    except ValueError as e:
+        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
+
+
+# ============================================
+# Processing
+# ============================================
+@router.post(
+    "/process/daily", response_model=AttendanceProcessingResult, response_model_by_alias=True
+)
+async def process_daily_attendance(
+    data: ProcessDailyAttendanceRequest,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_MARK)),
+):
+    """Process daily attendance from punches."""
+    service = AttendanceService(db)
+    result = await service.process_daily_attendance(data, current_user.id)
+    return result
+
+
+@router.post(
+    "/process/monthly", response_model=AttendanceProcessingResult, response_model_by_alias=True
+)
+async def process_monthly_summary(
+    data: ProcessMonthlyAttendanceRequest,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_MARK)),
+):
+    """Process monthly attendance summary."""
+    service = AttendanceService(db)
+    result = await service.process_monthly_summary(data, current_user.id)
+    return result
+
+
+@router.post("/lock", response_model=dict, response_model_by_alias=True)
+async def lock_attendance(
+    data: LockAttendanceRequest,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_APPROVE)),
+):
+    """Lock monthly attendance for payroll."""
+    service = AttendanceService(db)
+    count = await service.lock_monthly_attendance(
+        data.organization_id, data.year, data.month, current_user.id
+    )
+    return {"locked_count": count, "message": f"Locked {count} attendance records for payroll"}
 
 
 @router.get("/{attendance_id}", response_model=AttendanceResponse, response_model_by_alias=True)
@@ -140,156 +333,6 @@ async def update_attendance(
         return _build_attendance_response(attendance)
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
-
-
-# ============================================
-# Regularization
-# ============================================
-@router.get("/regularizations", response_model=PaginatedResponse[AttendanceRegularizationResponse], response_model_by_alias=True)
-async def list_regularizations(
-    organization_id: Optional[UUID] = None,
-    employee_id: Optional[UUID] = None,
-    department_id: Optional[UUID] = None,
-    status: Optional[RegularizationStatus] = None,
-    request_type: Optional[str] = None,
-    from_date: Optional[date] = None,
-    to_date: Optional[date] = None,
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_VIEW)),
-):
-    """List regularization requests."""
-    service = AttendanceService(db)
-    filters = AttendanceRegularizationFilters(
-        organization_id=organization_id,
-        employee_id=employee_id,
-        department_id=department_id,
-        status=status,
-        request_type=request_type,
-        from_date=from_date,
-        to_date=to_date,
-    )
-    records, total = await service.list_regularizations(filters, skip, limit)
-
-    items = []
-    for rec in records:
-        items.append(_build_regularization_response(rec))
-
-    return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
-
-
-@router.post("/regularizations", response_model=AttendanceRegularizationResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
-async def create_regularization(
-    data: AttendanceRegularizationCreate,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_REGULARIZE)),
-):
-    """Create regularization request."""
-    service = AttendanceService(db)
-    regularization = await service.create_regularization(data, current_user.id)
-    return _build_regularization_response(regularization)
-
-
-@router.get("/regularizations/{regularization_id}", response_model=AttendanceRegularizationResponse, response_model_by_alias=True)
-async def get_regularization(
-    regularization_id: UUID,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_VIEW)),
-):
-    """Get regularization by ID."""
-    service = AttendanceService(db)
-    regularization = await service.get_regularization(regularization_id)
-    if not regularization:
-        raise NotFoundException(detail="Regularization not found", error_code="REGULARIZATION_NOT_FOUND")
-    return _build_regularization_response(regularization)
-
-
-@router.post("/regularizations/{regularization_id}/approve", response_model=AttendanceRegularizationResponse, response_model_by_alias=True)
-async def approve_regularization(
-    regularization_id: UUID,
-    data: AttendanceRegularizationApprove,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_APPROVE)),
-):
-    """Approve regularization request."""
-    service = AttendanceService(db)
-    try:
-        regularization = await service.approve_regularization(
-            regularization_id, data.remarks, current_user.id
-        )
-        if not regularization:
-            raise NotFoundException(
-                detail="Regularization not found",
-                error_code="REGULARIZATION_NOT_FOUND",
-            )
-        return _build_regularization_response(regularization)
-    except ValueError as e:
-        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
-
-
-@router.post("/regularizations/{regularization_id}/reject", response_model=AttendanceRegularizationResponse, response_model_by_alias=True)
-async def reject_regularization(
-    regularization_id: UUID,
-    data: AttendanceRegularizationReject,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_APPROVE)),
-):
-    """Reject regularization request."""
-    service = AttendanceService(db)
-    try:
-        regularization = await service.reject_regularization(
-            regularization_id, data.reason, current_user.id
-        )
-        if not regularization:
-            raise NotFoundException(
-                detail="Regularization not found",
-                error_code="REGULARIZATION_NOT_FOUND",
-            )
-        return _build_regularization_response(regularization)
-    except ValueError as e:
-        raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
-
-
-# ============================================
-# Processing
-# ============================================
-@router.post("/process/daily", response_model=AttendanceProcessingResult, response_model_by_alias=True)
-async def process_daily_attendance(
-    data: ProcessDailyAttendanceRequest,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_MARK)),
-):
-    """Process daily attendance from punches."""
-    service = AttendanceService(db)
-    result = await service.process_daily_attendance(data, current_user.id)
-    return result
-
-
-@router.post("/process/monthly", response_model=AttendanceProcessingResult, response_model_by_alias=True)
-async def process_monthly_summary(
-    data: ProcessMonthlyAttendanceRequest,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_MARK)),
-):
-    """Process monthly attendance summary."""
-    service = AttendanceService(db)
-    result = await service.process_monthly_summary(data, current_user.id)
-    return result
-
-
-@router.post("/lock", response_model=dict, response_model_by_alias=True)
-async def lock_attendance(
-    data: LockAttendanceRequest,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(RequirePermissions(Permissions.HRIS_ATTENDANCE_APPROVE)),
-):
-    """Lock monthly attendance for payroll."""
-    service = AttendanceService(db)
-    count = await service.lock_monthly_attendance(
-        data.organization_id, data.year, data.month, current_user.id
-    )
-    return {"locked_count": count, "message": f"Locked {count} attendance records for payroll"}
 
 
 # ============================================

@@ -88,6 +88,36 @@ export default tseslint.config(
       // sanctioned outlet. No allow-list — strict.
       'no-console': 'error',
 
+      // Money formatting — CLAUDE.md §5.8. Inline Intl.NumberFormat with INR,
+      // hand-rolled formatCurrency declarations, and .toFixed(2) on rupee
+      // amounts are all defects. Use <AmountDisplay /> or, in non-JSX code,
+      // formatIndianCompactCurrency from @/components/common/AmountDisplay.
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "NewExpression[callee.object.name='Intl'][callee.property.name='NumberFormat'] Literal[value=/INR/i]",
+          message:
+            "Inline Intl.NumberFormat('INR', …) is forbidden. Use <AmountDisplay /> or formatIndianCompactCurrency from @/components/common/AmountDisplay (CLAUDE.md §5.8).",
+        },
+        {
+          selector:
+            "VariableDeclarator[id.name='formatCurrency'][init.type='ArrowFunctionExpression']",
+          message:
+            'Per-file `const formatCurrency = …` is forbidden. Use <AmountDisplay /> (CLAUDE.md §5.8).',
+        },
+        {
+          selector: "VariableDeclarator[id.name='formatCurrency'][init.type='FunctionExpression']",
+          message:
+            'Per-file `const formatCurrency = function …` is forbidden. Use <AmountDisplay /> (CLAUDE.md §5.8).',
+        },
+        {
+          selector: "FunctionDeclaration[id.name='formatCurrency']",
+          message:
+            '`function formatCurrency(…)` is forbidden. Use <AmountDisplay /> (CLAUDE.md §5.8).',
+        },
+      ],
+
       // Imports
       'import/order': [
         'warn',
@@ -110,6 +140,22 @@ export default tseslint.config(
       'jsx-a11y/no-autofocus': 'warn',
       'jsx-a11y/no-static-element-interactions': 'warn',
       'react/no-unescaped-entities': 'warn',
+    },
+  },
+
+  // The sanctioned currency-rendering surfaces. CLAUDE.md §5.8 — these
+  // files own the canonical formatter; everywhere else uses <AmountDisplay />.
+  {
+    files: [
+      'src/lib/utils.ts',
+      'src/lib/utils.test.ts',
+      'src/components/common/AmountDisplay.tsx',
+      'src/components/common/AmountDisplay.test.tsx',
+      'src/components/lending/common/AmountInput.tsx',
+      'src/components/lending/common/AmountDisplay.tsx',
+    ],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
 

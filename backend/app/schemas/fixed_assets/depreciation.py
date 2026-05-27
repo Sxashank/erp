@@ -58,6 +58,17 @@ class DepreciationRunResponse(FixedAssetsAuditSchema):
     remarks: Optional[str] = None
 
 
+class DepreciationPostingActionResponse(CamelSchema):
+    """Response for posting or submitting a depreciation run."""
+
+    mode: Literal["posted", "submitted_for_approval"]
+    message: str
+    run: DepreciationRunResponse
+    approval_request_id: UUID | None = None
+    approval_request_number: str | None = None
+    approval_status: ApprovalRequestStatus | None = None
+
+
 class DepreciationResponse(FixedAssetsAuditSchema):
     """Individual depreciation entry response schema."""
 
@@ -187,6 +198,7 @@ class AssetRegisterResponse(CamelSchema):
 # ============================================
 # IT Act Depreciation Schemas
 # ============================================
+
 
 class ITDepreciationRunCreate(CamelSchema):
     """Schema for creating an IT Act depreciation run."""
@@ -335,7 +347,7 @@ class DepreciationComparisonResponse(CamelSchema):
 
 # IT Block rate lookup (as per IT Act Schedule II)
 IT_BLOCK_RATES = {
-    ITActAssetBlock.BLOCK_1: Decimal("5.00"),   # Residential buildings
+    ITActAssetBlock.BLOCK_1: Decimal("5.00"),  # Residential buildings
     ITActAssetBlock.BLOCK_2: Decimal("10.00"),  # Non-residential buildings
     ITActAssetBlock.BLOCK_3: Decimal("40.00"),  # Temporary structures
     ITActAssetBlock.BLOCK_4: Decimal("10.00"),  # Furniture & Fittings
@@ -344,9 +356,9 @@ IT_BLOCK_RATES = {
     ITActAssetBlock.BLOCK_7: Decimal("20.00"),  # Ships/Vessels
     ITActAssetBlock.BLOCK_8: Decimal("15.00"),  # Motor Vehicles
     ITActAssetBlock.BLOCK_9: Decimal("30.00"),  # Motor Vehicles - Hire/Leasing
-    ITActAssetBlock.BLOCK_10: Decimal("40.00"), # Aircrafts
-    ITActAssetBlock.BLOCK_11: Decimal("50.00"), # Containers
-    ITActAssetBlock.BLOCK_12: Decimal("25.00"), # Intangible Assets
+    ITActAssetBlock.BLOCK_10: Decimal("40.00"),  # Aircrafts
+    ITActAssetBlock.BLOCK_11: Decimal("50.00"),  # Containers
+    ITActAssetBlock.BLOCK_12: Decimal("25.00"),  # Intangible Assets
 }
 
 IT_BLOCK_NAMES = {

@@ -24,18 +24,43 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { essReimbursementApi } from '@/services/essApi';
 import { useEssAuthStore } from '@/stores/essAuthStore';
-import type { ReimbursementClaim, ReimbursementCategory, ReimbursementSummary, ClaimStatus } from '@/types/ess';
+import type {
+  ReimbursementClaim,
+  ReimbursementCategory,
+  ReimbursementSummary,
+  ClaimStatus,
+} from '@/types/ess';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function ESSReimbursementsPage() {
   const navigate = useNavigate();
   const accessToken = useEssAuthStore((state) => state.accessToken);
@@ -60,7 +85,9 @@ export default function ESSReimbursementsPage() {
   const fetchData = async () => {
     try {
       const [claimsRes, categoriesRes, summaryRes] = await Promise.all([
-        essReimbursementApi.getClaims({ status: statusFilter !== 'ALL' ? statusFilter : undefined }),
+        essReimbursementApi.getClaims({
+          status: statusFilter !== 'ALL' ? statusFilter : undefined,
+        }),
         essReimbursementApi.getCategories(),
         essReimbursementApi.getSummary(),
       ]);
@@ -81,7 +108,7 @@ export default function ESSReimbursementsPage() {
     setSubmitting(true);
     try {
       await essReimbursementApi.createClaim({
-        category_id: formData.get('category_id') as string || undefined,
+        category_id: (formData.get('category_id') as string) || undefined,
         claim_type: formData.get('claim_type') as string,
         expense_from: formData.get('expense_from') as string,
         expense_to: formData.get('expense_to') as string,
@@ -131,18 +158,9 @@ export default function ESSReimbursementsPage() {
     };
     return <Badge className={styles[status]}>{status.replace('_', ' ')}</Badge>;
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -152,78 +170,81 @@ export default function ESSReimbursementsPage() {
     <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="h-4 w-4 mr-2" />
+          <Plus className="mr-2 h-4 w-4" />
           New Claim
         </Button>
       </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Create Reimbursement Claim</DialogTitle>
-              <DialogDescription>
-                Submit a new expense claim for reimbursement
-              </DialogDescription>
-            </DialogHeader>
-            <form onSubmit={handleCreateClaim} className="space-y-4">
-              <div>
-                <Label htmlFor="claim_type">Claim Type</Label>
-                <Select name="claim_type" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="MEDICAL">Medical</SelectItem>
-                    <SelectItem value="TRAVEL">Travel</SelectItem>
-                    <SelectItem value="CONVEYANCE">Conveyance</SelectItem>
-                    <SelectItem value="MOBILE">Mobile</SelectItem>
-                    <SelectItem value="INTERNET">Internet</SelectItem>
-                    <SelectItem value="FOOD">Food & Meals</SelectItem>
-                    <SelectItem value="TRAINING">Training</SelectItem>
-                    <SelectItem value="CERTIFICATION">Certification</SelectItem>
-                    <SelectItem value="OTHER">Other</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="expense_from">Expense From</Label>
-                  <Input type="date" id="expense_from" name="expense_from" required />
-                </div>
-                <div>
-                  <Label htmlFor="expense_to">Expense To</Label>
-                  <Input type="date" id="expense_to" name="expense_to" required />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="claimed_amount">Claimed Amount</Label>
-                <Input
-                  type="number"
-                  id="claimed_amount"
-                  name="claimed_amount"
-                  min="1"
-                  step="0.01"
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Textarea id="description" name="description" placeholder="Describe the expense" required />
-              </div>
-              <div>
-                <Label htmlFor="purpose">Purpose</Label>
-                <Input id="purpose" name="purpose" placeholder="Business purpose" />
-              </div>
-              <div className="flex gap-3 justify-end">
-                <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={submitting}>
-                  {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  Create Claim
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Create Reimbursement Claim</DialogTitle>
+          <DialogDescription>Submit a new expense claim for reimbursement</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleCreateClaim} className="space-y-4">
+          <div>
+            <Label htmlFor="claim_type">Claim Type</Label>
+            <Select name="claim_type" required>
+              <SelectTrigger>
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="MEDICAL">Medical</SelectItem>
+                <SelectItem value="TRAVEL">Travel</SelectItem>
+                <SelectItem value="CONVEYANCE">Conveyance</SelectItem>
+                <SelectItem value="MOBILE">Mobile</SelectItem>
+                <SelectItem value="INTERNET">Internet</SelectItem>
+                <SelectItem value="FOOD">Food & Meals</SelectItem>
+                <SelectItem value="TRAINING">Training</SelectItem>
+                <SelectItem value="CERTIFICATION">Certification</SelectItem>
+                <SelectItem value="OTHER">Other</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="expense_from">Expense From</Label>
+              <Input type="date" id="expense_from" name="expense_from" required />
+            </div>
+            <div>
+              <Label htmlFor="expense_to">Expense To</Label>
+              <Input type="date" id="expense_to" name="expense_to" required />
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="claimed_amount">Claimed Amount</Label>
+            <Input
+              type="number"
+              id="claimed_amount"
+              name="claimed_amount"
+              min="1"
+              step="0.01"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="description">Description</Label>
+            <Textarea
+              id="description"
+              name="description"
+              placeholder="Describe the expense"
+              required
+            />
+          </div>
+          <div>
+            <Label htmlFor="purpose">Purpose</Label>
+            <Input id="purpose" name="purpose" placeholder="Business purpose" />
+          </div>
+          <div className="flex justify-end gap-3">
+            <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Create Claim
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 
   return (
@@ -235,11 +256,11 @@ export default function ESSReimbursementsPage() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <Receipt className="h-5 w-5 text-blue-600" />
               </div>
               <div>
@@ -252,7 +273,7 @@ export default function ESSReimbursementsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-yellow-100 rounded-lg">
+              <div className="rounded-lg bg-yellow-100 p-2">
                 <Clock className="h-5 w-5 text-yellow-600" />
               </div>
               <div>
@@ -265,12 +286,14 @@ export default function ESSReimbursementsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-2">
                 <IndianRupee className="h-5 w-5 text-green-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Claimed Amount</p>
-                <p className="text-lg font-bold">{formatCurrency(summary?.total_claimed_amount || 0)}</p>
+                <p className="text-lg font-bold">
+                  {formatIndianCompactCurrency(summary?.total_claimed_amount || 0)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -278,12 +301,14 @@ export default function ESSReimbursementsPage() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-emerald-100 rounded-lg">
+              <div className="rounded-lg bg-emerald-100 p-2">
                 <CheckCircle className="h-5 w-5 text-emerald-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Paid Amount</p>
-                <p className="text-lg font-bold">{formatCurrency(summary?.total_paid_amount || 0)}</p>
+                <p className="text-lg font-bold">
+                  {formatIndianCompactCurrency(summary?.total_paid_amount || 0)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -330,13 +355,14 @@ export default function ESSReimbursementsPage() {
                     <TableCell className="font-medium">{claim.claim_number}</TableCell>
                     <TableCell>{claim.claim_type}</TableCell>
                     <TableCell className="text-sm text-gray-500">
-                      <DateDisplay date={claim.expense_from} /> - <DateDisplay date={claim.expense_to} />
+                      <DateDisplay date={claim.expense_from} /> -{' '}
+                      <DateDisplay date={claim.expense_to} />
                     </TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(claim.claimed_amount)}
+                      {formatIndianCompactCurrency(claim.claimed_amount)}
                       {claim.approved_amount && claim.approved_amount !== claim.claimed_amount && (
-                        <span className="text-sm text-green-600 block">
-                          Approved: {formatCurrency(claim.approved_amount)}
+                        <span className="block text-sm text-green-600">
+                          Approved: {formatIndianCompactCurrency(claim.approved_amount)}
                         </span>
                       )}
                     </TableCell>
@@ -348,10 +374,18 @@ export default function ESSReimbursementsPage() {
                         </Button>
                         {claim.status === 'DRAFT' && (
                           <>
-                            <Button variant="ghost" size="sm" onClick={() => handleSubmitClaim(claim.id)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleSubmitClaim(claim.id)}
+                            >
                               <Send className="h-4 w-4 text-blue-600" />
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => setClaimPendingDelete(claim)}>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setClaimPendingDelete(claim)}
+                            >
                               <Trash2 className="h-4 w-4 text-red-600" />
                             </Button>
                           </>
@@ -363,8 +397,8 @@ export default function ESSReimbursementsPage() {
               </TableBody>
             </Table>
           ) : (
-            <div className="text-center py-8 text-gray-500">
-              <Receipt className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <div className="py-8 text-center text-gray-500">
+              <Receipt className="mx-auto mb-2 h-8 w-8 opacity-50" />
               <p>No claims found</p>
               <Button variant="link" onClick={() => setCreateDialogOpen(true)}>
                 Create your first claim
@@ -394,12 +428,15 @@ export default function ESSReimbursementsPage() {
                 <div>
                   <p className="text-sm text-gray-500">Expense Period</p>
                   <p className="font-medium">
-                    <DateDisplay date={selectedClaim.expense_from} /> - <DateDisplay date={selectedClaim.expense_to} />
+                    <DateDisplay date={selectedClaim.expense_from} /> -{' '}
+                    <DateDisplay date={selectedClaim.expense_to} />
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Claimed Amount</p>
-                  <p className="font-medium text-lg">{formatCurrency(selectedClaim.claimed_amount)}</p>
+                  <p className="text-lg font-medium">
+                    {formatIndianCompactCurrency(selectedClaim.claimed_amount)}
+                  </p>
                 </div>
               </div>
               <div>
@@ -413,14 +450,14 @@ export default function ESSReimbursementsPage() {
                 </div>
               )}
               {selectedClaim.rejection_reason && (
-                <div className="p-3 bg-red-50 rounded-lg">
-                  <p className="text-sm text-red-700 font-medium">Rejection Reason</p>
+                <div className="rounded-lg bg-red-50 p-3">
+                  <p className="text-sm font-medium text-red-700">Rejection Reason</p>
                   <p className="text-red-600">{selectedClaim.rejection_reason}</p>
                 </div>
               )}
               {selectedClaim.line_items && selectedClaim.line_items.length > 0 && (
                 <div>
-                  <p className="text-sm text-gray-500 mb-2">Line Items</p>
+                  <p className="mb-2 text-sm text-gray-500">Line Items</p>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -432,9 +469,13 @@ export default function ESSReimbursementsPage() {
                     <TableBody>
                       {selectedClaim.line_items.map((item) => (
                         <TableRow key={item.id}>
-                          <TableCell><DateDisplay date={item.expense_date} /></TableCell>
+                          <TableCell>
+                            <DateDisplay date={item.expense_date} />
+                          </TableCell>
                           <TableCell>{item.description}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
+                          <TableCell className="text-right">
+                            {formatIndianCompactCurrency(item.amount)}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -446,12 +487,16 @@ export default function ESSReimbursementsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!!claimPendingDelete} onOpenChange={(open) => !open && setClaimPendingDelete(null)}>
+      <Dialog
+        open={!!claimPendingDelete}
+        onOpenChange={(open) => !open && setClaimPendingDelete(null)}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Draft Claim</DialogTitle>
             <DialogDescription>
-              This will cancel claim {claimPendingDelete?.claim_number}. This action cannot be undone.
+              This will cancel claim {claimPendingDelete?.claim_number}. This action cannot be
+              undone.
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-3">

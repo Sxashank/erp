@@ -37,15 +37,7 @@ import {
   type ProductCategoryValue,
   type LoanProductFilters,
 } from '@/hooks/lending/useLoanProducts';
-
-const categoryLabels: Record<ProductCategoryValue, string> = {
-  TERM_LOAN: 'Term Loan',
-  WORKING_CAPITAL: 'Working Capital',
-  PROJECT_FINANCE: 'Project Finance',
-  LAP: 'Loan Against Property',
-  EQUIPMENT_FINANCE: 'Equipment Finance',
-  BILL_DISCOUNTING: 'Bill Discounting',
-};
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 
 export default function ProductList() {
   const navigate = useNavigate();
@@ -62,6 +54,15 @@ export default function ProductList() {
     ...(statusFilter === 'INACTIVE' && { includeInactive: true }),
   };
   const { data, isLoading, isError, error, refetch } = useLoanProducts(filters);
+  const productCategoriesQuery = useLendingOptionRows('PRODUCT_CATEGORY');
+  const productCategoryOptions =
+    productCategoriesQuery.data?.items.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.code ?? ''),
+    })) ?? [];
+  const categoryLabel = (value: string) =>
+    productCategoryOptions.find((option) => option.value === value)?.label ??
+    value.replace(/_/g, ' ');
 
   const all: LoanProductListItem[] = data?.items ?? [];
   // Status filter is client-side — BE returns active by default; we use
@@ -160,9 +161,9 @@ export default function ProductList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Categories</SelectItem>
-                  {Object.entries(categoryLabels).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>
-                      {v}
+                  {productCategoryOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -199,20 +200,23 @@ export default function ProductList() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {isLoading ? (
+              {isLoading || productCategoriesQuery.isLoading ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8 text-center text-muted-foreground">
                     <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
                     Loading products...
                   </TableCell>
                 </TableRow>
-              ) : isError ? (
+              ) : isError || productCategoriesQuery.isError ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8">
                     <ErrorState
                       title="Could not load loan products"
-                      error={error}
-                      onRetry={() => refetch()}
+                      error={error ?? productCategoriesQuery.error}
+                      onRetry={() => {
+                        refetch();
+                        productCategoriesQuery.refetch();
+                      }}
                     />
                   </TableCell>
                 </TableRow>
@@ -233,7 +237,7 @@ export default function ProductList() {
                     <TableCell className="font-medium">{product.name}</TableCell>
                     <TableCell>
                       <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                        {categoryLabels[product.category] ?? product.category}
+                        {categoryLabel(product.category)}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">

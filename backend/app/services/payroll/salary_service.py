@@ -9,7 +9,7 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import String, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -39,10 +39,7 @@ class SalaryComponentService:
 
     async def create(self, data: SalaryComponentCreate, created_by: UUID) -> SalaryComponent:
         """Create a new salary component"""
-        component = SalaryComponent(
-            **data.model_dump(),
-            created_by=created_by
-        )
+        component = SalaryComponent(**data.model_dump(), created_by=created_by)
         self.db.add(component)
         await self.db.flush()
         await self.db.refresh(component)
@@ -50,9 +47,7 @@ class SalaryComponentService:
 
     async def get(self, id: UUID) -> Optional[SalaryComponent]:
         """Get salary component by ID"""
-        result = await self.db.execute(
-            select(SalaryComponent).where(SalaryComponent.id == id)
-        )
+        result = await self.db.execute(select(SalaryComponent).where(SalaryComponent.id == id))
         return result.scalar_one_or_none()
 
     async def get_by_code(self, organization_id: UUID, code: str) -> Optional[SalaryComponent]:
@@ -61,7 +56,7 @@ class SalaryComponentService:
             select(SalaryComponent).where(
                 and_(
                     SalaryComponent.organization_id == organization_id,
-                    SalaryComponent.component_code == code
+                    SalaryComponent.component_code == code,
                 )
             )
         )
@@ -74,12 +69,10 @@ class SalaryComponentService:
         category: Optional[str] = None,
         active_only: bool = True,
         skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
     ) -> Tuple[List[SalaryComponent], int]:
         """List salary components with filters"""
-        query = select(SalaryComponent).where(
-            SalaryComponent.organization_id == organization_id
-        )
+        query = select(SalaryComponent).where(SalaryComponent.organization_id == organization_id)
 
         if component_type:
             query = query.where(SalaryComponent.component_type == component_type)
@@ -102,10 +95,7 @@ class SalaryComponentService:
         return items, total_count
 
     async def update(
-        self,
-        id: UUID,
-        data: SalaryComponentUpdate,
-        updated_by: UUID
+        self, id: UUID, data: SalaryComponentUpdate, updated_by: UUID
     ) -> Optional[SalaryComponent]:
         """Update a salary component"""
         component = await self.get(id)
@@ -176,9 +166,7 @@ class SalaryStructureService:
         # Create structure components
         for comp_data in data.components:
             component = SalaryStructureComponent(
-                structure_id=structure.id,
-                **comp_data.model_dump(),
-                created_by=created_by
+                structure_id=structure.id, **comp_data.model_dump(), created_by=created_by
             )
             self.db.add(component)
 
@@ -191,24 +179,19 @@ class SalaryStructureService:
         result = await self.db.execute(
             select(SalaryStructure)
             .options(
-                selectinload(SalaryStructure.components)
-                .selectinload(SalaryStructureComponent.component)
+                selectinload(SalaryStructure.components).selectinload(
+                    SalaryStructureComponent.component
+                )
             )
             .where(SalaryStructure.id == id)
         )
         return result.scalar_one_or_none()
 
     async def list(
-        self,
-        organization_id: UUID,
-        active_only: bool = True,
-        skip: int = 0,
-        limit: int = 100
+        self, organization_id: UUID, active_only: bool = True, skip: int = 0, limit: int = 100
     ) -> Tuple[List[SalaryStructure], int]:
         """List salary structures"""
-        query = select(SalaryStructure).where(
-            SalaryStructure.organization_id == organization_id
-        )
+        query = select(SalaryStructure).where(SalaryStructure.organization_id == organization_id)
 
         if active_only:
             query = query.where(SalaryStructure.is_active == True)
@@ -227,10 +210,7 @@ class SalaryStructureService:
         return items, total_count
 
     async def update(
-        self,
-        id: UUID,
-        data: SalaryStructureUpdate,
-        updated_by: UUID
+        self, id: UUID, data: SalaryStructureUpdate, updated_by: UUID
     ) -> Optional[SalaryStructure]:
         """Update a salary structure"""
         structure = await self.get(id)
@@ -256,9 +236,7 @@ class SalaryStructureService:
             # Create new components
             for comp_data in data.components:
                 component = SalaryStructureComponent(
-                    structure_id=structure.id,
-                    **comp_data.model_dump(),
-                    created_by=updated_by
+                    structure_id=structure.id, **comp_data.model_dump(), created_by=updated_by
                 )
                 self.db.add(component)
 
@@ -282,7 +260,9 @@ class EmployeeSalaryService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def _get_employee_for_org(self, employee_id: UUID, organization_id: UUID) -> Optional[Employee]:
+    async def _get_employee_for_org(
+        self, employee_id: UUID, organization_id: UUID
+    ) -> Optional[Employee]:
         result = await self.db.execute(
             select(Employee).where(
                 and_(
@@ -293,7 +273,9 @@ class EmployeeSalaryService:
         )
         return result.scalar_one_or_none()
 
-    async def _get_structure_for_org(self, structure_id: UUID, organization_id: UUID) -> Optional[SalaryStructure]:
+    async def _get_structure_for_org(
+        self, structure_id: UUID, organization_id: UUID
+    ) -> Optional[SalaryStructure]:
         result = await self.db.execute(
             select(SalaryStructure).where(
                 and_(
@@ -324,7 +306,9 @@ class EmployeeSalaryService:
         )
         matching_count = result.scalar() or 0
         if matching_count != len(set(component_ids)):
-            raise ValueError("One or more employee salary components are invalid for this organization")
+            raise ValueError(
+                "One or more employee salary components are invalid for this organization"
+            )
 
     async def create(
         self,
@@ -341,7 +325,9 @@ class EmployeeSalaryService:
         if not structure:
             raise ValueError("Salary structure is invalid for this organization")
         if structure.effective_from > data.effective_from:
-            raise ValueError("Salary assignment cannot start before the salary structure effective date")
+            raise ValueError(
+                "Salary assignment cannot start before the salary structure effective date"
+            )
         if structure.effective_to and data.effective_from > structure.effective_to:
             raise ValueError("Salary structure is not effective for this assignment date")
 
@@ -354,7 +340,9 @@ class EmployeeSalaryService:
         existing = await self.get_active_salary(data.employee_id, organization_id)
         if existing:
             if data.effective_from <= existing.effective_from:
-                raise ValueError("New salary effective date must be after the current salary effective date")
+                raise ValueError(
+                    "New salary effective date must be after the current salary effective date"
+                )
             existing.status = "SUPERSEDED"
             existing.effective_to = data.effective_from - timedelta(days=1)
 
@@ -364,7 +352,7 @@ class EmployeeSalaryService:
             **salary_data,
             revision_number=(existing.revision_number + 1) if existing else 1,
             previous_salary_id=existing.id if existing else None,
-            created_by=created_by
+            created_by=created_by,
         )
         self.db.add(salary)
         await self.db.flush()
@@ -372,9 +360,7 @@ class EmployeeSalaryService:
         # Create salary components
         for comp_data in data.components:
             component = EmployeeSalaryComponent(
-                employee_salary_id=salary.id,
-                **comp_data.model_dump(),
-                created_by=created_by
+                employee_salary_id=salary.id, **comp_data.model_dump(), created_by=created_by
             )
             self.db.add(component)
 
@@ -382,24 +368,27 @@ class EmployeeSalaryService:
         await self.db.refresh(salary)
         return await self.get(salary.id)
 
-    async def get(self, id: UUID, organization_id: Optional[UUID] = None) -> Optional[EmployeeSalary]:
+    async def get(
+        self, id: UUID, organization_id: Optional[UUID] = None
+    ) -> Optional[EmployeeSalary]:
         """Get employee salary by ID with components"""
         query = (
             select(EmployeeSalary)
             .options(
-                selectinload(EmployeeSalary.components)
-                .selectinload(EmployeeSalaryComponent.component),
+                selectinload(EmployeeSalary.components).selectinload(
+                    EmployeeSalaryComponent.component
+                ),
                 selectinload(EmployeeSalary.structure),
-                selectinload(EmployeeSalary.employee)
+                selectinload(EmployeeSalary.employee),
             )
             .where(EmployeeSalary.id == id)
         )
         if organization_id:
-            query = query.join(EmployeeSalary.employee).where(Employee.organization_id == organization_id)
+            query = query.join(EmployeeSalary.employee).where(
+                Employee.organization_id == organization_id
+            )
 
-        result = await self.db.execute(
-            query
-        )
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_active_salary(
@@ -414,16 +403,16 @@ class EmployeeSalaryService:
             .where(
                 and_(
                     EmployeeSalary.employee_id == employee_id,
-                    EmployeeSalary.status == "ACTIVE"
+                    cast(EmployeeSalary.status, String) == "ACTIVE",
                 )
             )
         )
         if organization_id:
-            query = query.join(EmployeeSalary.employee).where(Employee.organization_id == organization_id)
+            query = query.join(EmployeeSalary.employee).where(
+                Employee.organization_id == organization_id
+            )
 
-        result = await self.db.execute(
-            query
-        )
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     async def list(
@@ -432,18 +421,20 @@ class EmployeeSalaryService:
         employee_id: Optional[UUID] = None,
         active_only: bool = True,
         skip: int = 0,
-        limit: int = 100
+        limit: int = 100,
     ) -> Tuple[List[EmployeeSalary], int]:
         """List employee salaries with filters"""
-        query = select(EmployeeSalary).options(
-            selectinload(EmployeeSalary.employee),
-            selectinload(EmployeeSalary.structure)
-        ).join(EmployeeSalary.employee).where(Employee.organization_id == organization_id)
+        query = (
+            select(EmployeeSalary)
+            .options(selectinload(EmployeeSalary.employee), selectinload(EmployeeSalary.structure))
+            .join(EmployeeSalary.employee)
+            .where(Employee.organization_id == organization_id)
+        )
 
         if employee_id:
             query = query.where(EmployeeSalary.employee_id == employee_id)
         if active_only:
-            query = query.where(EmployeeSalary.status == "ACTIVE")
+            query = query.where(cast(EmployeeSalary.status, String) == "ACTIVE")
 
         # Count
         count_query = select(func.count()).select_from(query.subquery())
@@ -459,9 +450,7 @@ class EmployeeSalaryService:
         return items, total_count
 
     async def get_salary_at_date(
-        self,
-        employee_id: UUID,
-        as_of_date: date
+        self, employee_id: UUID, as_of_date: date
     ) -> Optional[EmployeeSalary]:
         """Get employee's salary that was effective on a specific date"""
         result = await self.db.execute(
@@ -471,7 +460,8 @@ class EmployeeSalaryService:
                 and_(
                     EmployeeSalary.employee_id == employee_id,
                     EmployeeSalary.effective_from <= as_of_date,
-                    (EmployeeSalary.effective_to >= as_of_date) | (EmployeeSalary.effective_to.is_(None))
+                    (EmployeeSalary.effective_to >= as_of_date)
+                    | (EmployeeSalary.effective_to.is_(None)),
                 )
             )
             .order_by(EmployeeSalary.effective_from.desc())

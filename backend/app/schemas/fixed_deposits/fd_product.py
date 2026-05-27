@@ -20,6 +20,7 @@ from app.models.fixed_deposits.fd_product import (
 # Interest Slab Schemas
 class FDInterestSlabBase(CamelSchema):
     """Base schema for FD interest slab."""
+
     customer_category: FDCustomerCategory = FDCustomerCategory.GENERAL
     min_tenure_days: int = Field(..., ge=1)
     max_tenure_days: int = Field(..., ge=1)
@@ -33,11 +34,13 @@ class FDInterestSlabBase(CamelSchema):
 
 class FDInterestSlabCreate(FDInterestSlabBase):
     """Schema for creating interest slab."""
+
     pass
 
 
 class FDInterestSlabUpdate(CamelSchema):
     """Schema for updating interest slab."""
+
     customer_category: Optional[FDCustomerCategory] = None
     min_tenure_days: Optional[int] = Field(None, ge=1)
     max_tenure_days: Optional[int] = Field(None, ge=1)
@@ -60,6 +63,7 @@ class FDInterestSlabResponse(FDInterestSlabBase):
 # Product Schemas
 class FDProductBase(CamelSchema):
     """Base schema for FD product."""
+
     product_code: str = Field(..., min_length=1, max_length=20)
     product_name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = None
@@ -96,12 +100,14 @@ class FDProductBase(CamelSchema):
 
 class FDProductCreate(FDProductBase):
     """Schema for creating FD product."""
-    organization_id: UUID
+
+    organization_id: Optional[UUID] = None
     interest_slabs: Optional[List[FDInterestSlabCreate]] = None
 
 
 class FDProductUpdate(CamelSchema):
     """Schema for updating FD product."""
+
     product_code: Optional[str] = Field(None, min_length=1, max_length=20)
     product_name: Optional[str] = Field(None, min_length=1, max_length=100)
     description: Optional[str] = None
@@ -147,5 +153,6 @@ class FDProductResponse(FDProductBase):
 
 class FDProductListResponse(CamelSchema):
     """Schema for paginated FD product list."""
+
     items: List[FDProductResponse]
     total: int

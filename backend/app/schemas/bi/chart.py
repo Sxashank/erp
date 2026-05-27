@@ -17,6 +17,7 @@ class ChartRoleAccessBase(BaseSchema):
 
 class ChartRoleAccessCreate(ChartRoleAccessBase):
     """Chart role access creation schema."""
+
     pass
 
 
@@ -80,6 +81,7 @@ class ChartDefinitionListResponse(BaseSchema):
     module: BIModule
     chart_type: ChartType
     is_system: bool
+    has_data_source: bool = False
     is_active: bool
 
 

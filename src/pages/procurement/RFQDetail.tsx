@@ -28,22 +28,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock RFQ detail data
 const rfqData = {
   id: '1',
   rfqNumber: 'RFQ2025010001',
   title: 'Office Furniture - Q1 2025',
   category: 'Furniture',
-  description: 'Procurement of office furniture including ergonomic chairs, standing desks, and storage cabinets for the new wing.',
+  description:
+    'Procurement of office furniture including ergonomic chairs, standing desks, and storage cabinets for the new wing.',
   estimatedValue: 500000,
   startDate: '2025-01-10',
   endDate: '2025-01-20',
@@ -54,17 +46,76 @@ const rfqData = {
   createdBy: 'Admin',
   createdAt: '2025-01-08 10:30 AM',
   lineItems: [
-    { id: 1, description: 'Ergonomic Office Chair', quantity: 50, uom: 'PCS', specifications: 'Lumbar support, adjustable height, mesh back' },
-    { id: 2, description: 'Standing Desk - Electric', quantity: 25, uom: 'PCS', specifications: 'Height adjustable 70-120cm, memory presets' },
-    { id: 3, description: 'Filing Cabinet - 4 Drawer', quantity: 30, uom: 'PCS', specifications: 'Steel construction, central locking' },
-    { id: 4, description: 'Conference Table - 10 Seater', quantity: 5, uom: 'PCS', specifications: 'Modular design, cable management' },
+    {
+      id: 1,
+      description: 'Ergonomic Office Chair',
+      quantity: 50,
+      uom: 'PCS',
+      specifications: 'Lumbar support, adjustable height, mesh back',
+    },
+    {
+      id: 2,
+      description: 'Standing Desk - Electric',
+      quantity: 25,
+      uom: 'PCS',
+      specifications: 'Height adjustable 70-120cm, memory presets',
+    },
+    {
+      id: 3,
+      description: 'Filing Cabinet - 4 Drawer',
+      quantity: 30,
+      uom: 'PCS',
+      specifications: 'Steel construction, central locking',
+    },
+    {
+      id: 4,
+      description: 'Conference Table - 10 Seater',
+      quantity: 5,
+      uom: 'PCS',
+      specifications: 'Modular design, cable management',
+    },
   ],
   vendors: [
-    { id: 'V001', name: 'ABC Suppliers Ltd', email: 'sales@abcsuppliers.com', phone: '+91 9876543210', status: 'INVITED', responseDate: null },
-    { id: 'V005', name: 'Furniture Hub', email: 'info@furniturehub.com', phone: '+91 9988776655', status: 'QUOTED', responseDate: '2025-01-12' },
-    { id: 'V007', name: 'Office Solutions', email: 'contact@officesol.com', phone: '+91 8899001122', status: 'QUOTED', responseDate: '2025-01-14' },
-    { id: 'V008', name: 'Premium Furnishings', email: 'sales@premfurn.com', phone: '+91 7766554433', status: 'QUOTED', responseDate: '2025-01-15' },
-    { id: 'V010', name: 'Metro Furniture', email: 'info@metrofurn.com', phone: '+91 6655443322', status: 'DECLINED', responseDate: '2025-01-11' },
+    {
+      id: 'V001',
+      name: 'ABC Suppliers Ltd',
+      email: 'sales@abcsuppliers.com',
+      phone: '+91 9876543210',
+      status: 'INVITED',
+      responseDate: null,
+    },
+    {
+      id: 'V005',
+      name: 'Furniture Hub',
+      email: 'info@furniturehub.com',
+      phone: '+91 9988776655',
+      status: 'QUOTED',
+      responseDate: '2025-01-12',
+    },
+    {
+      id: 'V007',
+      name: 'Office Solutions',
+      email: 'contact@officesol.com',
+      phone: '+91 8899001122',
+      status: 'QUOTED',
+      responseDate: '2025-01-14',
+    },
+    {
+      id: 'V008',
+      name: 'Premium Furnishings',
+      email: 'sales@premfurn.com',
+      phone: '+91 7766554433',
+      status: 'QUOTED',
+      responseDate: '2025-01-15',
+    },
+    {
+      id: 'V010',
+      name: 'Metro Furniture',
+      email: 'info@metrofurn.com',
+      phone: '+91 6655443322',
+      status: 'DECLINED',
+      responseDate: '2025-01-11',
+    },
   ],
   quotations: [
     {
@@ -120,13 +171,33 @@ export default function RFQDetail() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'OPEN':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><Send className="h-3 w-3 mr-1" />Open</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <Send className="mr-1 h-3 w-3" />
+            Open
+          </Badge>
+        );
       case 'CLOSED':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Closed</Badge>;
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Closed
+          </Badge>
+        );
       case 'AWARDED':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800"><CheckCircle className="h-3 w-3 mr-1" />Awarded</Badge>;
+        return (
+          <Badge variant="default" className="bg-blue-100 text-blue-800">
+            <CheckCircle className="mr-1 h-3 w-3" />
+            Awarded
+          </Badge>
+        );
       case 'CANCELLED':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Cancelled
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -137,7 +208,11 @@ export default function RFQDetail() {
       case 'INVITED':
         return <Badge variant="outline">Invited</Badge>;
       case 'QUOTED':
-        return <Badge variant="default" className="bg-green-100 text-green-800">Quoted</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            Quoted
+          </Badge>
+        );
       case 'DECLINED':
         return <Badge variant="destructive">Declined</Badge>;
       default:
@@ -145,30 +220,27 @@ export default function RFQDetail() {
     }
   };
 
-  const quotedCount = rfqData.vendors.filter(v => v.status === 'QUOTED').length;
+  const quotedCount = rfqData.vendors.filter((v) => v.status === 'QUOTED').length;
   const invitedCount = rfqData.vendors.length;
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={rfqData.rfqNumber}
         subtitle={rfqData.title}
-        breadcrumbs={[
-          { label: 'RFQ', to: '/admin/procurement/rfq' },
-          { label: rfqData.rfqNumber },
-        ]}
+        breadcrumbs={[{ label: 'RFQ', to: '/admin/procurement/rfq' }, { label: rfqData.rfqNumber }]}
         actions={
           <div className="flex gap-2">
             {getStatusBadge(rfqData.status)}
             {rfqData.status === 'OPEN' && (
               <>
                 <Button variant="outline">
-                  <Download className="h-4 w-4 mr-2" />
+                  <Download className="mr-2 h-4 w-4" />
                   Export
                 </Button>
                 <Link to={`/admin/procurement/rfq/${id}/compare`}>
                   <Button>
-                    <BarChart3 className="h-4 w-4 mr-2" />
+                    <BarChart3 className="mr-2 h-4 w-4" />
                     Compare Quotes
                   </Button>
                 </Link>
@@ -179,29 +251,33 @@ export default function RFQDetail() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Estimated Value</div>
-            <div className="text-2xl font-bold mt-1">{formatCurrency(rfqData.estimatedValue)}</div>
+            <div className="mt-1 text-2xl font-bold">
+              {formatIndianCompactCurrency(rfqData.estimatedValue)}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Vendors Invited</div>
-            <div className="text-2xl font-bold mt-1">{invitedCount}</div>
+            <div className="mt-1 text-2xl font-bold">{invitedCount}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Quotations Received</div>
-            <div className="text-2xl font-bold mt-1 text-green-600">{quotedCount}/{invitedCount}</div>
+            <div className="mt-1 text-2xl font-bold text-green-600">
+              {quotedCount}/{invitedCount}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Due Date</div>
-            <div className="text-2xl font-bold mt-1">{rfqData.endDate}</div>
+            <div className="mt-1 text-2xl font-bold">{rfqData.endDate}</div>
           </CardContent>
         </Card>
       </div>
@@ -221,7 +297,7 @@ export default function RFQDetail() {
               <CardTitle>RFQ Information</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm text-muted-foreground">Title</label>
@@ -229,7 +305,9 @@ export default function RFQDetail() {
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Category</label>
-                    <p><Badge variant="outline">{rfqData.category}</Badge></p>
+                    <p>
+                      <Badge variant="outline">{rfqData.category}</Badge>
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Description</label>
@@ -243,7 +321,7 @@ export default function RFQDetail() {
                 <div className="space-y-4">
                   <div>
                     <label className="text-sm text-muted-foreground">RFQ Period</label>
-                    <p className="font-medium flex items-center gap-2">
+                    <p className="flex items-center gap-2 font-medium">
                       <Calendar className="h-4 w-4" />
                       {rfqData.startDate} to {rfqData.endDate}
                     </p>
@@ -258,7 +336,9 @@ export default function RFQDetail() {
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Created By</label>
-                    <p className="font-medium">{rfqData.createdBy} on {rfqData.createdAt}</p>
+                    <p className="font-medium">
+                      {rfqData.createdBy} on {rfqData.createdAt}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -293,7 +373,9 @@ export default function RFQDetail() {
                       <TableCell className="font-medium">{item.description}</TableCell>
                       <TableCell className="text-center">{item.quantity}</TableCell>
                       <TableCell className="text-center">{item.uom}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{item.specifications}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {item.specifications}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -352,14 +434,18 @@ export default function RFQDetail() {
             <CardContent>
               <div className="space-y-6">
                 {rfqData.quotations.map((quotation) => (
-                  <div key={quotation.vendorId} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
+                  <div key={quotation.vendorId} className="rounded-lg border p-4">
+                    <div className="mb-4 flex items-center justify-between">
                       <div>
                         <h4 className="font-semibold">{quotation.vendorName}</h4>
-                        <p className="text-sm text-muted-foreground">Submitted: {quotation.submittedAt}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Submitted: {quotation.submittedAt}
+                        </p>
                       </div>
                       <div className="text-right">
-                        <div className="text-2xl font-bold">{formatCurrency(quotation.totalAmount)}</div>
+                        <div className="text-2xl font-bold">
+                          {formatIndianCompactCurrency(quotation.totalAmount)}
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           Delivery: {quotation.deliveryDays} days | Warranty: {quotation.warranty}
                         </div>
@@ -375,12 +461,16 @@ export default function RFQDetail() {
                       </TableHeader>
                       <TableBody>
                         {quotation.items.map((item) => {
-                          const lineItem = rfqData.lineItems.find(li => li.id === item.itemId);
+                          const lineItem = rfqData.lineItems.find((li) => li.id === item.itemId);
                           return (
                             <TableRow key={item.itemId}>
                               <TableCell>{lineItem?.description}</TableCell>
-                              <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
-                              <TableCell className="text-right font-medium">{formatCurrency(item.amount)}</TableCell>
+                              <TableCell className="text-right">
+                                {formatIndianCompactCurrency(item.unitPrice)}
+                              </TableCell>
+                              <TableCell className="text-right font-medium">
+                                {formatIndianCompactCurrency(item.amount)}
+                              </TableCell>
                             </TableRow>
                           );
                         })}

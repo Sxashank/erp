@@ -66,15 +66,6 @@ const projects = [
   { id: '2', name: 'Project Beta' },
   { id: '3', name: 'Internal Operations' },
 ];
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 export default function ESSExpenseForm() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -303,7 +294,9 @@ export default function ESSExpenseForm() {
               <div className="mt-4 flex justify-end">
                 <div className="rounded-lg bg-muted p-4">
                   <div className="text-sm text-muted-foreground">Total Amount</div>
-                  <div className="text-2xl font-bold">{formatCurrency(totalAmount)}</div>
+                  <div className="text-2xl font-bold">
+                    {formatIndianCompactCurrency(totalAmount)}
+                  </div>
                 </div>
               </div>
             </CardContent>

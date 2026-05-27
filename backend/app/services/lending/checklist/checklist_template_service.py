@@ -32,6 +32,7 @@ from app.models.lending.enums import (
     ChecklistAppliesTo,
     ChecklistItemCategory,
 )
+from app.models.lending.masters import ChecklistItemCatalog
 from app.schemas.lending.approval_checklist import (
     ChecklistTemplateCreate,
     ChecklistTemplateItemCreate,
@@ -41,6 +42,17 @@ from app.schemas.lending.approval_checklist import (
 
 _VALID_APPLIES_TO = {e.value for e in ChecklistAppliesTo}
 _VALID_CATEGORIES = {e.value for e in ChecklistItemCategory}
+_APPROVAL_CATEGORY_MAP = {
+    "KYC": ChecklistItemCategory.KYC.value,
+    "LEGAL": ChecklistItemCategory.LEGAL.value,
+    "INSURANCE": ChecklistItemCategory.INSURANCE.value,
+    "REGULATORY": ChecklistItemCategory.COMPLIANCE.value,
+    "FINANCIAL": ChecklistItemCategory.DOCUMENT.value,
+    "PROPERTY": ChecklistItemCategory.DOCUMENT.value,
+    "VESSEL": ChecklistItemCategory.DOCUMENT.value,
+    "PORT": ChecklistItemCategory.DOCUMENT.value,
+    "OTHER": ChecklistItemCategory.OTHER.value,
+}
 
 
 class ChecklistTemplateService:
@@ -83,13 +95,6 @@ class ChecklistTemplateService:
                 error_code="TEMPLATE_CODE_EXISTS",
             )
 
-        for item in data.items:
-            if item.category not in _VALID_CATEGORIES:
-                raise BadRequestException(
-                    f"Item '{item.code}': category must be one of " f"{sorted(_VALID_CATEGORIES)}",
-                    error_code="INVALID_ITEM_CATEGORY",
-                )
-
         template = ApprovalChecklistTemplate(
             organization_id=current_user.organization_id,
             code=data.code,
@@ -106,13 +111,22 @@ class ChecklistTemplateService:
         if data.is_default:
             await self._unset_other_defaults(current_user.organization_id, template.id)
 
+        seen_codes: set[str] = set()
         for item_data in data.items:
+            catalog_item = await self._get_catalog_item(
+                current_user.organization_id,
+                item_data.catalog_item_id,
+            )
+            item_fields = self._template_item_fields_from_catalog(catalog_item)
+            if str(item_fields["code"]) in seen_codes:
+                raise ConflictException(
+                    f"Item with code '{item_fields['code']}' already exists",
+                    error_code="TEMPLATE_ITEM_CODE_EXISTS",
+                )
+            seen_codes.add(str(item_fields["code"]))
             item = ApprovalChecklistTemplateItem(
                 template_id=template.id,
-                code=item_data.code,
-                label=item_data.label,
-                description=item_data.description,
-                category=item_data.category,
+                **item_fields,
                 is_mandatory=item_data.is_mandatory,
                 sort_order=item_data.sort_order,
                 default_due_offset_days=item_data.default_due_offset_days,
@@ -288,25 +302,19 @@ class ChecklistTemplateService:
                 "Cannot add items to a platform template",
                 error_code="READONLY_PLATFORM_TEMPLATE",
             )
-        if data.category not in _VALID_CATEGORIES:
-            raise BadRequestException(
-                f"category must be one of {sorted(_VALID_CATEGORIES)}",
-                error_code="INVALID_ITEM_CATEGORY",
-            )
+        catalog_item = await self._get_catalog_item(organization_id, data.catalog_item_id)
+        item_fields = self._template_item_fields_from_catalog(catalog_item)
         # Code uniqueness within the template.
         for existing in template.items:
-            if existing.deleted_at is None and existing.code == data.code:
+            if existing.deleted_at is None and existing.code == item_fields["code"]:
                 raise ConflictException(
-                    f"Item with code '{data.code}' already exists",
+                    f"Item with code '{item_fields['code']}' already exists",
                     error_code="TEMPLATE_ITEM_CODE_EXISTS",
                 )
 
         item = ApprovalChecklistTemplateItem(
             template_id=template_id,
-            code=data.code,
-            label=data.label,
-            description=data.description,
-            category=data.category,
+            **item_fields,
             is_mandatory=data.is_mandatory,
             sort_order=data.sort_order,
             default_due_offset_days=data.default_due_offset_days,
@@ -327,12 +335,12 @@ class ChecklistTemplateService:
         current_user: User,
     ) -> ApprovalChecklistTemplateItem:
         item = await self._get_template_item(organization_id, template_id, item_id)
-        if data.category is not None and data.category not in _VALID_CATEGORIES:
-            raise BadRequestException(
-                f"category must be one of {sorted(_VALID_CATEGORIES)}",
-                error_code="INVALID_ITEM_CATEGORY",
-            )
-        for field, value in data.model_dump(exclude_unset=True).items():
+        update_data = data.model_dump(exclude_unset=True)
+        catalog_item_id = update_data.pop("catalog_item_id", None)
+        if catalog_item_id is not None:
+            catalog_item = await self._get_catalog_item(organization_id, catalog_item_id)
+            update_data.update(self._template_item_fields_from_catalog(catalog_item))
+        for field, value in update_data.items():
             setattr(item, field, value)
         item.updated_by = current_user.id
         item.version = (item.version or 1) + 1
@@ -354,6 +362,45 @@ class ChecklistTemplateService:
     # =========================================================================
     # Helpers
     # =========================================================================
+
+    async def _get_catalog_item(
+        self,
+        organization_id: UUID,
+        catalog_item_id: UUID,
+    ) -> ChecklistItemCatalog:
+        result = await self.session.execute(
+            select(ChecklistItemCatalog).where(
+                ChecklistItemCatalog.id == catalog_item_id,
+                ChecklistItemCatalog.organization_id == organization_id,
+                ChecklistItemCatalog.deleted_at.is_(None),
+                ChecklistItemCatalog.is_active.is_(True),
+            )
+        )
+        catalog_item = result.scalar_one_or_none()
+        if catalog_item is None:
+            raise NotFoundException(
+                "Checklist catalog item not found",
+                error_code="CHECKLIST_CATALOG_ITEM_NOT_FOUND",
+            )
+        return catalog_item
+
+    def _template_item_fields_from_catalog(
+        self,
+        catalog_item: ChecklistItemCatalog,
+    ) -> dict[str, object]:
+        category = _APPROVAL_CATEGORY_MAP.get(catalog_item.category)
+        if category is None or category not in _VALID_CATEGORIES:
+            raise BadRequestException(
+                f"Checklist catalog category '{catalog_item.category}' is not valid for an approval template",
+                error_code="INVALID_ITEM_CATEGORY",
+            )
+        return {
+            "catalog_item_id": catalog_item.id,
+            "code": catalog_item.code,
+            "label": catalog_item.label,
+            "description": catalog_item.description,
+            "category": category,
+        }
 
     async def _get_template_item(
         self,

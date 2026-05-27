@@ -5,10 +5,10 @@
 
 // ============== ENUMS ==============
 
-export type EntityType = 'CORPORATE' | 'INDIVIDUAL' | 'LLP' | 'PARTNERSHIP' | 'TRUST' | 'HUF';
+export type EntityType = string;
 export type EntityStatus = 'PROSPECT' | 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
-export type RiskCategory = 'LOW' | 'MEDIUM' | 'HIGH';
-export type CreditRating = 'AAA' | 'AA' | 'A' | 'BBB' | 'BB' | 'B' | 'C' | 'D';
+export type RiskCategory = string;
+export type CreditRating = string;
 
 export type ApplicationStage =
   | 'LEAD'
@@ -26,10 +26,10 @@ export type ApplicationStatus =
   | 'REJECTED'
   | 'WITHDRAWN';
 
-export type InterestType = 'FIXED' | 'FLOATING';
-export type RepaymentFrequency = 'MONTHLY' | 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY' | 'BULLET';
-export type RepaymentMode = 'EMI' | 'STRUCTURED' | 'BULLET' | 'BALLOON' | 'STEP_UP' | 'STEP_DOWN';
-export type DayCountConvention = 'ACT_365' | 'ACT_360' | 'THIRTY_360';
+export type InterestType = string;
+export type RepaymentFrequency = string;
+export type RepaymentMode = string;
+export type DayCountConvention = string;
 
 export type AssetClassification =
   | 'STANDARD'
@@ -110,12 +110,7 @@ export interface Entity {
 export interface EntityContact {
   id: string;
   entityId: string;
-  contactType:
-    | 'DIRECTOR'
-    | 'PROMOTER'
-    | 'AUTHORIZED_SIGNATORY'
-    | 'KEY_MANAGERIAL_PERSON'
-    | 'GUARANTOR';
+  contactType: string;
   name: string;
   designation?: string;
   din?: string;
@@ -130,7 +125,7 @@ export interface EntityContact {
 export interface EntityAddress {
   id: string;
   entityId: string;
-  addressType: 'REGISTERED' | 'CORRESPONDENCE' | 'PLANT' | 'WAREHOUSE' | 'BRANCH' | 'PROJECT_SITE';
+  addressType: string;
   addressLine1: string;
   addressLine2?: string;
   city: string;
@@ -149,7 +144,7 @@ export interface EntityBankAccount {
   branchName?: string;
   accountNumber: string;
   ifscCode: string;
-  accountType: 'CURRENT' | 'SAVINGS' | 'CC' | 'OD';
+  accountType: string;
   isPrimary: boolean;
   isVerified: boolean;
   accountHolderName?: string;
@@ -230,7 +225,7 @@ export interface LoanProduct {
   organizationId: string;
   code: string;
   name: string;
-  category: 'TERM_LOAN' | 'WORKING_CAPITAL' | 'PROJECT_FINANCE' | 'LAP' | 'VEHICLE' | 'EQUIPMENT';
+  category: string;
   subCategory?: string | null;
 
   // Limits

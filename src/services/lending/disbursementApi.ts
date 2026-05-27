@@ -233,11 +233,16 @@ export async function getDisbursements(
   if (filters?.search) params.append('search', filters.search);
   if (filters?.status) params.append('status', filters.status);
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+  if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
   const response = await api.get<PaginatedResponse<DisbursementListItem>>(
     `${BASE_URL}?${params.toString()}`,
   );
+  return response.data;
+}
+
+export async function getDisbursement(disbursementId: string): Promise<DisbursementListItem> {
+  const response = await api.get<DisbursementListItem>(`${BASE_URL}/detail/${disbursementId}`);
   return response.data;
 }
 
@@ -253,6 +258,7 @@ export const disbursementApi = {
 
   // CRUD
   getDisbursements,
+  getDisbursement,
 };
 
 export default disbursementApi;

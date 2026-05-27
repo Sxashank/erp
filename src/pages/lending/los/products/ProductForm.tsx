@@ -1,10 +1,11 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Save, Plus, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { useForm, useFieldArray } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { FileCheck2, Save } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
+import { useForm } from 'react-hook-form';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
 import { AmountInput } from '@/components/lending/common/AmountInput';
 import { Button } from '@/components/ui/button';
@@ -19,135 +20,315 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-import { logger } from '@/lib/logger';
+import { useLendingMasterRows, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
+import { useLoanProduct } from '@/hooks/lending/useLoanProduct';
+import { useCreateLoanProduct, useUpdateLoanProduct } from '@/hooks/lending/useLoanProducts';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
+import type { LoanProductMutationPayload } from '@/services/lending/productApi';
+
+const today = new Date().toISOString().split('T')[0];
+const optionalNonNegativeNumber = z.number().min(0).optional();
+const optionalNumberRegister = {
+  setValueAs: (value: string) => (value === '' ? undefined : Number(value)),
+};
+
 const productSchema = z.object({
   productCode: z.string().min(1, 'Product code is required'),
   productName: z.string().min(1, 'Product name is required'),
   description: z.string().optional(),
-  category: z.enum([
-    'TERM_LOAN',
-    'WORKING_CAPITAL',
-    'PROJECT_FINANCE',
-    'LAP',
-    'EQUIPMENT_FINANCE',
-    'BILL_DISCOUNTING',
-  ]),
+  category: z.string().min(1, 'Category is required'),
   subCategory: z.string().optional(),
   minAmount: z.number().min(0, 'Minimum amount must be positive'),
   maxAmount: z.number().min(0, 'Maximum amount must be positive'),
   minTenureMonths: z.number().min(1, 'Minimum tenure must be at least 1 month'),
   maxTenureMonths: z.number().min(1, 'Maximum tenure must be at least 1 month'),
-  interestType: z.enum(['FIXED', 'FLOATING']),
-  baseRate: z.string().optional(),
-  spreadBps: z.number().default(0),
-  fixedRate: z.number().optional(),
-  processingFeePercent: z.number().min(0).max(10),
-  processingFeeMin: z.number().optional(),
-  processingFeeMax: z.number().optional(),
-  prepaymentAllowed: z.boolean().default(true),
-  prepaymentChargePercent: z.number().optional(),
-  prepaymentLockInMonths: z.number().optional(),
+  interestType: z.string().min(1, 'Interest type is required'),
+  spreadBps: z.number().min(0).default(0),
+  fixedRate: z.number().min(0).max(100).optional(),
   moratoriumAllowed: z.boolean().default(true),
-  maxMoratoriumMonths: z.number().optional(),
-  repaymentFrequency: z.array(z.enum(['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY', 'BULLET'])),
-  dayCountConvention: z.enum(['ACT_365', 'ACT_360', 'THIRTY_360']),
-  fees: z
-    .array(
-      z.object({
-        feeType: z.string(),
-        feeName: z.string(),
-        chargeType: z.enum(['PERCENTAGE', 'FIXED', 'SLAB']),
-        percentage: z.number().optional(),
-        fixedAmount: z.number().optional(),
-        minAmount: z.number().optional(),
-        maxAmount: z.number().optional(),
-        isMandatory: z.boolean().default(false),
-      }),
-    )
-    .optional(),
-  documentChecklist: z
-    .array(
-      z.object({
-        documentType: z.string(),
-        documentName: z.string(),
-        isMandatory: z.boolean().default(false),
-        stage: z.enum(['APPLICATION', 'APPRAISAL', 'SANCTION', 'DISBURSEMENT']),
-      }),
-    )
-    .optional(),
-  status: z.enum(['ACTIVE', 'INACTIVE', 'DISCONTINUED']).default('ACTIVE'),
+  maxMoratoriumMonths: optionalNonNegativeNumber,
+  repaymentFrequency: z.array(z.string()).min(1, 'Select at least one repayment frequency'),
+  repaymentModes: z.array(z.string()).min(1, 'Select at least one repayment mode'),
+  dayCountConvention: z.string().min(1, 'Day count convention is required'),
+  prepaymentAllowed: z.boolean().default(true),
+  prepaymentLockInMonths: optionalNonNegativeNumber,
+  requiresCollateral: z.boolean().default(true),
+  minCollateralCoverage: optionalNonNegativeNumber,
+  effectiveFrom: z.string().min(1, 'Effective from date is required'),
+  status: z.enum(['ACTIVE', 'INACTIVE']).default('ACTIVE'),
 });
 
-type ProductFormData = z.infer<typeof productSchema>;
+type ProductFormInput = z.input<typeof productSchema>;
+type ProductFormData = z.output<typeof productSchema>;
 
-const defaultValues: Partial<ProductFormData> = {
-  category: 'TERM_LOAN',
-  interestType: 'FLOATING',
-  baseRate: 'SMFC_BR',
+const defaultValues: ProductFormInput = {
+  productCode: '',
+  productName: '',
+  description: '',
+  category: '',
+  subCategory: '',
+  minAmount: 1000000,
+  maxAmount: 1000000000,
+  minTenureMonths: 12,
+  maxTenureMonths: 120,
+  interestType: '',
   spreadBps: 200,
-  processingFeePercent: 1.0,
-  prepaymentAllowed: true,
+  fixedRate: undefined,
   moratoriumAllowed: true,
-  repaymentFrequency: ['MONTHLY'],
-  dayCountConvention: 'ACT_365',
+  maxMoratoriumMonths: 12,
+  repaymentFrequency: [],
+  repaymentModes: [],
+  dayCountConvention: '',
+  prepaymentAllowed: true,
+  prepaymentLockInMonths: undefined,
+  requiresCollateral: true,
+  minCollateralCoverage: 100,
+  effectiveFrom: today,
   status: 'ACTIVE',
-  fees: [],
-  documentChecklist: [],
 };
+
+function toOptions(
+  rows: { data: Record<string, unknown> }[] | undefined,
+  labelKey: 'label' | 'name' = 'label',
+) {
+  return (
+    rows?.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data[labelKey] ?? row.data.label ?? row.data.name ?? row.data.code ?? ''),
+    })) ?? []
+  );
+}
+
+function numberFromDecimal(value: string | number | null | undefined): number | undefined {
+  if (value === null || value === undefined || value === '') return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function blankToNull(value: string | undefined): string | null {
+  return value && value.trim() ? value.trim() : null;
+}
+
+function toPayload(data: ProductFormData): LoanProductMutationPayload {
+  const fixedRate = data.interestType === 'FIXED' ? (data.fixedRate ?? null) : null;
+  const defaultFrequency = data.repaymentFrequency[0];
+  return {
+    code: data.productCode,
+    name: data.productName,
+    description: blankToNull(data.description),
+    category: data.category,
+    subCategory: blankToNull(data.subCategory),
+    minAmount: data.minAmount,
+    maxAmount: data.maxAmount,
+    minTenureMonths: data.minTenureMonths,
+    maxTenureMonths: data.maxTenureMonths,
+    allowsMoratorium: data.moratoriumAllowed,
+    maxMoratoriumMonths: data.moratoriumAllowed ? (data.maxMoratoriumMonths ?? null) : 0,
+    interestType: data.interestType,
+    minSpreadBps: 0,
+    maxSpreadBps: data.interestType === 'FLOATING' ? Math.max(data.spreadBps, 500) : 0,
+    defaultSpreadBps: data.interestType === 'FLOATING' ? data.spreadBps : 0,
+    minEffectiveRate: fixedRate,
+    maxEffectiveRate: fixedRate,
+    dayCountConvention: data.dayCountConvention,
+    allowedRepaymentFrequencies: data.repaymentFrequency,
+    defaultRepaymentFrequency: defaultFrequency,
+    allowedRepaymentModes: data.repaymentModes,
+    defaultRepaymentMode: data.repaymentModes[0],
+    allowsPrepayment: data.prepaymentAllowed,
+    prepaymentLockInMonths: data.prepaymentAllowed ? (data.prepaymentLockInMonths ?? null) : null,
+    allowsForeclosure: data.prepaymentAllowed,
+    requiresCollateral: data.requiresCollateral,
+    minCollateralCoverage: data.requiresCollateral ? (data.minCollateralCoverage ?? null) : null,
+    requiresGuarantee: false,
+    effectiveFrom: data.effectiveFrom,
+    isActive: data.status === 'ACTIVE',
+  };
+}
 
 export default function ProductForm() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { toast } = useToast();
   const isEdit = Boolean(id);
-  const [activeTab, setActiveTab] = useState('basic');
+
+  const productQuery = useLoanProduct(id);
+  const createMutation = useCreateLoanProduct();
+  const updateMutation = useUpdateLoanProduct();
+  const productCategoriesQuery = useLendingOptionRows('PRODUCT_CATEGORY');
+  const interestTypesQuery = useLendingOptionRows('RATE_TYPE');
+  const repaymentFrequenciesQuery = useLendingOptionRows('REPAYMENT_FREQUENCY');
+  const repaymentModesQuery = useLendingOptionRows('REPAYMENT_MODE');
+  const dayCountConventionsQuery = useLendingMasterRows('day-count-conventions', {
+    pageSize: 100,
+  });
+
+  const productCategoryOptions = useMemo(
+    () => toOptions(productCategoriesQuery.data?.items),
+    [productCategoriesQuery.data?.items],
+  );
+  const interestTypeOptions = useMemo(
+    () => toOptions(interestTypesQuery.data?.items),
+    [interestTypesQuery.data?.items],
+  );
+  const repaymentFrequencyOptions = useMemo(
+    () => toOptions(repaymentFrequenciesQuery.data?.items),
+    [repaymentFrequenciesQuery.data?.items],
+  );
+  const repaymentModeOptions = useMemo(
+    () => toOptions(repaymentModesQuery.data?.items),
+    [repaymentModesQuery.data?.items],
+  );
+  const dayCountConventionOptions = useMemo(
+    () => toOptions(dayCountConventionsQuery.data?.items, 'name'),
+    [dayCountConventionsQuery.data?.items],
+  );
 
   const {
     register,
-    control,
     handleSubmit,
     watch,
     setValue,
-    formState: { errors, isSubmitting },
-  } = useForm<ProductFormData>({
-    resolver: zodResolver(productSchema) as any,
+    getValues,
+    reset,
+    formState: { errors },
+  } = useForm<ProductFormInput, unknown, ProductFormData>({
+    resolver: zodResolver(productSchema),
     defaultValues,
   });
 
-  const {
-    fields: feeFields,
-    append: appendFee,
-    remove: removeFee,
-  } = useFieldArray({
-    control,
-    name: 'fees',
-  });
-
-  const {
-    fields: documentFields,
-    append: appendDocument,
-    remove: removeDocument,
-  } = useFieldArray({
-    control,
-    name: 'documentChecklist',
-  });
-
   const interestType = watch('interestType');
+  const saving = createMutation.isPending || updateMutation.isPending;
+  const loadingMasters =
+    productCategoriesQuery.isLoading ||
+    interestTypesQuery.isLoading ||
+    repaymentFrequenciesQuery.isLoading ||
+    repaymentModesQuery.isLoading ||
+    dayCountConventionsQuery.isLoading;
+  const masterError =
+    productCategoriesQuery.error ??
+    interestTypesQuery.error ??
+    repaymentFrequenciesQuery.error ??
+    repaymentModesQuery.error ??
+    dayCountConventionsQuery.error;
+
+  useEffect(() => {
+    if (isEdit) return;
+    if (!getValues('category') && productCategoryOptions[0]) {
+      setValue('category', productCategoryOptions[0].value);
+    }
+    if (!getValues('interestType') && interestTypeOptions[0]) {
+      setValue('interestType', interestTypeOptions[0].value);
+    }
+    if (!getValues('dayCountConvention') && dayCountConventionOptions[0]) {
+      setValue('dayCountConvention', dayCountConventionOptions[0].value);
+    }
+    if (!getValues('repaymentFrequency').length && repaymentFrequencyOptions[0]) {
+      setValue('repaymentFrequency', [repaymentFrequencyOptions[0].value]);
+    }
+    if (!getValues('repaymentModes').length && repaymentModeOptions[0]) {
+      setValue('repaymentModes', [repaymentModeOptions[0].value]);
+    }
+  }, [
+    dayCountConventionOptions,
+    getValues,
+    interestTypeOptions,
+    isEdit,
+    productCategoryOptions,
+    repaymentFrequencyOptions,
+    repaymentModeOptions,
+    setValue,
+  ]);
+
+  useEffect(() => {
+    const product = productQuery.data;
+    if (!product) return;
+    reset({
+      productCode: product.code,
+      productName: product.name,
+      description: product.description ?? '',
+      category: product.category,
+      subCategory: product.subCategory ?? '',
+      minAmount: numberFromDecimal(product.minAmount) ?? 0,
+      maxAmount: numberFromDecimal(product.maxAmount) ?? 0,
+      minTenureMonths: product.minTenureMonths,
+      maxTenureMonths: product.maxTenureMonths,
+      interestType: product.interestType,
+      spreadBps: product.defaultSpreadBps ?? 0,
+      fixedRate: numberFromDecimal(product.minEffectiveRate),
+      moratoriumAllowed: product.allowsMoratorium,
+      maxMoratoriumMonths: product.maxMoratoriumMonths ?? undefined,
+      repaymentFrequency: product.allowedRepaymentFrequencies?.length
+        ? product.allowedRepaymentFrequencies
+        : [product.defaultRepaymentFrequency],
+      repaymentModes: product.allowedRepaymentModes?.length
+        ? product.allowedRepaymentModes
+        : [product.defaultRepaymentMode],
+      dayCountConvention: product.dayCountConvention,
+      prepaymentAllowed: product.allowsPrepayment,
+      prepaymentLockInMonths: product.prepaymentLockInMonths ?? undefined,
+      requiresCollateral: product.requiresCollateral,
+      minCollateralCoverage: numberFromDecimal(product.minCollateralCoverage),
+      effectiveFrom: product.effectiveFrom,
+      status: product.isActive ? 'ACTIVE' : 'INACTIVE',
+    });
+  }, [productQuery.data, reset]);
 
   const onSubmit = async (data: ProductFormData) => {
-    logger.debug('Product data:', data);
-    // API call would go here
-    navigate('/admin/lending/products');
+    const payload = toPayload(data);
+    try {
+      if (isEdit && id) {
+        await updateMutation.mutateAsync({ productId: id, payload });
+        toast({ title: 'Product updated' });
+        navigate(`/admin/lending/products/${id}`);
+        return;
+      }
+      const created = await createMutation.mutateAsync(payload);
+      toast({ title: 'Product created' });
+      navigate(`/admin/lending/products/${created.id}`);
+    } catch (error) {
+      showErrorToast(error, toast);
+    }
   };
+
+  if ((isEdit && productQuery.isLoading) || loadingMasters) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title={isEdit ? 'Edit Loan Product' : 'Create Loan Product'}
+          breadcrumbs={[
+            { label: 'Loan Products', to: '/admin/lending/products' },
+            { label: isEdit ? 'Edit' : 'New' },
+          ]}
+        />
+        <Card>
+          <CardContent className="p-8 text-sm text-muted-foreground">
+            Loading product setup...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if ((isEdit && productQuery.isError) || masterError) {
+    return (
+      <ErrorState
+        title="Could not load product setup"
+        error={productQuery.error ?? masterError}
+        onRetry={() => {
+          productQuery.refetch();
+          productCategoriesQuery.refetch();
+          interestTypesQuery.refetch();
+          repaymentFrequenciesQuery.refetch();
+          repaymentModesQuery.refetch();
+          dayCountConventionsQuery.refetch();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -163,29 +344,36 @@ export default function ProductForm() {
           { label: isEdit ? 'Edit' : 'New' },
         ]}
         actions={
-          <Button onClick={handleSubmit(onSubmit as any)} disabled={isSubmitting}>
-            <Save className="mr-2 h-4 w-4" />
-            {isEdit ? 'Update Product' : 'Create Product'}
-          </Button>
+          <div className="flex gap-2">
+            {isEdit && id ? (
+              <Button variant="outline" asChild>
+                <Link to={`/admin/lending/products/${id}/checklist`}>
+                  <FileCheck2 className="mr-2 h-4 w-4" />
+                  Document requirements
+                </Link>
+              </Button>
+            ) : null}
+            <Button onClick={handleSubmit(onSubmit)} disabled={saving}>
+              <Save className="mr-2 h-4 w-4" />
+              {isEdit ? 'Update Product' : 'Create Product'}
+            </Button>
+          </div>
         }
       />
 
-      <form onSubmit={handleSubmit(onSubmit as any)}>
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <Tabs defaultValue="basic">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="basic">Basic Info</TabsTrigger>
-            <TabsTrigger value="interest">Interest & Fees</TabsTrigger>
-            <TabsTrigger value="terms">Terms & Conditions</TabsTrigger>
-            <TabsTrigger value="fees">Fee Structure</TabsTrigger>
-            <TabsTrigger value="documents">Document Checklist</TabsTrigger>
+            <TabsTrigger value="interest">Interest</TabsTrigger>
+            <TabsTrigger value="terms">Terms</TabsTrigger>
           </TabsList>
 
-          {/* Basic Info Tab */}
           <TabsContent value="basic" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Product Details</CardTitle>
-                <CardDescription>Basic product identification and categorization</CardDescription>
+                <CardDescription>Basic product identification and categorisation</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -196,9 +384,9 @@ export default function ProductForm() {
                       placeholder="e.g., TL-CORP-001"
                       {...register('productCode')}
                     />
-                    {errors.productCode && (
+                    {errors.productCode ? (
                       <p className="text-sm text-destructive">{errors.productCode.message}</p>
-                    )}
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="productName">Product Name *</Label>
@@ -207,39 +395,33 @@ export default function ProductForm() {
                       placeholder="e.g., Corporate Term Loan"
                       {...register('productName')}
                     />
-                    {errors.productName && (
+                    {errors.productName ? (
                       <p className="text-sm text-destructive">{errors.productName.message}</p>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="description">Description</Label>
-                  <Textarea
-                    id="description"
-                    placeholder="Brief description of the product..."
-                    rows={3}
-                    {...register('description')}
-                  />
+                  <Textarea id="description" rows={3} {...register('description')} />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label>Category *</Label>
                     <Select
                       value={watch('category')}
-                      onValueChange={(v) => setValue('category', v as ProductFormData['category'])}
+                      onValueChange={(value) => setValue('category', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="TERM_LOAN">Term Loan</SelectItem>
-                        <SelectItem value="WORKING_CAPITAL">Working Capital</SelectItem>
-                        <SelectItem value="PROJECT_FINANCE">Project Finance</SelectItem>
-                        <SelectItem value="LAP">Loan Against Property</SelectItem>
-                        <SelectItem value="EQUIPMENT_FINANCE">Equipment Finance</SelectItem>
-                        <SelectItem value="BILL_DISCOUNTING">Bill Discounting</SelectItem>
+                        {productCategoryOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -247,65 +429,53 @@ export default function ProductForm() {
                     <Label htmlFor="subCategory">Sub Category</Label>
                     <Input
                       id="subCategory"
-                      placeholder="e.g., Corporate, SME, Retail"
+                      placeholder="e.g., Corporate"
                       {...register('subCategory')}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <Label>Status</Label>
+                    <Select
+                      value={watch('status')}
+                      onValueChange={(value) =>
+                        setValue('status', value as ProductFormData['status'])
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACTIVE">Active</SelectItem>
+                        <SelectItem value="INACTIVE">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select
-                    value={watch('status')}
-                    onValueChange={(v) => setValue('status', v as ProductFormData['status'])}
-                  >
-                    <SelectTrigger className="w-[200px]">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ACTIVE">Active</SelectItem>
-                      <SelectItem value="INACTIVE">Inactive</SelectItem>
-                      <SelectItem value="DISCONTINUED">Discontinued</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Amount & Tenure Limits</CardTitle>
-                <CardDescription>
-                  Define the permissible range for loan amounts and tenures
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Minimum Loan Amount *</Label>
                     <AmountInput
                       value={watch('minAmount') || 0}
-                      onChange={(v) => setValue('minAmount', v ?? 0)}
-                      placeholder="Enter minimum amount"
+                      onChange={(value) => setValue('minAmount', value ?? 0)}
                     />
-                    {errors.minAmount && (
+                    {errors.minAmount ? (
                       <p className="text-sm text-destructive">{errors.minAmount.message}</p>
-                    )}
+                    ) : null}
                   </div>
                   <div className="space-y-2">
                     <Label>Maximum Loan Amount *</Label>
                     <AmountInput
                       value={watch('maxAmount') || 0}
-                      onChange={(v) => setValue('maxAmount', v ?? 0)}
-                      placeholder="Enter maximum amount"
+                      onChange={(value) => setValue('maxAmount', value ?? 0)}
                     />
-                    {errors.maxAmount && (
+                    {errors.maxAmount ? (
                       <p className="text-sm text-destructive">{errors.maxAmount.message}</p>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
                     <Label htmlFor="minTenureMonths">Minimum Tenure (Months) *</Label>
                     <Input
@@ -314,9 +484,6 @@ export default function ProductForm() {
                       min={1}
                       {...register('minTenureMonths', { valueAsNumber: true })}
                     />
-                    {errors.minTenureMonths && (
-                      <p className="text-sm text-destructive">{errors.minTenureMonths.message}</p>
-                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="maxTenureMonths">Maximum Tenure (Months) *</Label>
@@ -326,23 +493,21 @@ export default function ProductForm() {
                       min={1}
                       {...register('maxTenureMonths', { valueAsNumber: true })}
                     />
-                    {errors.maxTenureMonths && (
-                      <p className="text-sm text-destructive">{errors.maxTenureMonths.message}</p>
-                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="effectiveFrom">Effective From *</Label>
+                    <Input id="effectiveFrom" type="date" {...register('effectiveFrom')} />
                   </div>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* Interest & Fees Tab */}
           <TabsContent value="interest" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Interest Configuration</CardTitle>
-                <CardDescription>
-                  Define interest rate type and calculation parameters
-                </CardDescription>
+                <CardDescription>Define rate type and calculation parameters</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -350,16 +515,17 @@ export default function ProductForm() {
                     <Label>Interest Type *</Label>
                     <Select
                       value={interestType}
-                      onValueChange={(v) =>
-                        setValue('interestType', v as ProductFormData['interestType'])
-                      }
+                      onValueChange={(value) => setValue('interestType', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select interest type" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="FIXED">Fixed Rate</SelectItem>
-                        <SelectItem value="FLOATING">Floating Rate</SelectItem>
+                        {interestTypeOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -367,53 +533,32 @@ export default function ProductForm() {
                     <Label>Day Count Convention *</Label>
                     <Select
                       value={watch('dayCountConvention')}
-                      onValueChange={(v) =>
-                        setValue('dayCountConvention', v as ProductFormData['dayCountConvention'])
-                      }
+                      onValueChange={(value) => setValue('dayCountConvention', value)}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select convention" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="ACT_365">Actual/365</SelectItem>
-                        <SelectItem value="ACT_360">Actual/360</SelectItem>
-                        <SelectItem value="THIRTY_360">30/360</SelectItem>
+                        {dayCountConventionOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
 
                 {interestType === 'FLOATING' ? (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label>Base Rate *</Label>
-                      <Select
-                        value={watch('baseRate')}
-                        onValueChange={(v) => setValue('baseRate', v)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select base rate" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="SMFC_BR">SMFC Base Rate</SelectItem>
-                          <SelectItem value="MCLR">MCLR</SelectItem>
-                          <SelectItem value="REPO_LINKED">Repo Linked</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="spreadBps">Spread (Basis Points) *</Label>
-                      <Input
-                        id="spreadBps"
-                        type="number"
-                        min={0}
-                        placeholder="e.g., 200 for 2%"
-                        {...register('spreadBps', { valueAsNumber: true })}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        100 bps = 1%. Effective Rate = Base Rate + Spread
-                      </p>
-                    </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="spreadBps">Default Spread (Basis Points) *</Label>
+                    <Input
+                      id="spreadBps"
+                      type="number"
+                      min={0}
+                      {...register('spreadBps', { valueAsNumber: true })}
+                    />
+                    <p className="text-xs text-muted-foreground">100 bps = 1%.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -423,76 +568,53 @@ export default function ProductForm() {
                       type="number"
                       step="0.01"
                       min={0}
-                      max={30}
-                      placeholder="e.g., 12.50"
-                      {...register('fixedRate', { valueAsNumber: true })}
+                      max={100}
+                      {...register('fixedRate', optionalNumberRegister)}
                     />
                   </div>
                 )}
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Processing Fee</CardTitle>
-                <CardDescription>Define processing fee structure</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-4 md:grid-cols-3">
-                  <div className="space-y-2">
-                    <Label htmlFor="processingFeePercent">Processing Fee (%) *</Label>
-                    <Input
-                      id="processingFeePercent"
-                      type="number"
-                      step="0.01"
-                      min={0}
-                      max={10}
-                      {...register('processingFeePercent', { valueAsNumber: true })}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Minimum Fee</Label>
-                    <AmountInput
-                      value={watch('processingFeeMin') || 0}
-                      onChange={(v) => setValue('processingFeeMin', v)}
-                      placeholder="Minimum fee amount"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Maximum Fee</Label>
-                    <AmountInput
-                      value={watch('processingFeeMax') || 0}
-                      onChange={(v) => setValue('processingFeeMax', v)}
-                      placeholder="Maximum fee amount"
-                    />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
-          {/* Terms & Conditions Tab */}
           <TabsContent value="terms" className="mt-6 space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle>Repayment Terms</CardTitle>
                 <CardDescription>
-                  Configure repayment frequencies and moratorium options
+                  Configure repayment frequency and moratorium controls
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Repayment Frequency Options</Label>
                   <div className="flex flex-wrap gap-4">
-                    {['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY', 'BULLET'].map((freq) => (
-                      <label key={freq} className="flex items-center gap-2">
+                    {repaymentFrequencyOptions.map((option) => (
+                      <label key={option.value} className="flex items-center gap-2">
                         <input
                           type="checkbox"
-                          value={freq}
+                          value={option.value}
                           {...register('repaymentFrequency')}
                           className="h-4 w-4 rounded border-gray-300"
                         />
-                        <span className="text-sm">{freq.replace('_', ' ')}</span>
+                        <span className="text-sm">{option.label}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Repayment Mode Options</Label>
+                  <div className="flex flex-wrap gap-4">
+                    {repaymentModeOptions.map((option) => (
+                      <label key={option.value} className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          value={option.value}
+                          {...register('repaymentModes')}
+                          className="h-4 w-4 rounded border-gray-300"
+                        />
+                        <span className="text-sm">{option.label}</span>
                       </label>
                     ))}
                   </div>
@@ -502,16 +624,16 @@ export default function ProductForm() {
                   <div className="space-y-0.5">
                     <Label>Moratorium Allowed</Label>
                     <p className="text-sm text-muted-foreground">
-                      Allow moratorium period at the start of the loan
+                      Allow moratorium at the start of the loan
                     </p>
                   </div>
                   <Switch
                     checked={watch('moratoriumAllowed')}
-                    onCheckedChange={(v) => setValue('moratoriumAllowed', v)}
+                    onCheckedChange={(value) => setValue('moratoriumAllowed', value)}
                   />
                 </div>
 
-                {watch('moratoriumAllowed') && (
+                {watch('moratoriumAllowed') ? (
                   <div className="space-y-2">
                     <Label htmlFor="maxMoratoriumMonths">Maximum Moratorium Period (Months)</Label>
                     <Input
@@ -519,17 +641,19 @@ export default function ProductForm() {
                       type="number"
                       min={0}
                       className="w-[200px]"
-                      {...register('maxMoratoriumMonths', { valueAsNumber: true })}
+                      {...register('maxMoratoriumMonths', optionalNumberRegister)}
                     />
                   </div>
-                )}
+                ) : null}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Prepayment Terms</CardTitle>
-                <CardDescription>Configure prepayment options and charges</CardDescription>
+                <CardTitle>Prepayment And Collateral</CardTitle>
+                <CardDescription>
+                  Configure product-level servicing and security controls
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between rounded-lg border p-4">
@@ -541,290 +665,49 @@ export default function ProductForm() {
                   </div>
                   <Switch
                     checked={watch('prepaymentAllowed')}
-                    onCheckedChange={(v) => setValue('prepaymentAllowed', v)}
+                    onCheckedChange={(value) => setValue('prepaymentAllowed', value)}
                   />
                 </div>
 
-                {watch('prepaymentAllowed') && (
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="prepaymentLockInMonths">Lock-in Period (Months)</Label>
-                      <Input
-                        id="prepaymentLockInMonths"
-                        type="number"
-                        min={0}
-                        placeholder="Months before prepayment allowed"
-                        {...register('prepaymentLockInMonths', { valueAsNumber: true })}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="prepaymentChargePercent">Prepayment Charge (%)</Label>
-                      <Input
-                        id="prepaymentChargePercent"
-                        type="number"
-                        step="0.01"
-                        min={0}
-                        max={10}
-                        placeholder="Charge on prepaid amount"
-                        {...register('prepaymentChargePercent', { valueAsNumber: true })}
-                      />
-                    </div>
+                {watch('prepaymentAllowed') ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="prepaymentLockInMonths">Lock-in Period (Months)</Label>
+                    <Input
+                      id="prepaymentLockInMonths"
+                      type="number"
+                      min={0}
+                      className="w-[200px]"
+                      {...register('prepaymentLockInMonths', optionalNumberRegister)}
+                    />
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                ) : null}
 
-          {/* Fee Structure Tab */}
-          <TabsContent value="fees" className="mt-6 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Fee Structure</CardTitle>
-                <CardDescription>Define additional fees applicable to this product</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Fee Type</TableHead>
-                      <TableHead>Fee Name</TableHead>
-                      <TableHead>Charge Type</TableHead>
-                      <TableHead>Value</TableHead>
-                      <TableHead>Mandatory</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {feeFields.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
-                          No fees configured. Click "Add Fee" to add fee structures.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      feeFields.map((field, index) => (
-                        <TableRow key={field.id}>
-                          <TableCell>
-                            <Select
-                              value={watch(`fees.${index}.feeType`)}
-                              onValueChange={(v) => setValue(`fees.${index}.feeType`, v)}
-                            >
-                              <SelectTrigger className="w-[150px]">
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="DOCUMENTATION">Documentation</SelectItem>
-                                <SelectItem value="LEGAL">Legal</SelectItem>
-                                <SelectItem value="VALUATION">Valuation</SelectItem>
-                                <SelectItem value="INSURANCE">Insurance</SelectItem>
-                                <SelectItem value="STAMP_DUTY">Stamp Duty</SelectItem>
-                                <SelectItem value="OTHER">Other</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              placeholder="Fee name"
-                              {...register(`fees.${index}.feeName`)}
-                              className="w-[180px]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={watch(`fees.${index}.chargeType`)}
-                              onValueChange={(v) =>
-                                setValue(
-                                  `fees.${index}.chargeType`,
-                                  v as 'PERCENTAGE' | 'FIXED' | 'SLAB',
-                                )
-                              }
-                            >
-                              <SelectTrigger className="w-[130px]">
-                                <SelectValue placeholder="Type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="PERCENTAGE">Percentage</SelectItem>
-                                <SelectItem value="FIXED">Fixed</SelectItem>
-                                <SelectItem value="SLAB">Slab-based</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            {watch(`fees.${index}.chargeType`) === 'PERCENTAGE' ? (
-                              <Input
-                                type="number"
-                                step="0.01"
-                                placeholder="%"
-                                {...register(`fees.${index}.percentage`, { valueAsNumber: true })}
-                                className="w-[100px]"
-                              />
-                            ) : (
-                              <Input
-                                type="number"
-                                placeholder="Amount"
-                                {...register(`fees.${index}.fixedAmount`, { valueAsNumber: true })}
-                                className="w-[120px]"
-                              />
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Switch
-                              checked={watch(`fees.${index}.isMandatory`)}
-                              onCheckedChange={(v) => setValue(`fees.${index}.isMandatory`, v)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeFee(index)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() =>
-                    appendFee({
-                      feeType: 'OTHER',
-                      feeName: '',
-                      chargeType: 'FIXED',
-                      isMandatory: false,
-                    })
-                  }
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Fee
-                </Button>
-              </CardContent>
-            </Card>
-          </TabsContent>
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div className="space-y-0.5">
+                    <Label>Collateral Required</Label>
+                    <p className="text-sm text-muted-foreground">
+                      Require collateral/security for this product
+                    </p>
+                  </div>
+                  <Switch
+                    checked={watch('requiresCollateral')}
+                    onCheckedChange={(value) => setValue('requiresCollateral', value)}
+                  />
+                </div>
 
-          {/* Document Checklist Tab */}
-          <TabsContent value="documents" className="mt-6 space-y-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Document Checklist</CardTitle>
-                <CardDescription>
-                  Define required documents for this product at each stage
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Document Type</TableHead>
-                      <TableHead>Document Name</TableHead>
-                      <TableHead>Stage</TableHead>
-                      <TableHead>Mandatory</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documentFields.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
-                          No documents configured. Click "Add Document" to add to the checklist.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      documentFields.map((field, index) => (
-                        <TableRow key={field.id}>
-                          <TableCell>
-                            <Select
-                              value={watch(`documentChecklist.${index}.documentType`)}
-                              onValueChange={(v) =>
-                                setValue(`documentChecklist.${index}.documentType`, v)
-                              }
-                            >
-                              <SelectTrigger className="w-[150px]">
-                                <SelectValue placeholder="Select type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="KYC">KYC</SelectItem>
-                                <SelectItem value="FINANCIAL">Financial</SelectItem>
-                                <SelectItem value="LEGAL">Legal</SelectItem>
-                                <SelectItem value="COLLATERAL">Collateral</SelectItem>
-                                <SelectItem value="PROJECT">Project</SelectItem>
-                                <SelectItem value="OTHER">Other</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Input
-                              placeholder="Document name"
-                              {...register(`documentChecklist.${index}.documentName`)}
-                              className="w-[200px]"
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Select
-                              value={watch(`documentChecklist.${index}.stage`)}
-                              onValueChange={(v) =>
-                                setValue(
-                                  `documentChecklist.${index}.stage`,
-                                  v as 'APPLICATION' | 'APPRAISAL' | 'SANCTION' | 'DISBURSEMENT',
-                                )
-                              }
-                            >
-                              <SelectTrigger className="w-[140px]">
-                                <SelectValue placeholder="Stage" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="APPLICATION">Application</SelectItem>
-                                <SelectItem value="APPRAISAL">Appraisal</SelectItem>
-                                <SelectItem value="SANCTION">Sanction</SelectItem>
-                                <SelectItem value="DISBURSEMENT">Disbursement</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </TableCell>
-                          <TableCell>
-                            <Switch
-                              checked={watch(`documentChecklist.${index}.isMandatory`)}
-                              onCheckedChange={(v) =>
-                                setValue(`documentChecklist.${index}.isMandatory`, v)
-                              }
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeDocument(index)}
-                            >
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() =>
-                    appendDocument({
-                      documentType: 'KYC',
-                      documentName: '',
-                      isMandatory: false,
-                      stage: 'APPLICATION',
-                    })
-                  }
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Document
-                </Button>
+                {watch('requiresCollateral') ? (
+                  <div className="space-y-2">
+                    <Label htmlFor="minCollateralCoverage">Minimum Collateral Coverage (%)</Label>
+                    <Input
+                      id="minCollateralCoverage"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      className="w-[220px]"
+                      {...register('minCollateralCoverage', optionalNumberRegister)}
+                    />
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </TabsContent>

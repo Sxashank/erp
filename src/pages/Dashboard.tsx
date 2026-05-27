@@ -38,18 +38,98 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import {
-  organizationsApi,
-  dashboardApi,
-} from '@/services/api';
+import { organizationsApi, dashboardApi } from '@/services/api';
 import { biDashboardApi } from '@/services/biApi';
-import type { DashboardListItem } from '@/types/bi';
+import type { DashboardListItem, DashboardWidget } from '@/types/bi';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
   code: string;
+}
+
+interface DashboardSummary {
+  totalRevenueMtd: number;
+  revenueChange: number;
+  totalExpensesMtd: number;
+  expensesChange: number;
+  netProfitMtd: number;
+  totalPendingApprovals: number;
+  totalVendors: number;
+  totalCustomers: number;
+  currentFinancialYear?: string;
+}
+
+interface AgingBucket {
+  label: string;
+  amount: number;
+  percentage: number;
+}
+
+interface TopParty {
+  id: string;
+  name: string;
+  code: string;
+  outstanding: number;
+  overdue: number;
+}
+
+interface APDashboardSummary {
+  totalOutstanding: number;
+  totalOverdue: number;
+  overdueCount: number;
+  dueThisWeek: number;
+  dueThisWeekCount: number;
+  agingBuckets: AgingBucket[];
+  topVendors: TopParty[];
+}
+
+interface ARDashboardSummary {
+  totalOutstanding: number;
+  totalOverdue: number;
+  overdueCount: number;
+  dueThisWeek: number;
+  dueThisWeekCount: number;
+  agingBuckets: AgingBucket[];
+  topCustomers: TopParty[];
+  collectionRate?: number;
+}
+
+interface CashFlowSummary {
+  totalBankBalance: number;
+  receiptsToday: number;
+  paymentsToday: number;
+  netToday: number;
+  receiptsWeek: number;
+  paymentsWeek: number;
+  netWeek: number;
+  receiptsMonth: number;
+  paymentsMonth: number;
+  netMonth: number;
+  pendingChequeReceipts?: number;
+  pendingChequePayments?: number;
+}
+
+interface TrendPoint {
+  period: string;
+  value: number;
+}
+
+interface DashboardTrends {
+  revenue: TrendPoint[];
+  expenses: TrendPoint[];
+  collections: TrendPoint[];
+  payments: TrendPoint[];
+  netProfit: TrendPoint[];
+}
+
+interface CustomDashboardView {
+  id: string;
+  name: string;
+  widgets: DashboardWidget[];
+  autoRefresh: boolean;
+  refreshIntervalSeconds: number;
 }
 
 export function Dashboard() {
@@ -60,17 +140,19 @@ export function Dashboard() {
   const [selectedOrg, setSelectedOrg] = useState<string>('');
 
   // Dashboard data states
-  const [summary, setSummary] = useState<any>(null);
-  const [apSummary, setApSummary] = useState<any>(null);
-  const [arSummary, setArSummary] = useState<any>(null);
-  const [cashflow, setCashflow] = useState<any>(null);
-  const [trends, setTrends] = useState<any>(null);
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [apSummary, setApSummary] = useState<APDashboardSummary | null>(null);
+  const [arSummary, setArSummary] = useState<ARDashboardSummary | null>(null);
+  const [cashflow, setCashflow] = useState<CashFlowSummary | null>(null);
+  const [trends, setTrends] = useState<DashboardTrends | null>(null);
   const [recentActivity, setRecentActivity] = useState<Record<string, unknown>[]>([]);
 
   // Custom BI dashboards
   const [customDashboards, setCustomDashboards] = useState<DashboardListItem[]>([]);
   const [activeDashboard, setActiveDashboard] = useState<string>('overview');
-  const [selectedDashboardData, setSelectedDashboardData] = useState<any>(null);
+  const [selectedDashboardData, setSelectedDashboardData] = useState<CustomDashboardView | null>(
+    null,
+  );
   const [loadingCustomDashboard, setLoadingCustomDashboard] = useState(false);
 
   useEffect(() => {
@@ -106,7 +188,7 @@ export function Dashboard() {
     try {
       setLoadingCustomDashboard(true);
       const response = await biDashboardApi.get(dashboardId);
-      setSelectedDashboardData(response.data);
+      setSelectedDashboardData(response.data as unknown as CustomDashboardView);
     } catch (error) {
       logger.error('Failed to load custom dashboard:', error);
       toast({
@@ -142,15 +224,14 @@ export function Dashboard() {
 
     setLoading(true);
     try {
-      const [summaryRes, apRes, arRes, cashflowRes, trendsRes, activityRes] =
-        await Promise.all([
-          dashboardApi.getSummary().catch(() => ({ data: null })),
-          dashboardApi.getAPSummary().catch(() => ({ data: null })),
-          dashboardApi.getARSummary().catch(() => ({ data: null })),
-          dashboardApi.getCashflow().catch(() => ({ data: null })),
-          dashboardApi.getTrends({ months: 6 }).catch(() => ({ data: null })),
-          dashboardApi.getRecentActivity({ limit: 10 }).catch(() => ({ data: [] })),
-        ]);
+      const [summaryRes, apRes, arRes, cashflowRes, trendsRes, activityRes] = await Promise.all([
+        dashboardApi.getSummary().catch(() => ({ data: null })),
+        dashboardApi.getAPSummary().catch(() => ({ data: null })),
+        dashboardApi.getARSummary().catch(() => ({ data: null })),
+        dashboardApi.getCashflow().catch(() => ({ data: null })),
+        dashboardApi.getTrends({ months: 6 }).catch(() => ({ data: null })),
+        dashboardApi.getRecentActivity({ limit: 10 }).catch(() => ({ data: [] })),
+      ]);
 
       setSummary(summaryRes.data);
       setApSummary(apRes.data);
@@ -179,16 +260,6 @@ export function Dashboard() {
       description: 'Dashboard data has been updated',
     });
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  };
-
   const formatCompact = (amount: number | undefined | null) => {
     const num = Number(amount) || 0;
     if (num === 0) return '0';
@@ -211,26 +282,38 @@ export function Dashboard() {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Total Revenue (MTD)"
-          value={formatCurrency(summary?.totalRevenueMtd || 0)}
-          change={summary?.revenueChange}
+          value={formatIndianCompactCurrency(summary?.totalRevenueMtd || 0)}
+          change={summary?.revenueChange ?? 0}
           changeLabel="vs last month"
-          trend={summary?.revenueChange > 0 ? 'up' : summary?.revenueChange < 0 ? 'down' : 'neutral'}
+          trend={
+            (summary?.revenueChange ?? 0) > 0
+              ? 'up'
+              : (summary?.revenueChange ?? 0) < 0
+                ? 'down'
+                : 'neutral'
+          }
           icon={<TrendingUp className="h-5 w-5 text-green-500" />}
         />
         <KPICard
           title="Total Expenses (MTD)"
-          value={formatCurrency(summary?.totalExpensesMtd || 0)}
-          change={summary?.expensesChange}
+          value={formatIndianCompactCurrency(summary?.totalExpensesMtd || 0)}
+          change={summary?.expensesChange ?? 0}
           changeLabel="vs last month"
-          trend={summary?.expensesChange > 0 ? 'down' : summary?.expensesChange < 0 ? 'up' : 'neutral'}
+          trend={
+            (summary?.expensesChange ?? 0) > 0
+              ? 'down'
+              : (summary?.expensesChange ?? 0) < 0
+                ? 'up'
+                : 'neutral'
+          }
           icon={<TrendingDown className="h-5 w-5 text-red-500" />}
         />
         <KPICard
           title="Net Profit (MTD)"
-          value={formatCurrency(summary?.netProfitMtd || 0)}
-          subtitle={`${((summary?.netProfitMtd || 0) / (summary?.totalRevenueMtd || 1) * 100).toFixed(1)}% margin`}
+          value={formatIndianCompactCurrency(summary?.netProfitMtd || 0)}
+          subtitle={`${(((summary?.netProfitMtd || 0) / (summary?.totalRevenueMtd || 1)) * 100).toFixed(1)}% margin`}
           icon={<Receipt className="h-5 w-5 text-purple-500" />}
-          valueClassName={summary?.netProfitMtd >= 0 ? 'text-green-600' : 'text-red-600'}
+          valueClassName={(summary?.netProfitMtd ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}
         />
         <KPICard
           title="Pending Approvals"
@@ -243,7 +326,7 @@ export function Dashboard() {
       {/* Quick Stats Row */}
       <div className="grid gap-4 md:grid-cols-4">
         <Link to="/admin/ap-ar/vendors">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="rounded-lg bg-orange-100 p-3">
                 <Building2 className="h-5 w-5 text-orange-600" />
@@ -256,7 +339,7 @@ export function Dashboard() {
           </Card>
         </Link>
         <Link to="/admin/ap-ar/customers">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="rounded-lg bg-blue-100 p-3">
                 <Users className="h-5 w-5 text-blue-600" />
@@ -269,26 +352,30 @@ export function Dashboard() {
           </Card>
         </Link>
         <Link to="/admin/ap-ar/purchase-bills">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="rounded-lg bg-red-100 p-3">
                 <FileText className="h-5 w-5 text-red-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatCompact(apSummary?.totalOutstanding || 0)}</p>
+                <p className="text-2xl font-bold">
+                  {formatCompact(apSummary?.totalOutstanding || 0)}
+                </p>
                 <p className="text-sm text-muted-foreground">AP Outstanding</p>
               </div>
             </CardContent>
           </Card>
         </Link>
         <Link to="/admin/ap-ar/sales-invoices">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="flex items-center gap-4 p-4">
               <div className="rounded-lg bg-green-100 p-3">
                 <Receipt className="h-5 w-5 text-green-600" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{formatCompact(arSummary?.totalOutstanding || 0)}</p>
+                <p className="text-2xl font-bold">
+                  {formatCompact(arSummary?.totalOutstanding || 0)}
+                </p>
                 <p className="text-sm text-muted-foreground">AR Outstanding</p>
               </div>
             </CardContent>
@@ -430,12 +517,7 @@ export function Dashboard() {
                 ))}
               </SelectContent>
             </Select>
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={handleRefresh}
-              disabled={refreshing}
-            >
+            <Button variant="outline" size="icon" onClick={handleRefresh} disabled={refreshing}>
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             </Button>
           </div>
@@ -457,7 +539,7 @@ export function Dashboard() {
             ))}
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-6 mt-6">
+          <TabsContent value="overview" className="mt-6 space-y-6">
             {loading ? (
               <div className="flex items-center justify-center py-24">
                 <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
@@ -480,22 +562,20 @@ export function Dashboard() {
                   refreshInterval={selectedDashboardData.refreshIntervalSeconds * 1000}
                 />
               ) : (
-                <div className="text-center py-12 text-muted-foreground">
+                <div className="py-12 text-center text-muted-foreground">
                   No widgets configured for this dashboard
                 </div>
               )}
             </TabsContent>
           ))}
         </Tabs>
+      ) : // No custom dashboards - show standard layout
+      loading ? (
+        <div className="flex items-center justify-center py-24">
+          <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+        </div>
       ) : (
-        // No custom dashboards - show standard layout
-        loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
-          </div>
-        ) : (
-          renderOverviewContent()
-        )
+        renderOverviewContent()
       )}
     </div>
   );

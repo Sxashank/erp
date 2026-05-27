@@ -1,11 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  ArrowLeft,
-  Package,
-  Save,
-  CheckCircle,
-  AlertTriangle,
-} from 'lucide-react';
+import { ArrowLeft, Package, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -40,16 +34,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 const grnItemSchema = z.object({
   itemId: z.string(),
   description: z.string(),
@@ -87,8 +71,22 @@ const pendingPOs = [
     totalAmount: 145000,
     deliveryDate: '2025-01-25',
     items: [
-      { id: '1', description: 'Ergonomic Office Chair', orderedQty: 50, previouslyReceived: 30, pendingQty: 20, unitPrice: 1500 },
-      { id: '2', description: 'Standing Desk', orderedQty: 25, previouslyReceived: 20, pendingQty: 5, unitPrice: 3000 },
+      {
+        id: '1',
+        description: 'Ergonomic Office Chair',
+        orderedQty: 50,
+        previouslyReceived: 30,
+        pendingQty: 20,
+        unitPrice: 1500,
+      },
+      {
+        id: '2',
+        description: 'Standing Desk',
+        orderedQty: 25,
+        previouslyReceived: 20,
+        pendingQty: 5,
+        unitPrice: 3000,
+      },
     ],
   },
   {
@@ -98,9 +96,30 @@ const pendingPOs = [
     totalAmount: 485000,
     deliveryDate: '2025-02-10',
     items: [
-      { id: '1', description: 'Executive Desk', orderedQty: 10, previouslyReceived: 0, pendingQty: 10, unitPrice: 15000 },
-      { id: '2', description: 'Conference Chair', orderedQty: 40, previouslyReceived: 0, pendingQty: 40, unitPrice: 5000 },
-      { id: '3', description: 'Bookshelf', orderedQty: 15, previouslyReceived: 0, pendingQty: 15, unitPrice: 8000 },
+      {
+        id: '1',
+        description: 'Executive Desk',
+        orderedQty: 10,
+        previouslyReceived: 0,
+        pendingQty: 10,
+        unitPrice: 15000,
+      },
+      {
+        id: '2',
+        description: 'Conference Chair',
+        orderedQty: 40,
+        previouslyReceived: 0,
+        pendingQty: 40,
+        unitPrice: 5000,
+      },
+      {
+        id: '3',
+        description: 'Bookshelf',
+        orderedQty: 15,
+        previouslyReceived: 0,
+        pendingQty: 15,
+        unitPrice: 8000,
+      },
     ],
   },
 ];
@@ -110,7 +129,7 @@ export default function GRNCreate() {
   const [searchParams] = useSearchParams();
   const poRef = searchParams.get('po');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedPO, setSelectedPO] = useState<typeof pendingPOs[0] | null>(null);
+  const [selectedPO, setSelectedPO] = useState<(typeof pendingPOs)[0] | null>(null);
 
   const form = useForm<GRNFormData>({
     resolver: zodResolver(grnSchema),
@@ -137,10 +156,10 @@ export default function GRNCreate() {
 
   useEffect(() => {
     if (watchPoId) {
-      const po = pendingPOs.find(p => p.id === watchPoId);
+      const po = pendingPOs.find((p) => p.id === watchPoId);
       setSelectedPO(po || null);
       if (po) {
-        const items = po.items.map(item => ({
+        const items = po.items.map((item) => ({
           itemId: item.id,
           description: item.description,
           orderedQty: item.orderedQty,
@@ -178,25 +197,22 @@ export default function GRNCreate() {
   };
 
   const calculateTotalReceivedValue = () => {
-    return watchItems.reduce((sum, item) => sum + (item.acceptedQty * item.unitPrice), 0);
+    return watchItems.reduce((sum, item) => sum + item.acceptedQty * item.unitPrice, 0);
   };
 
   const onSubmit = async (data: GRNFormData) => {
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     navigate('/admin/procurement/grn');
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Create Goods Receipt Note"
         subtitle="Record receipt of goods against a purchase order"
-        breadcrumbs={[
-          { label: 'GRN', to: '/admin/procurement/grn' },
-          { label: 'New' },
-        ]}
+        breadcrumbs={[{ label: 'GRN', to: '/admin/procurement/grn' }, { label: 'New' }]}
       />
 
       <Form {...form}>
@@ -220,9 +236,9 @@ export default function GRNCreate() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {pendingPOs.map(po => (
+                        {pendingPOs.map((po) => (
                           <SelectItem key={po.id} value={po.id}>
-                            {po.id} - {po.vendor} ({formatCurrency(po.totalAmount)})
+                            {po.id} - {po.vendor} ({formatIndianCompactCurrency(po.totalAmount)})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -233,8 +249,8 @@ export default function GRNCreate() {
               />
 
               {selectedPO && (
-                <div className="mt-4 p-4 bg-muted rounded-lg">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="mt-4 rounded-lg bg-muted p-4">
+                  <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                     <div>
                       <span className="text-muted-foreground">Vendor:</span>
                       <p className="font-medium">{selectedPO.vendor}</p>
@@ -245,7 +261,9 @@ export default function GRNCreate() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">PO Amount:</span>
-                      <p className="font-medium">{formatCurrency(selectedPO.totalAmount)}</p>
+                      <p className="font-medium">
+                        {formatIndianCompactCurrency(selectedPO.totalAmount)}
+                      </p>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Expected Delivery:</span>
@@ -265,7 +283,7 @@ export default function GRNCreate() {
                   <CardTitle>Invoice & Receipt Details</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                     <FormField
                       control={form.control}
                       name="invoiceNumber"
@@ -395,9 +413,9 @@ export default function GRNCreate() {
                         <TableHead className="text-center">Ordered</TableHead>
                         <TableHead className="text-center">Previously Received</TableHead>
                         <TableHead className="text-center">Pending</TableHead>
-                        <TableHead className="text-center w-[100px]">Received Now</TableHead>
-                        <TableHead className="text-center w-[100px]">Accepted</TableHead>
-                        <TableHead className="text-center w-[100px]">Rejected</TableHead>
+                        <TableHead className="w-[100px] text-center">Received Now</TableHead>
+                        <TableHead className="w-[100px] text-center">Accepted</TableHead>
+                        <TableHead className="w-[100px] text-center">Rejected</TableHead>
                         <TableHead className="text-right">Value</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -409,14 +427,18 @@ export default function GRNCreate() {
                             <TableCell className="font-medium">{item.description}</TableCell>
                             <TableCell className="text-center">{item.orderedQty}</TableCell>
                             <TableCell className="text-center">{item.previouslyReceived}</TableCell>
-                            <TableCell className="text-center font-medium text-yellow-600">{item.pendingQty}</TableCell>
+                            <TableCell className="text-center font-medium text-yellow-600">
+                              {item.pendingQty}
+                            </TableCell>
                             <TableCell>
                               <Input
                                 type="number"
                                 min={0}
                                 max={item.pendingQty}
                                 value={item.receivedQty}
-                                onChange={(e) => handleReceivedQtyChange(index, Number(e.target.value))}
+                                onChange={(e) =>
+                                  handleReceivedQtyChange(index, Number(e.target.value))
+                                }
                                 className="w-20 text-center"
                               />
                             </TableCell>
@@ -426,17 +448,21 @@ export default function GRNCreate() {
                                 min={0}
                                 max={item.receivedQty}
                                 value={item.acceptedQty}
-                                onChange={(e) => handleAcceptedQtyChange(index, Number(e.target.value))}
+                                onChange={(e) =>
+                                  handleAcceptedQtyChange(index, Number(e.target.value))
+                                }
                                 className="w-20 text-center"
                               />
                             </TableCell>
                             <TableCell className="text-center">
-                              <span className={item.rejectedQty > 0 ? 'text-red-600 font-medium' : ''}>
+                              <span
+                                className={item.rejectedQty > 0 ? 'font-medium text-red-600' : ''}
+                              >
                                 {item.rejectedQty}
                               </span>
                             </TableCell>
                             <TableCell className="text-right font-medium">
-                              {formatCurrency(item.acceptedQty * item.unitPrice)}
+                              {formatIndianCompactCurrency(item.acceptedQty * item.unitPrice)}
                             </TableCell>
                           </TableRow>
                         );
@@ -444,19 +470,20 @@ export default function GRNCreate() {
                       <TableRow className="bg-muted/50 font-bold">
                         <TableCell colSpan={7}>Total Accepted Value</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(calculateTotalReceivedValue())}
+                          {formatIndianCompactCurrency(calculateTotalReceivedValue())}
                         </TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
 
-                  {watchItems.some(item => item.rejectedQty > 0) && (
-                    <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg flex items-start gap-2">
-                      <AlertTriangle className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  {watchItems.some((item) => item.rejectedQty > 0) && (
+                    <div className="mt-4 flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 text-yellow-600" />
                       <div>
                         <p className="font-medium text-yellow-800">Items Rejected</p>
                         <p className="text-sm text-yellow-700">
-                          Some items have been marked as rejected. Please ensure proper documentation for returns.
+                          Some items have been marked as rejected. Please ensure proper
+                          documentation for returns.
                         </p>
                       </div>
                     </div>
@@ -493,7 +520,7 @@ export default function GRNCreate() {
               {/* Actions */}
               <div className="flex gap-2">
                 <Button type="submit" disabled={isSubmitting}>
-                  <CheckCircle className="h-4 w-4 mr-2" />
+                  <CheckCircle className="mr-2 h-4 w-4" />
                   Create GRN
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => navigate(-1)}>

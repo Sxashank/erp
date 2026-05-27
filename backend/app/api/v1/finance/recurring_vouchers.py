@@ -30,10 +30,10 @@ router = APIRouter()
 
 @router.get(
     "",
-    response_model=RecurringVoucherListResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherListResponse,
+    response_model_by_alias=True,
 )
 async def list_recurring_vouchers(
-    organization_id: UUID,
     status: Optional[RecurringVoucherStatus] = None,
     frequency: Optional[RecurrenceFrequency] = None,
     page: int = Query(default=1, ge=1),
@@ -42,6 +42,12 @@ async def list_recurring_vouchers(
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List recurring voucher templates."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException(
+            detail="Current user is not mapped to an organization",
+            error_code="ORGANIZATION_REQUIRED",
+        )
     service = RecurringVoucherService(db)
     return await service.list(
         organization_id=organization_id,
@@ -54,36 +60,49 @@ async def list_recurring_vouchers(
 
 @router.get(
     "/upcoming",
-    response_model=list[UpcomingRecurringVoucher], response_model_by_alias=True,
+    response_model=list[UpcomingRecurringVoucher],
+    response_model_by_alias=True,
 )
 async def get_upcoming_vouchers(
-    organization_id: UUID,
     days_ahead: int = Query(default=7, ge=1, le=30),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get upcoming recurring vouchers due in the next N days."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException(
+            detail="Current user is not mapped to an organization",
+            error_code="ORGANIZATION_REQUIRED",
+        )
     service = RecurringVoucherService(db)
     return await service.get_upcoming(organization_id, days_ahead)
 
 
 @router.get(
     "/stats",
-    response_model=RecurringVoucherStats, response_model_by_alias=True,
+    response_model=RecurringVoucherStats,
+    response_model_by_alias=True,
 )
 async def get_recurring_stats(
-    organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get statistics for recurring vouchers."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException(
+            detail="Current user is not mapped to an organization",
+            error_code="ORGANIZATION_REQUIRED",
+        )
     service = RecurringVoucherService(db)
     return await service.get_stats(organization_id)
 
 
 @router.get(
     "/{recurring_id}",
-    response_model=RecurringVoucherResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherResponse,
+    response_model_by_alias=True,
 )
 async def get_recurring_voucher(
     recurring_id: UUID,
@@ -103,7 +122,8 @@ async def get_recurring_voucher(
 
 @router.post(
     "",
-    response_model=RecurringVoucherResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_recurring_voucher(
@@ -123,7 +143,8 @@ async def create_recurring_voucher(
 
 @router.put(
     "/{recurring_id}",
-    response_model=RecurringVoucherResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherResponse,
+    response_model_by_alias=True,
 )
 async def update_recurring_voucher(
     recurring_id: UUID,
@@ -163,7 +184,8 @@ async def delete_recurring_voucher(
 
 @router.post(
     "/{recurring_id}/pause",
-    response_model=RecurringVoucherResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherResponse,
+    response_model_by_alias=True,
 )
 async def pause_recurring_voucher(
     recurring_id: UUID,
@@ -183,7 +205,8 @@ async def pause_recurring_voucher(
 
 @router.post(
     "/{recurring_id}/resume",
-    response_model=RecurringVoucherResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherResponse,
+    response_model_by_alias=True,
 )
 async def resume_recurring_voucher(
     recurring_id: UUID,
@@ -202,7 +225,8 @@ async def resume_recurring_voucher(
 
 @router.post(
     "/{recurring_id}/cancel",
-    response_model=RecurringVoucherResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherResponse,
+    response_model_by_alias=True,
 )
 async def cancel_recurring_voucher(
     recurring_id: UUID,
@@ -222,7 +246,8 @@ async def cancel_recurring_voucher(
 
 @router.post(
     "/{recurring_id}/generate",
-    response_model=GenerateVoucherResponse, response_model_by_alias=True,
+    response_model=GenerateVoucherResponse,
+    response_model_by_alias=True,
 )
 async def generate_voucher_from_template(
     recurring_id: UUID,
@@ -245,7 +270,8 @@ async def generate_voucher_from_template(
 
 @router.post(
     "/process-due",
-    response_model=list[GenerateVoucherResponse], response_model_by_alias=True,
+    response_model=list[GenerateVoucherResponse],
+    response_model_by_alias=True,
 )
 async def process_due_vouchers(
     organization_id: UUID,
@@ -261,7 +287,8 @@ async def process_due_vouchers(
 
 @router.get(
     "/{recurring_id}/logs",
-    response_model=RecurringVoucherLogListResponse, response_model_by_alias=True,
+    response_model=RecurringVoucherLogListResponse,
+    response_model_by_alias=True,
 )
 async def get_recurring_voucher_logs(
     recurring_id: UUID,

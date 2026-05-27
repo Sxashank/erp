@@ -61,6 +61,7 @@ class DataSourceListResponse(BaseSchema):
     description: Optional[str] = None
     source_type: DataSourceType
     organization_id: Optional[UUID] = None
+    cache_ttl_seconds: int = Field(default=300, ge=0)
     is_active: bool
 
 

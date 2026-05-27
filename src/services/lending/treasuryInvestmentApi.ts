@@ -146,7 +146,7 @@ export interface InvestmentFilters {
   status?: InvestmentStatus;
   category?: InvestmentCategory;
   page?: number;
-  page_size?: number;
+  pageSize?: number;
 }
 
 /**
@@ -193,7 +193,7 @@ export async function listInvestments(
   if (filters?.status) params.append('status', filters.status);
   if (filters?.category) params.append('category', filters.category);
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.page_size) params.append('page_size', String(filters.page_size));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<InvestmentListResponse>(`${BASE_URL}?${params.toString()}`);
   return data;
 }

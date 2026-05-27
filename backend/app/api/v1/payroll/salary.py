@@ -34,7 +34,17 @@ from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter()
 
 
+def _require_organization_id(current_user: User) -> UUID:
+    if not current_user.organization_id:
+        raise BadRequestException(
+            detail="Current user is not assigned to an organization",
+            error_code="ORGANIZATION_CONTEXT_REQUIRED",
+        )
+    return current_user.organization_id
+
+
 # ============== Salary Components ==============
+
 
 @router.get("/components", response_model=dict, response_model_by_alias=True)
 async def list_salary_components(
@@ -54,17 +64,22 @@ async def list_salary_components(
         category=category,
         active_only=active_only,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
     return {
         "items": [SalaryComponentList.model_validate(item) for item in items],
         "total": total,
         "skip": skip,
-        "limit": limit
+        "limit": limit,
     }
 
 
-@router.post("/components", response_model=SalaryComponentResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/components",
+    response_model=SalaryComponentResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_salary_component(
     data: SalaryComponentCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -85,7 +100,9 @@ async def create_salary_component(
     return SalaryComponentResponse.model_validate(component)
 
 
-@router.get("/components/{id}", response_model=SalaryComponentResponse, response_model_by_alias=True)
+@router.get(
+    "/components/{id}", response_model=SalaryComponentResponse, response_model_by_alias=True
+)
 async def get_salary_component(
     id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -99,7 +116,9 @@ async def get_salary_component(
     return SalaryComponentResponse.model_validate(component)
 
 
-@router.put("/components/{id}", response_model=SalaryComponentResponse, response_model_by_alias=True)
+@router.put(
+    "/components/{id}", response_model=SalaryComponentResponse, response_model_by_alias=True
+)
 async def update_salary_component(
     id: UUID,
     data: SalaryComponentUpdate,
@@ -129,6 +148,7 @@ async def delete_salary_component(
 
 # ============== Salary Structures ==============
 
+
 @router.get("/structures", response_model=dict, response_model_by_alias=True)
 async def list_salary_structures(
     active_only: bool = Query(True),
@@ -143,17 +163,22 @@ async def list_salary_structures(
         organization_id=current_user.organization_id,
         active_only=active_only,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
     return {
         "items": [SalaryStructureList.model_validate(item) for item in items],
         "total": total,
         "skip": skip,
-        "limit": limit
+        "limit": limit,
     }
 
 
-@router.post("/structures", response_model=SalaryStructureResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/structures",
+    response_model=SalaryStructureResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_salary_structure(
     data: SalaryStructureCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -165,7 +190,9 @@ async def create_salary_structure(
     return SalaryStructureResponse.model_validate(structure)
 
 
-@router.get("/structures/{id}", response_model=SalaryStructureResponse, response_model_by_alias=True)
+@router.get(
+    "/structures/{id}", response_model=SalaryStructureResponse, response_model_by_alias=True
+)
 async def get_salary_structure(
     id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -179,7 +206,9 @@ async def get_salary_structure(
     return SalaryStructureResponse.model_validate(structure)
 
 
-@router.put("/structures/{id}", response_model=SalaryStructureResponse, response_model_by_alias=True)
+@router.put(
+    "/structures/{id}", response_model=SalaryStructureResponse, response_model_by_alias=True
+)
 async def update_salary_structure(
     id: UUID,
     data: SalaryStructureUpdate,
@@ -209,6 +238,7 @@ async def delete_salary_structure(
 
 # ============== Employee Salaries ==============
 
+
 @router.get("/employee-salaries", response_model=dict, response_model_by_alias=True)
 async def list_employee_salaries(
     employee_id: Optional[UUID] = Query(None),
@@ -221,20 +251,26 @@ async def list_employee_salaries(
     """List employee salaries"""
     service = EmployeeSalaryService(db)
     items, total = await service.list(
+        organization_id=_require_organization_id(current_user),
         employee_id=employee_id,
         active_only=active_only,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
     return {
         "items": [EmployeeSalaryList.model_validate(item) for item in items],
         "total": total,
         "skip": skip,
-        "limit": limit
+        "limit": limit,
     }
 
 
-@router.post("/employee-salaries", response_model=EmployeeSalaryResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/employee-salaries",
+    response_model=EmployeeSalaryResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_employee_salary(
     data: EmployeeSalaryCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -246,7 +282,9 @@ async def create_employee_salary(
     return EmployeeSalaryResponse.model_validate(salary)
 
 
-@router.get("/employee-salaries/{id}", response_model=EmployeeSalaryResponse, response_model_by_alias=True)
+@router.get(
+    "/employee-salaries/{id}", response_model=EmployeeSalaryResponse, response_model_by_alias=True
+)
 async def get_employee_salary(
     id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -263,7 +301,11 @@ async def get_employee_salary(
     return EmployeeSalaryResponse.model_validate(salary)
 
 
-@router.get("/employee-salaries/employee/{employee_id}/current", response_model=EmployeeSalaryResponse, response_model_by_alias=True)
+@router.get(
+    "/employee-salaries/employee/{employee_id}/current",
+    response_model=EmployeeSalaryResponse,
+    response_model_by_alias=True,
+)
 async def get_current_employee_salary(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),

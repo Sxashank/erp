@@ -75,9 +75,9 @@ export const legalCasesQueryKey = (filters?: LegalCaseFilters) =>
 async function fetchLegalCases(filters?: LegalCaseFilters) {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.caseType) params.append('case_type', filters.caseType);
+  if (filters?.caseType) params.append('caseType', filters.caseType);
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<PaginatedResponse<LegalCaseListItem>>(
     `/lending/collections/legal-cases?${params.toString()}`,
   );

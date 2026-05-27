@@ -16,6 +16,7 @@ to the route decorator. See ``app/schemas/base.py::CamelSchema``.
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import List, Optional
 
 from pydantic import Field
 
@@ -39,71 +40,6 @@ class PortfolioKPIs(CamelSchema):
     gross_npa: Decimal = Field(Decimal("0"), description="Gross NPA % (RBI definition)")
     net_npa: Decimal = Field(Decimal("0"))
     provision_coverage: Decimal = Field(Decimal("0"), description="Provision Coverage Ratio %")
-
-
-class LifecycleStageMetric(CamelSchema):
-    """Pipeline amount/count for one lifecycle stage."""
-
-    stage: str
-    count: int
-    amount: Decimal
-
-
-class TreasuryFundingSummary(CamelSchema):
-    """Borrowing-side summary for source-of-funds visibility."""
-
-    active_borrowings: int
-    sanctioned_borrowings: Decimal
-    drawn_borrowings: Decimal
-    available_borrowings: Decimal
-    borrowing_outstanding: Decimal
-    weighted_cost_of_funds: Decimal
-
-
-class SourceOfFundsSummary(CamelSchema):
-    """Borrowing drawdowns mapped to lending deployments."""
-
-    mapped_deployments: int
-    deployed_amount: Decimal
-    active_drawn_borrowings: Decimal
-    unmapped_drawn_borrowings: Decimal
-    weighted_cost_rate: Decimal
-    weighted_lending_rate: Decimal
-    weighted_spread_bps: Decimal
-
-
-class MarginSummary(CamelSchema):
-    """Asset yield vs liability cost and interest margin view."""
-
-    lending_yield: Decimal
-    cost_of_funds: Decimal
-    gross_spread_bps: Decimal
-    interest_receivable: Decimal
-    interest_payable: Decimal
-    net_interest_position: Decimal
-
-
-class CollectionSummary(CamelSchema):
-    """Current-period demand, collection, overdue and unapplied receipt view."""
-
-    due_this_month: Decimal
-    collected_this_month: Decimal
-    collection_efficiency: Decimal
-    overdue_amount: Decimal
-    unallocated_receipts: Decimal
-    unmatched_bank_credit_count: int = 0
-    unmatched_bank_credit_amount: Decimal = Decimal("0")
-    auto_match_candidate_count: int = 0
-    match_review_required_count: int = 0
-
-
-class CashflowBucket(CamelSchema):
-    """Expected borrower inflows vs lender outflows for one date bucket."""
-
-    bucket: str
-    borrower_inflows: Decimal
-    lender_outflows: Decimal
-    net_gap: Decimal
 
 
 class MonthlyDisbursement(CamelSchema):
@@ -136,10 +72,10 @@ class PendingApprovalItem(CamelSchema):
     id: str
     type: str
     reference: str
-    entity: str | None = None
+    entity: Optional[str] = None
     amount: Decimal
-    stage: str | None = None
-    due_date: str | None = None
+    stage: Optional[str] = None
+    due_date: Optional[str] = None
 
 
 class UpcomingMaturityItem(CamelSchema):
@@ -147,7 +83,7 @@ class UpcomingMaturityItem(CamelSchema):
 
     id: str
     account_number: str
-    entity: str | None = None
+    entity: Optional[str] = None
     maturity_date: str
     outstanding: Decimal
 
@@ -156,14 +92,8 @@ class LendingDashboardResponse(CamelSchema):
     """Aggregate envelope returned by /api/v1/lending/dashboard."""
 
     portfolio_kpis: PortfolioKPIs
-    lifecycle_pipeline: list[LifecycleStageMetric]
-    treasury_funding: TreasuryFundingSummary
-    source_of_funds: SourceOfFundsSummary
-    margin_summary: MarginSummary
-    collection_summary: CollectionSummary
-    cashflow_buckets: list[CashflowBucket]
-    monthly_disbursements: list[MonthlyDisbursement]
-    portfolio_by_product: list[ProductSlice]
-    asset_classification: list[AssetClassRow]
-    pending_approvals: list[PendingApprovalItem]
-    upcoming_maturities: list[UpcomingMaturityItem]
+    monthly_disbursements: List[MonthlyDisbursement]
+    portfolio_by_product: List[ProductSlice]
+    asset_classification: List[AssetClassRow]
+    pending_approvals: List[PendingApprovalItem]
+    upcoming_maturities: List[UpcomingMaturityItem]

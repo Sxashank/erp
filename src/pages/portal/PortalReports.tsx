@@ -18,29 +18,28 @@ import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
 import type {
   PortalReportBorrowerBreakdownItem,
-  PortalReportLenderBreakdownItem,
   PortalReportRecentReleaseItem,
+  PortalReportReviewBreakdownItem,
   PortalReportStatusBreakdownItem,
 } from '@/services/portalApi';
 
 const ROLE_COPY: Record<string, { title: string; subtitle: string }> = {
   scheme_borrower: {
-    title: 'Scheme Reports',
+    title: 'Borrower Reports',
     subtitle:
       'Review application, claim, and release metrics for your linked institutional entities.',
   },
   scheme_lender: {
-    title: 'Lender Monitoring',
-    subtitle:
-      'Track lender validation throughput, approval conversion, and claim-release activity.',
+    title: 'SFC Monitoring',
+    subtitle: 'Track SFC review throughput, approval conversion, and claim-release activity.',
   },
   scheme_smfcl_reviewer: {
-    title: 'SMFCL Review Reports',
+    title: 'SFC Review Reports',
     subtitle: 'Monitor review backlogs, borrower concentration, and claim verification progress.',
   },
   scheme_smfcl_approver: {
-    title: 'SMFCL Approval Reports',
-    subtitle: 'Track sanction approvals and claim release execution across the scheme.',
+    title: 'SFC Approval Reports',
+    subtitle: 'Track sanction approvals and claim release execution.',
   },
   scheme_ministry_viewer: {
     title: 'Ministry Monitoring Reports',
@@ -48,9 +47,9 @@ const ROLE_COPY: Record<string, { title: string; subtitle: string }> = {
       'Review scheme-wide application funnel, borrower coverage, lender participation, and releases.',
   },
   scheme_admin: {
-    title: 'Scheme Administration Reports',
+    title: 'SFC Administration Reports',
     subtitle:
-      'Oversee the end-to-end scheme pipeline across applications, claims, and borrower concentration.',
+      'Oversee the end-to-end SFC pipeline across applications, claims, and borrower concentration.',
   },
 };
 
@@ -61,7 +60,7 @@ function formatStatus(status: string): string {
 const applicationStatusColumns: Column<PortalReportStatusBreakdownItem>[] = [
   {
     key: 'status',
-    header: 'Scheme status',
+    header: 'Status',
     render: (row) => <StatusPill type="application" status={row.status} />,
   },
   {
@@ -122,11 +121,11 @@ const borrowerColumns: Column<PortalReportBorrowerBreakdownItem>[] = [
   },
 ];
 
-const lenderColumns: Column<PortalReportLenderBreakdownItem>[] = [
+const reviewColumns: Column<PortalReportReviewBreakdownItem>[] = [
   {
-    key: 'lenderName',
-    header: 'Lender',
-    render: (row) => <span className="font-medium">{row.lenderName}</span>,
+    key: 'reviewOwner',
+    header: 'Review owner',
+    render: (row) => <span className="font-medium">{row.reviewOwner}</span>,
   },
   {
     key: 'applicationCount',
@@ -137,12 +136,12 @@ const lenderColumns: Column<PortalReportLenderBreakdownItem>[] = [
     sortValue: (row) => row.applicationCount,
   },
   {
-    key: 'pendingLenderReview',
-    header: 'Pending lender review',
+    key: 'pendingSfcReview',
+    header: 'Pending SFC review',
     align: 'right',
-    render: (row) => row.pendingLenderReview,
+    render: (row) => row.pendingSfcReview,
     sortable: true,
-    sortValue: (row) => row.pendingLenderReview,
+    sortValue: (row) => row.pendingSfcReview,
   },
   {
     key: 'requestedAmount',
@@ -211,7 +210,7 @@ export default function PortalReports(): JSX.Element {
       <PageHeader
         title={roleCopy.title}
         subtitle={roleCopy.subtitle}
-        breadcrumbs={[{ label: 'Scheme Portal' }, { label: 'Reports' }]}
+        breadcrumbs={[{ label: 'Borrower Portal' }, { label: 'Reports' }]}
         actions={
           <Button
             variant="outline"
@@ -280,7 +279,7 @@ export default function PortalReports(): JSX.Element {
                   columns={applicationStatusColumns}
                   getRowId={(row) => row.status}
                   emptyTitle="No applications in scope"
-                  emptySubtitle="Applications will appear here once the selected actor has accessible scheme records."
+                  emptySubtitle="Applications will appear here once the selected actor has accessible records."
                 />
               </CardContent>
             </Card>
@@ -317,20 +316,22 @@ export default function PortalReports(): JSX.Element {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">Lender participation</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <DataTable<PortalReportLenderBreakdownItem>
-                  data={query.data.lenderBreakdown}
-                  columns={lenderColumns}
-                  getRowId={(row) => row.lenderName}
-                  emptyTitle="No lender mapping yet"
-                  emptySubtitle="This table fills once applications carry lender details."
-                />
-              </CardContent>
-            </Card>
+            {query.data.actorRole !== 'scheme_borrower' ? (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">SFC review workload</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DataTable<PortalReportReviewBreakdownItem>
+                    data={query.data.reviewBreakdown}
+                    columns={reviewColumns}
+                    getRowId={(row) => row.reviewOwner}
+                    emptyTitle="No review workload yet"
+                    emptySubtitle="This table fills once applications enter SFC review."
+                  />
+                </CardContent>
+              </Card>
+            ) : null}
           </div>
 
           <Card>

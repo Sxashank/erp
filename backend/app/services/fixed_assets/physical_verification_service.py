@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import List, Optional, Tuple
 from uuid import UUID
 
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, cast, String
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -36,6 +36,22 @@ class PhysicalVerificationService:
 
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    @staticmethod
+    def _legacy_entry_status_for_result(verification_result: Optional[str]) -> str:
+        if verification_result == VerificationResult.FOUND:
+            return "VERIFIED"
+        if verification_result == VerificationResult.MISSING:
+            return "NOT_FOUND"
+        if verification_result in {VerificationResult.MISPLACED, VerificationResult.EXCESS}:
+            return "DISCREPANCY"
+        return "PENDING"
+
+    @staticmethod
+    def _db_schedule_status(status_value: Optional[str]) -> Optional[str]:
+        if status_value == VerificationStatus.SCHEDULED:
+            return "DRAFT"
+        return status_value
 
     # ============================================
     # Schedule Operations
@@ -72,7 +88,7 @@ class PhysicalVerificationService:
             assigned_to=data.assigned_to,
             team_members=data.team_members,
             total_assets=len(assets),
-            status=VerificationStatus.SCHEDULED,
+            status="DRAFT",
             remarks=data.remarks,
         )
         if created_by:
@@ -86,6 +102,7 @@ class PhysicalVerificationService:
             entry = PhysicalVerificationEntry(
                 schedule_id=schedule.id,
                 asset_id=asset.id,
+                legacy_status="PENDING",
                 expected_location_id=asset.location_id,
                 expected_department_id=asset.department_id,
                 book_value=asset.wdv_value,
@@ -123,7 +140,9 @@ class PhysicalVerificationService:
         if financial_year:
             query = query.where(PhysicalVerificationSchedule.financial_year == financial_year)
         if status:
-            query = query.where(PhysicalVerificationSchedule.status == status)
+            query = query.where(
+                PhysicalVerificationSchedule.status == self._db_schedule_status(status)
+            )
 
         # Count
         count_result = await self.session.execute(
@@ -152,7 +171,7 @@ class PhysicalVerificationService:
         if not schedule:
             return None
 
-        if schedule.status not in [VerificationStatus.SCHEDULED]:
+        if schedule.status not in {"DRAFT", VerificationStatus.SCHEDULED}:
             raise ValueError("Can only update scheduled verifications")
 
         update_data = data.model_dump(exclude_unset=True)
@@ -176,7 +195,7 @@ class PhysicalVerificationService:
         if not schedule:
             raise ValueError("Schedule not found")
 
-        if schedule.status != VerificationStatus.SCHEDULED:
+        if schedule.status not in {"DRAFT", VerificationStatus.SCHEDULED}:
             raise ValueError("Can only start scheduled verifications")
 
         schedule.status = VerificationStatus.IN_PROGRESS
@@ -271,9 +290,7 @@ class PhysicalVerificationService:
 
         # Fetch
         result = await self.session.execute(
-            query.options(selectinload(PhysicalVerificationEntry.asset))
-            .offset(skip)
-            .limit(limit)
+            query.options(selectinload(PhysicalVerificationEntry.asset)).offset(skip).limit(limit)
         )
         entries = list(result.scalars().all())
 
@@ -300,8 +317,11 @@ class PhysicalVerificationService:
         entry.verified_by = verified_by
         entry.verification_result = data.verification_result
         entry.asset_condition = data.asset_condition
+        entry.legacy_status = self._legacy_entry_status_for_result(data.verification_result)
         entry.actual_location_id = data.actual_location_id
         entry.actual_department_id = data.actual_department_id
+        entry.physical_location = str(data.actual_location_id) if data.actual_location_id else None
+        entry.physical_condition = data.asset_condition
         entry.photo_urls = data.photo_urls
         entry.barcode_scan = data.barcode_scan
         entry.condition_notes = data.condition_notes
@@ -352,7 +372,14 @@ class PhysicalVerificationService:
             entry.verified_by = verified_by
             entry.verification_result = entry_data.verification_result
             entry.asset_condition = entry_data.asset_condition
+            entry.legacy_status = self._legacy_entry_status_for_result(
+                entry_data.verification_result
+            )
             entry.actual_location_id = entry_data.actual_location_id
+            entry.physical_location = (
+                str(entry_data.actual_location_id) if entry_data.actual_location_id else None
+            )
+            entry.physical_condition = entry_data.asset_condition
             entry.condition_notes = entry_data.condition_notes
             entry.barcode_scan = entry_data.barcode_scan
 
@@ -373,7 +400,9 @@ class PhysicalVerificationService:
     # Discrepancy Operations
     # ============================================
 
-    async def get_discrepancy(self, discrepancy_id: UUID) -> Optional[PhysicalVerificationDiscrepancy]:
+    async def get_discrepancy(
+        self, discrepancy_id: UUID
+    ) -> Optional[PhysicalVerificationDiscrepancy]:
         """Get discrepancy by ID."""
         result = await self.session.execute(
             select(PhysicalVerificationDiscrepancy)
@@ -399,7 +428,7 @@ class PhysicalVerificationService:
         )
 
         if status:
-            query = query.where(PhysicalVerificationDiscrepancy.status == status)
+            query = query.where(cast(PhysicalVerificationDiscrepancy.status, String) == status)
 
         # Count
         count_result = await self.session.execute(
@@ -487,17 +516,20 @@ class PhysicalVerificationService:
             .where(
                 PhysicalVerificationSchedule.organization_id == organization_id,
                 PhysicalVerificationSchedule.financial_year == financial_year,
-                PhysicalVerificationDiscrepancy.status.in_([
-                    DiscrepancyStatus.OPEN,
-                    DiscrepancyStatus.INVESTIGATING,
-                ]),
+                cast(PhysicalVerificationDiscrepancy.status, String).in_(
+                    [
+                        DiscrepancyStatus.OPEN,
+                        DiscrepancyStatus.INVESTIGATING,
+                    ]
+                ),
             )
         )
         open_discrepancies = open_count_result.scalar_one()
 
         verification_pct = (
             Decimal(total_verified * 100) / Decimal(total_assets)
-            if total_assets > 0 else Decimal("0.00")
+            if total_assets > 0
+            else Decimal("0.00")
         )
 
         return VerificationSummaryResponse(
@@ -552,9 +584,7 @@ class PhysicalVerificationService:
         if category_ids:
             query = query.where(FixedAsset.category_id.in_(category_ids))
 
-        result = await self.session.execute(
-            query.order_by(FixedAsset.asset_code)
-        )
+        result = await self.session.execute(query.order_by(FixedAsset.asset_code))
         return list(result.scalars().all())
 
     async def _update_schedule_summary(self, schedule: PhysicalVerificationSchedule):

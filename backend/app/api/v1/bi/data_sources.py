@@ -56,6 +56,7 @@ def _to_list_response(ds) -> DataSourceListResponse:
         description=ds.description,
         source_type=ds.source_type,
         organization_id=ds.organization_id,
+        cache_ttl_seconds=ds.cache_ttl_seconds,
         is_active=ds.is_active,
     )
 
@@ -129,7 +130,9 @@ async def delete_data_source(
     return MessageResponse(message="Data source deleted successfully", success=True)
 
 
-@router.post("/{data_source_id}/fetch", response_model=DataSourceFetchResponse, response_model_by_alias=True)
+@router.post(
+    "/{data_source_id}/fetch", response_model=DataSourceFetchResponse, response_model_by_alias=True
+)
 async def fetch_data(
     data_source_id: UUID,
     request: DataSourceFetchRequest,
@@ -142,7 +145,11 @@ async def fetch_data(
     return DataSourceFetchResponse(data=data, cached=False)
 
 
-@router.get("/{data_source_id}/preview", response_model=DataSourceFetchResponse, response_model_by_alias=True)
+@router.get(
+    "/{data_source_id}/preview",
+    response_model=DataSourceFetchResponse,
+    response_model_by_alias=True,
+)
 async def preview_data_source(
     data_source_id: UUID,
     current_user: User = Depends(RequirePermissions("BI_DATASOURCE_VIEW")),

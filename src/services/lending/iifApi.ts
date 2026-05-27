@@ -11,12 +11,14 @@
 
 import api from '../api';
 
+import type { GeneratedDocument } from '@/services/documentStudioApi';
+
 // ============================================================================
 // Wire shapes
 // ============================================================================
 
-export type ClaimFrequency = 'QUARTERLY' | 'HALF_YEARLY' | 'YEARLY';
-export type EligibleLoanType = 'TERM_LOAN_CAPEX' | 'WORKING_CAPITAL';
+export type ClaimFrequency = string;
+export type EligibleLoanType = string;
 
 export type EnrollmentStatus =
   | 'PENDING_APPROVAL'
@@ -54,7 +56,7 @@ export interface SubventionScheme {
   npaDisqualificationDpdDays: number;
   calculationRules?: Record<string, unknown>;
   eligibilityRules?: Record<string, unknown>;
-  requiredDocuments?: Array<Record<string, unknown>>;
+  requiredDocuments?: Record<string, unknown>[];
   workflowRules?: Record<string, unknown>;
   fundRules?: Record<string, unknown>;
   description: string | null;
@@ -104,7 +106,10 @@ export interface LoanSubventionEnrollment {
 }
 
 export interface SubventionClaimDocument {
+  documentId?: string | null;
   name: string;
+  fileName?: string | null;
+  documentCategory?: string | null;
   path: string;
   uploadedAt: string;
 }
@@ -208,7 +213,7 @@ export interface SubventionSchemeCreate {
   npaDisqualificationDpdDays: number;
   calculationRules?: Record<string, unknown>;
   eligibilityRules?: Record<string, unknown>;
-  requiredDocuments?: Array<Record<string, unknown>>;
+  requiredDocuments?: Record<string, unknown>[];
   workflowRules?: Record<string, unknown>;
   fundRules?: Record<string, unknown>;
   description?: string | null;
@@ -489,7 +494,7 @@ export interface ClaimCreatePayload extends ClaimComputePayload {
   notes?: string | null;
 }
 
-export interface ClaimMarkPaidPayload {
+export interface ClaimMarkReleasedPayload {
   releaseReference: string;
   releasedDate: string;
 }
@@ -550,7 +555,7 @@ export const claimsApi = {
     );
     return data;
   },
-  async markReleased(id: string, payload: ClaimMarkPaidPayload): Promise<SubventionClaim> {
+  async markReleased(id: string, payload: ClaimMarkReleasedPayload): Promise<SubventionClaim> {
     const { data } = await api.post<SubventionClaim>(
       `/lending/iif/claims/${id}/mark-released`,
       payload,
@@ -569,7 +574,7 @@ export const claimsApi = {
   async getEligibleLoans(params?: { page?: number; pageSize?: number }): Promise<EligibleLoan[]> {
     const { data } = await api.get<{ items: EligibleLoan[]; total: number }>(
       '/lending/iif/claims/eligible-loans',
-      { params: { page: params?.page, page_size: params?.pageSize } },
+      { params: { page: params?.page, pageSize: params?.pageSize } },
     );
     return data.items ?? [];
   },
@@ -591,6 +596,20 @@ export const claimsApi = {
   },
   async downloadReportPdf(id: string): Promise<Blob> {
     const { data } = await api.get<Blob>(`/lending/iif/claims/${id}/report.pdf`, {
+      responseType: 'blob',
+    });
+    return data;
+  },
+  async generateCertificate(id: string): Promise<GeneratedDocument> {
+    const { data } = await api.post<GeneratedDocument>(
+      `/lending/iif/claims/${id}/certificate/generate`,
+      {},
+      { headers: idempotencyHeader() },
+    );
+    return data;
+  },
+  async downloadCertificate(id: string): Promise<Blob> {
+    const { data } = await api.get<Blob>(`/lending/iif/claims/${id}/certificate.pdf`, {
       responseType: 'blob',
     });
     return data;

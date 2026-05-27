@@ -51,7 +51,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { legalExpenseApi } from '@/services/legalApi';
 import type { LegalExpense, ExpenseCategory } from '@/types/legal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 const expenseCategories: { value: ExpenseCategory; label: string }[] = [
   { value: 'COURT_FEE', label: 'Court Fee' },
   { value: 'ADVOCATE_FEE', label: 'Advocate Fee' },
@@ -118,15 +118,6 @@ export default function LegalExpenseList() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const handleApprove = async (id: string) => {
     try {
       await legalExpenseApi.approve(id);
@@ -226,7 +217,7 @@ export default function LegalExpenseList() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Total Expenses</p>
-                <p className="text-lg font-bold">{formatCurrency(stats.total)}</p>
+                <p className="text-lg font-bold">{formatIndianCompactCurrency(stats.total)}</p>
               </div>
             </div>
           </CardContent>
@@ -239,7 +230,9 @@ export default function LegalExpenseList() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Pending Approval</p>
-                <p className="text-lg font-bold text-yellow-600">{formatCurrency(stats.pending)}</p>
+                <p className="text-lg font-bold text-yellow-600">
+                  {formatIndianCompactCurrency(stats.pending)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -252,7 +245,9 @@ export default function LegalExpenseList() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Approved</p>
-                <p className="text-lg font-bold text-green-600">{formatCurrency(stats.approved)}</p>
+                <p className="text-lg font-bold text-green-600">
+                  {formatIndianCompactCurrency(stats.approved)}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -266,7 +261,7 @@ export default function LegalExpenseList() {
               <div>
                 <p className="text-sm text-gray-500">Pending Recovery</p>
                 <p className="text-lg font-bold text-orange-600">
-                  {formatCurrency(stats.pendingRecovery)}
+                  {formatIndianCompactCurrency(stats.pendingRecovery)}
                 </p>
               </div>
             </div>
@@ -363,14 +358,18 @@ export default function LegalExpenseList() {
                     <p className="text-sm text-gray-500">{expense.payee_type}</p>
                   </TableCell>
                   <TableCell className="text-right">
-                    <p className="font-medium">{formatCurrency(expense.total_amount)}</p>
+                    <p className="font-medium">
+                      {formatIndianCompactCurrency(expense.total_amount)}
+                    </p>
                     {expense.gst_amount && (
                       <p className="text-xs text-gray-500">
-                        GST: {formatCurrency(expense.gst_amount)}
+                        GST: {formatIndianCompactCurrency(expense.gst_amount)}
                       </p>
                     )}
                   </TableCell>
-                  <TableCell><DateDisplay date={expense.expense_date} /></TableCell>
+                  <TableCell>
+                    <DateDisplay date={expense.expense_date} />
+                  </TableCell>
                   <TableCell>
                     <Badge className={statusColors[expense.status]}>{expense.status}</Badge>
                   </TableCell>
@@ -382,7 +381,7 @@ export default function LegalExpenseList() {
                         </Badge>
                         {expense.recovered_amount && expense.recovered_amount > 0 && (
                           <p className="mt-1 text-xs text-gray-500">
-                            {formatCurrency(expense.recovered_amount)}
+                            {formatIndianCompactCurrency(expense.recovered_amount)}
                           </p>
                         )}
                       </div>

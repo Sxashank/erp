@@ -120,7 +120,7 @@ async def list_investments(
     status_filter: str | None = Query(None, alias="status"),
     category: str | None = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ) -> InvestmentListResponse:

@@ -1,216 +1,157 @@
-import { Laptop, Monitor, Smartphone, Key, Car, Package } from 'lucide-react';
+import { Car, Laptop, Monitor, Package, Smartphone } from 'lucide-react';
 
+import { AmountDisplay } from '@/components/common/AmountDisplay';
+import { DataTable, type Column } from '@/components/common/DataTable';
+import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
+import { StatusPill } from '@/components/common/StatusPill';
+import { Card, CardContent } from '@/components/ui/card';
+import { useAssignedAssets } from '@/hooks/ess/useEssOperations';
+import type { ESSAssignedAsset } from '@/services/essApi';
 
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
-interface AssignedAsset {
-  id: string;
-  assetCode: string;
-  name: string;
-  category: string;
-  serialNumber: string;
-  assignedDate: string;
-  condition: string;
-  value: number;
-  warranty: string | null;
-  icon: string;
+function AssetMetric({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: typeof Package;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between pt-6">
+        <div>
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="mt-2 text-3xl font-semibold">{value}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="rounded-full bg-muted p-3">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
-const assets: AssignedAsset[] = [];
+function assetIconForCategory(category: string) {
+  const normalized = category.toLowerCase();
+  if (normalized.includes('laptop')) return Laptop;
+  if (normalized.includes('monitor')) return Monitor;
+  if (normalized.includes('mobile') || normalized.includes('phone')) return Smartphone;
+  if (normalized.includes('vehicle') || normalized.includes('car')) return Car;
+  return Package;
+}
 
 export default function ESSAssetList() {
-  const getAssetIcon = (iconName: string) => {
-    switch (iconName) {
-      case 'Laptop':
-        return <Laptop className="h-5 w-5 text-blue-500" />;
-      case 'Monitor':
-        return <Monitor className="h-5 w-5 text-purple-500" />;
-      case 'Smartphone':
-        return <Smartphone className="h-5 w-5 text-green-500" />;
-      case 'Key':
-        return <Key className="h-5 w-5 text-orange-500" />;
-      case 'Car':
-        return <Car className="h-5 w-5 text-red-500" />;
-      default:
-        return <Package className="h-5 w-5 text-gray-500" />;
-    }
-  };
+  const assetsQuery = useAssignedAssets();
+  const assets = assetsQuery.data?.items ?? [];
 
-  const getConditionBadge = (condition: string) => {
-    switch (condition) {
-      case 'GOOD':
-        return <Badge variant="default" className="bg-green-500">Good</Badge>;
-      case 'FAIR':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Fair</Badge>;
-      case 'POOR':
-        return <Badge variant="destructive">Poor</Badge>;
-      default:
-        return <Badge variant="outline">{condition}</Badge>;
-    }
-  };
+  const columns: Column<ESSAssignedAsset>[] = [
+    {
+      key: 'assetName',
+      header: 'Asset',
+      render: (row) => {
+        const Icon = assetIconForCategory(row.category);
+        return (
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-muted p-2">
+              <Icon className="h-4 w-4 text-muted-foreground" />
+            </div>
+            <div>
+              <div className="font-medium">{row.assetName}</div>
+              <div className="text-xs text-muted-foreground">{row.category}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    { key: 'assetCode', header: 'Asset Code' },
+    { key: 'serialNumber', header: 'Serial #' },
+    {
+      key: 'assignedDate',
+      header: 'Assigned',
+      render: (row) => <DateDisplay date={row.assignedDate} />,
+      sortable: true,
+      sortValue: (row) => row.assignedDate,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => <StatusPill type="application" status={row.status} />,
+    },
+    {
+      key: 'totalCost',
+      header: 'Value',
+      align: 'right',
+      render: (row) => <AmountDisplay amount={row.totalCost} />,
+      sortable: true,
+      sortValue: (row) => row.totalCost,
+    },
+  ];
 
-  const isWarrantyExpiring = (warrantyDate: string | null) => {
-    if (!warrantyDate) return false;
-    const warranty = new Date(warrantyDate);
-    const threeMonthsFromNow = new Date();
-    threeMonthsFromNow.setMonth(threeMonthsFromNow.getMonth() + 3);
-    return warranty <= threeMonthsFromNow && warranty >= new Date();
-  };
-
-  const totalAssetValue = assets.reduce((sum, asset) => sum + asset.value, 0);
+  const itEquipmentCount = assets.filter((asset) =>
+    ['laptop', 'monitor', 'mobile', 'phone'].some((needle) =>
+      asset.category.toLowerCase().includes(needle),
+    ),
+  ).length;
+  const returnRequiredCount = assets.filter((asset) => asset.returnRequired).length;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="My Assets"
-        subtitle="Company assets assigned to you"
+        title="Assigned Assets"
+        subtitle="View company assets in your custody, assignment dates, and return obligations."
       />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid gap-4 md:grid-cols-4">
+        <AssetMetric
+          title="Assigned Assets"
+          value={assetsQuery.data?.totalAssets ?? 0}
+          subtitle="Assets currently assigned"
+          icon={Package}
+        />
+        <AssetMetric
+          title="IT Equipment"
+          value={itEquipmentCount}
+          subtitle="Laptops, monitors, and mobiles"
+          icon={Laptop}
+        />
+        <AssetMetric
+          title="Return Required"
+          value={returnRequiredCount}
+          subtitle="Must be returned on transfer or separation"
+          icon={Car}
+        />
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Package className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">{assets.length}</div>
-                <div className="text-sm text-muted-foreground">Total Assets</div>
-              </div>
+            <p className="text-sm text-muted-foreground">Total Asset Value</p>
+            <div className="mt-2 text-3xl font-semibold">
+              <AmountDisplay amount={assetsQuery.data?.totalAssetValue ?? 0} compact />
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <Laptop className="h-6 w-6 text-green-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">
-                  {assets.filter((asset) => ['Laptop', 'Monitor', 'Mobile'].includes(asset.category)).length}
-                </div>
-                <div className="text-sm text-muted-foreground">IT Equipment</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <Car className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <div className="text-2xl font-bold">
-                  {assets.filter((asset) => asset.category === 'Vehicle').length}
-                </div>
-                <div className="text-sm text-muted-foreground">Vehicle</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <div className="text-xl font-bold">{formatCurrency(totalAssetValue)}</div>
-              <div className="text-sm text-muted-foreground">Total Value</div>
-            </div>
+            <p className="mt-1 text-xs text-muted-foreground">Original capitalized value</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Assets Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Assigned Assets</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Asset</TableHead>
-                <TableHead>Asset Code</TableHead>
-                <TableHead>Serial Number</TableHead>
-                <TableHead>Assigned Date</TableHead>
-                <TableHead>Condition</TableHead>
-                <TableHead className="text-right">Value</TableHead>
-                <TableHead>Warranty</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {assets.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-sm text-muted-foreground">
-                    Asset assignment data is pending backend ESS asset endpoints. Once fixed-asset custody is exposed to ESS, assigned assets will appear here.
-                  </TableCell>
-                </TableRow>
-              ) : assets.map((asset) => (
-                <TableRow key={asset.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      {getAssetIcon(asset.icon)}
-                      <div>
-                        <div className="font-medium">{asset.name}</div>
-                        <div className="text-sm text-muted-foreground">{asset.category}</div>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">{asset.assetCode}</TableCell>
-                  <TableCell className="font-mono text-sm">{asset.serialNumber}</TableCell>
-                  <TableCell>{asset.assignedDate}</TableCell>
-                  <TableCell>{getConditionBadge(asset.condition)}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(asset.value)}</TableCell>
-                  <TableCell>
-                    {asset.warranty ? (
-                      <div className="flex items-center gap-2">
-                        <span className={isWarrantyExpiring(asset.warranty) ? 'text-orange-600' : ''}>
-                          {asset.warranty}
-                        </span>
-                        {isWarrantyExpiring(asset.warranty) && (
-                          <Badge variant="secondary" className="bg-orange-100 text-orange-800 text-xs">
-                            Expiring Soon
-                          </Badge>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-muted-foreground">N/A</span>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      <DataTable
+        data={assets}
+        columns={columns}
+        getRowId={(row) => row.id}
+        isLoading={assetsQuery.isLoading}
+        error={assetsQuery.error}
+        onRetry={() => void assetsQuery.refetch()}
+        emptyTitle="No assigned assets"
+        emptySubtitle="Assets with employee custody will appear here once fixed-asset assignment is recorded."
+      />
 
-      {/* Asset Acknowledgment Note */}
-      <Card className="bg-muted/50">
-        <CardContent className="pt-6">
-          <div className="text-sm text-muted-foreground">
-            <strong>Note:</strong> You are responsible for the safekeeping and proper use of all assigned assets.
-            Any damage or loss must be reported immediately to the IT/Admin department.
-            Assets must be returned upon separation or when requested.
-          </div>
+      <Card className="bg-muted/30">
+        <CardContent className="pt-6 text-sm text-muted-foreground">
+          Assigned assets are part of the employee custody record. Report damage, loss, or transfer
+          requirements through the internal helpdesk so HR and admin teams can update the fixed
+          asset register and return obligations.
         </CardContent>
       </Card>
     </div>

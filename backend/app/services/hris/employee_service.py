@@ -51,8 +51,7 @@ class EmployeeService:
     async def generate_employee_code(self, organization_id: UUID) -> str:
         """Generate next employee code for organization."""
         result = await self.db.execute(
-            select(func.count(Employee.id))
-            .where(Employee.organization_id == organization_id)
+            select(func.count(Employee.id)).where(Employee.organization_id == organization_id)
         )
         count = result.scalar() or 0
         return f"EMP{str(count + 1).zfill(5)}"
@@ -65,7 +64,14 @@ class EmployeeService:
 
         # Create employee
         employee_data = data.model_dump(
-            exclude={"documents", "family_members", "bank_accounts", "education", "experience", "statutory_info"}
+            exclude={
+                "documents",
+                "family_members",
+                "bank_accounts",
+                "education",
+                "experience",
+                "statutory_info",
+            }
         )
         employee = Employee(**employee_data, created_by=created_by)
         self.db.add(employee)
@@ -161,6 +167,7 @@ class EmployeeService:
                 selectinload(Employee.designation),
                 selectinload(Employee.unit),
                 selectinload(Employee.shift),
+                selectinload(Employee.reporting_manager),
             )
 
         result = await self.db.execute(query)
@@ -237,7 +244,9 @@ class EmployeeService:
 
         return employees, total
 
-    async def update(self, employee_id: UUID, data: EmployeeUpdate, updated_by: UUID) -> Optional[Employee]:
+    async def update(
+        self, employee_id: UUID, data: EmployeeUpdate, updated_by: UUID
+    ) -> Optional[Employee]:
         """Update employee."""
         employee = await self.get(employee_id)
         if not employee:
@@ -313,7 +322,9 @@ class EmployeeService:
         await self.db.flush()
         return True
 
-    async def verify_document(self, document_id: UUID, verified_by: UUID) -> Optional[EmployeeDocument]:
+    async def verify_document(
+        self, document_id: UUID, verified_by: UUID
+    ) -> Optional[EmployeeDocument]:
         """Verify employee document."""
         result = await self.db.execute(
             select(EmployeeDocument).where(EmployeeDocument.id == document_id)
@@ -351,9 +362,7 @@ class EmployeeService:
         self, family_id: UUID, data: EmployeeFamilyUpdate, updated_by: UUID
     ) -> Optional[EmployeeFamily]:
         """Update family member."""
-        result = await self.db.execute(
-            select(EmployeeFamily).where(EmployeeFamily.id == family_id)
-        )
+        result = await self.db.execute(select(EmployeeFamily).where(EmployeeFamily.id == family_id))
         family = result.scalar_one_or_none()
         if not family:
             return None
@@ -369,9 +378,7 @@ class EmployeeService:
 
     async def delete_family_member(self, family_id: UUID) -> bool:
         """Delete family member."""
-        result = await self.db.execute(
-            select(EmployeeFamily).where(EmployeeFamily.id == family_id)
-        )
+        result = await self.db.execute(select(EmployeeFamily).where(EmployeeFamily.id == family_id))
         family = result.scalar_one_or_none()
         if not family:
             return False
@@ -390,8 +397,7 @@ class EmployeeService:
         # If primary, unset other primary accounts
         if data.is_primary:
             await self.db.execute(
-                select(EmployeeBankAccount)
-                .where(EmployeeBankAccount.employee_id == employee_id)
+                select(EmployeeBankAccount).where(EmployeeBankAccount.employee_id == employee_id)
             )
             result = await self.db.execute(
                 select(EmployeeBankAccount).where(

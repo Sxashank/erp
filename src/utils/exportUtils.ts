@@ -136,11 +136,7 @@ const formatValue = (value: unknown, format?: string): string => {
 
   switch (format) {
     case 'currency':
-      return new Intl.NumberFormat('en-IN', {
-        style: 'currency',
-        currency: 'INR',
-        minimumFractionDigits: 2,
-      }).format(Number(value));
+      return formatIndianCompactCurrency(Number(value));
     case 'date':
       return new Date(value as string | number | Date).toLocaleDateString('en-IN', {
         day: '2-digit',
@@ -184,7 +180,7 @@ const downloadWorkbook = async (wb: ExcelJS.Workbook, filename: string): Promise
 const applySheet = (
   ws: ExcelJS.Worksheet,
   rows: CellValue[][],
-  columnCharWidths?: number[]
+  columnCharWidths?: number[],
 ): void => {
   rows.forEach((row) => {
     ws.addRow(row);
@@ -200,7 +196,8 @@ const applySheet = (
  * Export data to Excel format
  */
 export const exportToExcel = async (options: ExportOptions): Promise<void> => {
-  const { filename, title, subtitle, organization, period, columns, data, totals, generatedAt } = options;
+  const { filename, title, subtitle, organization, period, columns, data, totals, generatedAt } =
+    options;
 
   // Create worksheet data
   const wsData: CellValue[][] = [];
@@ -232,7 +229,7 @@ export const exportToExcel = async (options: ExportOptions): Promise<void> => {
           return typeof value === 'number' ? value : 0;
         }
         return formatValue(value, col.format);
-      })
+      }),
     );
   });
 
@@ -248,7 +245,7 @@ export const exportToExcel = async (options: ExportOptions): Promise<void> => {
           return formatValue(value, col.format);
         }
         return '';
-      })
+      }),
     );
   }
 
@@ -270,7 +267,8 @@ export const exportToExcel = async (options: ExportOptions): Promise<void> => {
  * Export data to PDF format
  */
 export const exportToPDF = (options: ExportOptions): void => {
-  const { filename, title, subtitle, organization, period, columns, data, totals, generatedAt } = options;
+  const { filename, title, subtitle, organization, period, columns, data, totals, generatedAt } =
+    options;
 
   // Create PDF document (A4 landscape for reports with many columns)
   const doc = new jsPDF({
@@ -329,7 +327,7 @@ export const exportToPDF = (options: ExportOptions): void => {
           return formatValue(value, col.format);
         }
         return '';
-      })
+      }),
     );
   }
 
@@ -337,7 +335,8 @@ export const exportToPDF = (options: ExportOptions): void => {
   const columnStyles: Record<number, { halign: 'left' | 'center' | 'right' }> = {};
   columns.forEach((col, index) => {
     columnStyles[index] = {
-      halign: col.align || (col.format === 'currency' || col.format === 'number' ? 'right' : 'left'),
+      halign:
+        col.align || (col.format === 'currency' || col.format === 'number' ? 'right' : 'left'),
     };
   });
 
@@ -375,22 +374,14 @@ export const exportToPDF = (options: ExportOptions): void => {
   doc.setTextColor(100);
 
   if (generatedAt) {
-    doc.text(
-      `Generated on: ${new Date(generatedAt).toLocaleString('en-IN')}`,
-      14,
-      pageHeight - 10
-    );
+    doc.text(`Generated on: ${new Date(generatedAt).toLocaleString('en-IN')}`, 14, pageHeight - 10);
   }
 
   // Add page numbers
   const pageCount = doc.getNumberOfPages();
   for (let i = 1; i <= pageCount; i++) {
     doc.setPage(i);
-    doc.text(
-      `Page ${i} of ${pageCount}`,
-      doc.internal.pageSize.getWidth() - 30,
-      pageHeight - 10
-    );
+    doc.text(`Page ${i} of ${pageCount}`, doc.internal.pageSize.getWidth() - 30, pageHeight - 10);
   }
 
   // Save the PDF
@@ -590,18 +581,10 @@ export const exportCashFlowToPDF = (reportData: CashFlowReport): void => {
 
   const pageWidth = doc.internal.pageSize.getWidth();
   let yPosition = 15;
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
-
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(reportData.organization_name ?? "", pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportData.organization_name ?? '', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(14);
@@ -614,7 +597,7 @@ export const exportCashFlowToPDF = (reportData: CashFlowReport): void => {
     `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     pageWidth / 2,
     yPosition,
-    { align: 'center' }
+    { align: 'center' },
   );
   yPosition += 5;
   doc.text('(Prepared using Indirect Method)', pageWidth / 2, yPosition, { align: 'center' });
@@ -640,7 +623,10 @@ export const exportCashFlowToPDF = (reportData: CashFlowReport): void => {
       }
 
       doc.text(item.label, 20, yPosition);
-      const amountText = item.amount < 0 ? `(${formatCurrency(item.amount)})` : formatCurrency(item.amount);
+      const amountText =
+        item.amount < 0
+          ? `(${formatIndianCompactCurrency(item.amount)})`
+          : formatIndianCompactCurrency(item.amount);
       doc.text(amountText, pageWidth - 20, yPosition, { align: 'right' });
       yPosition += 5;
 
@@ -652,8 +638,15 @@ export const exportCashFlowToPDF = (reportData: CashFlowReport): void => {
     doc.setFillColor(71, 85, 105); // slate-600
     doc.setTextColor(255, 255, 255);
     doc.rect(14, yPosition - 3, pageWidth - 28, 7, 'F');
-    doc.text(`Net Cash from ${section.section_name.replace('Cash Flow from ', '')}`, 20, yPosition + 1);
-    const netText = section.net_cash_flow < 0 ? `(${formatCurrency(section.net_cash_flow)})` : formatCurrency(section.net_cash_flow);
+    doc.text(
+      `Net Cash from ${section.section_name.replace('Cash Flow from ', '')}`,
+      20,
+      yPosition + 1,
+    );
+    const netText =
+      section.net_cash_flow < 0
+        ? `(${formatIndianCompactCurrency(section.net_cash_flow)})`
+        : formatIndianCompactCurrency(section.net_cash_flow);
     doc.text(netText, pageWidth - 20, yPosition + 1, { align: 'right' });
     doc.setTextColor(0, 0, 0);
     yPosition += 12;
@@ -678,18 +671,31 @@ export const exportCashFlowToPDF = (reportData: CashFlowReport): void => {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9);
 
-  const netText = reportData.net_increase_in_cash < 0 ? `(${formatCurrency(reportData.net_increase_in_cash)})` : formatCurrency(reportData.net_increase_in_cash);
+  const netText =
+    reportData.net_increase_in_cash < 0
+      ? `(${formatIndianCompactCurrency(reportData.net_increase_in_cash)})`
+      : formatIndianCompactCurrency(reportData.net_increase_in_cash);
   doc.text('Net Change in Cash & Cash Equivalents:', 20, yPosition);
   doc.text(netText, pageWidth - 20, yPosition, { align: 'right' });
   yPosition += 5;
 
   doc.text('Opening Cash & Cash Equivalents:', 20, yPosition);
-  doc.text(formatCurrency(reportData.opening_cash_balance), pageWidth - 20, yPosition, { align: 'right' });
+  doc.text(
+    formatIndianCompactCurrency(reportData.opening_cash_balance),
+    pageWidth - 20,
+    yPosition,
+    { align: 'right' },
+  );
   yPosition += 5;
 
   doc.setFont('helvetica', 'bold');
   doc.text('Closing Cash & Cash Equivalents:', 20, yPosition);
-  doc.text(formatCurrency(reportData.closing_cash_balance), pageWidth - 20, yPosition, { align: 'right' });
+  doc.text(
+    formatIndianCompactCurrency(reportData.closing_cash_balance),
+    pageWidth - 20,
+    yPosition,
+    { align: 'right' },
+  );
 
   doc.setTextColor(0, 0, 0);
 
@@ -711,7 +717,9 @@ export const exportCashFlowToExcel = async (reportData: CashFlowReport): Promise
   // Header
   wsData.push([reportData.organization_name]);
   wsData.push(['Cash Flow Statement']);
-  wsData.push([`For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`]);
+  wsData.push([
+    `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
+  ]);
   wsData.push(['(Prepared using Indirect Method)']);
   wsData.push([]);
 
@@ -721,7 +729,10 @@ export const exportCashFlowToExcel = async (reportData: CashFlowReport): Promise
     section.items.forEach((item: CashFlowItem) => {
       wsData.push([item.label, item.amount]);
     });
-    wsData.push([`Net Cash from ${section.section_name.replace('Cash Flow from ', '')}`, section.net_cash_flow]);
+    wsData.push([
+      `Net Cash from ${section.section_name.replace('Cash Flow from ', '')}`,
+      section.net_cash_flow,
+    ]);
     wsData.push([]);
   };
 
@@ -742,7 +753,7 @@ export const exportCashFlowToExcel = async (reportData: CashFlowReport): Promise
   applySheet(ws, wsData, [50, 20]);
   await downloadWorkbook(
     wb,
-    `Cash_Flow_Statement_${reportData.organization_name}_${reportData.to_date}`
+    `Cash_Flow_Statement_${reportData.organization_name}_${reportData.to_date}`,
   );
 };
 
@@ -755,7 +766,9 @@ export const exportProfitLossToExcel = async (reportData: ProfitLossReport): Pro
   // Header
   wsData.push([reportData.organization_name]);
   wsData.push(['Profit & Loss Statement']);
-  wsData.push([`For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`]);
+  wsData.push([
+    `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
+  ]);
   wsData.push([]);
 
   // Income Section
@@ -775,17 +788,17 @@ export const exportProfitLossToExcel = async (reportData: ProfitLossReport): Pro
   wsData.push([]);
 
   // Net Profit/Loss
-  wsData.push([`Net ${reportData.profit_loss_type === 'PROFIT' ? 'Profit' : 'Loss'}`, reportData.net_profit_loss]);
+  wsData.push([
+    `Net ${reportData.profit_loss_type === 'PROFIT' ? 'Profit' : 'Loss'}`,
+    reportData.net_profit_loss,
+  ]);
   wsData.push([]);
   wsData.push([`Generated on: ${formatDateTimeSafe(reportData.generated_at)}`]);
 
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet('Profit & Loss');
   applySheet(ws, wsData, [40, 20]);
-  await downloadWorkbook(
-    wb,
-    `Profit_Loss_${reportData.organization_name}_${reportData.to_date}`
-  );
+  await downloadWorkbook(wb, `Profit_Loss_${reportData.organization_name}_${reportData.to_date}`);
 };
 
 /**
@@ -801,17 +814,10 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   const pageWidth = doc.internal.pageSize.getWidth();
   let yPosition = 15;
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(reportData.organization_name ?? "", pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportData.organization_name ?? '', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(14);
@@ -824,7 +830,7 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
     `For the period ${formatDateSafe(reportData.from_date)} to ${formatDateSafe(reportData.to_date)}`,
     pageWidth / 2,
     yPosition,
-    { align: 'center' }
+    { align: 'center' },
   );
   yPosition += 10;
 
@@ -842,7 +848,9 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   doc.setFontSize(9);
   reportData.income_items.forEach((item: ProfitLossItem) => {
     doc.text(item.account_group_name, 20, yPosition);
-    doc.text(formatCurrency(item.amount), pageWidth - 20, yPosition, { align: 'right' });
+    doc.text(formatIndianCompactCurrency(item.amount), pageWidth - 20, yPosition, {
+      align: 'right',
+    });
     yPosition += 5;
   });
 
@@ -851,7 +859,9 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   doc.setTextColor(255, 255, 255);
   doc.rect(14, yPosition - 3, pageWidth - 28, 7, 'F');
   doc.text('Total Income', 20, yPosition + 1);
-  doc.text(formatCurrency(reportData.total_income), pageWidth - 20, yPosition + 1, { align: 'right' });
+  doc.text(formatIndianCompactCurrency(reportData.total_income), pageWidth - 20, yPosition + 1, {
+    align: 'right',
+  });
   doc.setTextColor(0, 0, 0);
   yPosition += 12;
 
@@ -869,7 +879,9 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   doc.setFontSize(9);
   reportData.expense_items.forEach((item: ProfitLossItem) => {
     doc.text(item.account_group_name, 20, yPosition);
-    doc.text(formatCurrency(item.amount), pageWidth - 20, yPosition, { align: 'right' });
+    doc.text(formatIndianCompactCurrency(item.amount), pageWidth - 20, yPosition, {
+      align: 'right',
+    });
     yPosition += 5;
   });
 
@@ -878,7 +890,9 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   doc.setTextColor(255, 255, 255);
   doc.rect(14, yPosition - 3, pageWidth - 28, 7, 'F');
   doc.text('Total Expenses', 20, yPosition + 1);
-  doc.text(formatCurrency(reportData.total_expenses), pageWidth - 20, yPosition + 1, { align: 'right' });
+  doc.text(formatIndianCompactCurrency(reportData.total_expenses), pageWidth - 20, yPosition + 1, {
+    align: 'right',
+  });
   doc.setTextColor(0, 0, 0);
   yPosition += 12;
 
@@ -889,7 +903,9 @@ export const exportProfitLossToPDF = (reportData: ProfitLossReport): void => {
   doc.rect(14, yPosition - 4, pageWidth - 28, 10, 'F');
   doc.setFontSize(12);
   doc.text(`Net ${isProfit ? 'Profit' : 'Loss'}`, 20, yPosition + 2);
-  doc.text(formatCurrency(reportData.net_profit_loss), pageWidth - 20, yPosition + 2, { align: 'right' });
+  doc.text(formatIndianCompactCurrency(reportData.net_profit_loss), pageWidth - 20, yPosition + 2, {
+    align: 'right',
+  });
   doc.setTextColor(0, 0, 0);
 
   // Footer
@@ -948,7 +964,7 @@ export const exportBalanceSheetToExcel = async (reportData: BalanceSheetReport):
   applySheet(ws, wsData, [40, 20]);
   await downloadWorkbook(
     wb,
-    `Balance_Sheet_${reportData.organization_name}_${reportData.as_on_date}`
+    `Balance_Sheet_${reportData.organization_name}_${reportData.as_on_date}`,
   );
 };
 
@@ -965,17 +981,10 @@ export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void =>
   const pageWidth = doc.internal.pageSize.getWidth();
   let yPosition = 15;
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   // Header
   doc.setFontSize(16);
   doc.setFont('helvetica', 'bold');
-  doc.text(reportData.organization_name ?? "", pageWidth / 2, yPosition, { align: 'center' });
+  doc.text(reportData.organization_name ?? '', pageWidth / 2, yPosition, { align: 'center' });
   yPosition += 8;
 
   doc.setFontSize(14);
@@ -984,15 +993,17 @@ export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void =>
 
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
-  doc.text(
-    `As on ${formatDateSafe(reportData.as_on_date)}`,
-    pageWidth / 2,
-    yPosition,
-    { align: 'center' }
-  );
+  doc.text(`As on ${formatDateSafe(reportData.as_on_date)}`, pageWidth / 2, yPosition, {
+    align: 'center',
+  });
   yPosition += 10;
 
-  const renderSection = (title: string, items: readonly ProfitLossItem[], total: number, color: number[]) => {
+  const renderSection = (
+    title: string,
+    items: readonly ProfitLossItem[],
+    total: number,
+    color: number[],
+  ) => {
     doc.setFillColor(color[0], color[1], color[2]);
     doc.setTextColor(255, 255, 255);
     doc.rect(14, yPosition - 4, pageWidth - 28, 8, 'F');
@@ -1006,7 +1017,9 @@ export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void =>
     doc.setFontSize(9);
     items.forEach((item: ProfitLossItem) => {
       doc.text(item.account_group_name, 20, yPosition);
-      doc.text(formatCurrency(item.amount), pageWidth - 20, yPosition, { align: 'right' });
+      doc.text(formatIndianCompactCurrency(item.amount), pageWidth - 20, yPosition, {
+        align: 'right',
+      });
       yPosition += 5;
     });
 
@@ -1015,14 +1028,19 @@ export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void =>
     doc.setTextColor(255, 255, 255);
     doc.rect(14, yPosition - 3, pageWidth - 28, 7, 'F');
     doc.text(`Total ${title}`, 20, yPosition + 1);
-    doc.text(formatCurrency(total), pageWidth - 20, yPosition + 1, { align: 'right' });
+    doc.text(formatIndianCompactCurrency(total), pageWidth - 20, yPosition + 1, { align: 'right' });
     doc.setTextColor(0, 0, 0);
     yPosition += 12;
   };
 
   // Render sections
   renderSection('ASSETS', reportData.assets.items, reportData.assets.total, [59, 130, 246]); // blue-500
-  renderSection('LIABILITIES', reportData.liabilities.items, reportData.liabilities.total, [239, 68, 68]); // red-500
+  renderSection(
+    'LIABILITIES',
+    reportData.liabilities.items,
+    reportData.liabilities.total,
+    [239, 68, 68],
+  ); // red-500
   renderSection('EQUITY', reportData.equity.items, reportData.equity.total, [139, 92, 246]); // purple-500
 
   // Summary
@@ -1033,12 +1051,19 @@ export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void =>
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
   doc.text('Net Profit/(Loss)', 20, yPosition + 2);
-  doc.text(formatCurrency(reportData.net_profit_loss), pageWidth - 20, yPosition + 2, { align: 'right' });
+  doc.text(formatIndianCompactCurrency(reportData.net_profit_loss), pageWidth - 20, yPosition + 2, {
+    align: 'right',
+  });
   yPosition += 7;
 
   doc.setFont('helvetica', 'bold');
   doc.text('Total Liabilities + Equity', 20, yPosition + 2);
-  doc.text(formatCurrency(reportData.total_liabilities_equity), pageWidth - 20, yPosition + 2, { align: 'right' });
+  doc.text(
+    formatIndianCompactCurrency(reportData.total_liabilities_equity),
+    pageWidth - 20,
+    yPosition + 2,
+    { align: 'right' },
+  );
 
   doc.setTextColor(0, 0, 0);
 
@@ -1056,7 +1081,9 @@ export const exportBalanceSheetToPDF = (reportData: BalanceSheetReport): void =>
     doc.rect(14, yPosition - 4, pageWidth - 28, 8, 'F');
     doc.setFontSize(10);
     const diff = Math.abs(reportData.assets.total - reportData.total_liabilities_equity);
-    doc.text(`Difference: ${formatCurrency(diff)}`, pageWidth / 2, yPosition, { align: 'center' });
+    doc.text(`Difference: ${formatIndianCompactCurrency(diff)}`, pageWidth / 2, yPosition, {
+      align: 'center',
+    });
   }
 
   doc.setTextColor(0, 0, 0);

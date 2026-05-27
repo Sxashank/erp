@@ -1,340 +1,342 @@
-import {
-  ClipboardCheck,
-  Save,
-  Send,
-  Target,
-  Star,
-  CheckCircle,
-  AlertCircle,
-  TrendingUp,
-} from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
+import { EmptyState } from '@/components/common/EmptyState';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
+import { StatusPill } from '@/components/common/StatusPill';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { Slider } from '@/components/ui/slider';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useEssSelfAppraisalPacket, useSubmitEssSelfAppraisal } from '@/hooks/ess/useEssOperations';
+import type { ESSPerformanceGoal, ESSPerformanceSelfAppraisalPayload } from '@/services/essApi';
 
-interface AppraisalCycle {
-  id: string;
-  name: string;
-  period: string;
-  selfAppraisalDeadline: string;
-  status: string;
-  daysRemaining: number;
-}
-
-interface AppraisalGoal {
-  id: string;
-  title: string;
-  weight: number;
-  targetDescription: string;
-  achievement: number;
-  selfRating: number;
+interface GoalFormState {
+  selfRating: string;
+  selfProgress: string;
   selfComments: string;
-  evidence?: string;
+  achievementValue: string;
 }
-
-interface CompetencyRating {
-  id: string;
-  name: string;
-  description: string;
-  selfRating: number;
-  selfComments: string;
-}
-
-const appraisalCycle: AppraisalCycle | null = null;
-const goalsForAppraisal: AppraisalGoal[] = [];
-const competencies: CompetencyRating[] = [];
-
-const ratingLabels = {
-  1: 'Needs Significant Improvement',
-  2: 'Needs Improvement',
-  3: 'Meets Expectations',
-  4: 'Exceeds Expectations',
-  5: 'Outstanding',
-};
 
 export default function ESSSelfAppraisal() {
-  const [goals, setGoals] = useState(goalsForAppraisal);
-  const [competencyRatings, setCompetencyRatings] = useState(competencies);
-  const [overallComments, setOverallComments] = useState('');
-  const [achievements, setAchievements] = useState('');
-  const [challenges, setChallenges] = useState('');
-  const [developmentAreas, setDevelopmentAreas] = useState('');
-  const [careerAspirations, setCareerAspirations] = useState('');
+  const packetQuery = useEssSelfAppraisalPacket();
+  const submitMutation = useSubmitEssSelfAppraisal();
+  const appraisal = packetQuery.data?.appraisal ?? null;
+  const goals = appraisal?.goals ?? [];
 
-  const updateGoalRating = (goalId: string, rating: number) => {
-    setGoals(goals.map(g => g.id === goalId ? { ...g, selfRating: rating } : g));
+  const [goalState, setGoalState] = useState<Record<string, GoalFormState>>({});
+  const [competencyRating, setCompetencyRating] = useState('3');
+  const [selfSummary, setSelfSummary] = useState('');
+  const [selfAchievements, setSelfAchievements] = useState('');
+  const [selfChallenges, setSelfChallenges] = useState('');
+  const [selfDevelopmentAreas, setSelfDevelopmentAreas] = useState('');
+  const [employeeComments, setEmployeeComments] = useState('');
+
+  useEffect(() => {
+    if (!appraisal) return;
+    const nextGoalState: Record<string, GoalFormState> = {};
+    for (const goal of appraisal.goals) {
+      nextGoalState[goal.id] = {
+        selfRating: String(goal.selfRating ?? 3),
+        selfProgress: String(goal.progressPercent ?? 0),
+        selfComments: goal.selfComments ?? '',
+        achievementValue: goal.achievementValue ?? '',
+      };
+    }
+    setGoalState(nextGoalState);
+    setCompetencyRating(String(appraisal.appraisal.competencyRating ?? 3));
+    setSelfSummary(appraisal.appraisal.selfSummary ?? '');
+    setSelfAchievements(appraisal.appraisal.selfAchievements ?? '');
+    setSelfChallenges(appraisal.appraisal.selfChallenges ?? '');
+    setSelfDevelopmentAreas(appraisal.appraisal.selfDevelopmentAreas ?? '');
+    setEmployeeComments(appraisal.appraisal.employeeComments ?? '');
+  }, [appraisal]);
+
+  const weightedGoalRating = useMemo(() => {
+    if (goals.length === 0) return 0;
+    return goals.reduce((sum, goal) => {
+      const rating = Number(goalState[goal.id]?.selfRating ?? goal.selfRating ?? 0);
+      return sum + (rating * goal.weightage) / 100;
+    }, 0);
+  }, [goals, goalState]);
+
+  const canSubmit =
+    appraisal?.appraisal.status === 'SELF_APPRAISAL' &&
+    goals.length > 0 &&
+    goals.every((goal) => {
+      const current = goalState[goal.id];
+      return (
+        current &&
+        current.selfComments.trim().length >= 10 &&
+        Number(current.selfRating) >= 1 &&
+        Number(current.selfProgress) >= 0
+      );
+    }) &&
+    selfSummary.trim().length >= 20 &&
+    selfAchievements.trim().length >= 20 &&
+    selfDevelopmentAreas.trim().length >= 10;
+
+  const updateGoal = (goalId: string, patch: Partial<GoalFormState>) => {
+    setGoalState((prev) => ({
+      ...prev,
+      [goalId]: {
+        ...prev[goalId],
+        ...patch,
+      },
+    }));
   };
 
-  const updateGoalComments = (goalId: string, comments: string) => {
-    setGoals(goals.map(g => g.id === goalId ? { ...g, selfComments: comments } : g));
+  const handleSubmit = async () => {
+    if (!canSubmit) return;
+    const payload: ESSPerformanceSelfAppraisalPayload = {
+      goals: goals.map((goal) => ({
+        goalId: goal.id,
+        selfRating: Number(goalState[goal.id].selfRating),
+        selfProgress: Number(goalState[goal.id].selfProgress),
+        selfComments: goalState[goal.id].selfComments,
+        achievementValue: goalState[goal.id].achievementValue || undefined,
+      })),
+      competencyRating: Number(competencyRating),
+      selfSummary,
+      selfAchievements,
+      selfChallenges: selfChallenges || undefined,
+      selfDevelopmentAreas,
+      employeeComments: employeeComments || undefined,
+    };
+    await submitMutation.mutateAsync(payload);
+    void packetQuery.refetch();
   };
 
-  const updateCompetencyRating = (compId: string, rating: number) => {
-    setCompetencyRatings(competencyRatings.map(c => c.id === compId ? { ...c, selfRating: rating } : c));
-  };
-
-  const updateCompetencyComments = (compId: string, comments: string) => {
-    setCompetencyRatings(competencyRatings.map(c => c.id === compId ? { ...c, selfComments: comments } : c));
-  };
-
-  const calculateWeightedScore = () => {
-    return goals.reduce((sum, g) => sum + (g.selfRating * g.weight / 100), 0);
-  };
-
-  const calculateCompetencyAverage = () => {
-    const sum = competencyRatings.reduce((s, c) => s + c.selfRating, 0);
-    return (sum / competencyRatings.length).toFixed(1);
-  };
-
-  const getRatingColor = (rating: number) => {
-    if (rating >= 4) return 'text-green-600';
-    if (rating >= 3) return 'text-blue-600';
-    return 'text-orange-600';
-  };
-
-  if (!appraisalCycle) {
+  const renderGoalCard = (goal: ESSPerformanceGoal) => {
+    const current = goalState[goal.id];
     return (
-      <div className="space-y-6">
-        <PageHeader
-          title="Self Appraisal"
-          subtitle="Complete your self assessment"
-        />
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Self-appraisal data is pending ESS performance endpoints. Appraisal cycles, goals, and competency ratings will appear after HRIS performance APIs are exposed to ESS.
-          </CardContent>
-        </Card>
-      </div>
+      <Card key={goal.id}>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between gap-4 text-base">
+            <span>{goal.title}</span>
+            <div className="flex items-center gap-2">
+              <StatusPill type="application" status={goal.status} />
+              <span className="text-sm text-muted-foreground">{goal.weightage}%</span>
+            </div>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Description</p>
+              <p className="text-sm">{goal.description || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Target Value</p>
+              <p className="text-sm">{goal.targetValue || '—'}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Measurement Criteria</p>
+              <p className="text-sm">{goal.measurementCriteria || '—'}</p>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Self Rating</Label>
+                <Select
+                  value={current?.selfRating ?? '3'}
+                  onValueChange={(value) => updateGoal(goal.id, { selfRating: value })}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select rating" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {[1, 2, 3, 4, 5].map((rating) => (
+                      <SelectItem key={rating} value={String(rating)}>
+                        {rating}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Progress (%)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={current?.selfProgress ?? '0'}
+                  onChange={(event) => updateGoal(goal.id, { selfProgress: event.target.value })}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Achievement Value</Label>
+              <Input
+                value={current?.achievementValue ?? ''}
+                onChange={(event) => updateGoal(goal.id, { achievementValue: event.target.value })}
+                disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Comments</Label>
+              <Textarea
+                value={current?.selfComments ?? ''}
+                onChange={(event) => updateGoal(goal.id, { selfComments: event.target.value })}
+                disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                rows={4}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     );
-  }
+  };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Self Appraisal"
-        subtitle={`${appraisalCycle.name} | ${appraisalCycle.period}`}
-        actions={
-          <div className="flex items-center gap-4">
-            <div className="text-right">
-              <div className="text-sm text-muted-foreground">Deadline</div>
-              <div className="font-medium flex items-center gap-1">
-                <AlertCircle className="h-4 w-4 text-orange-500" />
-                {appraisalCycle.daysRemaining} days remaining
-              </div>
-            </div>
-            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-              Self Appraisal Phase
-            </Badge>
-          </div>
-        }
+        subtitle="Complete your self-appraisal using the live goal packet from the active appraisal cycle."
       />
 
-      {/* Summary Card */}
-      <Card className="bg-gradient-to-r from-blue-50 to-purple-50">
-        <CardContent className="pt-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
-            <div>
-              <div className="text-3xl font-bold text-blue-600">{calculateWeightedScore().toFixed(1)}</div>
-              <div className="text-sm text-muted-foreground">Weighted Goal Score</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-purple-600">{calculateCompetencyAverage()}</div>
-              <div className="text-sm text-muted-foreground">Avg Competency Rating</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-green-600">
-                {Math.round((calculateWeightedScore() + parseFloat(calculateCompetencyAverage())) / 2 * 20)}%
-              </div>
-              <div className="text-sm text-muted-foreground">Overall Score</div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Goals Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Target className="h-5 w-5" />
-            Goal Achievement
-          </CardTitle>
-          <CardDescription>Rate your achievement against each goal</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {goals.map((goal, index) => (
-            <div key={goal.id} className="space-y-4">
-              {index > 0 && <Separator />}
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-medium">{goal.title}</h4>
-                    <Badge variant="outline">Weight: {goal.weight}%</Badge>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">{goal.targetDescription}</p>
-                  <div className="flex items-center gap-2 mt-2">
-                    <span className="text-sm text-muted-foreground">Achievement:</span>
-                    <Progress value={goal.achievement} className="w-32" />
-                    <span className="text-sm font-medium">{goal.achievement}%</span>
-                  </div>
-                  {goal.evidence && (
-                    <p className="text-sm text-muted-foreground mt-1">
-                      <strong>Evidence:</strong> {goal.evidence}
-                    </p>
-                  )}
+      {!appraisal && !packetQuery.isLoading ? (
+        <EmptyState
+          title="No active self-appraisal"
+          subtitle="HR has not yet opened a self-appraisal stage for your current cycle."
+        />
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Cycle</p>
+                <p className="mt-2 text-xl font-semibold">{appraisal?.cycle.name ?? '—'}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{appraisal?.cycle.cycleType}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Stage</p>
+                <div className="mt-2">
+                  {appraisal ? (
+                    <StatusPill type="application" status={appraisal.appraisal.status} />
+                  ) : null}
                 </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-4 border-l-2 border-muted">
-                <div>
-                  <label className="text-sm font-medium">Self Rating</label>
-                  <div className="flex items-center gap-4 mt-2">
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Current employee appraisal status
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Goals</p>
+                <p className="mt-2 text-3xl font-semibold">{goals.length}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {appraisal?.employee.completedGoals ?? 0} completed
+                </p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="pt-6">
+                <p className="text-sm text-muted-foreground">Weighted Goal Rating</p>
+                <p className="mt-2 text-3xl font-semibold">{weightedGoalRating.toFixed(2)}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Computed from current self ratings
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {goals.map(renderGoalCard)}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Overall Self Appraisal</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Competency Rating</Label>
+                <Select
+                  value={competencyRating}
+                  onValueChange={setCompetencyRating}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select rating" />
+                  </SelectTrigger>
+                  <SelectContent>
                     {[1, 2, 3, 4, 5].map((rating) => (
-                      <button
-                        key={rating}
-                        type="button"
-                        onClick={() => updateGoalRating(goal.id, rating)}
-                        className={`p-2 rounded-full transition-colors ${
-                          goal.selfRating >= rating
-                            ? 'bg-yellow-400 text-yellow-900'
-                            : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                        }`}
-                      >
-                        <Star className="h-5 w-5" fill={goal.selfRating >= rating ? 'currentColor' : 'none'} />
-                      </button>
+                      <SelectItem key={rating} value={String(rating)}>
+                        {rating}
+                      </SelectItem>
                     ))}
-                    <span className={`text-sm font-medium ${getRatingColor(goal.selfRating)}`}>
-                      {ratingLabels[goal.selfRating as keyof typeof ratingLabels]}
-                    </span>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Comments</label>
-                  <Textarea
-                    value={goal.selfComments}
-                    onChange={(e) => updateGoalComments(goal.id, e.target.value)}
-                    placeholder="Add your comments..."
-                    className="mt-2"
-                    rows={2}
-                  />
-                </div>
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Competencies Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5" />
-            Competency Assessment
-          </CardTitle>
-          <CardDescription>Rate yourself on core competencies</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {competencyRatings.map((comp, index) => (
-            <div key={comp.id} className="space-y-3">
-              {index > 0 && <Separator />}
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium">{comp.name}</h4>
-                  <p className="text-sm text-muted-foreground">{comp.description}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {[1, 2, 3, 4, 5].map((rating) => (
-                    <button
-                      key={rating}
-                      type="button"
-                      onClick={() => updateCompetencyRating(comp.id, rating)}
-                      className={`p-1.5 rounded-full transition-colors ${
-                        comp.selfRating >= rating
-                          ? 'bg-yellow-400 text-yellow-900'
-                          : 'bg-gray-100 text-gray-400 hover:bg-gray-200'
-                      }`}
-                    >
-                      <Star className="h-4 w-4" fill={comp.selfRating >= rating ? 'currentColor' : 'none'} />
-                    </button>
-                  ))}
-                </div>
+              <div className="space-y-2">
+                <Label>Employee Comments</Label>
+                <Textarea
+                  value={employeeComments}
+                  onChange={(event) => setEmployeeComments(event.target.value)}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                  rows={2}
+                />
               </div>
-              <Textarea
-                value={comp.selfComments}
-                onChange={(e) => updateCompetencyComments(comp.id, e.target.value)}
-                placeholder="Provide examples or comments..."
-                rows={2}
-              />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Performance Summary</Label>
+                <Textarea
+                  value={selfSummary}
+                  onChange={(event) => setSelfSummary(event.target.value)}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                  rows={4}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Key Achievements</Label>
+                <Textarea
+                  value={selfAchievements}
+                  onChange={(event) => setSelfAchievements(event.target.value)}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                  rows={4}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Challenges</Label>
+                <Textarea
+                  value={selfChallenges}
+                  onChange={(event) => setSelfChallenges(event.target.value)}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                  rows={4}
+                />
+              </div>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Development Areas</Label>
+                <Textarea
+                  value={selfDevelopmentAreas}
+                  onChange={(event) => setSelfDevelopmentAreas(event.target.value)}
+                  disabled={appraisal?.appraisal.status !== 'SELF_APPRAISAL'}
+                  rows={4}
+                />
+              </div>
+            </CardContent>
+          </Card>
 
-      {/* Overall Comments Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Additional Comments</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div>
-            <label className="text-sm font-medium">Key Achievements</label>
-            <Textarea
-              value={achievements}
-              onChange={(e) => setAchievements(e.target.value)}
-              placeholder="List your key achievements during this period..."
-              className="mt-2"
-              rows={3}
-            />
+          <div className="flex justify-end">
+            <Button
+              onClick={() => void handleSubmit()}
+              disabled={!canSubmit || submitMutation.isPending}
+            >
+              {submitMutation.isPending ? 'Submitting…' : 'Submit Self Appraisal'}
+            </Button>
           </div>
-          <div>
-            <label className="text-sm font-medium">Challenges Faced</label>
-            <Textarea
-              value={challenges}
-              onChange={(e) => setChallenges(e.target.value)}
-              placeholder="Describe any challenges you faced and how you overcame them..."
-              className="mt-2"
-              rows={3}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Development Areas</label>
-            <Textarea
-              value={developmentAreas}
-              onChange={(e) => setDevelopmentAreas(e.target.value)}
-              placeholder="Areas where you would like to improve..."
-              className="mt-2"
-              rows={3}
-            />
-          </div>
-          <div>
-            <label className="text-sm font-medium">Career Aspirations</label>
-            <Textarea
-              value={careerAspirations}
-              onChange={(e) => setCareerAspirations(e.target.value)}
-              placeholder="Your career goals and aspirations..."
-              className="mt-2"
-              rows={3}
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Actions */}
-      <div className="flex justify-end gap-4">
-        <Button variant="outline">
-          <Save className="h-4 w-4 mr-2" />
-          Save Draft
-        </Button>
-        <Button>
-          <Send className="h-4 w-4 mr-2" />
-          Submit Self Appraisal
-        </Button>
-      </div>
+        </>
+      )}
     </div>
   );
 }

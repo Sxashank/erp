@@ -1,6 +1,6 @@
 /**
- * Scheme Portal API Service
- * Handles all scheme-portal API calls for borrower-side workflows.
+ * Borrower Portal API Service
+ * Handles SFC borrower-side workflows.
  */
 
 import axios from 'axios';
@@ -256,6 +256,15 @@ export interface PortalProduct {
   maxAmount: string;
   minTenureMonths: number;
   maxTenureMonths: number;
+  defaultTenureMonths?: number | null;
+  allowsMoratorium?: boolean;
+  maxMoratoriumMonths?: number | null;
+  interestType?: string | null;
+  allowedRepaymentFrequencies?: string[];
+  defaultRepaymentFrequency?: string | null;
+  allowedRepaymentModes?: string[];
+  defaultRepaymentMode?: string | null;
+  documentRequirements?: PortalApplicationDocumentRequirement[];
 }
 
 export interface PortalUtilizationCategory {
@@ -302,10 +311,10 @@ export interface PortalReportBorrowerBreakdownItem {
   claimsReleasedAmount: string;
 }
 
-export interface PortalReportLenderBreakdownItem {
-  lenderName: string;
+export interface PortalReportReviewBreakdownItem {
+  reviewOwner: string;
   applicationCount: number;
-  pendingLenderReview: number;
+  pendingSfcReview: number;
   approvedCount: number;
   requestedAmount: string;
 }
@@ -328,7 +337,7 @@ export interface PortalReportingSummary {
   applicationStatusBreakdown: PortalReportStatusBreakdownItem[];
   claimStatusBreakdown: PortalReportStatusBreakdownItem[];
   borrowerBreakdown: PortalReportBorrowerBreakdownItem[];
-  lenderBreakdown: PortalReportLenderBreakdownItem[];
+  reviewBreakdown: PortalReportReviewBreakdownItem[];
   recentReleases: PortalReportRecentReleaseItem[];
 }
 
@@ -368,44 +377,6 @@ export interface PortalFundUtilizationLine {
   remarks?: string | null;
 }
 
-export interface PortalFundingSourceLine {
-  sourceCode: string;
-  sourceLabel: string;
-  amount: string;
-  remarks?: string | null;
-}
-
-export interface PortalLenderLoanLine {
-  loanType: string;
-  loanAmount: string;
-  lenderName: string;
-  lenderCategory?: string | null;
-  lenderContact?: string | null;
-  lenderEmail?: string | null;
-  lenderAddress?: string | null;
-  lenderState?: string | null;
-  lenderDistrict?: string | null;
-  lenderPincode?: string | null;
-  sanctionReference?: string | null;
-  sanctionDate?: string | null;
-  interestRatePercent?: string | null;
-  emiPeriodicity?: string | null;
-  interestDebitingPeriodicity?: string | null;
-  loanAccountNumber?: string | null;
-  ifscCode?: string | null;
-  securityType?: string | null;
-  disbursementCallType?: string | null;
-  emiAmount?: string | null;
-  emiDueDate?: string | null;
-}
-
-export interface PortalLenderLoanDetail extends PortalLenderLoanLine {
-  id: string;
-  lenderValidationStatus: string;
-  lenderValidationRemarks?: string | null;
-  lenderValidatedAt?: string | null;
-}
-
 export interface PortalApplication {
   id: string;
   applicationNumber: string;
@@ -431,9 +402,6 @@ export interface PortalApplicationDetail extends PortalApplication {
   projectCost?: string | null;
   shipyardName?: string | null;
   maritimeSegment?: string | null;
-  lenderName?: string | null;
-  lenderBranch?: string | null;
-  sanctionReference?: string | null;
   declarationAccepted?: boolean | null;
   reviewRemarks?: string | null;
   rejectionReason?: string | null;
@@ -444,21 +412,21 @@ export interface PortalApplicationDetail extends PortalApplication {
     approvedAmount?: string | null;
     remarks?: string | null;
   }[];
-  fundingSources?: (PortalFundingSourceLine & { id: string })[];
-  lenderLoans?: PortalLenderLoanDetail[];
-  documentRequirements?: {
-    code: string;
-    name: string;
-    category: string;
-    requiredAtStage: string;
-    isMandatory: boolean;
-    minFileCount: number;
-    maxFileCount: number;
-    uploadedCount: number;
-    isUploaded: boolean;
-    missing: boolean;
-    helpText?: string | null;
-  }[];
+  documentRequirements?: PortalApplicationDocumentRequirement[];
+}
+
+export interface PortalApplicationDocumentRequirement {
+  code: string;
+  name: string;
+  category: string;
+  requiredAtStage: string;
+  isMandatory: boolean;
+  minFileCount: number;
+  maxFileCount: number;
+  uploadedCount: number;
+  isUploaded: boolean;
+  missing: boolean;
+  helpText?: string | null;
 }
 
 export interface CreatePortalApplicationRequest {
@@ -473,13 +441,8 @@ export interface CreatePortalApplicationRequest {
   projectCost?: string | null;
   shipyardName?: string | null;
   maritimeSegment?: string | null;
-  lenderName?: string | null;
-  lenderBranch?: string | null;
-  sanctionReference?: string | null;
   declarationAccepted: boolean;
   fundUtilization: PortalFundUtilizationLine[];
-  fundingSources?: PortalFundingSourceLine[];
-  lenderLoans?: PortalLenderLoanLine[];
 }
 
 export type UpdatePortalApplicationRequest = Partial<
@@ -500,6 +463,43 @@ export interface PortalApplicationDocument {
   uploadedAt?: string;
   uploadDate?: string;
   downloadUrl?: string | null;
+}
+
+export type PortalApplicationQueryStatus =
+  | 'RAISED'
+  | 'RESPONDED'
+  | 'RE_REVIEW'
+  | 'RESOLVED'
+  | 'LAPSED';
+
+export interface PortalApplicationQuery {
+  id: string;
+  applicationId: string;
+  queryNumber: number;
+  raisedById: string;
+  raisedAt: string;
+  raisedReasonCode: string;
+  queryText: string;
+  requiredAttachments: string[];
+  slaDueAt?: string | null;
+  status: PortalApplicationQueryStatus;
+  respondedById?: string | null;
+  respondedAt?: string | null;
+  responseText?: string | null;
+  responseAttachments: Record<string, unknown>[];
+  resolvedById?: string | null;
+  resolvedAt?: string | null;
+  resolutionRemark?: string | null;
+}
+
+export interface PortalApplicationQueryListResponse {
+  items: PortalApplicationQuery[];
+  total: number;
+}
+
+export interface RespondToPortalApplicationQueryRequest {
+  responseText: string;
+  responseAttachments: Record<string, unknown>[];
 }
 
 export type PortalSubsidyClaimStatus =
@@ -605,28 +605,8 @@ export interface PortalCreateClaimRequest {
   documents?: PortalClaimDocument[];
 }
 
-export interface PortalApplicationReviewActionRequest {
-  remarks?: string | null;
-}
-
 export interface PortalApplicationReasonRequest {
   reason: string;
-}
-
-export interface PortalClaimVerifyRequest {
-  decision: 'APPROVE' | 'REJECT';
-  reason?: string | null;
-}
-
-export interface PortalClaimInitiateReleaseRequest {
-  releaseInstructionReference: string;
-  releaseInitiatedDate?: string | null;
-  releaseInstructionNotes?: string | null;
-}
-
-export interface PortalClaimMarkReleasedRequest {
-  releaseReference: string;
-  releasedDate?: string | null;
 }
 
 export interface FailedScheduleItem {
@@ -918,43 +898,12 @@ export const portalApplicationsApi = {
       headers: idempotencyHeaders(),
     }),
 
-  lenderValidate: (id: string, data?: PortalApplicationReviewActionRequest) =>
-    portalApiClient.post<PortalApplicationDetail>(
-      `/portal/applications/${id}/lender-validate`,
-      data ?? {},
-      { headers: idempotencyHeaders() },
-    ),
-
-  startAppraisal: (id: string, data?: PortalApplicationReviewActionRequest) =>
-    portalApiClient.post<PortalApplicationDetail>(
-      `/portal/applications/${id}/start-appraisal`,
-      data ?? {},
-      { headers: idempotencyHeaders() },
-    ),
-
-  raiseQuery: (id: string, data: PortalApplicationReasonRequest) =>
-    portalApiClient.post<PortalApplicationDetail>(`/portal/applications/${id}/query`, data, {
-      headers: idempotencyHeaders(),
-    }),
-
-  approve: (id: string, data?: PortalApplicationReviewActionRequest) =>
-    portalApiClient.post<PortalApplicationDetail>(
-      `/portal/applications/${id}/approve`,
-      data ?? {},
-      { headers: idempotencyHeaders() },
-    ),
-
-  reject: (id: string, data: PortalApplicationReasonRequest) =>
-    portalApiClient.post<PortalApplicationDetail>(`/portal/applications/${id}/reject`, data, {
-      headers: idempotencyHeaders(),
-    }),
-
   uploadDocument: (id: string, file: File, documentType: string, documentName?: string) => {
     const form = new FormData();
     form.append('file', file);
-    form.append('document_code', documentType);
+    form.append('documentCode', documentType);
     if (documentName) {
-      form.append('document_name', documentName);
+      form.append('documentName', documentName);
     }
     return portalApiClient.post<PortalApplicationDocument>(
       `/portal/applications/${id}/documents/upload`,
@@ -970,10 +919,27 @@ export const portalApplicationsApi = {
 
   listDocuments: (id: string) =>
     portalApiClient.get<PortalApplicationDocument[]>(`/portal/applications/${id}/documents`),
+
+  listQueries: (id: string) =>
+    portalApiClient.get<PortalApplicationQueryListResponse>(`/portal/applications/${id}/queries`),
+
+  respondToQuery: (
+    applicationId: string,
+    queryId: string,
+    data: RespondToPortalApplicationQueryRequest,
+  ) =>
+    portalApiClient.post<PortalApplicationQuery>(
+      `/portal/applications/${applicationId}/queries/${queryId}/respond`,
+      data,
+      { headers: idempotencyHeaders() },
+    ),
 };
 
 export const portalClaimsApi = {
   workbench: () => portalApiClient.get<PortalClaimsWorkbench>('/portal/claims/workbench'),
+
+  listDocumentTypes: () =>
+    portalApiClient.get<{ code: string; label: string }[]>('/portal/claims/document-types'),
 
   listEnrollments: () =>
     portalApiClient.get<{ items: PortalClaimEnrollment[]; total: number }>(
@@ -1005,9 +971,9 @@ export const portalClaimsApi = {
   ) => {
     const form = new FormData();
     form.append('file', file);
-    form.append('document_category', documentCategory);
+    form.append('documentCategory', documentCategory);
     if (documentName) {
-      form.append('document_name', documentName);
+      form.append('documentName', documentName);
     }
     return portalApiClient.post<PortalClaim>(`/portal/claims/${id}/documents/upload`, form, {
       headers: {
@@ -1019,21 +985,6 @@ export const portalClaimsApi = {
 
   submit: (id: string, data?: { declarationSignedAt?: string | null }) =>
     portalApiClient.post<PortalClaim>(`/portal/claims/${id}/submit`, data ?? {}, {
-      headers: idempotencyHeaders(),
-    }),
-
-  verify: (id: string, data: PortalClaimVerifyRequest) =>
-    portalApiClient.post<PortalClaim>(`/portal/claims/${id}/verify`, data, {
-      headers: idempotencyHeaders(),
-    }),
-
-  initiateRelease: (id: string, data: PortalClaimInitiateReleaseRequest) =>
-    portalApiClient.post<PortalClaim>(`/portal/claims/${id}/initiate-release`, data, {
-      headers: idempotencyHeaders(),
-    }),
-
-  markReleased: (id: string, data: PortalClaimMarkReleasedRequest) =>
-    portalApiClient.post<PortalClaim>(`/portal/claims/${id}/mark-released`, data, {
       headers: idempotencyHeaders(),
     }),
 
@@ -1051,16 +1002,9 @@ export const portalClaimsApi = {
     portalApiClient.get<Blob>(`/portal/claims/${claimId}/report.pdf`, {
       responseType: 'blob',
     }),
-};
 
-export const portalSubsidyApi = {
-  listClaims: (loanId: string) =>
-    portalApiClient.get<{ items: PortalSubsidyClaim[]; total: number }>(
-      `/portal/loans/${loanId}/iif/claims`,
-    ),
-
-  downloadClaimCsv: (loanId: string, claimId: string) =>
-    portalApiClient.get<Blob>(`/portal/loans/${loanId}/iif/claims/${claimId}/report.csv`, {
+  downloadClaimCertificate: (claimId: string) =>
+    portalApiClient.get<Blob>(`/portal/claims/${claimId}/certificate.pdf`, {
       responseType: 'blob',
     }),
 };
@@ -1097,6 +1041,5 @@ export default {
   registration: portalRegistrationApi,
   applications: portalApplicationsApi,
   claims: portalClaimsApi,
-  subsidy: portalSubsidyApi,
   schedule: portalScheduleApi,
 };

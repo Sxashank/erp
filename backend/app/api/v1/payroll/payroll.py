@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db, get_db_with_tenant
 from app.models.auth.user import User
+from app.schemas.common import PaginatedResponse
 from app.schemas.payroll.payroll import (
     StatutorySetupCreate,
     StatutorySetupUpdate,
@@ -37,7 +38,10 @@ router = APIRouter()
 
 # ============== Statutory Setup ==============
 
-@router.get("/statutory-setup", response_model=List[StatutorySetupResponse], response_model_by_alias=True)
+
+@router.get(
+    "/statutory-setup", response_model=List[StatutorySetupResponse], response_model_by_alias=True
+)
 async def list_statutory_setup(
     statutory_type: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -49,7 +53,12 @@ async def list_statutory_setup(
     return [StatutorySetupResponse.model_validate(item) for item in items]
 
 
-@router.post("/statutory-setup", response_model=StatutorySetupResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/statutory-setup",
+    response_model=StatutorySetupResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_statutory_setup(
     data: StatutorySetupCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -61,7 +70,9 @@ async def create_statutory_setup(
     return StatutorySetupResponse.model_validate(setup)
 
 
-@router.get("/statutory-setup/{id}", response_model=StatutorySetupResponse, response_model_by_alias=True)
+@router.get(
+    "/statutory-setup/{id}", response_model=StatutorySetupResponse, response_model_by_alias=True
+)
 async def get_statutory_setup(
     id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -75,7 +86,9 @@ async def get_statutory_setup(
     return StatutorySetupResponse.model_validate(setup)
 
 
-@router.put("/statutory-setup/{id}", response_model=StatutorySetupResponse, response_model_by_alias=True)
+@router.put(
+    "/statutory-setup/{id}", response_model=StatutorySetupResponse, response_model_by_alias=True
+)
 async def update_statutory_setup(
     id: UUID,
     data: StatutorySetupUpdate,
@@ -92,7 +105,12 @@ async def update_statutory_setup(
 
 # ============== Payroll Batches ==============
 
-@router.get("/batches", response_model=dict, response_model_by_alias=True)
+
+@router.get(
+    "/batches",
+    response_model=PaginatedResponse[PayrollBatchList],
+    response_model_by_alias=True,
+)
 async def list_payroll_batches(
     year: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
@@ -108,17 +126,22 @@ async def list_payroll_batches(
         year=year,
         status=status,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
-    return {
-        "items": [PayrollBatchList.model_validate(item) for item in items],
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+    return PaginatedResponse[PayrollBatchList](
+        items=[PayrollBatchList.model_validate(item) for item in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
-@router.post("/batches", response_model=PayrollBatchResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/batches",
+    response_model=PayrollBatchResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_payroll_batch(
     data: PayrollBatchCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -159,7 +182,9 @@ async def update_payroll_batch(
     return PayrollBatchResponse.model_validate(batch)
 
 
-@router.post("/batches/{id}/process", response_model=PayrollBatchResponse, response_model_by_alias=True)
+@router.post(
+    "/batches/{id}/process", response_model=PayrollBatchResponse, response_model_by_alias=True
+)
 async def process_payroll_batch(
     id: UUID,
     data: Optional[PayrollProcessRequest] = None,
@@ -172,14 +197,16 @@ async def process_payroll_batch(
         batch = await service.process_payroll(
             batch_id=id,
             employee_ids=data.employee_ids if data else None,
-            processed_by=current_user.id
+            processed_by=current_user.id,
         )
         return PayrollBatchResponse.model_validate(batch)
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/batches/{id}/approve", response_model=PayrollBatchResponse, response_model_by_alias=True)
+@router.post(
+    "/batches/{id}/approve", response_model=PayrollBatchResponse, response_model_by_alias=True
+)
 async def approve_payroll_batch(
     id: UUID,
     data: Optional[PayrollApproveRequest] = None,
@@ -189,9 +216,7 @@ async def approve_payroll_batch(
     """Approve payroll batch"""
     service = PayrollBatchService(db)
     batch = await service.approve(
-        id,
-        approved_by=current_user.id,
-        remarks=data.remarks if data else None
+        id, approved_by=current_user.id, remarks=data.remarks if data else None
     )
     if not batch:
         raise BadRequestException(
@@ -201,7 +226,9 @@ async def approve_payroll_batch(
     return PayrollBatchResponse.model_validate(batch)
 
 
-@router.post("/batches/{id}/mark-paid", response_model=PayrollBatchResponse, response_model_by_alias=True)
+@router.post(
+    "/batches/{id}/mark-paid", response_model=PayrollBatchResponse, response_model_by_alias=True
+)
 async def mark_payroll_batch_paid(
     id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -220,7 +247,12 @@ async def mark_payroll_batch_paid(
 
 # ============== Payslips ==============
 
-@router.get("/payslips", response_model=dict, response_model_by_alias=True)
+
+@router.get(
+    "/payslips",
+    response_model=PaginatedResponse[PayslipList],
+    response_model_by_alias=True,
+)
 async def list_payslips(
     batch_id: Optional[UUID] = Query(None),
     employee_id: Optional[UUID] = Query(None),
@@ -233,18 +265,14 @@ async def list_payslips(
     """List payslips"""
     service = PayslipService(db)
     items, total = await service.list(
-        batch_id=batch_id,
-        employee_id=employee_id,
-        status=status,
-        skip=skip,
-        limit=limit
+        batch_id=batch_id, employee_id=employee_id, status=status, skip=skip, limit=limit
     )
-    return {
-        "items": [PayslipList.model_validate(item) for item in items],
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+    return PaginatedResponse[PayslipList](
+        items=[PayslipList.model_validate(item) for item in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
 @router.get("/payslips/{id}", response_model=PayslipResponse, response_model_by_alias=True)
@@ -276,7 +304,11 @@ async def update_payslip(
     return PayslipResponse.model_validate(payslip)
 
 
-@router.get("/payslips/employee/{employee_id}", response_model=dict, response_model_by_alias=True)
+@router.get(
+    "/payslips/employee/{employee_id}",
+    response_model=PaginatedResponse[PayslipList],
+    response_model_by_alias=True,
+)
 async def get_employee_payslips(
     employee_id: UUID,
     year: Optional[int] = Query(None),
@@ -288,14 +320,11 @@ async def get_employee_payslips(
     """Get payslips for an employee"""
     service = PayslipService(db)
     items, total = await service.get_employee_payslips(
-        employee_id=employee_id,
-        year=year,
-        skip=skip,
-        limit=limit
+        employee_id=employee_id, year=year, skip=skip, limit=limit
     )
-    return {
-        "items": [PayslipList.model_validate(item) for item in items],
-        "total": total,
-        "skip": skip,
-        "limit": limit
-    }
+    return PaginatedResponse[PayslipList](
+        items=[PayslipList.model_validate(item) for item in items],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )

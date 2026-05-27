@@ -12,7 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
 import { voucherTemplatesApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface TemplateDetail {
   id: string;
   template_name: string;
@@ -41,19 +41,22 @@ export function UseVoucherTemplate() {
   const [narration, setNarration] = useState('');
   const [multiplier, setMultiplier] = useState('1');
 
-  const fetchTemplate = useCallback(async (templateId: string) => {
-    try {
-      setLoading(true);
-      const response = await voucherTemplatesApi.get(templateId);
-      setTemplate(response.data);
-      setNarration(response.data.default_narration || '');
-    } catch (error) {
-      logger.error('Failed to fetch template:', error);
-      toast({ title: 'Error', description: 'Failed to load template', variant: 'destructive' });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+  const fetchTemplate = useCallback(
+    async (templateId: string) => {
+      try {
+        setLoading(true);
+        const response = await voucherTemplatesApi.get(templateId);
+        setTemplate(response.data);
+        setNarration(response.data.default_narration || '');
+      } catch (error) {
+        logger.error('Failed to fetch template:', error);
+        toast({ title: 'Error', description: 'Failed to load template', variant: 'destructive' });
+      } finally {
+        setLoading(false);
+      }
+    },
+    [toast],
+  );
 
   useEffect(() => {
     if (id) {
@@ -67,9 +70,9 @@ export function UseVoucherTemplate() {
     try {
       setSubmitting(true);
       const response = await voucherTemplatesApi.use(id, {
-        voucher_date: voucherDate,
-        narration_override: narration || undefined,
-        amount_multiplier: parseFloat(multiplier) || undefined,
+        voucherDate,
+        narrationOverride: narration || undefined,
+        amountMultiplier: parseFloat(multiplier) || undefined,
       });
 
       if (response.data.success) {
@@ -84,14 +87,6 @@ export function UseVoucherTemplate() {
       setSubmitting(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -145,7 +140,9 @@ export function UseVoucherTemplate() {
               <div className="space-y-4">
                 <div className="text-sm text-slate-600">
                   <span className="font-medium">Base Amount:</span>{' '}
-                  <span className="font-mono">{formatCurrency(template.total_amount)}</span>
+                  <span className="font-mono">
+                    {formatIndianCompactCurrency(template.total_amount)}
+                  </span>
                 </div>
 
                 <div className="overflow-hidden rounded-lg border">
@@ -166,12 +163,16 @@ export function UseVoucherTemplate() {
                           </td>
                           <td className="p-3 text-right font-mono">
                             {line.debit_amount > 0
-                              ? formatCurrency(line.debit_amount * (parseFloat(multiplier) || 1))
+                              ? formatIndianCompactCurrency(
+                                  line.debit_amount * (parseFloat(multiplier) || 1),
+                                )
                               : '-'}
                           </td>
                           <td className="p-3 text-right font-mono">
                             {line.credit_amount > 0
-                              ? formatCurrency(line.credit_amount * (parseFloat(multiplier) || 1))
+                              ? formatIndianCompactCurrency(
+                                  line.credit_amount * (parseFloat(multiplier) || 1),
+                                )
                               : '-'}
                           </td>
                         </tr>
@@ -181,10 +182,10 @@ export function UseVoucherTemplate() {
                       <tr className="border-t">
                         <td className="p-3">Total</td>
                         <td className="p-3 text-right font-mono">
-                          {formatCurrency(calculatedAmount)}
+                          {formatIndianCompactCurrency(calculatedAmount)}
                         </td>
                         <td className="p-3 text-right font-mono">
-                          {formatCurrency(calculatedAmount)}
+                          {formatIndianCompactCurrency(calculatedAmount)}
                         </td>
                       </tr>
                     </tfoot>
@@ -241,7 +242,9 @@ export function UseVoucherTemplate() {
               <div className="border-t pt-4">
                 <div className="mb-2 flex justify-between text-sm">
                   <span className="text-slate-500">Final Amount:</span>
-                  <span className="font-mono font-bold">{formatCurrency(calculatedAmount)}</span>
+                  <span className="font-mono font-bold">
+                    {formatIndianCompactCurrency(calculatedAmount)}
+                  </span>
                 </div>
               </div>
             </CardContent>

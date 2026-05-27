@@ -14,7 +14,7 @@ from app.models.lending.entity import (
     EntityFinancial,
     EntityRelation,
 )
-from app.models.lending.enums import EntityStatus, EntityType, RiskCategory
+from app.models.lending.enums import EntityStatus
 from app.repositories.base import BaseRepository
 
 
@@ -100,9 +100,9 @@ class EntityRepository(BaseRepository[Entity]):
         limit: int = 100,
         include_inactive: bool = False,
         search: str | None = None,
-        entity_type: EntityType | None = None,
+        entity_type: str | None = None,
         status: EntityStatus | None = None,
-        risk_category: RiskCategory | None = None,
+        risk_category: str | None = None,
         relationship_manager_id: UUID | None = None,
     ) -> tuple[list[Entity], int]:
         """Get all entities for an organization with filters."""
@@ -151,7 +151,7 @@ class EntityRepository(BaseRepository[Entity]):
     async def get_active_entities(
         self,
         organization_id: UUID,
-        entity_type: EntityType | None = None,
+        entity_type: str | None = None,
     ) -> list[Entity]:
         """Get all active entities for dropdown lists."""
         query = select(Entity).where(
@@ -244,12 +244,10 @@ class EntityAddressRepository(BaseRepository[EntityAddress]):
 
     async def get_registered_address(self, entity_id: UUID) -> EntityAddress | None:
         """Get registered address for an entity."""
-        from app.models.lending.enums import AddressType
-
         query = select(EntityAddress).where(
             and_(
                 EntityAddress.entity_id == entity_id,
-                EntityAddress.address_type == AddressType.REGISTERED,
+                EntityAddress.is_primary == True,
                 EntityAddress.is_active == True,
             )
         )

@@ -25,7 +25,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biWidgetApi, biChartApi, biDataSourceApi, biDashboardApi } from '@/services/biApi';
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 import type {
   Dashboard,
   ChartDefinitionListItem,
@@ -33,7 +33,7 @@ import type {
   WidgetType,
   DashboardWidgetCreate,
 } from '@/types/bi';
-import { getErrorMessage } from "@/lib/errorMessage";
+import { getErrorMessage } from '@/lib/errorMessage';
 
 interface FormData {
   title: string;
@@ -42,7 +42,30 @@ interface FormData {
   data_source_id?: string;
   grid_w: number;
   grid_h: number;
-  config: Record<string, any>;
+  config: WidgetConfig;
+}
+
+interface WidgetTableColumn {
+  key: string;
+  label: string;
+}
+
+interface WidgetConfig extends Record<string, unknown> {
+  valueField?: string;
+  subtitleField?: string;
+  changeField?: string;
+  valueFormat?: string;
+  xAxisField?: string;
+  series?: string[];
+  showLegend?: boolean;
+  showGrid?: boolean;
+  stacked?: boolean;
+  labelField?: string;
+  columns?: WidgetTableColumn[];
+  pageSize?: number;
+  content?: string;
+  minValue?: number;
+  maxValue?: number;
 }
 
 const WIDGET_TYPES: { value: WidgetType; label: string; description: string }[] = [
@@ -71,7 +94,7 @@ export function WidgetCreate() {
   const [dataSources, setDataSources] = useState<DataSourceListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [previewData, setPreviewData] = useState<any[]>([]);
+  const [previewData, setPreviewData] = useState<Record<string, unknown>[]>([]);
   const [step, setStep] = useState<'type' | 'config'>('type');
 
   const {
@@ -584,14 +607,18 @@ export function WidgetCreate() {
                   <div className="space-y-2">
                     <Label>Data Source</Label>
                     <Select
-                      value={dataSourceId || ''}
-                      onValueChange={(value) => setValue('data_source_id', value || undefined)}
+                      value={dataSourceId ?? '__none__'}
+                      onValueChange={(value) =>
+                        setValue('data_source_id', value === '__none__' ? undefined : value)
+                      }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select a data source" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="__none__">None (use mock data)</SelectItem>
+                        <SelectItem value="__none__">
+                          None (widget stays empty until a data source is assigned)
+                        </SelectItem>
                         {dataSources.map((ds) => (
                           <SelectItem key={ds.id} value={ds.id}>
                             {ds.name}

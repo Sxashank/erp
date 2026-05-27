@@ -425,12 +425,22 @@ export const recurringVouchersApi = {
 export const voucherTemplatesApi = {
   list: (params: {
     category?: string;
-    is_active?: boolean;
-    is_favorite?: boolean;
+    isActive?: boolean;
+    isFavorite?: boolean;
     search?: string;
     page?: number;
-    page_size?: number;
-  }) => api.get('/voucher-templates', { params }),
+    pageSize?: number;
+  }) =>
+    api.get('/voucher-templates', {
+      params: {
+        category: params.category,
+        is_active: params.isActive,
+        is_favorite: params.isFavorite,
+        search: params.search,
+        page: params.page,
+        page_size: params.pageSize,
+      },
+    }),
   get: (id: string) => api.get(`/voucher-templates/${id}`),
   create: (data: unknown) => api.post('/voucher-templates', data),
   update: (id: string, data: unknown) => api.put(`/voucher-templates/${id}`, data),
@@ -438,7 +448,7 @@ export const voucherTemplatesApi = {
   toggleFavorite: (id: string) => api.post(`/voucher-templates/${id}/toggle-favorite`),
   use: (
     id: string,
-    data: { voucher_date: string; narration_override?: string; amount_multiplier?: number },
+    data: { voucherDate: string; narrationOverride?: string; amountMultiplier?: number },
   ) => api.post(`/voucher-templates/${id}/use`, data),
   duplicate: (id: string, newName?: string) =>
     api.post(`/voucher-templates/${id}/duplicate`, null, { params: { new_name: newName } }),

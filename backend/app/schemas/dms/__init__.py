@@ -24,6 +24,13 @@ from app.schemas.dms.tag import (
     TagResponse,
     DocumentTagResponse,
 )
+from app.schemas.dms.filing import (
+    EntityVaultResponse,
+    FilingRuleCreate,
+    FilingRuleResponse,
+    ResolveFolderRequest,
+    ResolveFolderResponse,
+)
 
 __all__ = [
     # Document schemas
@@ -42,6 +49,11 @@ __all__ = [
     "FolderTreeResponse",
     "FolderAccessCreate",
     "FolderAccessResponse",
+    "FilingRuleCreate",
+    "FilingRuleResponse",
+    "ResolveFolderRequest",
+    "ResolveFolderResponse",
+    "EntityVaultResponse",
     # Tag schemas
     "TagCreate",
     "TagUpdate",

@@ -24,13 +24,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.lending.enums import (
-    AddressType,
-    ContactType,
     EntityStatus,
-    EntityType,
-    IndustrySector,
     RelationType,
-    RiskCategory,
 )
 
 if TYPE_CHECKING:
@@ -62,11 +57,11 @@ class Entity(BaseModel):
         index=True,
         comment="Unique entity code e.g., 'ENT/2025/00001'",
     )
-    entity_type: Mapped[EntityType] = mapped_column(
-        Enum(EntityType),
+    entity_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
         index=True,
-        comment="Type of entity - CORPORATE, INDIVIDUAL, LLP, etc.",
+        comment="Tenant master code from ENTITY_TYPE_CORPORATE.",
     )
     legal_name: Mapped[str] = mapped_column(
         String(500),
@@ -155,11 +150,11 @@ class Entity(BaseModel):
     )
 
     # Industry classification
-    industry_sector: Mapped[IndustrySector | None] = mapped_column(
-        Enum(IndustrySector),
+    industry_sector: Mapped[str | None] = mapped_column(
+        String(80),
         nullable=True,
         index=True,
-        comment="Primary industry sector",
+        comment="Tenant master code from INDUSTRY_SECTOR.",
     )
     industry_sub_sector: Mapped[str | None] = mapped_column(
         String(200),
@@ -173,12 +168,12 @@ class Entity(BaseModel):
     )
 
     # Risk classification
-    risk_category: Mapped[RiskCategory] = mapped_column(
-        Enum(RiskCategory),
+    risk_category: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=RiskCategory.MEDIUM,
+        default="MEDIUM",
         index=True,
-        comment="Risk category - LOW, MEDIUM, HIGH, VERY_HIGH",
+        comment="Tenant master code from RISK_GRADE.",
     )
     internal_rating: Mapped[str | None] = mapped_column(
         String(10),
@@ -384,10 +379,10 @@ class EntityContact(BaseModel):
     )
 
     # Contact type and role
-    contact_type: Mapped[ContactType] = mapped_column(
-        Enum(ContactType),
+    contact_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="Type of contact - DIRECTOR, PROMOTER, GUARANTOR, etc.",
+        comment="Tenant master code from CONTACT_TYPE.",
     )
     designation: Mapped[str | None] = mapped_column(
         String(200),
@@ -573,9 +568,7 @@ class EntityContact(BaseModel):
         back_populates="contacts",
     )
 
-    __table_args__ = (
-        Index("ix_los_entity_contact_entity_type", "entity_id", "contact_type"),
-    )
+    __table_args__ = (Index("ix_los_entity_contact_entity_type", "entity_id", "contact_type"),)
 
     @property
     def full_name(self) -> str:
@@ -610,10 +603,10 @@ class EntityAddress(BaseModel):
     )
 
     # Address type
-    address_type: Mapped[AddressType] = mapped_column(
-        Enum(AddressType),
+    address_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="Type of address - REGISTERED, CORRESPONDENCE, PLANT, etc.",
+        comment="Tenant master code from ADDRESS_TYPE.",
     )
     is_primary: Mapped[bool] = mapped_column(
         Boolean,

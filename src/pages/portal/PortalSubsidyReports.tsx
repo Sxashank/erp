@@ -1,5 +1,5 @@
 /**
- * Scheme Portal — claim center / verification / release queue.
+ * Borrower Portal - claim center.
  */
 
 import {
@@ -12,7 +12,7 @@ import {
   Send,
   Upload,
 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   AmountDisplay,
@@ -44,21 +44,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { usePortalSession } from '@/hooks/portal/usePortalSession';
 import {
   useCreatePortalClaim,
   usePortalClaim,
+  usePortalClaimDocumentTypes,
   useDownloadPortalClaimCsv,
+  useDownloadPortalClaimCertificate,
   useDownloadPortalClaimReport,
-  useInitiatePortalClaimRelease,
-  useMarkPortalClaimReleased,
   usePortalClaimEnrollments,
   usePortalClaims,
   usePortalClaimsWorkbench,
   useSubmitPortalClaim,
   useUploadPortalClaimDocument,
-  useVerifyPortalClaim,
 } from '@/hooks/portal/useSubsidyReports';
 import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
@@ -70,23 +68,12 @@ import type {
 
 const ALL_ENROLLMENTS = '__ALL_ENROLLMENTS__';
 const ALL_STATUSES = '__ALL_STATUSES__';
-const CLAIM_DOCUMENT_TYPES = [
-  { value: 'INTEREST_CALCULATION_SHEET', label: 'Interest calculation sheet' },
-  { value: 'REPAYMENT_RECORD', label: 'Borrower repayment record' },
-  { value: 'REGULAR_ACCOUNT_CERTIFICATE', label: 'Regular account certificate' },
-  { value: 'NON_DUPLICATION_UNDERTAKING', label: 'Non-duplication undertaking' },
-  { value: 'AUDITED_INTEREST_CERTIFICATE', label: 'Audited interest certificate' },
-  { value: 'CLAIM_SUMMARY', label: 'Claim summary' },
-];
 
 export default function PortalSubsidyReports(): JSX.Element {
   const { toast } = useToast();
   const { actorRole } = usePortalSession();
   const isBorrower = actorRole === 'scheme_borrower';
-  const canCreateClaim =
-    actorRole === 'scheme_borrower' || actorRole === 'scheme_lender' || actorRole === 'scheme_admin';
-  const canVerify = actorRole === 'scheme_smfcl_reviewer' || actorRole === 'scheme_admin';
-  const canRelease = actorRole === 'scheme_smfcl_approver' || actorRole === 'scheme_admin';
+  const canCreateClaim = isBorrower;
 
   const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<string>(ALL_ENROLLMENTS);
   const [statusFilter, setStatusFilter] = useState<string>(ALL_STATUSES);
@@ -116,24 +103,10 @@ export default function PortalSubsidyReports(): JSX.Element {
   ).length;
   const firstDraftClaim = filteredClaims.find((claim) => claim.status === 'DRAFT');
 
-  const title = isBorrower
-    ? 'Claims'
-    : canCreateClaim
-      ? 'Lender Claim Submission'
-    : canRelease
-      ? 'Claim Release Queue'
-      : canVerify
-        ? 'Claim Verification Queue'
-        : 'Claims Monitoring';
+  const title = isBorrower ? 'Claims' : 'Claims Monitoring';
   const subtitle = isBorrower
     ? 'Create borrower subsidy claims, submit draft periods, and track release status across enrolled loans.'
-    : canCreateClaim
-      ? 'Submit IIF claim proposals with required lender certificates and repayment records.'
-    : canRelease
-      ? 'Mark verified subsidy claims as released and capture audited payment references.'
-      : canVerify
-        ? 'Review submitted subsidy claims and decide whether they should proceed to release.'
-        : 'Monitor scheme claims across submission, verification, and release stages.';
+    : 'Monitor SFC claim status across submission, verification, and release stages.';
 
   const columns: Column<PortalClaim>[] = [
     {
@@ -181,7 +154,7 @@ export default function PortalSubsidyReports(): JSX.Element {
       header: '',
       align: 'right',
       render: (row) => (
-        <div className="flex justify-end gap-2">
+        <div className="flex flex-wrap justify-end gap-2">
           {isBorrower && row.status === 'DRAFT' ? (
             <>
               <Button variant="outline" size="sm" onClick={() => setDocumentsClaimId(row.id)}>
@@ -194,15 +167,6 @@ export default function PortalSubsidyReports(): JSX.Element {
                 onError={(err) => showErrorToast(err, toast)}
               />
             </>
-          ) : null}
-          {canVerify && row.status === 'SUBMITTED' ? (
-            <VerifyClaimButtons claimId={row.id} onError={(err) => showErrorToast(err, toast)} />
-          ) : null}
-          {canRelease && row.status === 'VERIFIED' ? (
-            <InitiateReleaseButton claimId={row.id} onError={(err) => showErrorToast(err, toast)} />
-          ) : null}
-          {canRelease && row.status === 'RELEASE_IN_PROGRESS' ? (
-            <MarkReleasedButton claimId={row.id} onError={(err) => showErrorToast(err, toast)} />
           ) : null}
           {isBorrower && row.status !== 'DRAFT' && row.documents.length > 0 ? (
             <Button variant="outline" size="sm" onClick={() => setDocumentsClaimId(row.id)}>
@@ -225,7 +189,7 @@ export default function PortalSubsidyReports(): JSX.Element {
       <PageHeader
         title={title}
         subtitle={subtitle}
-        breadcrumbs={[{ label: 'Scheme Portal', to: '/portal/workbench' }, { label: 'Claims' }]}
+        breadcrumbs={[{ label: 'Borrower Portal', to: '/portal/workbench' }, { label: 'Claims' }]}
         actions={
           canCreateClaim ? (
             <div className="flex flex-wrap justify-end gap-2">
@@ -597,22 +561,30 @@ function ClaimDocumentsDialog({
   onError: (err: unknown) => void;
 }): JSX.Element {
   const claimQuery = usePortalClaim(claimId);
+  const documentTypesQuery = usePortalClaimDocumentTypes();
   const uploadDocument = useUploadPortalClaimDocument();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [documentName, setDocumentName] = useState('');
-  const [documentCategory, setDocumentCategory] = useState(CLAIM_DOCUMENT_TYPES[0].value);
+  const [documentCategory, setDocumentCategory] = useState('');
 
   const claim = claimQuery.data;
   const canUpload = claim?.status === 'DRAFT';
+  const documentTypes = useMemo(() => documentTypesQuery.data ?? [], [documentTypesQuery.data]);
+
+  useEffect(() => {
+    if (!documentCategory && documentTypes[0]?.code) {
+      setDocumentCategory(documentTypes[0].code);
+    }
+  }, [documentCategory, documentTypes]);
 
   const resetUploadState = () => {
     setSelectedFile(null);
     setDocumentName('');
-    setDocumentCategory(CLAIM_DOCUMENT_TYPES[0].value);
+    setDocumentCategory(documentTypes[0]?.code ?? '');
   };
 
   const handleUpload = async () => {
-    if (!selectedFile) {
+    if (!selectedFile || !documentCategory) {
       return;
     }
     try {
@@ -667,11 +639,11 @@ function ClaimDocumentsDialog({
                   <Label htmlFor="claim-document-category">Document type</Label>
                   <Select value={documentCategory} onValueChange={setDocumentCategory}>
                     <SelectTrigger id="claim-document-category">
-                      <SelectValue />
+                      <SelectValue placeholder="Select document type" />
                     </SelectTrigger>
                     <SelectContent>
-                      {CLAIM_DOCUMENT_TYPES.map((type) => (
-                        <SelectItem key={type.value} value={type.value}>
+                      {documentTypes.map((type) => (
+                        <SelectItem key={type.code} value={type.code}>
                           {type.label}
                         </SelectItem>
                       ))}
@@ -684,7 +656,7 @@ function ClaimDocumentsDialog({
                     id="claim-document-name"
                     value={documentName}
                     onChange={(event) => setDocumentName(event.target.value)}
-                    placeholder="Sanction letter, account statement, lender certificate"
+                    placeholder="Sanction letter, account statement, SFC certificate"
                   />
                 </div>
                 <div className="space-y-2">
@@ -748,7 +720,7 @@ function ClaimDocumentsDialog({
           {canUpload ? (
             <Button
               onClick={handleUpload}
-              disabled={uploadDocument.isPending || !selectedFile}
+              disabled={uploadDocument.isPending || !selectedFile || !documentCategory}
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {uploadDocument.isPending ? (
@@ -765,228 +737,6 @@ function ClaimDocumentsDialog({
   );
 }
 
-function VerifyClaimButtons({
-  claimId,
-  onError,
-}: {
-  claimId: string;
-  onError: (err: unknown) => void;
-}): JSX.Element {
-  const verifyClaim = useVerifyPortalClaim();
-  const [open, setOpen] = useState(false);
-  const [reason, setReason] = useState('');
-
-  async function approve() {
-    try {
-      await verifyClaim.mutateAsync({ id: claimId, decision: 'APPROVE' });
-    } catch (err) {
-      onError(err);
-    }
-  }
-
-  async function reject() {
-    try {
-      await verifyClaim.mutateAsync({
-        id: claimId,
-        decision: 'REJECT',
-        reason,
-      });
-      setOpen(false);
-      setReason('');
-    } catch (err) {
-      onError(err);
-    }
-  }
-
-  return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => void approve()}
-        disabled={verifyClaim.isPending}
-      >
-        Verify
-      </Button>
-      <Button variant="destructive" size="sm" onClick={() => setOpen(true)}>
-        Reject
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Reject claim</DialogTitle>
-            <DialogDescription>
-              Provide the rejection reason that should be visible in the claim history.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="claim-reject-reason">Reason</Label>
-            <Textarea
-              id="claim-reject-reason"
-              value={reason}
-              onChange={(event) => setReason(event.target.value)}
-              rows={4}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              disabled={reason.trim().length < 5}
-              onClick={() => void reject()}
-            >
-              Reject claim
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-function InitiateReleaseButton({
-  claimId,
-  onError,
-}: {
-  claimId: string;
-  onError: (err: unknown) => void;
-}): JSX.Element {
-  const initiateRelease = useInitiatePortalClaimRelease();
-  const [open, setOpen] = useState(false);
-  const [instructionReference, setInstructionReference] = useState('');
-  const [instructionNotes, setInstructionNotes] = useState('');
-
-  async function submit() {
-    try {
-      await initiateRelease.mutateAsync({
-        id: claimId,
-        releaseInstructionReference: instructionReference.trim(),
-        releaseInitiatedDate: new Date().toISOString().slice(0, 10),
-        releaseInstructionNotes: instructionNotes.trim() || undefined,
-      });
-      setOpen(false);
-      setInstructionReference('');
-      setInstructionNotes('');
-    } catch (err) {
-      onError(err);
-    }
-  }
-
-  return (
-    <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Initiate release
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Initiate claim release</DialogTitle>
-            <DialogDescription>
-              Capture the release instruction that sends this verified claim into the execution
-              queue.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="claim-release-instruction-reference">
-              Release instruction reference
-            </Label>
-            <Input
-              id="claim-release-instruction-reference"
-              value={instructionReference}
-              onChange={(event) => setInstructionReference(event.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="claim-release-instruction-notes">Instruction notes</Label>
-            <Textarea
-              id="claim-release-instruction-notes"
-              value={instructionNotes}
-              onChange={(event) => setInstructionNotes(event.target.value)}
-              rows={4}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={initiateRelease.isPending || instructionReference.trim().length === 0}
-              onClick={() => void submit()}
-            >
-              Start release
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-function MarkReleasedButton({
-  claimId,
-  onError,
-}: {
-  claimId: string;
-  onError: (err: unknown) => void;
-}): JSX.Element {
-  const markReleased = useMarkPortalClaimReleased();
-  const [open, setOpen] = useState(false);
-  const [releaseReference, setReleaseReference] = useState('');
-
-  async function submit() {
-    try {
-      await markReleased.mutateAsync({
-        id: claimId,
-        releaseReference: releaseReference.trim(),
-        releasedDate: new Date().toISOString().slice(0, 10),
-      });
-      setOpen(false);
-      setReleaseReference('');
-    } catch (err) {
-      onError(err);
-    }
-  }
-
-  return (
-    <>
-      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-        Mark released
-      </Button>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Mark claim released</DialogTitle>
-            <DialogDescription>
-              Record the final bank / release reference after the subsidy transfer is completed.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="claim-release-reference">Release reference</Label>
-            <Input
-              id="claim-release-reference"
-              value={releaseReference}
-              onChange={(event) => setReleaseReference(event.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={markReleased.isPending || releaseReference.trim().length === 0}
-              onClick={() => void submit()}
-            >
-              Confirm released
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
 function DownloadClaimButton({
   claimId,
   claimReference,
@@ -999,10 +749,13 @@ function DownloadClaimButton({
   const csv = useDownloadPortalClaimCsv(claimId);
   const xlsx = useDownloadPortalClaimReport(claimId, 'xlsx');
   const pdf = useDownloadPortalClaimReport(claimId, 'pdf');
-  const isDownloading = csv.isDownloading || xlsx.isDownloading || pdf.isDownloading;
+  const certificate = useDownloadPortalClaimCertificate(claimId);
+  const isDownloading =
+    csv.isDownloading || xlsx.isDownloading || pdf.isDownloading || certificate.isDownloading;
+  const safeClaimReference = claimReference.replace(/[\\/:*?"<>|]+/g, '_');
   const downloadAs = async (format: 'csv' | 'xlsx' | 'pdf') => {
     const downloader = format === 'xlsx' ? xlsx : format === 'pdf' ? pdf : csv;
-    await downloader.download(`${claimReference}.${format}`);
+    await downloader.download(`${safeClaimReference}.${format}`);
   };
   return (
     <>
@@ -1028,6 +781,25 @@ function DownloadClaimButton({
           {format.toUpperCase()}
         </Button>
       ))}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={async () => {
+          try {
+            await certificate.download(`${safeClaimReference}-certificate.pdf`);
+          } catch (err) {
+            onError(err);
+          }
+        }}
+        disabled={isDownloading}
+      >
+        {certificate.isDownloading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Download className="mr-2 h-4 w-4" />
+        )}
+        Certificate
+      </Button>
     </>
   );
 }

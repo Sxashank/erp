@@ -27,7 +27,7 @@ import {
 import { reportsApi, organizationsApi, financialYearsApi } from '@/services/api';
 import { exportTrialBalanceToExcel, exportTrialBalanceToPDF } from '@/utils/exportUtils';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
@@ -88,15 +88,17 @@ export function TrialBalance() {
 
   const handleDrillDown = (accountId: string) => {
     // Navigate to account ledger with current date range
-    navigate(`/admin/reports/account-ledger?account_id=${accountId}&from_date=${fromDate}&to_date=${toDate}&organization_id=${selectedOrgId}`);
+    navigate(
+      `/admin/reports/account-ledger?account_id=${accountId}&from_date=${fromDate}&to_date=${toDate}&organization_id=${selectedOrgId}`,
+    );
   };
 
   useEffect(() => {
     if (selectedFYId) {
-      const fy = financialYears.find(f => f.id === selectedFYId);
+      const fy = financialYears.find((f) => f.id === selectedFYId);
       if (fy) {
-        setFromDate(fy.start_date);
-        setToDate(fy.end_date);
+        setFromDate(fy.start_date ?? '');
+        setToDate(fy.end_date ?? '');
       }
     }
   }, [selectedFYId, financialYears]);
@@ -155,14 +157,6 @@ export function TrialBalance() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   const handlePrint = () => {
     window.print();
   };
@@ -256,11 +250,15 @@ export function TrialBalance() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate ?? ''}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input type="date" value={toDate ?? ''} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="flex items-end gap-4">
               <div className="flex items-center space-x-2">
@@ -269,9 +267,14 @@ export function TrialBalance() {
                   checked={includeZeroBalance}
                   onCheckedChange={(checked) => setIncludeZeroBalance(checked === true)}
                 />
-                <Label htmlFor="zero-balance" className="text-sm cursor-pointer">Include Zero Balance</Label>
+                <Label htmlFor="zero-balance" className="cursor-pointer text-sm">
+                  Include Zero Balance
+                </Label>
               </div>
-              <Button onClick={generateReport} disabled={loading || !selectedOrgId || !selectedFYId}>
+              <Button
+                onClick={generateReport}
+                disabled={loading || !selectedOrgId || !selectedFYId}
+              >
                 {loading ? 'Generating...' : 'Generate'}
               </Button>
             </div>
@@ -286,7 +289,8 @@ export function TrialBalance() {
               <h2 className="text-xl font-bold">{reportData.organization_name}</h2>
               <h3 className="text-lg font-semibold text-slate-700">Trial Balance</h3>
               <p className="text-sm text-slate-500">
-                For the period <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
+                For the period <DateDisplay date={reportData.from_date} /> to{' '}
+                <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>
@@ -315,7 +319,7 @@ export function TrialBalance() {
                   {reportData.items.map((item) => (
                     <TableRow
                       key={item.account_id}
-                      className="cursor-pointer hover:bg-blue-50 transition-colors group"
+                      className="group cursor-pointer transition-colors hover:bg-blue-50"
                       onClick={() => handleDrillDown(item.account_id)}
                     >
                       <TableCell className="font-mono text-sm">
@@ -324,51 +328,67 @@ export function TrialBalance() {
                           <ExternalLink className="h-3 w-3 text-slate-400 opacity-0 group-hover:opacity-100" />
                         </span>
                       </TableCell>
-                      <TableCell className="group-hover:text-blue-600">{item.account_name}</TableCell>
+                      <TableCell className="group-hover:text-blue-600">
+                        {item.account_name}
+                      </TableCell>
                       <TableCell>
-                        <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${getNatureBadgeClass(item.account_nature)}`}>
+                        <span
+                          className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${getNatureBadgeClass(item.account_nature)}`}
+                        >
                           {item.account_group_name}
                         </span>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {item.opening_debit > 0 ? formatCurrency(item.opening_debit) : '-'}
+                        {item.opening_debit > 0
+                          ? formatIndianCompactCurrency(item.opening_debit)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {item.opening_credit > 0 ? formatCurrency(item.opening_credit) : '-'}
+                        {item.opening_credit > 0
+                          ? formatIndianCompactCurrency(item.opening_credit)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {item.period_debit > 0 ? formatCurrency(item.period_debit) : '-'}
+                        {item.period_debit > 0
+                          ? formatIndianCompactCurrency(item.period_debit)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {item.period_credit > 0 ? formatCurrency(item.period_credit) : '-'}
+                        {item.period_credit > 0
+                          ? formatIndianCompactCurrency(item.period_credit)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold text-blue-600">
-                        {item.closing_debit > 0 ? formatCurrency(item.closing_debit) : '-'}
+                        {item.closing_debit > 0
+                          ? formatIndianCompactCurrency(item.closing_debit)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono font-semibold text-red-600">
-                        {item.closing_credit > 0 ? formatCurrency(item.closing_credit) : '-'}
+                        {item.closing_credit > 0
+                          ? formatIndianCompactCurrency(item.closing_credit)
+                          : '-'}
                       </TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="bg-slate-100 font-bold">
                     <TableCell colSpan={3}>TOTAL</TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.total_opening_debit)}
+                      {formatIndianCompactCurrency(reportData.total_opening_debit)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.total_opening_credit)}
+                      {formatIndianCompactCurrency(reportData.total_opening_credit)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.total_period_debit)}
+                      {formatIndianCompactCurrency(reportData.total_period_debit)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.total_period_credit)}
+                      {formatIndianCompactCurrency(reportData.total_period_credit)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-blue-600">
-                      {formatCurrency(reportData.total_closing_debit)}
+                      {formatIndianCompactCurrency(reportData.total_closing_debit)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-red-600">
-                      {formatCurrency(reportData.total_closing_credit)}
+                      {formatIndianCompactCurrency(reportData.total_closing_credit)}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -377,11 +397,15 @@ export function TrialBalance() {
             <div className="mt-4 flex justify-between text-xs text-slate-500 print:mt-8">
               <span>Generated on: {new Date(reportData.generated_at).toLocaleString('en-IN')}</span>
               <span>
-                {Math.abs(reportData.total_closing_debit - reportData.total_closing_credit) < 0.01 ? (
-                  <span className="text-emerald-600 font-medium">Books are balanced</span>
+                {Math.abs(reportData.total_closing_debit - reportData.total_closing_credit) <
+                0.01 ? (
+                  <span className="font-medium text-emerald-600">Books are balanced</span>
                 ) : (
-                  <span className="text-red-600 font-medium">
-                    Difference: {formatCurrency(Math.abs(reportData.total_closing_debit - reportData.total_closing_credit))}
+                  <span className="font-medium text-red-600">
+                    Difference:{' '}
+                    {formatIndianCompactCurrency(
+                      Math.abs(reportData.total_closing_debit - reportData.total_closing_credit),
+                    )}
                   </span>
                 )}
               </span>

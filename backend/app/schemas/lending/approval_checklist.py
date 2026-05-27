@@ -22,10 +22,7 @@ from app.schemas.base import CamelSchema
 class ChecklistTemplateItemCreate(CamelSchema):
     """Payload for creating a new template item."""
 
-    code: str = Field(..., max_length=50, min_length=1)
-    label: str = Field(..., max_length=300, min_length=1)
-    description: str | None = None
-    category: str = Field(..., max_length=50)
+    catalog_item_id: UUID
     is_mandatory: bool = False
     sort_order: int = 0
     default_due_offset_days: int | None = Field(None, ge=0)
@@ -35,9 +32,7 @@ class ChecklistTemplateItemCreate(CamelSchema):
 class ChecklistTemplateItemUpdate(CamelSchema):
     """Partial update for a template item."""
 
-    label: str | None = Field(None, max_length=300, min_length=1)
-    description: str | None = None
-    category: str | None = Field(None, max_length=50)
+    catalog_item_id: UUID | None = None
     is_mandatory: bool | None = None
     sort_order: int | None = None
     default_due_offset_days: int | None = Field(None, ge=0)
@@ -50,6 +45,7 @@ class ChecklistTemplateItemResponse(CamelSchema):
 
     id: UUID
     template_id: UUID
+    catalog_item_id: UUID
     code: str
     label: str
     description: str | None = None
@@ -156,6 +152,7 @@ class LoanChecklistItemResponse(CamelSchema):
     id: UUID
     checklist_id: UUID
     template_item_id: UUID | None = None
+    catalog_item_id: UUID | None = None
     code: str
     label: str
     description: str | None = None

@@ -9,9 +9,81 @@ import type { PaginatedResponse } from '@/types/lending';
 
 const BASE_URL = '/lending/collections';
 
+export interface OTSPaymentSchedulePayload {
+  installmentNumber: number;
+  dueDate: string;
+  dueAmount: number;
+}
+
+export interface OTSProposalCreatePayload {
+  loanAccountId: string;
+  proposalDate: string;
+  principalOutstanding: number;
+  interestOutstanding: number;
+  penalOutstanding: number;
+  otherCharges: number;
+  totalOutstanding: number;
+  otsAmount: number;
+  principalWaiver: number;
+  interestWaiver: number;
+  penalWaiver: number;
+  chargesWaiver: number;
+  paymentMode: string;
+  upfrontAmount: number;
+  upfrontDueDate?: string | null;
+  numberOfInstallments: number;
+  validTill: string;
+  securityReleaseTerms?: string | null;
+  termsAndConditions?: string | null;
+  remarks?: string | null;
+}
+
+export interface RestructureCreatePayload {
+  loanAccountId: string;
+  restructureType: string;
+  proposalDate: string;
+  preOutstandingPrincipal: number;
+  preOutstandingInterest: number;
+  preInterestRate: number;
+  preTenureMonths: number;
+  preEmiAmount?: number;
+  preMaturityDate: string;
+  postOutstandingPrincipal: number;
+  postInterestRate: number;
+  postTenureMonths: number;
+  postEmiAmount?: number;
+  postMaturityDate: string;
+  moratoriumMonths: number;
+  moratoriumStartDate?: string;
+  moratoriumEndDate?: string;
+  moratoriumInterestTreatment?: string;
+  interestWaived: number;
+  penalWaived: number;
+  principalConvertedToFitl: number;
+  isStandardRestructure: boolean;
+  downgradeRequired: boolean;
+  preConditions?: string;
+  postConditions?: string;
+  justification: string;
+  remarks?: string;
+}
+
+export interface RestructureApprovalPayload {
+  approvedById: string;
+  approvedByName: string;
+  approvalAuthority: string;
+}
+
+export interface RestructureRejectPayload {
+  rejectedById: string;
+  rejectedByName: string;
+  rejectionReason: string;
+  approvalAuthority?: string;
+}
+
 function appendPaging(params: URLSearchParams, page?: number, pageSize?: number) {
   if (page) params.append('page', page.toString());
-  if (pageSize) params.append('page_size', pageSize.toString());
+  if (pageSize) params.append('pageSize', pageSize.toString());
 }
 
 export async function getFollowUps(
@@ -62,12 +134,46 @@ export async function getRestructures(
   return response.data;
 }
 
+export async function createOTSProposal(
+  payload: OTSProposalCreatePayload,
+  paymentSchedule?: OTSPaymentSchedulePayload[],
+) {
+  const response = await api.post(`${BASE_URL}/ots-proposals`, {
+    data: payload,
+    paymentSchedule: paymentSchedule ?? null,
+  });
+  return response.data;
+}
+
+export async function createRestructure(payload: RestructureCreatePayload) {
+  const response = await api.post(`${BASE_URL}/restructures`, payload);
+  return response.data;
+}
+
+export async function getRestructure(restructureId: string) {
+  const response = await api.get(`${BASE_URL}/restructures/${restructureId}`);
+  return response.data;
+}
+
+export async function approveRestructure(
+  restructureId: string,
+  payload: RestructureApprovalPayload,
+) {
+  const response = await api.post(`${BASE_URL}/restructures/${restructureId}/approve`, payload);
+  return response.data;
+}
+
+export async function rejectRestructure(restructureId: string, payload: RestructureRejectPayload) {
+  const response = await api.post(`${BASE_URL}/restructures/${restructureId}/reject`, payload);
+  return response.data;
+}
+
 export async function getLegalCases(
   filters?: LegalCaseFilters,
 ): Promise<PaginatedResponse<LegalCaseListItem>> {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.caseType) params.append('case_type', filters.caseType);
+  if (filters?.caseType) params.append('caseType', filters.caseType);
   appendPaging(params, filters?.page, filters?.pageSize);
   const response = await api.get<PaginatedResponse<LegalCaseListItem>>(
     `${BASE_URL}/legal-cases?${params.toString()}`,
@@ -79,7 +185,12 @@ export const collectionApi = {
   getFollowUps,
   getNPAAccounts,
   getOTSProposals,
+  createOTSProposal,
   getRestructures,
+  createRestructure,
+  getRestructure,
+  approveRestructure,
+  rejectRestructure,
   getLegalCases,
 };
 

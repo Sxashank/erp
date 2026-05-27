@@ -52,7 +52,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { legalNoticeApi } from '@/services/legalApi';
 import type { LegalNotice, NoticeType } from '@/types/legal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 const noticeTypes: { value: NoticeType; label: string; days: number }[] = [
   { value: 'SECTION_13_2_SARFAESI', label: 'Section 13(2) SARFAESI', days: 60 },
   { value: 'SECTION_13_4_POSSESSION', label: 'Section 13(4) Possession', days: 15 },
@@ -106,15 +106,6 @@ export default function LegalNoticeList() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const handleDownloadPdf = async (noticeId: string) => {
     try {
       const response = await legalNoticeApi.downloadPdf(noticeId);
@@ -336,12 +327,15 @@ export default function LegalNoticeList() {
                     </TableCell>
                     <TableCell>{notice.borrower_name}</TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(notice.amount_demanded)}
+                      {formatIndianCompactCurrency(notice.amount_demanded)}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1">
                         <Calendar className="h-4 w-4 text-gray-400" />
-                        <DateDisplay date={notice.response_due_date} className={isOverdue ? 'font-medium text-red-600' : ''} />
+                        <DateDisplay
+                          date={notice.response_due_date}
+                          className={isOverdue ? 'font-medium text-red-600' : ''}
+                        />
                       </div>
                       <p className="text-xs text-gray-500">
                         {notice.statutory_period_days} days from notice

@@ -1,4 +1,4 @@
-"""Actor-scoped reporting for the integrated scheme portal."""
+"""Actor-scoped reporting for the integrated SFC portal."""
 
 from __future__ import annotations
 
@@ -24,8 +24,8 @@ from app.schemas.portal.reporting import (
     PortalReportBorrowerBreakdownItem,
     PortalReportClaimSummary,
     PortalReportingResponse,
-    PortalReportLenderBreakdownItem,
     PortalReportRecentReleaseItem,
+    PortalReportReviewBreakdownItem,
     PortalReportStatusBreakdownItem,
 )
 from app.services.portal.actor_roles import is_borrower_role, portal_actor_role
@@ -76,7 +76,7 @@ UNDER_REVIEW_APPLICATION_STATUSES = {
 
 
 class PortalReportingService:
-    """Build reporting summaries for borrower, lender, SMFCL, and ministry roles."""
+    """Build reporting summaries for borrower, SFC, and ministry roles."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -130,7 +130,7 @@ class PortalReportingService:
                 application_statuses,
                 claims,
             ),
-            lender_breakdown=self._lender_breakdown(
+            review_breakdown=self._review_breakdown(
                 applications,
                 application_statuses,
             ),
@@ -315,22 +315,20 @@ class PortalReportingService:
         )
         return [PortalReportBorrowerBreakdownItem(**row) for row in ordered[:10]]
 
-    def _lender_breakdown(
+    def _review_breakdown(
         self,
         applications: list[LoanApplication],
         application_statuses: list[str],
-    ) -> list[PortalReportLenderBreakdownItem]:
+    ) -> list[PortalReportReviewBreakdownItem]:
         summary: dict[str, dict[str, object]] = {}
         for app, status in zip(applications, application_statuses):
-            lender_name = (
-                (app.extra_data or {}).get("lender_name") or ""
-            ).strip() or "Unspecified lender"
+            review_owner = "SFC"
             bucket = summary.setdefault(
-                lender_name,
+                review_owner,
                 {
-                    "lender_name": lender_name,
+                    "review_owner": review_owner,
                     "application_count": 0,
-                    "pending_lender_review": 0,
+                    "pending_sfc_review": 0,
                     "approved_count": 0,
                     "requested_amount": Decimal("0"),
                 },
@@ -340,7 +338,7 @@ class PortalReportingService:
                 app.requested_amount or Decimal("0")
             )
             if status == "LENDER_REVIEW":
-                bucket["pending_lender_review"] = int(bucket["pending_lender_review"]) + 1
+                bucket["pending_sfc_review"] = int(bucket["pending_sfc_review"]) + 1
             if status in APPROVED_APPLICATION_STATUSES:
                 bucket["approved_count"] = int(bucket["approved_count"]) + 1
 
@@ -352,7 +350,7 @@ class PortalReportingService:
             ),
             reverse=True,
         )
-        return [PortalReportLenderBreakdownItem(**row) for row in ordered[:10]]
+        return [PortalReportReviewBreakdownItem(**row) for row in ordered[:10]]
 
     def _recent_releases(
         self,

@@ -5,7 +5,6 @@
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
-
 import { AreaChartWidget } from './AreaChartWidget';
 import { BarChartWidget } from './BarChartWidget';
 import { DataTableWidget } from './DataTableWidget';
@@ -17,9 +16,9 @@ import { PieChartWidget } from './PieChartWidget';
 import { TextMarkdownWidget } from './TextMarkdownWidget';
 
 import { biDataSourceApi } from '@/services/biApi';
-import type { DashboardWidget, WidgetType, WidgetConfig } from '@/types/bi';
+import type { DashboardWidget, WidgetConfig } from '@/types/bi';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface WidgetRendererProps {
   widget: DashboardWidget;
   autoRefresh?: boolean;
@@ -31,7 +30,9 @@ export function WidgetRenderer({
   autoRefresh = false,
   refreshInterval = 60000,
 }: WidgetRendererProps) {
-  const [data, setData] = useState<Record<string, unknown> | Record<string, unknown>[] | null>(null);
+  const [data, setData] = useState<Record<string, unknown> | Record<string, unknown>[] | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,37 +40,30 @@ export function WidgetRenderer({
     // Skip data fetch for markdown widgets
     if (widget.widget_type === 'TEXT_MARKDOWN') {
       setData({});
+      setError(null);
       setLoading(false);
       return;
     }
 
-    // Determine data source
-    const dataSourceId = widget.data_source_id || widget.chart_definition?.id;
+    const dataSourceId = widget.data_source_id;
 
-    if (!dataSourceId && !widget.config) {
-      // Use mock data for demo
-      setData(getMockData(widget.widget_type));
+    if (!dataSourceId) {
+      setData(null);
+      setError('Assign a supported BI data source to render this widget.');
       setLoading(false);
       return;
     }
 
-    if (dataSourceId) {
-      try {
-        setLoading(true);
-        const response = await biDataSourceApi.fetch(dataSourceId);
-        setData(response.data.data as Record<string, unknown>);
-        setError(null);
-      } catch (err) {
-        logger.error('Error fetching widget data:', err);
-        setError('Failed to load data');
-        // Fall back to mock data
-        setData(getMockData(widget.widget_type));
-      } finally {
-        setLoading(false);
-      }
-    } else {
-      // Use mock data if no data source
-      setData(getMockData(widget.widget_type));
+    try {
+      setLoading(true);
+      const response = await biDataSourceApi.fetch(dataSourceId);
+      setData(response.data.data as Record<string, unknown>);
+      setError(null);
+    } catch (err) {
+      logger.error('Error fetching widget data:', err);
+      setError('Failed to load widget data from the configured source.');
+      setData(null);
+    } finally {
       setLoading(false);
     }
   };
@@ -85,7 +79,7 @@ export function WidgetRenderer({
 
   if (loading) {
     return (
-      <div className="h-full w-full flex items-center justify-center">
+      <div className="flex h-full w-full items-center justify-center">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -93,8 +87,8 @@ export function WidgetRenderer({
 
   if (error && !data) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center text-muted-foreground">
-        <AlertCircle className="h-6 w-6 mb-2" />
+      <div className="flex h-full w-full flex-col items-center justify-center text-muted-foreground">
+        <AlertCircle className="mb-2 h-6 w-6" />
         <p className="text-sm">{error}</p>
       </div>
     );
@@ -106,95 +100,79 @@ export function WidgetRenderer({
     // Each branch narrows the union by widget_type; we cast the still-widened
     // config to the specific shape the child widget needs.
     case 'KPI_CARD':
-      return <KPICardWidget config={config as Parameters<typeof KPICardWidget>[0]['config']} data={data as Record<string, unknown>} />;
+      return (
+        <KPICardWidget
+          config={config as Parameters<typeof KPICardWidget>[0]['config']}
+          data={data as Record<string, unknown>}
+        />
+      );
 
     case 'LINE_CHART':
-      return <LineChartWidget config={config as Parameters<typeof LineChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
+      return (
+        <LineChartWidget
+          config={config as Parameters<typeof LineChartWidget>[0]['config']}
+          data={data as Record<string, unknown>[]}
+        />
+      );
 
     case 'BAR_CHART':
-      return <BarChartWidget config={config as Parameters<typeof BarChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
+      return (
+        <BarChartWidget
+          config={config as Parameters<typeof BarChartWidget>[0]['config']}
+          data={data as Record<string, unknown>[]}
+        />
+      );
 
     case 'PIE_CHART':
-      return <PieChartWidget config={config as Parameters<typeof PieChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
+      return (
+        <PieChartWidget
+          config={config as Parameters<typeof PieChartWidget>[0]['config']}
+          data={data as Record<string, unknown>[]}
+        />
+      );
 
     case 'DONUT_CHART':
-      return <DonutChartWidget config={config as Parameters<typeof DonutChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
+      return (
+        <DonutChartWidget
+          config={config as Parameters<typeof DonutChartWidget>[0]['config']}
+          data={data as Record<string, unknown>[]}
+        />
+      );
 
     case 'AREA_CHART':
-      return <AreaChartWidget config={config as Parameters<typeof AreaChartWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
+      return (
+        <AreaChartWidget
+          config={config as Parameters<typeof AreaChartWidget>[0]['config']}
+          data={data as Record<string, unknown>[]}
+        />
+      );
 
     case 'DATA_TABLE':
-      return <DataTableWidget config={config as Parameters<typeof DataTableWidget>[0]['config']} data={data as Record<string, unknown>[]} />;
+      return (
+        <DataTableWidget
+          config={config as Parameters<typeof DataTableWidget>[0]['config']}
+          data={data as Record<string, unknown>[]}
+        />
+      );
 
     case 'TEXT_MARKDOWN':
-      return <TextMarkdownWidget config={config as Parameters<typeof TextMarkdownWidget>[0]['config']} />;
+      return (
+        <TextMarkdownWidget config={config as Parameters<typeof TextMarkdownWidget>[0]['config']} />
+      );
 
     case 'GAUGE_PROGRESS':
-      return <GaugeWidget config={config as Parameters<typeof GaugeWidget>[0]['config']} data={data as Record<string, unknown>} />;
+      return (
+        <GaugeWidget
+          config={config as Parameters<typeof GaugeWidget>[0]['config']}
+          data={data as Record<string, unknown>}
+        />
+      );
 
     default:
       return (
-        <div className="h-full w-full flex items-center justify-center text-muted-foreground">
+        <div className="flex h-full w-full items-center justify-center text-muted-foreground">
           <p className="text-sm">Unknown widget type: {widget.widget_type}</p>
         </div>
       );
-  }
-}
-
-// Mock data for demo purposes
-function getMockData(widgetType: WidgetType): Record<string, unknown> | Record<string, unknown>[] {
-  switch (widgetType) {
-    case 'KPI_CARD':
-      return {
-        value: 15750000,
-        subtitle: 'Revenue MTD',
-        change: 12.5,
-      };
-
-    case 'LINE_CHART':
-    case 'AREA_CHART':
-      return [
-        { month: 'Jan', revenue: 4000000, expenses: 2400000 },
-        { month: 'Feb', revenue: 3000000, expenses: 1398000 },
-        { month: 'Mar', revenue: 2000000, expenses: 9800000 },
-        { month: 'Apr', revenue: 2780000, expenses: 3908000 },
-        { month: 'May', revenue: 1890000, expenses: 4800000 },
-        { month: 'Jun', revenue: 2390000, expenses: 3800000 },
-      ];
-
-    case 'BAR_CHART':
-      return [
-        { name: 'Branch A', value: 4000 },
-        { name: 'Branch B', value: 3000 },
-        { name: 'Branch C', value: 2000 },
-        { name: 'Branch D', value: 2780 },
-        { name: 'Branch E', value: 1890 },
-      ];
-
-    case 'PIE_CHART':
-    case 'DONUT_CHART':
-      return [
-        { name: 'Product A', value: 400 },
-        { name: 'Product B', value: 300 },
-        { name: 'Product C', value: 200 },
-        { name: 'Product D', value: 100 },
-      ];
-
-    case 'DATA_TABLE':
-      return [
-        { id: '001', name: 'John Doe', amount: 50000, date: '2024-01-15' },
-        { id: '002', name: 'Jane Smith', amount: 75000, date: '2024-01-16' },
-        { id: '003', name: 'Bob Johnson', amount: 32000, date: '2024-01-17' },
-        { id: '004', name: 'Alice Brown', amount: 98000, date: '2024-01-18' },
-        { id: '005', name: 'Charlie Wilson', amount: 45000, date: '2024-01-19' },
-      ];
-
-    case 'GAUGE_PROGRESS':
-      return {
-        value: 72,
-      };
-
-    default:
-      return {};
   }
 }

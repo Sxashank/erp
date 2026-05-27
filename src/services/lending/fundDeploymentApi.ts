@@ -97,11 +97,11 @@ export async function getFundDeployments(
   filters: FundDeploymentFilters = {},
 ): Promise<PaginatedResponse<FundDeployment>> {
   const params = new URLSearchParams();
-  if (filters.borrowingId) params.append('borrowing_id', filters.borrowingId);
-  if (filters.loanAccountId) params.append('loan_account_id', filters.loanAccountId);
+  if (filters.borrowingId) params.append('borrowingId', filters.borrowingId);
+  if (filters.loanAccountId) params.append('loanAccountId', filters.loanAccountId);
   if (filters.status) params.append('status', filters.status);
   if (filters.page) params.append('page', String(filters.page));
-  if (filters.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters.pageSize) params.append('pageSize', String(filters.pageSize));
 
   const { data } = await api.get<PaginatedResponse<FundDeployment>>(
     `${BASE_URL}?${params.toString()}`,

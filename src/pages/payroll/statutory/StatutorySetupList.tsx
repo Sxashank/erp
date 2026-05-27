@@ -20,7 +20,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
-import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
 import type { StatutorySetup } from '@/services/payrollService';
 import payrollService from '@/services/payrollService';
 
@@ -39,8 +38,6 @@ export default function StatutorySetupList() {
   const [setups, setSetups] = useState<StatutorySetup[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const organizationId = useRequiredActiveOrganizationId();
-
   useEffect(() => {
     loadSetups();
   }, []);
@@ -48,8 +45,7 @@ export default function StatutorySetupList() {
   const loadSetups = async () => {
     try {
       setLoading(true);
-      const data = await payrollService.listStatutorySetup({
-      });
+      const data = await payrollService.listStatutorySetup({});
       setSetups(data);
     } catch (error) {
       toast({
@@ -72,6 +68,12 @@ export default function StatutorySetupList() {
         title="Statutory Setup"
         subtitle="Configure statutory compliance for payroll"
         breadcrumbs={[{ label: 'Payroll', to: '/admin/payroll' }, { label: 'Statutory Setup' }]}
+        actions={
+          <Button onClick={() => navigate('/admin/payroll/statutory/new')}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Statutory Setup
+          </Button>
+        }
       />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -118,13 +120,12 @@ export default function StatutorySetupList() {
                           <p className="font-medium">₹{setup.wageCeiling.toLocaleString()}</p>
                         </div>
                       )}
-                      {setup.adminChargesPct !== undefined &&
-                        setup.adminChargesPct !== null && (
-                          <div>
-                            <span className="text-muted-foreground">Admin Charges:</span>
-                            <p className="font-medium">{setup.adminChargesPct}%</p>
-                          </div>
-                        )}
+                      {setup.adminChargesPct !== undefined && setup.adminChargesPct !== null && (
+                        <div>
+                          <span className="text-muted-foreground">Admin Charges:</span>
+                          <p className="font-medium">{setup.adminChargesPct}%</p>
+                        </div>
+                      )}
                     </div>
                     <div className="text-sm text-muted-foreground">
                       Effective from: <DateDisplay date={setup.effectiveFrom} />
@@ -208,7 +209,9 @@ export default function StatutorySetupList() {
                     <TableCell>
                       {setup.wageCeiling != null ? `₹${setup.wageCeiling.toLocaleString()}` : '-'}
                     </TableCell>
-                    <TableCell><DateDisplay date={setup.effectiveFrom} /></TableCell>
+                    <TableCell>
+                      <DateDisplay date={setup.effectiveFrom} />
+                    </TableCell>
                     <TableCell>
                       <Badge variant={setup.isApplicable ? 'default' : 'secondary'}>
                         {setup.isApplicable ? 'Active' : 'Inactive'}

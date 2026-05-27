@@ -54,18 +54,9 @@ import {
   useUpdateTemplate,
   useUpdateTemplateItem,
 } from '@/hooks/lending/useChecklist';
+import { useLendingMasterRows } from '@/hooks/lending/useLendingMasters';
 import { useToast } from '@/hooks/use-toast';
-import type { ChecklistItemCategory, ChecklistTemplateItem } from '@/services/lending/checklistApi';
-
-const CATEGORIES: ChecklistItemCategory[] = [
-  'DOCUMENT',
-  'KYC',
-  'COMPLIANCE',
-  'COVENANT',
-  'LEGAL',
-  'INSURANCE',
-  'OTHER',
-];
+import type { ChecklistTemplateItem } from '@/services/lending/checklistApi';
 
 const templateSchema = z.object({
   code: z.string().trim().min(1, 'Code is required').max(64),
@@ -87,10 +78,11 @@ interface ItemDraft {
   id?: string;
   /** Stable client key — keeps React rows identified during reorder. */
   key: string;
+  catalogItemId: string;
   code: string;
   label: string;
   description: string;
-  category: ChecklistItemCategory;
+  category: string;
   isMandatory: boolean;
   sortOrder: number;
   defaultDueOffsetDays: number | null;
@@ -103,6 +95,7 @@ function fromServerItem(item: ChecklistTemplateItem): ItemDraft {
   return {
     id: item.id,
     key: item.id,
+    catalogItemId: item.catalogItemId,
     code: item.code,
     label: item.label,
     description: item.description ?? '',
@@ -119,6 +112,7 @@ function fromServerItem(item: ChecklistTemplateItem): ItemDraft {
 function blankDraft(sortOrder: number): ItemDraft {
   return {
     key: crypto.randomUUID(),
+    catalogItemId: '',
     code: '',
     label: '',
     description: '',
@@ -139,6 +133,8 @@ export default function TemplateForm(): JSX.Element {
   const isEdit = Boolean(id);
 
   const templateQuery = useChecklistTemplate(id);
+  const catalogQuery = useLendingMasterRows('checklist-catalog', { pageSize: 500 });
+  const catalogItems = catalogQuery.data?.items ?? [];
 
   const form = useForm<TemplateFormInput, unknown, TemplateFormValues>({
     resolver: zodResolver(templateSchema),
@@ -152,6 +148,18 @@ export default function TemplateForm(): JSX.Element {
   });
 
   const [items, setItems] = useState<ItemDraft[]>([]);
+
+  function applyCatalogFields(catalogItemId: string): Partial<ItemDraft> {
+    const row = catalogItems.find((item) => item.id === catalogItemId);
+    const data = row?.data ?? {};
+    return {
+      catalogItemId,
+      code: String(data.code ?? ''),
+      label: String(data.label ?? ''),
+      description: String(data.description ?? ''),
+      category: String(data.category ?? 'DOCUMENT'),
+    };
+  }
 
   // Seed form + items from server on edit
   useEffect(() => {
@@ -247,6 +255,15 @@ export default function TemplateForm(): JSX.Element {
     const toUpdate = items.filter((i) => i.id && !i._deleted && i._dirty);
     const toCreate = items.filter((i) => !i.id && !i._deleted);
 
+    if ([...toUpdate, ...toCreate].some((row) => !row.catalogItemId)) {
+      toast({
+        title: 'Select catalog items',
+        description: 'Every checklist row must come from the Checklist Item Catalog.',
+        variant: 'destructive',
+      });
+      throw new Error('Missing checklist catalog item');
+    }
+
     for (const row of toDelete) {
       if (!row.id) continue;
       await deleteItemMut.mutateAsync({ templateId, itemId: row.id });
@@ -257,10 +274,7 @@ export default function TemplateForm(): JSX.Element {
         templateId,
         itemId: row.id,
         payload: {
-          code: row.code,
-          label: row.label,
-          description: row.description || null,
-          category: row.category,
+          catalogItemId: row.catalogItemId,
           isMandatory: row.isMandatory,
           sortOrder: row.sortOrder,
           defaultDueOffsetDays: row.defaultDueOffsetDays,
@@ -272,10 +286,7 @@ export default function TemplateForm(): JSX.Element {
       await addItemMut.mutateAsync({
         templateId,
         payload: {
-          code: row.code,
-          label: row.label,
-          description: row.description || null,
-          category: row.category,
+          catalogItemId: row.catalogItemId,
           isMandatory: row.isMandatory,
           sortOrder: row.sortOrder,
           defaultDueOffsetDays: row.defaultDueOffsetDays,
@@ -306,7 +317,7 @@ export default function TemplateForm(): JSX.Element {
       toast({
         title: isEdit ? 'Template updated' : 'Template created',
       });
-      navigate('/admin/lending/checklist/templates');
+      navigate('/admin/lending/masters/approval-checklist-templates');
     } catch {
       // showErrorToast already fired from the hook's onError.
     }
@@ -321,11 +332,33 @@ export default function TemplateForm(): JSX.Element {
           title="Edit Template"
           breadcrumbs={[
             { label: 'Lending', to: '/admin/lending' },
-            { label: 'Approval Checklists', to: '/admin/lending/checklist/templates' },
+            {
+              label: 'Approval Checklists',
+              to: '/admin/lending/masters/approval-checklist-templates',
+            },
             { label: 'Edit' },
           ]}
         />
         <ErrorState error={templateQuery.error} onRetry={templateQuery.refetch} />
+      </div>
+    );
+  }
+
+  if (catalogQuery.isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title={isEdit ? 'Edit Template' : 'New Template'}
+          breadcrumbs={[
+            { label: 'Lending', to: '/admin/lending' },
+            {
+              label: 'Approval Checklists',
+              to: '/admin/lending/masters/approval-checklist-templates',
+            },
+            { label: isEdit ? 'Edit' : 'New' },
+          ]}
+        />
+        <ErrorState error={catalogQuery.error} onRetry={catalogQuery.refetch} />
       </div>
     );
   }
@@ -341,7 +374,10 @@ export default function TemplateForm(): JSX.Element {
         }
         breadcrumbs={[
           { label: 'Lending', to: '/admin/lending' },
-          { label: 'Approval Checklists', to: '/admin/lending/checklist/templates' },
+          {
+            label: 'Approval Checklists',
+            to: '/admin/lending/masters/approval-checklist-templates',
+          },
           { label: isEdit ? 'Edit' : 'New' },
         ]}
       />
@@ -354,7 +390,7 @@ export default function TemplateForm(): JSX.Element {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => navigate('/admin/lending/checklist/templates')}
+                  onClick={() => navigate('/admin/lending/masters/approval-checklist-templates')}
                 >
                   Cancel
                 </Button>
@@ -459,9 +495,9 @@ export default function TemplateForm(): JSX.Element {
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[60px]">Sort</TableHead>
+                        <TableHead className="w-[280px]">Catalog Item</TableHead>
                         <TableHead className="w-[140px]">Category</TableHead>
-                        <TableHead className="w-[140px]">Code</TableHead>
-                        <TableHead>Label / Description</TableHead>
+                        <TableHead>Definition</TableHead>
                         <TableHead className="w-[100px] text-center">Mandatory</TableHead>
                         <TableHead className="w-[120px] text-center">Evidence</TableHead>
                         <TableHead className="w-[120px] text-right">Due Offset (days)</TableHead>
@@ -509,52 +545,36 @@ export default function TemplateForm(): JSX.Element {
                             </TableCell>
                             <TableCell>
                               <Select
-                                value={row.category}
-                                onValueChange={(v) =>
-                                  updateItem(idx, {
-                                    category: v as ChecklistItemCategory,
-                                  })
-                                }
+                                value={row.catalogItemId}
+                                onValueChange={(v) => updateItem(idx, applyCatalogFields(v))}
                               >
                                 <SelectTrigger>
-                                  <SelectValue />
+                                  <SelectValue placeholder="Select catalog item" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {CATEGORIES.map((c) => (
-                                    <SelectItem key={c} value={c}>
-                                      {c}
+                                  {catalogItems.map((item) => (
+                                    <SelectItem key={item.id} value={item.id}>
+                                      {String(item.data.label ?? item.data.code ?? item.id)}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
                               </Select>
                             </TableCell>
                             <TableCell>
-                              <Input
-                                value={row.code}
-                                onChange={(e) => updateItem(idx, { code: e.target.value })}
-                                placeholder="ITEM_CODE"
-                                aria-label="Item code"
-                              />
+                              <span className="rounded bg-muted px-2 py-1 text-xs font-medium">
+                                {row.category || '-'}
+                              </span>
                             </TableCell>
                             <TableCell>
                               <div className="space-y-2">
-                                <Input
-                                  value={row.label}
-                                  onChange={(e) => updateItem(idx, { label: e.target.value })}
-                                  placeholder="Label"
-                                  aria-label="Item label"
-                                />
-                                <Textarea
-                                  value={row.description}
-                                  onChange={(e) =>
-                                    updateItem(idx, {
-                                      description: e.target.value,
-                                    })
-                                  }
-                                  placeholder="Description (optional)"
-                                  rows={1}
-                                  aria-label="Item description"
-                                />
+                                <div className="font-medium">{row.label || 'Select an item'}</div>
+                                <div className="font-mono text-xs text-muted-foreground">
+                                  {row.code || '-'}
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                  {row.description ||
+                                    'Definition is maintained in Checklist Item Catalog.'}
+                                </p>
                               </div>
                             </TableCell>
                             <TableCell className="text-center">

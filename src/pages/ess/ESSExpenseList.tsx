@@ -24,15 +24,6 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { essReimbursementApi } from '@/services/essApi';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 interface ExpenseClaim {
   id: string;
   claim_number: string;
@@ -95,13 +86,18 @@ export default function ESSExpenseList() {
     };
   }, [toast]);
 
-  const filteredExpenses = useMemo(() => expenses.filter((exp) => {
-    const matchesSearch = exp.claim_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      exp.description.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === '__all__' || exp.status === statusFilter;
-    const matchesCategory = categoryFilter === '__all__' || exp.category === categoryFilter;
-    return matchesSearch && matchesStatus && matchesCategory;
-  }), [categoryFilter, expenses, searchTerm, statusFilter]);
+  const filteredExpenses = useMemo(
+    () =>
+      expenses.filter((exp) => {
+        const matchesSearch =
+          exp.claim_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          exp.description.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === '__all__' || exp.status === statusFilter;
+        const matchesCategory = categoryFilter === '__all__' || exp.category === categoryFilter;
+        return matchesSearch && matchesStatus && matchesCategory;
+      }),
+    [categoryFilter, expenses, searchTerm, statusFilter],
+  );
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -109,13 +105,25 @@ export default function ESSExpenseList() {
         return <Badge variant="outline">Draft</Badge>;
       case 'SUBMITTED':
       case 'PENDING_APPROVAL':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
+        return (
+          <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+            Pending
+          </Badge>
+        );
       case 'APPROVED':
-        return <Badge variant="default" className="bg-blue-500">Approved</Badge>;
+        return (
+          <Badge variant="default" className="bg-blue-500">
+            Approved
+          </Badge>
+        );
       case 'REJECTED':
         return <Badge variant="destructive">Rejected</Badge>;
       case 'PAID':
-        return <Badge variant="default" className="bg-green-500">Paid</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-500">
+            Paid
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -136,7 +144,7 @@ export default function ESSExpenseList() {
         actions={
           <Button asChild>
             <Link to="/ess/expenses/new">
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               New Expense
             </Link>
           </Button>
@@ -144,15 +152,17 @@ export default function ESSExpenseList() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-yellow-100 rounded-lg">
+              <div className="rounded-lg bg-yellow-100 p-3">
                 <IndianRupee className="h-6 w-6 text-yellow-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{formatCurrency(totalPending)}</div>
+                <div className="text-2xl font-bold">
+                  {formatIndianCompactCurrency(totalPending)}
+                </div>
                 <div className="text-sm text-muted-foreground">Pending Approval</div>
               </div>
             </div>
@@ -161,11 +171,13 @@ export default function ESSExpenseList() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-green-100 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-3">
                 <IndianRupee className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{formatCurrency(totalApproved)}</div>
+                <div className="text-2xl font-bold">
+                  {formatIndianCompactCurrency(totalApproved)}
+                </div>
                 <div className="text-sm text-muted-foreground">Approved / Paid</div>
               </div>
             </div>
@@ -174,7 +186,7 @@ export default function ESSExpenseList() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-3">
                 <Receipt className="h-6 w-6 text-blue-600" />
               </div>
               <div>
@@ -187,11 +199,13 @@ export default function ESSExpenseList() {
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-4">
-              <div className="p-3 bg-gray-100 rounded-lg">
+              <div className="rounded-lg bg-gray-100 p-3">
                 <Receipt className="h-6 w-6 text-gray-600" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{expenses.filter((expense) => expense.status === 'DRAFT').length}</div>
+                <div className="text-2xl font-bold">
+                  {expenses.filter((expense) => expense.status === 'DRAFT').length}
+                </div>
                 <div className="text-sm text-muted-foreground">Drafts</div>
               </div>
             </div>
@@ -203,8 +217,8 @@ export default function ESSExpenseList() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap gap-4">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-muted-foreground" />
               <Input
                 placeholder="Search expenses..."
                 value={searchTerm}
@@ -271,27 +285,29 @@ export default function ESSExpenseList() {
                     No expense claims found.
                   </TableCell>
                 </TableRow>
-              ) : filteredExpenses.map((expense) => (
-                <TableRow key={expense.id}>
-                  <TableCell className="font-medium">{expense.claim_number}</TableCell>
-                  <TableCell>{expense.claim_date}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{expense.category || 'Uncategorized'}</Badge>
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">{expense.description}</TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(expense.claimed_amount)}
-                  </TableCell>
-                  <TableCell>{getStatusBadge(expense.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link to={`/ess/expenses/${expense.id}`}>
-                        <Eye className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              ) : (
+                filteredExpenses.map((expense) => (
+                  <TableRow key={expense.id}>
+                    <TableCell className="font-medium">{expense.claim_number}</TableCell>
+                    <TableCell>{expense.claim_date}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{expense.category || 'Uncategorized'}</Badge>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">{expense.description}</TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatIndianCompactCurrency(expense.claimed_amount)}
+                    </TableCell>
+                    <TableCell>{getStatusBadge(expense.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link to={`/ess/expenses/${expense.id}`}>
+                          <Eye className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
         </CardContent>

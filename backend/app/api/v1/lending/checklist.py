@@ -1,10 +1,8 @@
 """Approval-checklist endpoints.
 
-Mounted under ``/api/v1/lending/checklist``. Two groups of routes:
-
-* Template master (``/templates`` + ``/templates/{id}/items``).
-* Per-loan (``/applications/{application_id}/checklist`` and its item
-  lifecycle endpoints).
+Mounted under ``/api/v1/lending/checklist``. This router is intentionally
+transactional only: per-loan checklist application and item lifecycle.
+Checklist template master CRUD lives under ``/api/v1/lending/masters``.
 
 All routes use ``get_db_with_tenant`` (RLS — CLAUDE.md §3.4), wire is
 camelCase (``response_model_by_alias=True``), and every mutating
@@ -15,22 +13,14 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, Query, status
+from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.core.exceptions import BadRequestException
 from app.models.auth.user import User
-from app.schemas.base import MessageResponse
 from app.schemas.lending.approval_checklist import (
     ApplyTemplateRequest,
-    ChecklistTemplateCreate,
-    ChecklistTemplateItemCreate,
-    ChecklistTemplateItemResponse,
-    ChecklistTemplateItemUpdate,
-    ChecklistTemplateListResponse,
-    ChecklistTemplateResponse,
-    ChecklistTemplateUpdate,
     LoanChecklistItemResponse,
     LoanChecklistItemUpdate,
     LoanChecklistResponse,
@@ -39,7 +29,6 @@ from app.schemas.lending.approval_checklist import (
     WaiveRequest,
 )
 from app.services.lending.checklist import (
-    ChecklistTemplateService,
     LoanChecklistService,
 )
 
@@ -61,203 +50,6 @@ def _require_org(user: User) -> UUID:
             error_code="MISSING_ORG_CONTEXT",
         )
     return user.organization_id
-
-
-# =============================================================================
-# Template master
-# =============================================================================
-
-
-@router.get(
-    "/templates",
-    response_model=ChecklistTemplateListResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
-)
-async def list_templates(
-    applies_to: str | None = Query(None),
-    include_inactive: bool = Query(False),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateListResponse:
-    org_id = _require_org(current_user)
-    service = ChecklistTemplateService(db)
-    rows = await service.list_templates(
-        organization_id=org_id,
-        applies_to=applies_to,
-        include_inactive=include_inactive,
-    )
-    return ChecklistTemplateListResponse(
-        items=[ChecklistTemplateResponse.model_validate(r) for r in rows],
-    )
-
-
-@router.get(
-    "/templates/{template_id}",
-    response_model=ChecklistTemplateResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
-)
-async def get_template(
-    template_id: UUID,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateResponse:
-    org_id = _require_org(current_user)
-    service = ChecklistTemplateService(db)
-    template = await service.get_template_with_items(org_id, template_id)
-    return ChecklistTemplateResponse.model_validate(template)
-
-
-@router.post(
-    "/templates",
-    response_model=ChecklistTemplateResponse,
-    response_model_by_alias=True,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def create_template(
-    data: ChecklistTemplateCreate,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateResponse:
-    _require_idempotency_key(idempotency_key)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        template = await service.create_template(data, current_user)
-    await db.refresh(template, attribute_names=["items"])
-    return ChecklistTemplateResponse.model_validate(template)
-
-
-@router.put(
-    "/templates/{template_id}",
-    response_model=ChecklistTemplateResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def update_template(
-    template_id: UUID,
-    data: ChecklistTemplateUpdate,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        template = await service.update_template(org_id, template_id, data, current_user)
-    await db.refresh(template, attribute_names=["items"])
-    return ChecklistTemplateResponse.model_validate(template)
-
-
-@router.delete(
-    "/templates/{template_id}",
-    response_model=MessageResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def delete_template(
-    template_id: UUID,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> MessageResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        await service.delete_template(org_id, template_id, current_user)
-    return MessageResponse(message="Template deleted")
-
-
-@router.post(
-    "/templates/{template_id}/items",
-    response_model=ChecklistTemplateItemResponse,
-    response_model_by_alias=True,
-    status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def add_template_item(
-    template_id: UUID,
-    data: ChecklistTemplateItemCreate,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateItemResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        item = await service.add_item(org_id, template_id, data, current_user)
-    await db.refresh(item)
-    return ChecklistTemplateItemResponse.model_validate(item)
-
-
-@router.put(
-    "/templates/{template_id}/items/{item_id}",
-    response_model=ChecklistTemplateItemResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def update_template_item(
-    template_id: UUID,
-    item_id: UUID,
-    data: ChecklistTemplateItemUpdate,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateItemResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        item = await service.update_item(org_id, template_id, item_id, data, current_user)
-    await db.refresh(item)
-    return ChecklistTemplateItemResponse.model_validate(item)
-
-
-@router.delete(
-    "/templates/{template_id}/items/{item_id}",
-    response_model=MessageResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def delete_template_item(
-    template_id: UUID,
-    item_id: UUID,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> MessageResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        await service.delete_item(org_id, template_id, item_id, current_user)
-    return MessageResponse(message="Template item deleted")
-
-
-@router.post(
-    "/templates/{template_id}/set-default",
-    response_model=ChecklistTemplateResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def set_default_template(
-    template_id: UUID,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> ChecklistTemplateResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = ChecklistTemplateService(db)
-        template = await service.set_default_template(org_id, template_id, current_user)
-    await db.refresh(template, attribute_names=["items"])
-    return ChecklistTemplateResponse.model_validate(template)
 
 
 # =============================================================================

@@ -45,7 +45,7 @@ import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
 import { paymentsApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface PaymentDetail {
   id: string;
   payment_number: string;
@@ -200,15 +200,6 @@ export function PaymentView() {
       showErrorToast(error, toast);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-  };
-
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       DRAFT: 'bg-gray-100 text-gray-800',
@@ -469,13 +460,13 @@ export function PaymentView() {
                             {format(new Date(alloc.document_date), 'dd MMM yyyy')}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(alloc.document_amount)}
+                            {formatIndianCompactCurrency(alloc.document_amount)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(alloc.outstanding_before)}
+                            {formatIndianCompactCurrency(alloc.outstanding_before)}
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {formatCurrency(alloc.allocated_amount)}
+                            {formatIndianCompactCurrency(alloc.allocated_amount)}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -484,7 +475,7 @@ export function PaymentView() {
                           Total Allocated
                         </TableCell>
                         <TableCell className="text-right font-semibold">
-                          {formatCurrency(payment.allocated_amount)}
+                          {formatIndianCompactCurrency(payment.allocated_amount)}
                         </TableCell>
                       </TableRow>
                     </TableBody>
@@ -516,7 +507,7 @@ export function PaymentView() {
             <CardContent className="space-y-4">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Gross Amount</span>
-                <span className="font-medium">{formatCurrency(payment.amount)}</span>
+                <span className="font-medium">{formatIndianCompactCurrency(payment.amount)}</span>
               </div>
               {payment.tds_amount > 0 && (
                 <div className="flex justify-between">
@@ -524,7 +515,7 @@ export function PaymentView() {
                     TDS ({payment.tds_section_code} @ {payment.tds_rate}%)
                   </span>
                   <span className="font-medium text-red-600">
-                    -{formatCurrency(payment.tds_amount)}
+                    -{formatIndianCompactCurrency(payment.tds_amount)}
                   </span>
                 </div>
               )}
@@ -532,7 +523,7 @@ export function PaymentView() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Discount</span>
                   <span className="font-medium text-red-600">
-                    -{formatCurrency(payment.discount_amount)}
+                    -{formatIndianCompactCurrency(payment.discount_amount)}
                   </span>
                 </div>
               )}
@@ -540,14 +531,14 @@ export function PaymentView() {
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Write Off</span>
                   <span className="font-medium text-red-600">
-                    -{formatCurrency(payment.write_off_amount)}
+                    -{formatIndianCompactCurrency(payment.write_off_amount)}
                   </span>
                 </div>
               )}
               <Separator />
               <div className="flex justify-between text-lg font-semibold">
                 <span>Net {payment.party_type === 'VENDOR' ? 'Payment' : 'Receipt'}</span>
-                <span>{formatCurrency(payment.net_amount)}</span>
+                <span>{formatIndianCompactCurrency(payment.net_amount)}</span>
               </div>
 
               {payment.allocations && payment.allocations.length > 0 && (
@@ -555,12 +546,14 @@ export function PaymentView() {
                   <Separator />
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Allocated</span>
-                    <span className="font-medium">{formatCurrency(payment.allocated_amount)}</span>
+                    <span className="font-medium">
+                      {formatIndianCompactCurrency(payment.allocated_amount)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Unallocated</span>
                     <span className="font-medium">
-                      {formatCurrency(payment.unallocated_amount)}
+                      {formatIndianCompactCurrency(payment.unallocated_amount)}
                     </span>
                   </div>
                 </>

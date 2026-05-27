@@ -92,7 +92,7 @@ export default function TemplateList(): JSX.Element {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/admin/lending/checklist/templates/${row.id}`);
+              navigate(`/admin/lending/masters/approval-checklist-templates/${row.id}`);
             }}
             aria-label="View template"
           >
@@ -103,7 +103,7 @@ export default function TemplateList(): JSX.Element {
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
-              navigate(`/admin/lending/checklist/templates/${row.id}`);
+              navigate(`/admin/lending/masters/approval-checklist-templates/${row.id}`);
             }}
             aria-label="Edit template"
           >
@@ -149,7 +149,9 @@ export default function TemplateList(): JSX.Element {
         subtitle="Reusable checklists applied to loan applications before sanction approval."
         breadcrumbs={[{ label: 'Lending', to: '/admin/lending' }, { label: 'Approval Checklists' }]}
         actions={
-          <Button onClick={() => navigate('/admin/lending/checklist/templates/new')}>
+          <Button
+            onClick={() => navigate('/admin/lending/masters/approval-checklist-templates/new')}
+          >
             <Plus className="mr-2 h-4 w-4" />
             New Template
           </Button>
@@ -166,7 +168,9 @@ export default function TemplateList(): JSX.Element {
         emptyTitle="No checklist templates"
         emptySubtitle="Create a template to start gating sanctions on a fixed list of approvals."
         emptyAction={
-          <Button onClick={() => navigate('/admin/lending/checklist/templates/new')}>
+          <Button
+            onClick={() => navigate('/admin/lending/masters/approval-checklist-templates/new')}
+          >
             <Plus className="mr-2 h-4 w-4" />
             New Template
           </Button>

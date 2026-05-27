@@ -28,7 +28,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { vendorDashboardApi } from '@/services/vendorApi';
 import type { VendorDashboardSummary, PendingAction, VendorNotification } from '@/types/vendor';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function VendorDashboard() {
   const [loading, setLoading] = useState(true);
   const [summary, setSummary] = useState<VendorDashboardSummary | null>(null);
@@ -56,16 +56,6 @@ export default function VendorDashboard() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number | undefined) => {
-    if (amount === undefined || amount === null) return '-';
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const getPriorityBadge = (priority: string) => {
     const colors: Record<string, string> = {
       critical: 'bg-red-100 text-red-800',
@@ -154,7 +144,7 @@ export default function VendorDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(summary?.payments?.total_outstanding)}
+              {formatIndianCompactCurrency(summary?.payments?.total_outstanding ?? 0)}
             </div>
             <p className="mt-1 text-xs text-gray-500">Total receivable</p>
             <Link to="/vendor/payments">
@@ -285,7 +275,10 @@ export default function VendorDashboard() {
                           {notification.category}
                         </Badge>
                       </div>
-                      <DateDisplay date={notification.created_at} className="mt-2 text-xs text-gray-400" />
+                      <DateDisplay
+                        date={notification.created_at}
+                        className="mt-2 text-xs text-gray-400"
+                      />
                     </div>
                   ))}
                 </div>

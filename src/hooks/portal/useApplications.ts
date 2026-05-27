@@ -21,10 +21,13 @@ import {
   type PaginatedPortalApplications,
   type PortalApplicationDetail,
   type PortalApplicationDocument,
+  type PortalApplicationQueryListResponse,
+  type PortalApplicationQuery,
   type PortalProduct,
   type PortalApplicationStatus,
   type PortalSchemeApplicationStatus,
   type PortalUtilizationCategory,
+  type RespondToPortalApplicationQueryRequest,
   type UpdatePortalApplicationRequest,
 } from '@/services/portalApi';
 
@@ -42,6 +45,9 @@ export const portalApplicationQueryKey = (id: string) => ['portal', 'application
 
 export const portalApplicationDocsQueryKey = (id: string) =>
   ['portal', 'application', id, 'documents'] as const;
+
+export const portalApplicationQueriesQueryKey = (id: string) =>
+  ['portal', 'application', id, 'queries'] as const;
 
 export function usePortalApplications(filters?: PortalApplicationsFilters) {
   return useQuery<PaginatedPortalApplications>({
@@ -143,51 +149,6 @@ export function useWithdrawPortalApplication() {
   });
 }
 
-function buildReviewMutation(
-  handler: (
-    id: string,
-    payload?: { remarks?: string | null } | { reason: string },
-  ) => Promise<{ data: PortalApplicationDetail }>,
-) {
-  return function usePortalReviewMutation() {
-    const queryClient = useQueryClient();
-    return useMutation<
-      PortalApplicationDetail,
-      unknown,
-      { id: string; remarks?: string | null; reason?: string }
-    >({
-      mutationFn: async ({ id, remarks, reason }) => {
-        const res = await handler(id, reason != null ? { reason } : { remarks: remarks ?? null });
-        return res.data;
-      },
-      onSuccess: (data) => {
-        queryClient.invalidateQueries({ queryKey: ['portal', 'applications'] });
-        queryClient.setQueryData(portalApplicationQueryKey(data.id), data);
-      },
-    });
-  };
-}
-
-export const useLenderValidatePortalApplication = buildReviewMutation((id, payload) =>
-  portalApplicationsApi.lenderValidate(id, payload as { remarks?: string | null }),
-);
-
-export const useStartPortalApplicationAppraisal = buildReviewMutation((id, payload) =>
-  portalApplicationsApi.startAppraisal(id, payload as { remarks?: string | null }),
-);
-
-export const useRaisePortalApplicationQuery = buildReviewMutation((id, payload) =>
-  portalApplicationsApi.raiseQuery(id, payload as { reason: string }),
-);
-
-export const useApprovePortalApplication = buildReviewMutation((id, payload) =>
-  portalApplicationsApi.approve(id, payload as { remarks?: string | null }),
-);
-
-export const useRejectPortalApplication = buildReviewMutation((id, payload) =>
-  portalApplicationsApi.reject(id, payload as { reason: string }),
-);
-
 export interface UploadApplicationDocumentBody {
   applicationId: string;
   file: File;
@@ -225,6 +186,46 @@ export function usePortalApplicationDocuments(id: string | undefined) {
     enabled: Boolean(id),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
+  });
+}
+
+export function usePortalApplicationQueries(id: string | undefined) {
+  return useQuery<PortalApplicationQueryListResponse>({
+    queryKey: portalApplicationQueriesQueryKey(id ?? ''),
+    queryFn: async () => {
+      const res = await portalApplicationsApi.listQueries(id as string);
+      return res.data;
+    },
+    enabled: Boolean(id),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useRespondPortalApplicationQuery(applicationId: string | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation<
+    PortalApplicationQuery,
+    unknown,
+    { queryId: string; payload: RespondToPortalApplicationQueryRequest }
+  >({
+    mutationFn: async ({ queryId, payload }) => {
+      const res = await portalApplicationsApi.respondToQuery(
+        applicationId as string,
+        queryId,
+        payload,
+      );
+      return res.data;
+    },
+    onSuccess: () => {
+      if (!applicationId) return;
+      queryClient.invalidateQueries({
+        queryKey: portalApplicationQueriesQueryKey(applicationId),
+      });
+      queryClient.invalidateQueries({
+        queryKey: portalApplicationQueryKey(applicationId),
+      });
+    },
   });
 }
 

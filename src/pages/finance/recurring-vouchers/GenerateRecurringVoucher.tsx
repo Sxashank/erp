@@ -13,7 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
 import { recurringVouchersApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface RecurringVoucherDetail {
   id: string;
   template_name: string;
@@ -59,25 +59,28 @@ export function GenerateRecurringVoucher() {
 
   const [voucherDate, setVoucherDate] = useState(new Date().toISOString().split('T')[0]);
 
-  const fetchRecurringVoucher = useCallback(async (rvId: string) => {
-    try {
-      setLoading(true);
-      const response = await recurringVouchersApi.get(rvId);
-      setRecurringVoucher(response.data);
-      if (response.data.next_run_date) {
-        setVoucherDate(response.data.next_run_date);
+  const fetchRecurringVoucher = useCallback(
+    async (rvId: string) => {
+      try {
+        setLoading(true);
+        const response = await recurringVouchersApi.get(rvId);
+        setRecurringVoucher(response.data);
+        if (response.data.next_run_date) {
+          setVoucherDate(response.data.next_run_date);
+        }
+      } catch (error) {
+        logger.error('Failed to fetch recurring voucher:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to load recurring voucher',
+          variant: 'destructive',
+        });
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      logger.error('Failed to fetch recurring voucher:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to load recurring voucher',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [toast]);
+    },
+    [toast],
+  );
 
   useEffect(() => {
     if (id) {
@@ -104,14 +107,6 @@ export function GenerateRecurringVoucher() {
       setSubmitting(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
@@ -170,7 +165,7 @@ export function GenerateRecurringVoucher() {
                   <div>
                     <span className="text-slate-500">Amount:</span>{' '}
                     <span className="font-mono font-medium">
-                      {formatCurrency(recurringVoucher.total_amount)}
+                      {formatIndianCompactCurrency(recurringVoucher.total_amount)}
                     </span>
                   </div>
                   <div>
@@ -206,10 +201,14 @@ export function GenerateRecurringVoucher() {
                             {line.account_name}
                           </td>
                           <td className="p-3 text-right font-mono">
-                            {line.debit_amount > 0 ? formatCurrency(line.debit_amount) : '-'}
+                            {line.debit_amount > 0
+                              ? formatIndianCompactCurrency(line.debit_amount)
+                              : '-'}
                           </td>
                           <td className="p-3 text-right font-mono">
-                            {line.credit_amount > 0 ? formatCurrency(line.credit_amount) : '-'}
+                            {line.credit_amount > 0
+                              ? formatIndianCompactCurrency(line.credit_amount)
+                              : '-'}
                           </td>
                         </tr>
                       ))}
@@ -218,10 +217,10 @@ export function GenerateRecurringVoucher() {
                       <tr className="border-t">
                         <td className="p-3">Total</td>
                         <td className="p-3 text-right font-mono">
-                          {formatCurrency(recurringVoucher.total_amount)}
+                          {formatIndianCompactCurrency(recurringVoucher.total_amount)}
                         </td>
                         <td className="p-3 text-right font-mono">
-                          {formatCurrency(recurringVoucher.total_amount)}
+                          {formatIndianCompactCurrency(recurringVoucher.total_amount)}
                         </td>
                       </tr>
                     </tfoot>
@@ -260,7 +259,7 @@ export function GenerateRecurringVoucher() {
                 <div className="mb-2 flex justify-between text-sm">
                   <span className="text-slate-500">Voucher Amount:</span>
                   <span className="font-mono font-bold">
-                    {formatCurrency(recurringVoucher.total_amount)}
+                    {formatIndianCompactCurrency(recurringVoucher.total_amount)}
                   </span>
                 </div>
               </div>

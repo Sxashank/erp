@@ -4,16 +4,17 @@ from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import (
     Permissions,
     ApprovalWorkflowType,
     ApprovalRequestStatus,
 )
+from app.core.exceptions import BadRequestException
 from app.core.permissions import PermissionChecker
 from app.schemas.approval.approval import (
     ApprovalWorkflowCreate,
@@ -24,11 +25,8 @@ from app.schemas.approval.approval import (
     ApprovalRequestListResponse,
     ApprovalRequestActionCreate,
     ApprovalRequestActionResponse,
-    ApprovalRequestFilter,
-    PendingApprovalResponse,
-    ApprovalDashboardResponse,
 )
-from app.schemas.base import PaginatedResponse, MessageResponse
+from app.schemas.base import MessageResponse
 from app.services.approval.approval_service import ApprovalService
 
 router = APIRouter()
@@ -37,6 +35,7 @@ router = APIRouter()
 # ============================================
 # Helper Functions
 # ============================================
+
 
 def _workflow_to_response(workflow) -> ApprovalWorkflowResponse:
     """Convert workflow model to response schema."""
@@ -180,9 +179,9 @@ def _check_can_approve(request, user_id: UUID, user_role_ids: List[UUID]) -> boo
 def _get_user_role_ids(user: User) -> List[UUID]:
     """Extract role IDs from user object."""
     role_ids = []
-    if hasattr(user, 'user_roles') and user.user_roles:
+    if hasattr(user, "user_roles") and user.user_roles:
         for user_role in user.user_roles:
-            if hasattr(user_role, 'role_id'):
+            if hasattr(user_role, "role_id"):
                 role_ids.append(user_role.role_id)
     return role_ids
 
@@ -191,7 +190,13 @@ def _get_user_role_ids(user: User) -> List[UUID]:
 # Workflow Configuration Endpoints
 # ============================================
 
-@router.post("/workflows", response_model=ApprovalWorkflowResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+
+@router.post(
+    "/workflows",
+    response_model=ApprovalWorkflowResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_workflow(
     request: Request,
     data: ApprovalWorkflowCreate,
@@ -209,7 +214,6 @@ async def create_workflow(
 @router.get("/workflows", response_model=dict, response_model_by_alias=True)
 async def list_workflows(
     request: Request,
-    organization_id: UUID,
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=500),
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -217,6 +221,9 @@ async def list_workflows(
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_VIEW])),
 ):
     """List approval workflows for an organization."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException("Current user is not mapped to an organization")
     service = ApprovalService(db)
     workflows, total = await service.list_workflows(organization_id, skip=skip, limit=limit)
 
@@ -229,7 +236,11 @@ async def list_workflows(
     }
 
 
-@router.get("/workflows/{workflow_id}", response_model=ApprovalWorkflowResponse, response_model_by_alias=True)
+@router.get(
+    "/workflows/{workflow_id}",
+    response_model=ApprovalWorkflowResponse,
+    response_model_by_alias=True,
+)
 async def get_workflow(
     request: Request,
     workflow_id: UUID,
@@ -243,16 +254,22 @@ async def get_workflow(
     return _workflow_to_response(workflow)
 
 
-@router.get("/workflows/by-type/{workflow_type}", response_model=Optional[ApprovalWorkflowResponse], response_model_by_alias=True)
+@router.get(
+    "/workflows/by-type/{workflow_type}",
+    response_model=Optional[ApprovalWorkflowResponse],
+    response_model_by_alias=True,
+)
 async def get_workflow_by_type(
     request: Request,
     workflow_type: ApprovalWorkflowType,
-    organization_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
     _: None = Depends(PermissionChecker([Permissions.APPROVAL_CONFIG_VIEW])),
 ):
     """Get workflow configuration for a specific type."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException("Current user is not mapped to an organization")
     service = ApprovalService(db)
     workflow = await service.get_workflow_by_type(organization_id, workflow_type)
     if not workflow:
@@ -260,7 +277,11 @@ async def get_workflow_by_type(
     return _workflow_to_response(workflow)
 
 
-@router.put("/workflows/{workflow_id}", response_model=ApprovalWorkflowResponse, response_model_by_alias=True)
+@router.put(
+    "/workflows/{workflow_id}",
+    response_model=ApprovalWorkflowResponse,
+    response_model_by_alias=True,
+)
 async def update_workflow(
     request: Request,
     workflow_id: UUID,
@@ -276,7 +297,9 @@ async def update_workflow(
     return _workflow_to_response(workflow)
 
 
-@router.delete("/workflows/{workflow_id}", response_model=MessageResponse, response_model_by_alias=True)
+@router.delete(
+    "/workflows/{workflow_id}", response_model=MessageResponse, response_model_by_alias=True
+)
 async def delete_workflow(
     request: Request,
     workflow_id: UUID,
@@ -294,6 +317,7 @@ async def delete_workflow(
 # ============================================
 # Approval Request Endpoints
 # ============================================
+
 
 @router.get("/requests", response_model=dict, response_model_by_alias=True)
 async def list_requests(
@@ -324,8 +348,6 @@ async def list_requests(
         skip=skip,
         limit=limit,
     )
-
-    user_role_ids = _get_user_role_ids(current_user)
 
     return {
         "items": [
@@ -378,10 +400,7 @@ async def list_pending_for_me(
     )
 
     return {
-        "items": [
-            _request_to_response(r, current_user.id, user_role_ids)
-            for r in requests
-        ],
+        "items": [_request_to_response(r, current_user.id, user_role_ids) for r in requests],
         "total": total,
         "page": (skip // limit) + 1 if limit > 0 else 1,
         "page_size": limit,
@@ -389,7 +408,9 @@ async def list_pending_for_me(
     }
 
 
-@router.get("/requests/{request_id}", response_model=ApprovalRequestResponse, response_model_by_alias=True)
+@router.get(
+    "/requests/{request_id}", response_model=ApprovalRequestResponse, response_model_by_alias=True
+)
 async def get_request(
     request: Request,
     request_id: UUID,
@@ -404,7 +425,11 @@ async def get_request(
     return _request_to_response(approval_request, current_user.id, user_role_ids)
 
 
-@router.get("/requests/by-number/{request_number}", response_model=ApprovalRequestResponse, response_model_by_alias=True)
+@router.get(
+    "/requests/by-number/{request_number}",
+    response_model=ApprovalRequestResponse,
+    response_model_by_alias=True,
+)
 async def get_request_by_number(
     request: Request,
     request_number: str,
@@ -419,7 +444,11 @@ async def get_request_by_number(
     return _request_to_response(approval_request, current_user.id, user_role_ids)
 
 
-@router.post("/requests/{request_id}/action", response_model=ApprovalRequestResponse, response_model_by_alias=True)
+@router.post(
+    "/requests/{request_id}/action",
+    response_model=ApprovalRequestResponse,
+    response_model_by_alias=True,
+)
 async def take_action(
     request: Request,
     request_id: UUID,
@@ -442,7 +471,11 @@ async def take_action(
     return _request_to_response(approval_request, current_user.id, user_role_ids)
 
 
-@router.post("/requests/{request_id}/cancel", response_model=ApprovalRequestResponse, response_model_by_alias=True)
+@router.post(
+    "/requests/{request_id}/cancel",
+    response_model=ApprovalRequestResponse,
+    response_model_by_alias=True,
+)
 async def cancel_request(
     request: Request,
     request_id: UUID,
@@ -466,6 +499,7 @@ async def cancel_request(
 # ============================================
 # Dashboard Endpoints
 # ============================================
+
 
 @router.get("/dashboard", response_model=dict, response_model_by_alias=True)
 async def get_dashboard(
@@ -492,6 +526,7 @@ async def get_dashboard(
 # Utility Endpoints
 # ============================================
 
+
 @router.get("/check/{workflow_type}", response_model=dict, response_model_by_alias=True)
 async def check_approval_required(
     request: Request,
@@ -503,6 +538,7 @@ async def check_approval_required(
 ):
     """Check if approval is required for a transaction."""
     from decimal import Decimal
+
     service = ApprovalService(db)
     result = await service.check_approval_required(
         organization_id=organization_id,

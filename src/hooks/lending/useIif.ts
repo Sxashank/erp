@@ -32,7 +32,7 @@ import {
   type ClaimCreatePayload,
   type ClaimInitiateReleasePayload,
   type ClaimListParams,
-  type ClaimMarkPaidPayload,
+  type ClaimMarkReleasedPayload,
   type EligibilityCheckResult,
   type EligibleLoan,
   type EnrollmentCreate,
@@ -70,6 +70,7 @@ export const iifKeys = {
   enrollment: (id: string) => ['lending', 'iif', 'enrollment', id] as const,
   claims: (params?: ClaimListParams) => ['lending', 'iif', 'claims', params ?? {}] as const,
   claim: (id: string) => ['lending', 'iif', 'claim', id] as const,
+  claimCertificate: (id: string) => ['lending', 'iif', 'claim-certificate', id] as const,
   eligibleLoans: (params?: { page?: number; pageSize?: number }) =>
     ['lending', 'iif', 'eligible-loans', params ?? {}] as const,
   claimReport: (id: string) => ['lending', 'iif', 'claim-report', id] as const,
@@ -527,12 +528,12 @@ export function useMarkClaimReleased(
   options?: UseMutationOptions<
     SubventionClaim,
     unknown,
-    { id: string; payload: ClaimMarkPaidPayload }
+    { id: string; payload: ClaimMarkReleasedPayload }
   >,
 ) {
   const qc = useQueryClient();
   const { toast } = useToast();
-  return useMutation<SubventionClaim, unknown, { id: string; payload: ClaimMarkPaidPayload }>({
+  return useMutation<SubventionClaim, unknown, { id: string; payload: ClaimMarkReleasedPayload }>({
     mutationFn: ({ id, payload }) => claimsApi.markReleased(id, payload),
     onError: (err) => showErrorToast(err, toast),
     ...options,
@@ -555,6 +556,22 @@ export function useCancelClaim(
     onSuccess: (data, vars, onMutateResult, ctx) => {
       invalidateClaims(qc, vars.id);
       options?.onSuccess?.(data, vars, onMutateResult, ctx);
+    },
+  });
+}
+
+export function useGenerateClaimCertificate(
+  options?: UseMutationOptions<unknown, unknown, string>,
+) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation<unknown, unknown, string>({
+    mutationFn: (id) => claimsApi.generateCertificate(id),
+    onError: (err) => showErrorToast(err, toast),
+    ...options,
+    onSuccess: (data, id, onMutateResult, ctx) => {
+      qc.invalidateQueries({ queryKey: iifKeys.claimCertificate(id) });
+      options?.onSuccess?.(data, id, onMutateResult, ctx);
     },
   });
 }

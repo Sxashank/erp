@@ -12,18 +12,20 @@ from __future__ import annotations
 
 import csv
 import io
+import os
 from datetime import date
 from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, Query, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.core.exceptions import BadRequestException
 from app.models.auth.user import User
 from app.schemas.base import CamelSchema
+from app.schemas.document_studio import GeneratedDocumentResponse
 from app.schemas.lending.iif import (
     ClaimReportResponse,
     EligibleClaimPeriodResponse,
@@ -33,13 +35,13 @@ from app.schemas.lending.iif import (
     SubventionClaimCreate,
     SubventionClaimInitiateReleaseRequest,
     SubventionClaimListResponse,
-    SubventionClaimMarkPaidRequest,
     SubventionClaimMarkReleasedRequest,
     SubventionClaimResponse,
     SubventionClaimSubmitRequest,
     SubventionClaimUpdate,
     SubventionClaimVerifyRequest,
 )
+from app.services.dms.document_service import DocumentService
 from app.services.lending.iif import SubventionClaimService
 from app.utils.simple_exports import build_text_pdf, build_xlsx
 
@@ -102,7 +104,7 @@ class EligibleLoansResponse(CamelSchema):
 )
 async def list_eligible_loans(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ) -> EligibleLoansResponse:
@@ -166,10 +168,10 @@ async def compute_claim(
 )
 async def list_claims(
     status_filter: str | None = Query(None, alias="status"),
-    enrollment_id: UUID | None = Query(None),
-    loan_account_id: UUID | None = Query(None),
+    enrollment_id: UUID | None = Query(None, alias="enrollmentId"),
+    loan_account_id: UUID | None = Query(None, alias="loanAccountId"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ) -> SubventionClaimListResponse:
@@ -246,20 +248,16 @@ async def create_claim(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.create_claim(
-            org_id,
-            data.enrollment_id,
-            data.period_start,
-            data.period_end,
-            data.documents,
-            current_user,
-        )
-        claim_id = claim.id
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
+    service = SubventionClaimService(db)
+    claim = await service.create_claim(
+        org_id,
+        data.enrollment_id,
+        data.period_start,
+        data.period_end,
+        data.documents,
+        current_user,
+    )
+    await db.commit()
     return SubventionClaimResponse.model_validate(claim)
 
 
@@ -278,12 +276,11 @@ async def update_claim(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        if data.documents is not None:
-            await service.update_documents(org_id, claim_id, data.documents, current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
+    service = SubventionClaimService(db)
+    if data.documents is not None:
+        claim = await service.update_documents(org_id, claim_id, data.documents, current_user)
+        await db.commit()
+    else:
         claim = await service.get(org_id, claim_id)
     return SubventionClaimResponse.model_validate(claim)
 
@@ -303,12 +300,9 @@ async def submit_claim(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        await service.submit_claim(org_id, claim_id, data.declaration_signed_at, current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
+    service = SubventionClaimService(db)
+    claim = await service.submit_claim(org_id, claim_id, data.declaration_signed_at, current_user)
+    await db.commit()
     return SubventionClaimResponse.model_validate(claim)
 
 
@@ -327,12 +321,9 @@ async def verify_claim(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        await service.verify_claim(org_id, claim_id, data.decision, data.reason, current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
+    service = SubventionClaimService(db)
+    claim = await service.verify_claim(org_id, claim_id, data.decision, data.reason, current_user)
+    await db.commit()
     return SubventionClaimResponse.model_validate(claim)
 
 
@@ -351,19 +342,16 @@ async def initiate_claim_release(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        await service.initiate_release(
-            org_id,
-            claim_id,
-            data.release_instruction_reference,
-            data.release_initiated_date,
-            data.release_instruction_notes,
-            current_user,
-        )
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
+    service = SubventionClaimService(db)
+    claim = await service.initiate_release(
+        org_id,
+        claim_id,
+        data.release_instruction_reference,
+        data.release_initiated_date,
+        data.release_instruction_notes,
+        current_user,
+    )
+    await db.commit()
     return SubventionClaimResponse.model_validate(claim)
 
 
@@ -382,48 +370,15 @@ async def mark_claim_released(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        await service.mark_released(
-            org_id,
-            claim_id,
-            data.release_reference,
-            data.released_date,
-            current_user,
-        )
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
-    return SubventionClaimResponse.model_validate(claim)
-
-
-@router.post(
-    "/{claim_id}/mark-paid",
-    response_model=SubventionClaimResponse,
-    response_model_by_alias=True,
-    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
-)
-async def mark_claim_paid_alias(
-    claim_id: UUID,
-    data: SubventionClaimMarkPaidRequest,
-    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-) -> SubventionClaimResponse:
-    _require_idempotency_key(idempotency_key)
-    org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        await service.mark_released(
-            org_id,
-            claim_id,
-            data.utr_reference,
-            data.paid_date,
-            current_user,
-        )
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
+    service = SubventionClaimService(db)
+    claim = await service.mark_released(
+        org_id,
+        claim_id,
+        data.release_reference,
+        data.released_date,
+        current_user,
+    )
+    await db.commit()
     return SubventionClaimResponse.model_validate(claim)
 
 
@@ -442,13 +397,59 @@ async def cancel_claim(
 ) -> SubventionClaimResponse:
     _require_idempotency_key(idempotency_key)
     org_id = _require_org(current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        await service.cancel_claim(org_id, claim_id, data.reason, current_user)
-    async with db.begin():
-        service = SubventionClaimService(db)
-        claim = await service.get(org_id, claim_id)
+    service = SubventionClaimService(db)
+    claim = await service.cancel_claim(org_id, claim_id, data.reason, current_user)
+    await db.commit()
     return SubventionClaimResponse.model_validate(claim)
+
+
+@router.post(
+    "/{claim_id}/certificate/generate",
+    response_model=GeneratedDocumentResponse,
+    response_model_by_alias=True,
+    dependencies=[Depends(RequirePermissions("TREASURY_WRITE"))],
+)
+async def generate_claim_certificate(
+    claim_id: UUID,
+    idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+) -> GeneratedDocumentResponse:
+    _require_idempotency_key(idempotency_key)
+    org_id = _require_org(current_user)
+    service = SubventionClaimService(db)
+    generated = await service.generate_claim_certificate(org_id, claim_id, current_user)
+    await db.commit()
+    return GeneratedDocumentResponse.model_validate(generated)
+
+
+@router.get(
+    "/{claim_id}/certificate.pdf",
+    dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
+)
+async def download_claim_certificate(
+    claim_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+) -> FileResponse:
+    org_id = _require_org(current_user)
+    service = SubventionClaimService(db)
+    generated = await service.latest_claim_certificate(org_id, claim_id)
+    dms = DocumentService(db)
+    result = await dms.download_document(generated.dms_document_id, user_id=current_user.id)
+    if result is None:
+        raise BadRequestException(
+            "Generated certificate file is not available",
+            error_code="IIF_CLAIM_CERTIFICATE_FILE_NOT_FOUND",
+        )
+    storage_path, file_name, mime_type = result
+    full_path = os.path.join(dms.upload_path, storage_path)
+    if not os.path.exists(full_path):
+        raise BadRequestException(
+            "Generated certificate file is not available",
+            error_code="IIF_CLAIM_CERTIFICATE_FILE_NOT_FOUND",
+        )
+    return FileResponse(path=full_path, filename=file_name, media_type=mime_type)
 
 
 # ---------------------------------------------------------------------------
@@ -531,10 +532,18 @@ def _report_to_csv(payload: ClaimReportResponse) -> str:
     w.writerow([])
 
     # Repayment record
-    header_row("Repayment record (per receipt)")
+    header_row("Repayment record (per EMI/EPI allocation)")
     header_row(
+        "Installment #",
+        "Due date",
+        "Installment status",
+        "EMI/EPI due",
+        "Principal due",
+        "Interest due",
+        "Penal due",
         "Receipt #",
         "Value date",
+        "Instrument / UTR",
         "Receipt amount",
         "Interest",
         "Principal",
@@ -544,8 +553,16 @@ def _report_to_csv(payload: ClaimReportResponse) -> str:
     for r in payload.repayment_record:
         w.writerow(
             [
+                r.installment_number or "",
+                r.due_date or "",
+                r.installment_status or "",
+                r.emi_amount or "",
+                r.principal_due or "",
+                r.interest_due or "",
+                r.penal_due or "",
                 r.receipt_number,
                 r.value_date,
+                r.instrument_number or "",
                 r.receipt_amount,
                 r.allocated_to_interest,
                 r.allocated_to_principal,

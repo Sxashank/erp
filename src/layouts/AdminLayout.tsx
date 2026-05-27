@@ -81,6 +81,9 @@ const navItems: NavItem[] = [
     icon: Landmark,
     children: [
       { label: 'Dashboard', href: '/admin/lending' },
+      { label: 'Pipeline Dashboard', href: '/admin/lending/dashboards/pipeline' },
+      { label: 'Master Data', href: '/admin/lending/masters' },
+      { label: 'Loan Products', href: '/admin/lending/products' },
       { label: 'Entities/Borrowers', href: '/admin/lending/entities' },
       { label: 'Applications', href: '/admin/lending/applications' },
       { label: 'Sanctions', href: '/admin/lending/sanctions' },
@@ -123,7 +126,6 @@ const navItems: NavItem[] = [
       { label: 'ALM Dashboard', href: '/admin/treasury/alm' },
       { label: 'Gap Analysis', href: '/admin/treasury/alm/gap' },
       { label: 'Interest Rate Risk', href: '/admin/treasury/alm/irs' },
-      { label: 'Risk Dashboard', href: '/admin/treasury/risk-dashboard' },
       { label: 'Investments', href: '/admin/treasury/investments' },
     ],
   },
@@ -231,6 +233,7 @@ const navItems: NavItem[] = [
     icon: FolderOpen,
     children: [
       { label: 'Dashboard', href: '/admin/dms' },
+      { label: 'Document Studio', href: '/admin/dms/document-studio' },
       { label: 'Folders', href: '/admin/dms/folders' },
       { label: 'Upload', href: '/admin/dms/upload' },
       { label: 'Search', href: '/admin/dms/search' },
@@ -267,10 +270,7 @@ const navItems: NavItem[] = [
       { label: 'GST Registrations', href: '/admin/gst/registrations' },
       { label: 'HSN/SAC Masters', href: '/admin/gst/hsn-sac' },
       { label: 'TDS Sections', href: '/admin/tds/sections' },
-      { label: 'Loan Products', href: '/admin/lending/products' },
-      { label: 'Approval Checklists', href: '/admin/lending/checklist/templates' },
-      { label: 'IIF Schemes', href: '/admin/lending/iif/schemes' },
-      { label: 'IIF Categories', href: '/admin/lending/iif/categories' },
+      { label: 'Lending Setup', href: '/admin/lending/masters' },
       { label: 'Asset Categories', href: '/admin/fixed-assets/categories' },
       { label: 'FD Products', href: '/admin/fixed-deposits/products' },
       { label: 'FD Interest Slabs', href: '/admin/fixed-deposits/interest' },
@@ -298,31 +298,71 @@ export function AdminLayout() {
   const navigate = useNavigate();
   const permissions = useAuthStore((state) => state.permissions);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  // Single-open accordion: only one parent menu is expanded at a time.
+  // Storing one string (not a list) makes the "only that menu activates"
+  // contract obvious in the type.
+  const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const visibleNavItems = useMemo(
     () => filterNavItemsByAccess(navItems, permissions),
     [permissions],
   );
 
   const toggleExpand = (label: string) => {
-    setExpandedItems((prev) =>
-      prev.includes(label) ? prev.filter((item) => item !== label) : [...prev, label],
-    );
+    // Click on the open one → close it. Click on any other → switch.
+    setExpandedItem((prev) => (prev === label ? null : label));
   };
 
-  const isActive = (href: string) => location.pathname === href;
-  const isParentActive = useCallback(
-    (children?: { label: string; href: string }[]) =>
-      children?.some((child) => location.pathname.startsWith(child.href)),
+  // Path matches a route if it equals it OR is a descendant of it
+  // (separated by '/'). Plain startsWith would match `/admin/lending`
+  // against `/admin/lending-foo` which is wrong, and would also let
+  // siblings claim activity for nested routes.
+  const isPathInside = useCallback(
+    (href: string) => location.pathname === href || location.pathname.startsWith(href + '/'),
     [location.pathname],
   );
 
-  useEffect(() => {
-    const activeParent = visibleNavItems.find((item) => isParentActive(item.children))?.label;
-    if (!activeParent) return;
+  const isActive = (href: string) => location.pathname === href;
 
-    setExpandedItems((prev) => (prev.includes(activeParent) ? prev : [...prev, activeParent]));
-  }, [isParentActive, visibleNavItems]);
+  // For each parent, the "match length" is the length of the longest child
+  // href that is a prefix of the current path. The parent with the longest
+  // match wins — so /admin/lending/iif/enrollments activates "Interest
+  // Subvention" (whose child '/admin/lending/iif/enrollments' is a full
+  // match, length 38) rather than "Lending" (whose child '/admin/lending'
+  // is only a prefix, length 14).
+  const parentMatchLength = useCallback(
+    (item: NavItem): number => {
+      if (!item.children) return 0;
+      let best = 0;
+      for (const c of item.children) {
+        if (isPathInside(c.href) && c.href.length > best) {
+          best = c.href.length;
+        }
+      }
+      return best;
+    },
+    [isPathInside],
+  );
+
+  // Find the single most-specific parent for the current path.
+  const activeParentLabel = useMemo(() => {
+    let label: string | null = null;
+    let bestLength = 0;
+    for (const item of visibleNavItems) {
+      const len = parentMatchLength(item);
+      if (len > bestLength) {
+        bestLength = len;
+        label = item.label;
+      }
+    }
+    return label;
+  }, [visibleNavItems, parentMatchLength]);
+
+  const isParentActive = (item: NavItem) => activeParentLabel === item.label;
+
+  // Auto-open the active parent on navigation, collapse everything else.
+  useEffect(() => {
+    setExpandedItem(activeParentLabel);
+  }, [activeParentLabel]);
 
   const handleLogout = () => {
     localStorage.removeItem('access_token');
@@ -332,8 +372,8 @@ export function AdminLayout() {
 
   const renderNavItem = (item: NavItem) => {
     const hasChildren = item.children && item.children.length > 0;
-    const isExpanded = expandedItems.includes(item.label);
-    const active = item.href ? isActive(item.href) : isParentActive(item.children);
+    const isExpanded = expandedItem === item.label;
+    const active = item.href ? isActive(item.href) : isParentActive(item);
 
     if (hasChildren) {
       return (

@@ -17,7 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder } from '@/types/vendor';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function VendorPOAcknowledge() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -49,14 +49,6 @@ export default function VendorPOAcknowledge() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setProcessing(true);
@@ -126,7 +118,9 @@ export default function VendorPOAcknowledge() {
               </div>
               <div>
                 <Label className="text-gray-500">Total Amount</Label>
-                <p className="font-medium text-purple-600">{formatCurrency(po.total_amount)}</p>
+                <p className="font-medium text-purple-600">
+                  {formatIndianCompactCurrency(po.total_amount)}
+                </p>
               </div>
             </div>
             <div>

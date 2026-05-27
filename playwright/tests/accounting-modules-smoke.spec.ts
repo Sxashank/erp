@@ -7,25 +7,26 @@
  * back to the dashboard because a route is missing.
  */
 
-import { expect, request as pwRequest, test as base, type Page } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-const env =
-  (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
+import {
+  chromium,
+  expect,
+  test as base,
+  type ConsoleMessage,
+  type Page,
+  type Response,
+} from '@playwright/test';
+
+import { loginAsAdmin } from '../fixtures/auth';
+
+const env = process.env;
 const API_BASE = env.PLAYWRIGHT_API_BASE || 'http://localhost:8001/api/v1';
-const ADMIN_USERNAME = env.UAT_ADMIN_USERNAME || 'krishna';
-const ADMIN_PASSWORD = env.UAT_ADMIN_PASSWORD || 'ChangeMe123!';
+const BASE_URL = env.PLAYWRIGHT_BASE_URL || 'http://localhost:5176';
 const LIVE_BACKEND_ENABLED = env.PLAYWRIGHT_LIVE_BACKEND === '1';
 const ROUTE_TIMEOUT_MS = 8000;
-
-interface AuthBundle {
-  accessToken: string;
-  refreshToken: string;
-  user: {
-    organization_id?: string;
-    organizationId?: string;
-    permissions?: string[];
-  };
-}
 
 interface RouteSpec {
   path: string;
@@ -139,82 +140,27 @@ const CREATE_BUTTON_FLOWS = [
   },
 ];
 
-let cachedBundle: AuthBundle | null = null;
+const test = base.extend<{}, { storageStatePath: string }>({
+  storageStatePath: [
+    async (_args, use) => {
+      const dir = mkdtempSync(join(tmpdir(), 'accounting-smoke-'));
+      const path = join(dir, 'storage.json');
+      const browser = await chromium.launch();
+      const ctx = await browser.newContext({ baseURL: BASE_URL });
+      const page = await ctx.newPage();
+      await loginAsAdmin(page);
+      await ctx.storageState({ path });
+      await ctx.close();
+      await browser.close();
+      await use(path);
+    },
+    { scope: 'worker' },
+  ],
 
-async function getAuthBundle(): Promise<AuthBundle> {
-  if (cachedBundle) return cachedBundle;
-
-  let lastFailure = '';
-  for (const waitMs of [0, 5_000, 10_000, 30_000, 60_000]) {
-    if (waitMs) {
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-    }
-
-    const ctx = await pwRequest.newContext();
-    const res = await ctx.post(`${API_BASE}/auth/login`, {
-      data: { username: ADMIN_USERNAME, password: ADMIN_PASSWORD },
-    });
-    if (res.ok()) {
-      const body = await res.json();
-      await ctx.dispose();
-
-      cachedBundle = {
-        accessToken: body.access_token,
-        refreshToken: body.refresh_token,
-        user: body.user,
-      };
-      return cachedBundle;
-    }
-
-    const text = await res.text();
-    lastFailure = `Login failed: ${res.status()} ${text}`;
-    await ctx.dispose();
-    if (res.status() !== 429) {
-      break;
-    }
-
-    try {
-      const payload = JSON.parse(text) as { retry_after_seconds?: number };
-      const retryAfterSeconds = payload.retry_after_seconds ?? 60;
-      await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
-    } catch {
-      // Fall back to the next scheduled wait interval.
-    }
-  }
-
-  throw new Error(lastFailure || 'Login failed');
-}
-
-const test = base.extend<{ authedPage: Page; authBundle: AuthBundle }>({
-  // eslint-disable-next-line no-empty-pattern
-  authBundle: async ({}, use) => {
-    await use(await getAuthBundle());
-  },
-
-  authedPage: async ({ page, context, authBundle }, use) => {
-    const orgId = authBundle.user.organization_id ?? authBundle.user.organizationId ?? null;
-    await context.addInitScript(
-      (bundle) => {
-        window.localStorage.setItem('smfc-auth', JSON.stringify(bundle.auth));
-        window.localStorage.setItem('smfc-organization', JSON.stringify(bundle.org));
-      },
-      {
-        auth: {
-          state: {
-            accessToken: authBundle.accessToken,
-            refreshToken: authBundle.refreshToken,
-          },
-          version: 0,
-        },
-        org: {
-          state: {
-            activeOrganizationId: orgId,
-          },
-          version: 0,
-        },
-      },
-    );
-    await use(page);
+  context: async ({ browser, storageStatePath }, use) => {
+    const ctx = await browser.newContext({ storageState: storageStatePath, baseURL: BASE_URL });
+    await use(ctx);
+    await ctx.close();
   },
 });
 
@@ -222,16 +168,16 @@ async function installRouteGates(page: Page) {
   const errors: string[] = [];
   const failedResponses: { status: number; url: string }[] = [];
 
-  page.on('console', (msg) => {
+  page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() !== 'error') return;
     const text = msg.text();
     if (/ResizeObserver loop/i.test(text)) return;
     errors.push(text);
   });
-  page.on('pageerror', (err) => {
+  page.on('pageerror', (err: Error) => {
     errors.push(`uncaught: ${err.message}`);
   });
-  page.on('response', (res) => {
+  page.on('response', (res: Response) => {
     const status = res.status();
     if (status < 400) return;
     const url = res.url();
@@ -242,13 +188,20 @@ async function installRouteGates(page: Page) {
   return { errors, failedResponses };
 }
 
+async function expectNotAuthLogin(page: Page) {
+  await expect.poll(() => new URL(page.url()).pathname, { timeout: 5000 }).not.toBe('/login');
+}
+
 test.describe('accounting modules smoke', () => {
   test.describe.configure({ mode: 'serial' });
   test.setTimeout(120_000);
-  test.skip(!LIVE_BACKEND_ENABLED, 'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live accounting smoke suite.');
+  test.skip(
+    !LIVE_BACKEND_ENABLED,
+    'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live accounting smoke suite.',
+  );
 
   for (const spec of ROUTES) {
-    test(`/admin/${spec.path}`, async ({ authedPage: page }, testInfo) => {
+    test(`/admin/${spec.path}`, async ({ page }, testInfo) => {
       testInfo.setTimeout(45_000);
       const gate = await installRouteGates(page);
 
@@ -260,10 +213,13 @@ test.describe('accounting modules smoke', () => {
       }
       await page.waitForTimeout(200);
 
+      await expectNotAuthLogin(page);
       await expect(page).not.toHaveURL(/\/admin\/?$/);
       await expect(page.getByRole('heading', { name: /404|page not found/i })).toHaveCount(0);
 
-      const errMsg = gate.errors.length ? `console errors:\n  - ${gate.errors.join('\n  - ')}\n` : '';
+      const errMsg = gate.errors.length
+        ? `console errors:\n  - ${gate.errors.join('\n  - ')}\n`
+        : '';
       const netMsg = gate.failedResponses.length
         ? `failed responses:\n${gate.failedResponses
             .map((r) => `  - ${r.status} ${r.url}`)
@@ -274,7 +230,7 @@ test.describe('accounting modules smoke', () => {
   }
 
   for (const flow of CREATE_BUTTON_FLOWS) {
-    test(`create/import button from /admin/${flow.from}`, async ({ authedPage: page }) => {
+    test(`create/import button from /admin/${flow.from}`, async ({ page }) => {
       await page.goto(`/admin/${flow.from}`, { waitUntil: 'domcontentloaded' });
       try {
         await page.waitForLoadState('networkidle', { timeout: ROUTE_TIMEOUT_MS });
@@ -282,6 +238,7 @@ test.describe('accounting modules smoke', () => {
         // Background queries may remain active.
       }
 
+      await expectNotAuthLogin(page);
       const button = page.getByRole('button', { name: flow.button }).first();
       await expect(button).toBeVisible();
       await expect(button).toBeEnabled();

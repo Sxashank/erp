@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface UnreconciledStatement {
   statementId: string;
   transactionDate: string;
@@ -273,11 +273,7 @@ export function BankReconciliation() {
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   return (
@@ -535,9 +531,7 @@ export function BankReconciliation() {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg">Unreconciled Bank Statements</CardTitle>
-              <CardDescription>
-                {workspaceData.unreconciledStatements.length} items
-              </CardDescription>
+              <CardDescription>{workspaceData.unreconciledStatements.length} items</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="max-h-[400px] overflow-auto">

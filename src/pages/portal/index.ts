@@ -1,5 +1,5 @@
 /**
- * Scheme Portal Pages - Barrel Export
+ * Borrower Portal Pages - Barrel Export
  */
 
 export { default as PortalLogin } from './PortalLogin';
@@ -21,3 +21,9 @@ export { default as PortalSubsidyReports } from './PortalSubsidyReports';
 export { default as PortalReports } from './PortalReports';
 export { default as PortalResetPassword } from './PortalResetPassword';
 export { default as PortalPaymentComingSoon } from './PortalPaymentComingSoon';
+// Phase A-E pages
+export { default as PortalLoanTimeline } from './PortalLoanTimeline';
+export { default as PortalApplicationQueries } from './PortalApplicationQueries';
+export { default as PortalKFSAcknowledge } from './PortalKFSAcknowledge';
+export { default as PortalForeclosureQuote } from './PortalForeclosureQuote';
+export { default as PortalTransferOut } from './PortalTransferOut';

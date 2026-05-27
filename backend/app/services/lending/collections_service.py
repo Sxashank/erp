@@ -34,6 +34,7 @@ from app.models.lending.enums import (
     WriteOffStatus,
 )
 from app.models.lending.loan_account import LoanAccount
+from app.models.lending.masters import LendingOption
 from app.repositories.lending.collections_repo import (
     CollectionFollowUpRepository,
     DemandNoticeRepository,
@@ -63,6 +64,7 @@ from app.schemas.lending.collections import (
     LoanRestructureApprove,
     LoanRestructureCreate,
     LoanRestructureImplement,
+    LoanRestructureReject,
     LoanRestructureUpdate,
     NPARecordCreate,
     NPARecordUpdate,
@@ -103,6 +105,27 @@ class CollectionsService:
         self.auction_repo = PropertyAuctionRepository(session)
         self.write_off_repo = WriteOffRecordRepository(session)
         self.loan_account_repo = LoanAccountRepository(session)
+
+    async def _validate_lending_option(
+        self, organization_id: UUID, option_group: str, code: str | None
+    ) -> str | None:
+        if code is None:
+            return None
+        normalized = code.strip().upper()
+        result = await self.session.execute(
+            select(LendingOption).where(
+                LendingOption.organization_id == organization_id,
+                LendingOption.option_group == option_group,
+                LendingOption.code == normalized,
+                LendingOption.is_active,
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise BadRequestException(
+                f"{code} is not configured for {option_group}",
+                error_code="INVALID_LENDING_OPTION",
+            )
+        return normalized
 
     # =========================================================================
     # Paginated org-scoped list queries (for list pages)
@@ -575,11 +598,19 @@ class CollectionsService:
 
     async def create_ots_proposal(
         self,
+        organization_id: UUID,
         data: OTSProposalCreate,
         payment_schedule: list[OTSPaymentScheduleCreate] | None = None,
         created_by: UUID | None = None,
     ) -> OTSProposal:
         """Create an OTS proposal."""
+        loan = await self.loan_account_repo.get(data.loan_account_id)
+        if loan is None or loan.organization_id != organization_id:
+            raise NotFoundException("Loan account not found")
+        data.payment_mode = await self._validate_lending_option(
+            organization_id, "OTS_PAYMENT_MODE", data.payment_mode
+        )
+
         ots_reference = await self.ots_proposal_repo.generate_ots_reference()
 
         # Calculate haircut
@@ -628,6 +659,13 @@ class CollectionsService:
             raise BadRequestException("Cannot update proposal in current status")
 
         update_data = data.model_dump(exclude_unset=True)
+        if "payment_mode" in update_data:
+            loan = await self.loan_account_repo.get(proposal.loan_account_id)
+            if loan is None:
+                raise NotFoundException("Loan account not found")
+            update_data["payment_mode"] = await self._validate_lending_option(
+                loan.organization_id, "OTS_PAYMENT_MODE", update_data["payment_mode"]
+            )
         update_data["updated_by"] = updated_by
 
         return await self.ots_proposal_repo.update(proposal, update_data)
@@ -676,7 +714,7 @@ class CollectionsService:
             loan = await self.loan_account_repo.get(updated.loan_account_id)
             await record_financial_action(
                 self.session,
-                organization_id=loan.organization_id if loan else updated.organization_id,  # type: ignore[attr-defined]
+                organization_id=loan.organization_id,
                 entity_type="OTS_PROPOSAL",
                 entity_id=updated.id,
                 entity_reference=updated.ots_reference,
@@ -714,6 +752,32 @@ class CollectionsService:
                 },
                 change_reason="OTS proposal approved (maker-checker complete)",
             )
+
+        # Lifecycle event — OTS_APPROVED.
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.session).record_event(
+            organization_id=loan.organization_id,
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=updated.loan_account_id,
+            event_type="OTS_APPROVED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=updated_by,
+            business_number=updated.ots_reference,
+            state_from=before_status,
+            state_to="APPROVED",
+            payload={
+                "ots_id": str(updated.id),
+                "ots_amount": float(updated.ots_amount),
+                "haircut_amount": float(updated.haircut_amount),
+                "haircut_percent": float(updated.haircut_percent or 0),
+            },
+            regulatory_tags=["OTS_APPROVED"],
+        )
 
         return updated
 
@@ -783,10 +847,23 @@ class CollectionsService:
 
     async def create_restructure(
         self,
+        organization_id: UUID,
         data: LoanRestructureCreate,
         created_by: UUID | None = None,
     ) -> LoanRestructure:
         """Create a loan restructure proposal."""
+        loan = await self.loan_account_repo.get(data.loan_account_id)
+        if loan is None or loan.organization_id != organization_id:
+            raise NotFoundException("Loan account not found")
+        data.restructure_type = await self._validate_lending_option(
+            organization_id, "RESTRUCTURE_TYPE", data.restructure_type
+        )
+        data.moratorium_interest_treatment = await self._validate_lending_option(
+            organization_id,
+            "MORATORIUM_INTEREST_TREATMENT",
+            data.moratorium_interest_treatment,
+        )
+
         restructure_reference = await self.restructure_repo.generate_restructure_reference()
 
         restructure = LoanRestructure(
@@ -812,12 +889,22 @@ class CollectionsService:
             raise BadRequestException("Cannot update restructure in current status")
 
         update_data = data.model_dump(exclude_unset=True)
+        loan = await self.loan_account_repo.get(restructure.loan_account_id)
+        if loan is None:
+            raise NotFoundException("Loan account not found")
+        if "moratorium_interest_treatment" in update_data:
+            update_data["moratorium_interest_treatment"] = await self._validate_lending_option(
+                loan.organization_id,
+                "MORATORIUM_INTEREST_TREATMENT",
+                update_data["moratorium_interest_treatment"],
+            )
         update_data["updated_by"] = updated_by
 
         return await self.restructure_repo.update(restructure, update_data)
 
     async def approve_restructure(
         self,
+        organization_id: UUID,
         restructure_id: UUID,
         data: LoanRestructureApprove,
         updated_by: UUID | None = None,
@@ -833,6 +920,9 @@ class CollectionsService:
         restructure = await self.restructure_repo.get(restructure_id)
         if not restructure:
             raise NotFoundException("Restructure not found")
+        loan = await self.loan_account_repo.get(restructure.loan_account_id)
+        if loan is None or loan.organization_id != organization_id:
+            raise NotFoundException("Restructure not found")
 
         if restructure.status != RestructureStatus.PENDING_APPROVAL:
             raise BadRequestException("Restructure is not pending approval")
@@ -843,7 +933,9 @@ class CollectionsService:
         )
 
         before_status = (
-            restructure.status.value if hasattr(restructure.status, "value") else str(restructure.status)
+            restructure.status.value
+            if hasattr(restructure.status, "value")
+            else str(restructure.status)
         )
 
         update_data = data.model_dump()
@@ -855,7 +947,6 @@ class CollectionsService:
 
         # Domain audit: restructure approved — §8.5 / §4.8.
         if updated_by is not None:
-            loan = await self.loan_account_repo.get(updated.loan_account_id)
             await record_financial_action(
                 self.session,
                 organization_id=loan.organization_id if loan else updated.organization_id,  # type: ignore[attr-defined]
@@ -897,7 +988,68 @@ class CollectionsService:
                 change_reason="Restructure approved (maker-checker complete)",
             )
 
+        # Lifecycle event — RESTRUCTURE_APPROVED.
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.session).record_event(
+            organization_id=updated.organization_id,
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=updated.loan_account_id,
+            event_type="RESTRUCTURE_APPROVED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=updated_by,
+            business_number=updated.restructure_reference,
+            state_from=before_status,
+            state_to="APPROVED",
+            payload={
+                "restructure_id": str(updated.id),
+                "post_interest_rate": float(updated.post_interest_rate or 0),
+                "post_tenure_months": updated.post_tenure_months,
+                "moratorium_months": updated.moratorium_months,
+            },
+            regulatory_tags=["RESTRUCTURE_APPROVED"],
+        )
+
         return updated
+
+    async def reject_restructure(
+        self,
+        organization_id: UUID,
+        restructure_id: UUID,
+        data: LoanRestructureReject,
+        updated_by: UUID | None = None,
+    ) -> LoanRestructure:
+        """Reject a restructure proposal through maker-checker review."""
+        from app.core.maker_checker import ensure_maker_is_not_checker
+
+        restructure = await self.restructure_repo.get(restructure_id)
+        if not restructure:
+            raise NotFoundException("Restructure not found")
+        loan = await self.loan_account_repo.get(restructure.loan_account_id)
+        if loan is None or loan.organization_id != organization_id:
+            raise NotFoundException("Restructure not found")
+
+        if restructure.status != RestructureStatus.PENDING_APPROVAL:
+            raise BadRequestException("Restructure is not pending approval")
+
+        ensure_maker_is_not_checker(
+            maker_user_id=restructure.created_by,
+            checker_user_id=updated_by,
+        )
+
+        return await self.restructure_repo.update(
+            restructure,
+            {
+                "status": RestructureStatus.REJECTED,
+                "approval_authority": data.approval_authority,
+                "remarks": data.rejection_reason,
+                "updated_by": updated_by,
+            },
+        )
 
     async def implement_restructure(
         self,
@@ -1187,6 +1339,41 @@ class CollectionsService:
                 },
                 change_reason="Write-off approved (maker-checker complete)",
             )
+
+        # Lifecycle event — WRITE_OFF_TECHNICAL or WRITE_OFF_FINAL.
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        wo_type_value = (
+            updated.write_off_type.value
+            if hasattr(updated.write_off_type, "value")
+            else str(updated.write_off_type)
+        )
+        event_type = (
+            "WRITE_OFF_TECHNICAL" if wo_type_value.upper().startswith("TECH") else "WRITE_OFF_FINAL"
+        )
+        await LifecycleService(self.session).record_event(
+            organization_id=updated.organization_id,
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=updated.loan_account_id,
+            event_type=event_type,
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=updated_by,
+            business_number=updated.write_off_reference,
+            state_from=before_status,
+            state_to="APPROVED",
+            payload={
+                "write_off_id": str(updated.id),
+                "write_off_type": wo_type_value,
+                "total_written_off": float(updated.total_written_off or 0),
+                "principal_written_off": float(updated.principal_written_off or 0),
+                "interest_written_off": float(updated.interest_written_off or 0),
+            },
+            regulatory_tags=[event_type],
+        )
 
         return updated
 

@@ -14,6 +14,7 @@ from app.services.hris.separation_service import (
     FnFService,
     ClearanceChecklistService,
 )
+from app.services.hris.training_service import TrainingService
 
 __all__ = [
     "EmployeeService",
@@ -28,4 +29,5 @@ __all__ = [
     "ClearanceService",
     "FnFService",
     "ClearanceChecklistService",
+    "TrainingService",
 ]

@@ -4,17 +4,11 @@
 
 import { z } from 'zod';
 
-// Enums
-export const entityTypeSchema = z.enum([
-  'CORPORATE',
-  'INDIVIDUAL',
-  'LLP',
-  'PARTNERSHIP',
-  'TRUST',
-  'HUF',
-]);
+// Policy option sets are loaded from lending masters in the UI; validation
+// only enforces that a configured code is submitted.
+export const entityTypeSchema = z.string().min(1, 'Entity type is required');
 export const entityStatusSchema = z.enum(['PROSPECT', 'ACTIVE', 'INACTIVE', 'BLACKLISTED']);
-export const riskCategorySchema = z.enum(['LOW', 'MEDIUM', 'HIGH']);
+export const riskCategorySchema = z.string().min(1, 'Risk category is required');
 
 // PAN validation (Indian PAN format)
 const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
@@ -99,13 +93,7 @@ export const updateEntitySchema = entityBaseSchema.partial().extend({
 
 // ============== Contact Schemas ==============
 
-export const contactTypeSchema = z.enum([
-  'DIRECTOR',
-  'PROMOTER',
-  'AUTHORIZED_SIGNATORY',
-  'KEY_PERSON',
-  'GUARANTOR',
-]);
+export const contactTypeSchema = z.string().min(1, 'Contact type is required');
 
 export const entityContactSchema = z.object({
   contactType: contactTypeSchema,
@@ -127,13 +115,7 @@ export const entityContactSchema = z.object({
 
 // ============== Address Schemas ==============
 
-export const addressTypeSchema = z.enum([
-  'REGISTERED',
-  'CORRESPONDENCE',
-  'PLANT',
-  'WAREHOUSE',
-  'BRANCH',
-]);
+export const addressTypeSchema = z.string().min(1, 'Address type is required');
 
 export const entityAddressSchema = z.object({
   addressType: addressTypeSchema,
@@ -148,7 +130,7 @@ export const entityAddressSchema = z.object({
 
 // ============== Bank Account Schemas ==============
 
-export const accountTypeSchema = z.enum(['CURRENT', 'SAVINGS', 'CC', 'OD']);
+export const accountTypeSchema = z.string().min(1, 'Account type is required');
 
 export const entityBankAccountSchema = z.object({
   bankName: z.string().min(2).max(100),

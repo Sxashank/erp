@@ -24,7 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder, POAcknowledgement } from '@/types/vendor';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function VendorPODetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -55,14 +55,6 @@ export default function VendorPODetail() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
-  };
-
   const getStatusBadge = () => {
     if (!acknowledgement) {
       return <Badge className="bg-orange-100 text-orange-800">Pending Acknowledgement</Badge>;
@@ -170,7 +162,10 @@ export default function VendorPODetail() {
               {acknowledgement.committed_delivery_date && (
                 <div>
                   <Label className="text-gray-500">Committed Delivery</Label>
-                  <DateDisplay date={acknowledgement.committed_delivery_date} className="font-medium" />
+                  <DateDisplay
+                    date={acknowledgement.committed_delivery_date}
+                    className="font-medium"
+                  />
                 </div>
               )}
               {acknowledgement.delivery_remarks && (
@@ -219,38 +214,40 @@ export default function VendorPODetail() {
           <CardContent className="space-y-2">
             <div className="flex justify-between">
               <span className="text-gray-500">Subtotal</span>
-              <span>{formatCurrency(po.subtotal)}</span>
+              <span>{formatIndianCompactCurrency(po.subtotal)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Discount</span>
-              <span>-{formatCurrency(po.discount_amount)}</span>
+              <span>-{formatIndianCompactCurrency(po.discount_amount)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-gray-500">Taxable Amount</span>
-              <span>{formatCurrency(po.taxable_amount)}</span>
+              <span>{formatIndianCompactCurrency(po.taxable_amount)}</span>
             </div>
             {po.cgst_amount > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">CGST</span>
-                <span>{formatCurrency(po.cgst_amount)}</span>
+                <span>{formatIndianCompactCurrency(po.cgst_amount)}</span>
               </div>
             )}
             {po.sgst_amount > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">SGST</span>
-                <span>{formatCurrency(po.sgst_amount)}</span>
+                <span>{formatIndianCompactCurrency(po.sgst_amount)}</span>
               </div>
             )}
             {po.igst_amount > 0 && (
               <div className="flex justify-between">
                 <span className="text-gray-500">IGST</span>
-                <span>{formatCurrency(po.igst_amount)}</span>
+                <span>{formatIndianCompactCurrency(po.igst_amount)}</span>
               </div>
             )}
             <div className="mt-2 border-t pt-2">
               <div className="flex justify-between text-lg font-bold">
                 <span>Total</span>
-                <span className="text-purple-600">{formatCurrency(po.total_amount)}</span>
+                <span className="text-purple-600">
+                  {formatIndianCompactCurrency(po.total_amount)}
+                </span>
               </div>
             </div>
           </CardContent>
@@ -290,12 +287,16 @@ export default function VendorPODetail() {
                   <TableCell className="text-right">
                     {line.quantity} {line.uom}
                   </TableCell>
-                  <TableCell className="text-right">{formatCurrency(line.unit_price)}</TableCell>
                   <TableCell className="text-right">
-                    {formatCurrency(line.cgst_amount + line.sgst_amount + line.igst_amount)}
+                    {formatIndianCompactCurrency(line.unit_price)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {formatIndianCompactCurrency(
+                      line.cgst_amount + line.sgst_amount + line.igst_amount,
+                    )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(line.net_amount)}
+                    {formatIndianCompactCurrency(line.net_amount)}
                   </TableCell>
                 </TableRow>
               ))}

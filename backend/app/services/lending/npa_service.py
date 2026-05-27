@@ -82,6 +82,48 @@ class NPAService:
         dpd = (date.today() - oldest_unpaid.due_date).days
         return max(0, dpd)
 
+    async def _bucket_thresholds(
+        self, organization_id: UUID
+    ) -> list[tuple[str, int, Optional[int]]]:
+        """Return ordered (classification_lower, min_dpd, max_dpd) thresholds.
+
+        Reads from ``mst_npa_bucket`` for the org; falls back to the
+        RBI baseline (the historical NPA_THRESHOLDS map) if the master
+        is empty (tenant hasn't run the seed yet).
+        """
+        from datetime import date as _date
+
+        from sqlalchemy import select
+
+        from app.models.lending.masters import NpaBucket
+
+        today = _date.today()
+        stmt = (
+            select(NpaBucket)
+            .where(
+                NpaBucket.organization_id == organization_id,
+                NpaBucket.effective_from <= today,
+            )
+            .order_by(NpaBucket.sort_order)
+        )
+        rows = list((await self.db.execute(stmt)).scalars().all())
+        if not rows:
+            # Fallback — never let absence of masters break NPA classification.
+            return [
+                ("standard", 0, 0),
+                ("sma_0", 1, 30),
+                ("sma_1", 31, 60),
+                ("sma_2", 61, 90),
+                ("substandard", 91, 365),
+                ("doubtful_1", 366, 730),
+                ("doubtful_2", 731, 1095),
+                ("doubtful_3", 1096, 1460),
+                ("loss", 1461, None),
+            ]
+        # filter to currently-effective only
+        active = [r for r in rows if r.effective_to is None or r.effective_to >= today]
+        return [(r.asset_classification.lower(), r.min_dpd, r.max_dpd) for r in active]
+
     async def classify_loan(
         self,
         loan_account_id: UUID,
@@ -90,12 +132,30 @@ class NPAService:
         """
         Classify loan based on DPD.
 
+        Buckets read from ``mst_npa_bucket`` (per-org overridable); falls
+        back to RBI baseline if no master rows for the tenant.
+
         Returns classification: standard, sma_0, sma_1, sma_2, substandard,
         doubtful_1, doubtful_2, doubtful_3, or loss.
         """
         if dpd is None:
             dpd = await self.get_dpd(loan_account_id)
 
+        # Resolve the loan's org_id to pick the right master set
+        from app.models.lending.loan_account import LoanAccount
+
+        loan = await self.db.get(LoanAccount, loan_account_id)
+        organization_id = loan.organization_id if loan is not None else None
+
+        if organization_id is not None:
+            buckets = await self._bucket_thresholds(organization_id)
+            # Iterate in descending min_dpd so first match (the worst bucket)
+            # wins. open-ended max=None means "and above".
+            for classification, min_dpd, max_dpd in sorted(buckets, key=lambda r: -r[1]):
+                if dpd >= min_dpd and (max_dpd is None or dpd <= max_dpd):
+                    return classification
+
+        # Master-less fallback
         if dpd >= NPA_THRESHOLDS["loss"]:
             return "loss"
         elif dpd >= NPA_THRESHOLDS["doubtful_3"]:
@@ -132,9 +192,7 @@ class NPAService:
             Dictionary with provision_rate, provision_amount, outstanding_amount
         """
         # Get loan account
-        result = await self.db.execute(
-            select(LoanAccount).where(LoanAccount.id == loan_account_id)
-        )
+        result = await self.db.execute(select(LoanAccount).where(LoanAccount.id == loan_account_id))
         loan = result.scalar_one_or_none()
         if not loan:
             raise ValueError(f"Loan account {loan_account_id} not found")
@@ -203,7 +261,9 @@ class NPAService:
                 dpd = await self.get_dpd(loan.id)
                 classification = await self.classify_loan(loan.id, dpd)
                 provision_data = await self.calculate_provision(
-                    loan.id, classification, loan.is_secured if hasattr(loan, 'is_secured') else True
+                    loan.id,
+                    classification,
+                    loan.is_secured if hasattr(loan, "is_secured") else True,
                 )
 
                 # Update loan account classification
@@ -229,8 +289,12 @@ class NPAService:
                         "provision": Decimal("0"),
                     }
                 summary["classifications"][classification]["count"] += 1
-                summary["classifications"][classification]["outstanding"] += provision_data["outstanding_amount"]
-                summary["classifications"][classification]["provision"] += provision_data["provision_amount"]
+                summary["classifications"][classification]["outstanding"] += provision_data[
+                    "outstanding_amount"
+                ]
+                summary["classifications"][classification]["provision"] += provision_data[
+                    "provision_amount"
+                ]
 
                 if self.is_npa(classification):
                     summary["total_npa_amount"] += provision_data["outstanding_amount"]
@@ -326,8 +390,15 @@ class NPAService:
     def _is_upgrade(self, old_class: str, new_class: str) -> bool:
         """Check if classification change is an upgrade (improvement)."""
         class_order = [
-            "loss", "doubtful_3", "doubtful_2", "doubtful_1",
-            "substandard", "sma_2", "sma_1", "sma_0", "standard"
+            "loss",
+            "doubtful_3",
+            "doubtful_2",
+            "doubtful_1",
+            "substandard",
+            "sma_2",
+            "sma_1",
+            "sma_0",
+            "standard",
         ]
         old_idx = class_order.index(old_class) if old_class in class_order else 0
         new_idx = class_order.index(new_class) if new_class in class_order else 0
@@ -352,9 +423,7 @@ class NPAService:
         Returns:
             True if upgrade successful
         """
-        result = await self.db.execute(
-            select(LoanAccount).where(LoanAccount.id == loan_account_id)
-        )
+        result = await self.db.execute(select(LoanAccount).where(LoanAccount.id == loan_account_id))
         loan = result.scalar_one_or_none()
         if not loan:
             return False
@@ -403,9 +472,7 @@ class NPAService:
         Returns:
             True if write-off successful
         """
-        result = await self.db.execute(
-            select(LoanAccount).where(LoanAccount.id == loan_account_id)
-        )
+        result = await self.db.execute(select(LoanAccount).where(LoanAccount.id == loan_account_id))
         loan = result.scalar_one_or_none()
         if not loan:
             return False
@@ -451,7 +518,9 @@ class NPAService:
             select(
                 LoanAccount.npa_classification,
                 func.count(LoanAccount.id).label("count"),
-                func.sum(LoanAccount.principal_outstanding + LoanAccount.interest_outstanding).label("outstanding"),
+                func.sum(
+                    LoanAccount.principal_outstanding + LoanAccount.interest_outstanding
+                ).label("outstanding"),
             )
             .where(
                 LoanAccount.organization_id == organization_id,

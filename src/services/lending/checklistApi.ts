@@ -1,9 +1,9 @@
 /**
  * Approval Checklist API service.
  *
- * Backend mounts under `/api/v1/lending/checklist/*`. All wire shapes are
- * camelCase (Pydantic CamelSchema). Mutating endpoints attach an
- * `Idempotency-Key` header per CLAUDE.md §6.3.
+ * Templates are master data and are mounted under
+ * `/api/v1/lending/masters/approval-checklist-templates/rows/*`.
+ * Per-application checklist operations remain under `/api/v1/lending/checklist/*`.
  *
  * Two surfaces:
  *  - Templates (master CRUD) — schemas of items NBFCs reuse across loans.
@@ -33,6 +33,7 @@ export type ChecklistAppliesTo = 'LOAN_APPLICATION';
 export interface ChecklistTemplateItem {
   id: string;
   templateId: string;
+  catalogItemId: string;
   code: string;
   label: string;
   description: string | null;
@@ -58,6 +59,7 @@ export interface LoanChecklistItem {
   id: string;
   checklistId: string;
   templateItemId: string | null;
+  catalogItemId: string | null;
   code: string;
   label: string;
   description: string | null;
@@ -92,7 +94,6 @@ export interface LoanChecklist {
 // ============================================================================
 
 export interface ChecklistTemplateCreate {
-  organizationId?: string | null;
   code: string;
   name: string;
   description?: string | null;
@@ -103,10 +104,7 @@ export interface ChecklistTemplateCreate {
 export type ChecklistTemplateUpdate = Partial<ChecklistTemplateCreate>;
 
 export interface ChecklistTemplateItemCreate {
-  code: string;
-  label: string;
-  description?: string | null;
-  category: ChecklistItemCategory;
+  catalogItemId: string;
   isMandatory?: boolean;
   sortOrder?: number;
   defaultDueOffsetDays?: number | null;
@@ -154,38 +152,41 @@ function idempotencyHeader(): { 'Idempotency-Key': string } {
 // ============================================================================
 
 export interface ChecklistTemplateListParams {
-  organizationId?: string;
   appliesTo?: ChecklistAppliesTo;
 }
 
 export const checklistTemplatesApi = {
   async list(params?: ChecklistTemplateListParams): Promise<ChecklistTemplate[]> {
     const { data } = await api.get<ChecklistTemplate[] | { items?: ChecklistTemplate[] }>(
-      '/lending/checklist/templates',
+      '/lending/masters/approval-checklist-templates/rows',
       { params },
     );
     return Array.isArray(data) ? data : (data.items ?? []);
   },
   async get(id: string): Promise<ChecklistTemplate> {
-    const { data } = await api.get<ChecklistTemplate>(`/lending/checklist/templates/${id}`);
+    const { data } = await api.get<ChecklistTemplate>(
+      `/lending/masters/approval-checklist-templates/rows/${id}`,
+    );
     return data;
   },
   async create(payload: ChecklistTemplateCreate): Promise<ChecklistTemplate> {
-    const { data } = await api.post<ChecklistTemplate>('/lending/checklist/templates', payload, {
-      headers: idempotencyHeader(),
-    });
+    const { data } = await api.post<ChecklistTemplate>(
+      '/lending/masters/approval-checklist-templates/rows',
+      payload,
+      { headers: idempotencyHeader() },
+    );
     return data;
   },
   async update(id: string, payload: ChecklistTemplateUpdate): Promise<ChecklistTemplate> {
     const { data } = await api.put<ChecklistTemplate>(
-      `/lending/checklist/templates/${id}`,
+      `/lending/masters/approval-checklist-templates/rows/${id}`,
       payload,
       { headers: idempotencyHeader() },
     );
     return data;
   },
   async remove(id: string): Promise<void> {
-    await api.delete(`/lending/checklist/templates/${id}`, {
+    await api.delete(`/lending/masters/approval-checklist-templates/rows/${id}`, {
       headers: idempotencyHeader(),
     });
   },
@@ -194,7 +195,7 @@ export const checklistTemplatesApi = {
     payload: ChecklistTemplateItemCreate,
   ): Promise<ChecklistTemplateItem> {
     const { data } = await api.post<ChecklistTemplateItem>(
-      `/lending/checklist/templates/${templateId}/items`,
+      `/lending/masters/approval-checklist-templates/rows/${templateId}/items`,
       payload,
       { headers: idempotencyHeader() },
     );
@@ -206,20 +207,21 @@ export const checklistTemplatesApi = {
     payload: ChecklistTemplateItemUpdate,
   ): Promise<ChecklistTemplateItem> {
     const { data } = await api.put<ChecklistTemplateItem>(
-      `/lending/checklist/templates/${templateId}/items/${itemId}`,
+      `/lending/masters/approval-checklist-templates/rows/${templateId}/items/${itemId}`,
       payload,
       { headers: idempotencyHeader() },
     );
     return data;
   },
   async deleteItem(templateId: string, itemId: string): Promise<void> {
-    await api.delete(`/lending/checklist/templates/${templateId}/items/${itemId}`, {
-      headers: idempotencyHeader(),
-    });
+    await api.delete(
+      `/lending/masters/approval-checklist-templates/rows/${templateId}/items/${itemId}`,
+      { headers: idempotencyHeader() },
+    );
   },
   async setDefault(id: string): Promise<ChecklistTemplate> {
     const { data } = await api.post<ChecklistTemplate>(
-      `/lending/checklist/templates/${id}/set-default`,
+      `/lending/masters/approval-checklist-templates/rows/${id}/set-default`,
       null,
       { headers: idempotencyHeader() },
     );

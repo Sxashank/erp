@@ -29,7 +29,9 @@ export interface LoanProductDetail {
   defaultSpreadBps: number;
   minEffectiveRate?: string | number | null;
   maxEffectiveRate?: string | number | null;
+  rateResetFrequency?: string | null;
   dayCountConvention: string;
+  allowedRepaymentFrequencies: string[];
   defaultRepaymentFrequency: string;
   allowedRepaymentModes: string[];
   defaultRepaymentMode: string;

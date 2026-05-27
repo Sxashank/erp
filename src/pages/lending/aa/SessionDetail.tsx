@@ -67,14 +67,6 @@ const getStatusBadge = (status: string) => {
 };
 
 // Format currency
-const formatCurrency = (amount: number, currency = 'INR') => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
-
 export default function SessionDetailPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const navigate = useNavigate();
@@ -244,7 +236,7 @@ export default function SessionDetailPage() {
             <CardDescription>Total Balance</CardDescription>
           </CardHeader>
           <CardContent>
-            <span className="text-2xl font-bold">{formatCurrency(totalBalance)}</span>
+            <span className="text-2xl font-bold">{formatIndianCompactCurrency(totalBalance)}</span>
           </CardContent>
         </Card>
       </div>
@@ -375,7 +367,7 @@ export default function SessionDetailPage() {
                     </TableCell>
                     <TableCell>{account.holderName}</TableCell>
                     <TableCell className="text-right font-medium">
-                      {formatCurrency(account.currentBalance, account.currency)}
+                      {formatIndianCompactCurrency(account.currentBalance, account.currency)}
                     </TableCell>
                     <TableCell className="text-right">{account.transactionsCount}</TableCell>
                     <TableCell>

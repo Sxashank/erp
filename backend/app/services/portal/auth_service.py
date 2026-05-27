@@ -150,7 +150,7 @@ class PortalAuthService:
                     PortalOTP.organization_id == organization_id,
                     PortalOTP.mobile == mobile,
                     PortalOTP.purpose == purpose,
-                    PortalOTP.is_used == False,
+                    PortalOTP.is_used.is_(False),
                     PortalOTP.expires_at > datetime.utcnow(),
                 )
             )
@@ -363,15 +363,16 @@ class PortalAuthService:
         await self._send_internal_actor_email(
             user=user,
             template_code="PORTAL_ACTIVATION_INVITE",
-            subject="Activate your scheme portal account",
+            subject="Activate your SFC portal account",
             html_body=(
                 "<html><body>"
-                f"<p>Your scheme portal account for role <strong>{user.actor_role}</strong> is ready.</p>"
+                "<p>Your SFC portal account for role "
+                f"<strong>{user.actor_role}</strong> is ready.</p>"
                 f'<p><a href="{activation_url}">Activate account</a></p>'
                 f"<p>This link expires at {user.invite_token_expires_at.isoformat()}.</p>"
                 "</body></html>"
             ),
-            message=("Your scheme portal account is ready. " f"Activate it here: {activation_url}"),
+            message=("Your SFC portal account is ready. " f"Activate it here: {activation_url}"),
         )
 
         return {
@@ -455,16 +456,16 @@ class PortalAuthService:
         await self._send_internal_actor_email(
             user=user,
             template_code="PORTAL_PASSWORD_RESET",
-            subject="Reset your scheme portal password",
+            subject="Reset your SFC portal password",
             html_body=(
                 "<html><body>"
-                "<p>A password reset was requested for your scheme portal account.</p>"
+                "<p>A password reset was requested for your SFC portal account.</p>"
                 f'<p><a href="{reset_url}">Reset password</a></p>'
                 f"<p>This link expires at {user.reset_token_expires_at.isoformat()}.</p>"
                 "</body></html>"
             ),
             message=(
-                "A password reset was requested for your scheme portal account. "
+                "A password reset was requested for your SFC portal account. "
                 f"Reset it here: {reset_url}"
             ),
         )
@@ -548,7 +549,7 @@ class PortalAuthService:
         stmt = select(PortalSession).where(
             and_(
                 PortalSession.refresh_token == refresh_token,
-                PortalSession.is_active == True,
+                PortalSession.is_active.is_(True),
             )
         )
         result = await self.db.execute(stmt)
@@ -585,7 +586,7 @@ class PortalAuthService:
             .where(
                 and_(
                     PortalSession.session_token == session_token,
-                    PortalSession.is_active == True,
+                    PortalSession.is_active.is_(True),
                     PortalSession.expires_at > datetime.utcnow(),
                 )
             )
@@ -606,7 +607,7 @@ class PortalAuthService:
         stmt = select(PortalSession).where(
             and_(
                 PortalSession.user_id == user_id,
-                PortalSession.is_active == True,
+                PortalSession.is_active.is_(True),
                 PortalSession.expires_at > datetime.utcnow(),
             )
         )
@@ -622,7 +623,7 @@ class PortalAuthService:
         stmt = select(PortalSession).where(
             and_(
                 PortalSession.user_id == user_id,
-                PortalSession.is_active == True,
+                PortalSession.is_active.is_(True),
             )
         )
         if except_session_token:
@@ -654,7 +655,7 @@ class PortalAuthService:
             .where(
                 and_(
                     PortalDevice.user_id == user_id,
-                    PortalDevice.is_active == True,
+                    PortalDevice.is_active.is_(True),
                 )
             )
             .order_by(PortalDevice.last_seen_at.desc())
@@ -812,7 +813,7 @@ class PortalAuthService:
     def _build_otp_message(self, otp_code: str, purpose: OTPPurpose) -> str:
         purpose_label = purpose.value.replace("_", " ").title()
         return (
-            f"Your scheme portal {purpose_label} OTP is {otp_code}. "
+            f"Your SFC portal {purpose_label} OTP is {otp_code}. "
             f"It is valid for {self.OTP_EXPIRY_MINUTES} minutes. Do not share it."
         )
 
@@ -977,14 +978,14 @@ class PortalAuthService:
         return device
 
     async def _serialize_user(self, user: PortalUser) -> dict[str, Any]:
-        """Return the scheme-portal user payload for frontend session storage."""
+        """Return the SFC portal user payload for frontend session storage."""
 
         links_stmt = (
             select(PortalUserEntity, Entity)
             .join(Entity, Entity.id == PortalUserEntity.entity_id)
             .where(
                 PortalUserEntity.portal_user_id == user.id,
-                PortalUserEntity.is_link_active == True,
+                PortalUserEntity.is_link_active.is_(True),
                 PortalUserEntity.deleted_at.is_(None),
                 Entity.deleted_at.is_(None),
             )

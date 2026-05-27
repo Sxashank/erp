@@ -1,9 +1,4 @@
-import {
-  Download,
-  FileText,
-  AlertTriangle,
-  CheckCircle,
-} from 'lucide-react';
+import { Download, FileText, AlertTriangle, CheckCircle } from 'lucide-react';
 import { useState } from 'react';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -20,40 +15,134 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value);
-};
-
 // Mock data - ALM Report
 const almBuckets = [
   { bucket: '1-7 days', assets: 85000000, liabilities: 72000000, gap: 13000000, cumGap: 13000000 },
   { bucket: '8-14 days', assets: 95000000, liabilities: 88000000, gap: 7000000, cumGap: 20000000 },
-  { bucket: '15-30 days', assets: 125000000, liabilities: 115000000, gap: 10000000, cumGap: 30000000 },
-  { bucket: '31-60 days', assets: 180000000, liabilities: 165000000, gap: 15000000, cumGap: 45000000 },
-  { bucket: '61-90 days', assets: 220000000, liabilities: 195000000, gap: 25000000, cumGap: 70000000 },
-  { bucket: '91-180 days', assets: 350000000, liabilities: 320000000, gap: 30000000, cumGap: 100000000 },
-  { bucket: '181-365 days', assets: 480000000, liabilities: 420000000, gap: 60000000, cumGap: 160000000 },
-  { bucket: '1-3 years', assets: 650000000, liabilities: 580000000, gap: 70000000, cumGap: 230000000 },
-  { bucket: '3-5 years', assets: 350000000, liabilities: 300000000, gap: 50000000, cumGap: 280000000 },
-  { bucket: 'Over 5 years', assets: 200000000, liabilities: 180000000, gap: 20000000, cumGap: 300000000 },
+  {
+    bucket: '15-30 days',
+    assets: 125000000,
+    liabilities: 115000000,
+    gap: 10000000,
+    cumGap: 30000000,
+  },
+  {
+    bucket: '31-60 days',
+    assets: 180000000,
+    liabilities: 165000000,
+    gap: 15000000,
+    cumGap: 45000000,
+  },
+  {
+    bucket: '61-90 days',
+    assets: 220000000,
+    liabilities: 195000000,
+    gap: 25000000,
+    cumGap: 70000000,
+  },
+  {
+    bucket: '91-180 days',
+    assets: 350000000,
+    liabilities: 320000000,
+    gap: 30000000,
+    cumGap: 100000000,
+  },
+  {
+    bucket: '181-365 days',
+    assets: 480000000,
+    liabilities: 420000000,
+    gap: 60000000,
+    cumGap: 160000000,
+  },
+  {
+    bucket: '1-3 years',
+    assets: 650000000,
+    liabilities: 580000000,
+    gap: 70000000,
+    cumGap: 230000000,
+  },
+  {
+    bucket: '3-5 years',
+    assets: 350000000,
+    liabilities: 300000000,
+    gap: 50000000,
+    cumGap: 280000000,
+  },
+  {
+    bucket: 'Over 5 years',
+    assets: 200000000,
+    liabilities: 180000000,
+    gap: 20000000,
+    cumGap: 300000000,
+  },
 ];
 
 // Mock data - NPA Classification
 const npaCategories = [
-  { code: 'STD', name: 'Standard Assets', accounts: 14250, outstanding: 2050000000, provision: 8200000, rate: 0.4 },
-  { code: 'SMA0', name: 'SMA-0 (1-30 days)', accounts: 450, outstanding: 85000000, provision: 340000, rate: 0.4 },
-  { code: 'SMA1', name: 'SMA-1 (31-60 days)', accounts: 180, outstanding: 42000000, provision: 168000, rate: 0.4 },
-  { code: 'SMA2', name: 'SMA-2 (61-90 days)', accounts: 120, outstanding: 28000000, provision: 112000, rate: 0.4 },
-  { code: 'SUB', name: 'Sub-Standard', accounts: 85, outstanding: 22000000, provision: 3300000, rate: 15.0 },
-  { code: 'DBT', name: 'Doubtful 1', accounts: 45, outstanding: 12000000, provision: 3000000, rate: 25.0 },
-  { code: 'DBT2', name: 'Doubtful 2', accounts: 18, outstanding: 5500000, provision: 2200000, rate: 40.0 },
-  { code: 'LOSS', name: 'Loss Assets', accounts: 8, outstanding: 3200000, provision: 3200000, rate: 100.0 },
+  {
+    code: 'STD',
+    name: 'Standard Assets',
+    accounts: 14250,
+    outstanding: 2050000000,
+    provision: 8200000,
+    rate: 0.4,
+  },
+  {
+    code: 'SMA0',
+    name: 'SMA-0 (1-30 days)',
+    accounts: 450,
+    outstanding: 85000000,
+    provision: 340000,
+    rate: 0.4,
+  },
+  {
+    code: 'SMA1',
+    name: 'SMA-1 (31-60 days)',
+    accounts: 180,
+    outstanding: 42000000,
+    provision: 168000,
+    rate: 0.4,
+  },
+  {
+    code: 'SMA2',
+    name: 'SMA-2 (61-90 days)',
+    accounts: 120,
+    outstanding: 28000000,
+    provision: 112000,
+    rate: 0.4,
+  },
+  {
+    code: 'SUB',
+    name: 'Sub-Standard',
+    accounts: 85,
+    outstanding: 22000000,
+    provision: 3300000,
+    rate: 15.0,
+  },
+  {
+    code: 'DBT',
+    name: 'Doubtful 1',
+    accounts: 45,
+    outstanding: 12000000,
+    provision: 3000000,
+    rate: 25.0,
+  },
+  {
+    code: 'DBT2',
+    name: 'Doubtful 2',
+    accounts: 18,
+    outstanding: 5500000,
+    provision: 2200000,
+    rate: 40.0,
+  },
+  {
+    code: 'LOSS',
+    name: 'Loss Assets',
+    accounts: 8,
+    outstanding: 3200000,
+    provision: 3200000,
+    rate: 100.0,
+  },
 ];
 
 // Mock data - CRAR
@@ -87,15 +176,18 @@ export default function RegulatoryReports() {
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().split('T')[0]);
 
   const totalGNPA = npaCategories
-    .filter(c => !['STD', 'SMA0', 'SMA1', 'SMA2'].includes(c.code))
+    .filter((c) => !['STD', 'SMA0', 'SMA1', 'SMA2'].includes(c.code))
     .reduce((sum, c) => sum + c.outstanding, 0);
   const totalOutstanding = npaCategories.reduce((sum, c) => sum + c.outstanding, 0);
-  const gnpaRatio = (totalGNPA / totalOutstanding * 100).toFixed(2);
+  const gnpaRatio = ((totalGNPA / totalOutstanding) * 100).toFixed(2);
   const totalProvision = npaCategories.reduce((sum, c) => sum + c.provision, 0);
-  const nnpaRatio = ((totalGNPA - totalProvision) / (totalOutstanding - totalProvision) * 100).toFixed(2);
+  const nnpaRatio = (
+    ((totalGNPA - totalProvision) / (totalOutstanding - totalProvision)) *
+    100
+  ).toFixed(2);
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Regulatory Reports"
         subtitle="RBI compliance and regulatory submissions"
@@ -108,7 +200,7 @@ export default function RegulatoryReports() {
               className="w-40"
             />
             <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Export All
             </Button>
           </div>
@@ -116,7 +208,7 @@ export default function RegulatoryReports() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
@@ -124,9 +216,7 @@ export default function RegulatoryReports() {
                 <div className="text-sm text-muted-foreground">CRAR</div>
                 <div className="text-2xl font-bold text-green-600">{crarData.crar}%</div>
               </div>
-              <div className="text-sm text-muted-foreground">
-                Min: {crarData.minimumRequired}%
-              </div>
+              <div className="text-sm text-muted-foreground">Min: {crarData.minimumRequired}%</div>
             </div>
           </CardContent>
         </Card>
@@ -181,7 +271,7 @@ export default function RegulatoryReports() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Asset Liability Management Report</CardTitle>
               <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
             </CardHeader>
@@ -201,17 +291,29 @@ export default function RegulatoryReports() {
                   {almBuckets.map((bucket) => (
                     <TableRow key={bucket.bucket}>
                       <TableCell className="font-medium">{bucket.bucket}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(bucket.assets)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(bucket.liabilities)}</TableCell>
-                      <TableCell className={`text-right ${bucket.gap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {bucket.gap >= 0 ? '+' : ''}{formatCurrency(bucket.gap)}
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(bucket.assets)}
                       </TableCell>
-                      <TableCell className={`text-right ${bucket.cumGap >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {bucket.cumGap >= 0 ? '+' : ''}{formatCurrency(bucket.cumGap)}
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(bucket.liabilities)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right ${bucket.gap >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                      >
+                        {bucket.gap >= 0 ? '+' : ''}
+                        {formatIndianCompactCurrency(bucket.gap)}
+                      </TableCell>
+                      <TableCell
+                        className={`text-right ${bucket.cumGap >= 0 ? 'text-green-600' : 'text-red-600'}`}
+                      >
+                        {bucket.cumGap >= 0 ? '+' : ''}
+                        {formatIndianCompactCurrency(bucket.cumGap)}
                       </TableCell>
                       <TableCell className="text-center">
                         {bucket.gap >= 0 ? (
-                          <Badge variant="default" className="bg-green-500">Positive</Badge>
+                          <Badge variant="default" className="bg-green-500">
+                            Positive
+                          </Badge>
                         ) : (
                           <Badge variant="destructive">Negative</Badge>
                         )}
@@ -230,7 +332,7 @@ export default function RegulatoryReports() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>NPA Classification as per IRAC Norms</CardTitle>
               <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
             </CardHeader>
@@ -250,46 +352,68 @@ export default function RegulatoryReports() {
                     <TableRow key={cat.code}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <Badge variant={
-                            cat.code === 'STD' ? 'default' :
-                            cat.code.startsWith('SMA') ? 'secondary' :
-                            cat.code === 'SUB' ? 'outline' : 'destructive'
-                          }>
+                          <Badge
+                            variant={
+                              cat.code === 'STD'
+                                ? 'default'
+                                : cat.code.startsWith('SMA')
+                                  ? 'secondary'
+                                  : cat.code === 'SUB'
+                                    ? 'outline'
+                                    : 'destructive'
+                            }
+                          >
                             {cat.code}
                           </Badge>
                           <span>{cat.name}</span>
                         </div>
                       </TableCell>
                       <TableCell className="text-right">{cat.accounts.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(cat.outstanding)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(cat.outstanding)}
+                      </TableCell>
                       <TableCell className="text-right">{cat.rate}%</TableCell>
-                      <TableCell className="text-right">{formatCurrency(cat.provision)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(cat.provision)}
+                      </TableCell>
                     </TableRow>
                   ))}
                   <TableRow className="bg-muted/50 font-bold">
                     <TableCell>Total</TableCell>
-                    <TableCell className="text-right">{npaCategories.reduce((s, c) => s + c.accounts, 0).toLocaleString()}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totalOutstanding)}</TableCell>
+                    <TableCell className="text-right">
+                      {npaCategories.reduce((s, c) => s + c.accounts, 0).toLocaleString()}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(totalOutstanding)}
+                    </TableCell>
                     <TableCell className="text-right">-</TableCell>
-                    <TableCell className="text-right">{formatCurrency(totalProvision)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(totalProvision)}
+                    </TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
 
-              <div className="mt-4 p-4 bg-muted rounded-lg">
+              <div className="mt-4 rounded-lg bg-muted p-4">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-sm text-muted-foreground">Gross NPA</div>
-                    <div className="text-xl font-bold">{formatCurrency(totalGNPA)}</div>
+                    <div className="text-xl font-bold">
+                      {formatIndianCompactCurrency(totalGNPA)}
+                    </div>
                     <div className="text-sm text-muted-foreground">({gnpaRatio}%)</div>
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Total Provision</div>
-                    <div className="text-xl font-bold">{formatCurrency(totalProvision)}</div>
+                    <div className="text-xl font-bold">
+                      {formatIndianCompactCurrency(totalProvision)}
+                    </div>
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Net NPA</div>
-                    <div className="text-xl font-bold">{formatCurrency(totalGNPA - totalProvision)}</div>
+                    <div className="text-xl font-bold">
+                      {formatIndianCompactCurrency(totalGNPA - totalProvision)}
+                    </div>
                     <div className="text-sm text-muted-foreground">({nnpaRatio}%)</div>
                   </div>
                 </div>
@@ -304,27 +428,31 @@ export default function RegulatoryReports() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Capital to Risk Assets Ratio (CRAR)</CardTitle>
               <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {/* Capital */}
                 <div className="space-y-4">
                   <h4 className="font-semibold">Capital Funds</h4>
                   <div className="space-y-2">
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Tier 1 Capital</span>
-                      <span className="font-medium">{formatCurrency(crarData.tier1Capital)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(crarData.tier1Capital)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Tier 2 Capital</span>
-                      <span className="font-medium">{formatCurrency(crarData.tier2Capital)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(crarData.tier2Capital)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-primary/10 rounded font-semibold">
+                    <div className="flex justify-between rounded bg-primary/10 p-2 font-semibold">
                       <span>Total Capital</span>
-                      <span>{formatCurrency(crarData.totalCapital)}</span>
+                      <span>{formatIndianCompactCurrency(crarData.totalCapital)}</span>
                     </div>
                   </div>
                 </div>
@@ -333,34 +461,40 @@ export default function RegulatoryReports() {
                 <div className="space-y-4">
                   <h4 className="font-semibold">Risk Weighted Assets</h4>
                   <div className="space-y-2">
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Credit Risk RWA</span>
-                      <span className="font-medium">{formatCurrency(crarData.creditRiskRWA)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(crarData.creditRiskRWA)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Market Risk RWA</span>
-                      <span className="font-medium">{formatCurrency(crarData.marketRiskRWA)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(crarData.marketRiskRWA)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Operational Risk RWA</span>
-                      <span className="font-medium">{formatCurrency(crarData.operationalRiskRWA)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(crarData.operationalRiskRWA)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-primary/10 rounded font-semibold">
+                    <div className="flex justify-between rounded bg-primary/10 p-2 font-semibold">
                       <span>Total RWA</span>
-                      <span>{formatCurrency(crarData.totalRWA)}</span>
+                      <span>{formatIndianCompactCurrency(crarData.totalRWA)}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* Ratios */}
-              <div className="mt-6 p-4 bg-muted rounded-lg">
+              <div className="mt-6 rounded-lg bg-muted p-4">
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div>
                     <div className="text-sm text-muted-foreground">CRAR</div>
                     <div className="text-3xl font-bold text-green-600">{crarData.crar}%</div>
                     <div className="text-sm text-green-600">
-                      <CheckCircle className="h-4 w-4 inline mr-1" />
+                      <CheckCircle className="mr-1 inline h-4 w-4" />
                       Above minimum ({crarData.minimumRequired}%)
                     </div>
                   </div>
@@ -371,7 +505,10 @@ export default function RegulatoryReports() {
                   <div>
                     <div className="text-sm text-muted-foreground">Surplus Capital</div>
                     <div className="text-3xl font-bold text-green-600">
-                      {formatCurrency(crarData.totalCapital - (crarData.totalRWA * crarData.minimumRequired / 100))}
+                      {formatIndianCompactCurrency(
+                        crarData.totalCapital -
+                          (crarData.totalRWA * crarData.minimumRequired) / 100,
+                      )}
                     </div>
                   </div>
                 </div>
@@ -386,31 +523,37 @@ export default function RegulatoryReports() {
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Liquidity Coverage Ratio (LCR)</CardTitle>
               <Button variant="outline" size="sm">
-                <Download className="h-4 w-4 mr-2" />
+                <Download className="mr-2 h-4 w-4" />
                 Export
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                 {/* HQLA */}
                 <div className="space-y-4">
                   <h4 className="font-semibold">High Quality Liquid Assets (HQLA)</h4>
                   <div className="space-y-2">
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Level 1 Assets</span>
-                      <span className="font-medium">{formatCurrency(liquidityData.level1Assets)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(liquidityData.level1Assets)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Level 2A Assets</span>
-                      <span className="font-medium">{formatCurrency(liquidityData.level2aAssets)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(liquidityData.level2aAssets)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Level 2B Assets</span>
-                      <span className="font-medium">{formatCurrency(liquidityData.level2bAssets)}</span>
+                      <span className="font-medium">
+                        {formatIndianCompactCurrency(liquidityData.level2bAssets)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-primary/10 rounded font-semibold">
+                    <div className="flex justify-between rounded bg-primary/10 p-2 font-semibold">
                       <span>Total HQLA</span>
-                      <span>{formatCurrency(liquidityData.totalHQLA)}</span>
+                      <span>{formatIndianCompactCurrency(liquidityData.totalHQLA)}</span>
                     </div>
                   </div>
                 </div>
@@ -419,37 +562,43 @@ export default function RegulatoryReports() {
                 <div className="space-y-4">
                   <h4 className="font-semibold">Net Cash Outflows (30 days)</h4>
                   <div className="space-y-2">
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Total Cash Outflows</span>
-                      <span className="font-medium text-red-600">{formatCurrency(liquidityData.cashOutflows)}</span>
+                      <span className="font-medium text-red-600">
+                        {formatIndianCompactCurrency(liquidityData.cashOutflows)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-muted rounded">
+                    <div className="flex justify-between rounded bg-muted p-2">
                       <span>Total Cash Inflows</span>
-                      <span className="font-medium text-green-600">{formatCurrency(liquidityData.cashInflows)}</span>
+                      <span className="font-medium text-green-600">
+                        {formatIndianCompactCurrency(liquidityData.cashInflows)}
+                      </span>
                     </div>
-                    <div className="flex justify-between p-2 bg-primary/10 rounded font-semibold">
+                    <div className="flex justify-between rounded bg-primary/10 p-2 font-semibold">
                       <span>Net Cash Outflows</span>
-                      <span>{formatCurrency(liquidityData.netOutflows)}</span>
+                      <span>{formatIndianCompactCurrency(liquidityData.netOutflows)}</span>
                     </div>
                   </div>
                 </div>
               </div>
 
               {/* LCR */}
-              <div className="mt-6 p-4 bg-muted rounded-lg">
+              <div className="mt-6 rounded-lg bg-muted p-4">
                 <div className="grid grid-cols-2 gap-4 text-center">
                   <div>
                     <div className="text-sm text-muted-foreground">Liquidity Coverage Ratio</div>
                     <div className="text-4xl font-bold text-green-600">{liquidityData.lcr}%</div>
                     <div className="text-sm text-green-600">
-                      <CheckCircle className="h-4 w-4 inline mr-1" />
+                      <CheckCircle className="mr-1 inline h-4 w-4" />
                       Above minimum ({liquidityData.minimumRequired}%)
                     </div>
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">Surplus Liquidity</div>
                     <div className="text-4xl font-bold text-green-600">
-                      {formatCurrency(liquidityData.totalHQLA - liquidityData.netOutflows)}
+                      {formatIndianCompactCurrency(
+                        liquidityData.totalHQLA - liquidityData.netOutflows,
+                      )}
                     </div>
                   </div>
                 </div>

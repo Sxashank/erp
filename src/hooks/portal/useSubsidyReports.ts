@@ -16,6 +16,8 @@ import {
 
 export const portalClaimsWorkbenchQueryKey = ['portal', 'claims', 'workbench'] as const;
 
+export const portalClaimDocumentTypesQueryKey = ['portal', 'claims', 'document-types'] as const;
+
 export const portalClaimEnrollmentsQueryKey = ['portal', 'claims', 'enrollments'] as const;
 
 export const portalClaimsQueryKey = (params?: {
@@ -38,6 +40,18 @@ export function usePortalClaimsWorkbench() {
       return res.data;
     },
     staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function usePortalClaimDocumentTypes() {
+  return useQuery<{ code: string; label: string }[]>({
+    queryKey: portalClaimDocumentTypesQueryKey,
+    queryFn: async () => {
+      const res = await portalClaimsApi.listDocumentTypes();
+      return res.data;
+    },
+    staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 }
@@ -167,80 +181,6 @@ export function useSubmitPortalClaim() {
   });
 }
 
-export function useVerifyPortalClaim() {
-  const queryClient = useQueryClient();
-  return useMutation<
-    PortalClaim,
-    unknown,
-    { id: string; decision: 'APPROVE' | 'REJECT'; reason?: string | null }
-  >({
-    mutationFn: async ({ id, decision, reason }) => {
-      const res = await portalClaimsApi.verify(id, { decision, reason });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['portal', 'claims'] });
-      queryClient.invalidateQueries({ queryKey: portalClaimsWorkbenchQueryKey });
-      queryClient.setQueryData(portalClaimQueryKey(data.id), data);
-    },
-  });
-}
-
-export function useInitiatePortalClaimRelease() {
-  const queryClient = useQueryClient();
-  return useMutation<
-    PortalClaim,
-    unknown,
-    {
-      id: string;
-      releaseInstructionReference: string;
-      releaseInitiatedDate?: string | null;
-      releaseInstructionNotes?: string | null;
-    }
-  >({
-    mutationFn: async ({
-      id,
-      releaseInstructionReference,
-      releaseInitiatedDate,
-      releaseInstructionNotes,
-    }) => {
-      const res = await portalClaimsApi.initiateRelease(id, {
-        releaseInstructionReference,
-        releaseInitiatedDate,
-        releaseInstructionNotes,
-      });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['portal', 'claims'] });
-      queryClient.invalidateQueries({ queryKey: portalClaimsWorkbenchQueryKey });
-      queryClient.setQueryData(portalClaimQueryKey(data.id), data);
-    },
-  });
-}
-
-export function useMarkPortalClaimReleased() {
-  const queryClient = useQueryClient();
-  return useMutation<
-    PortalClaim,
-    unknown,
-    { id: string; releaseReference: string; releasedDate?: string | null }
-  >({
-    mutationFn: async ({ id, releaseReference, releasedDate }) => {
-      const res = await portalClaimsApi.markReleased(id, {
-        releaseReference,
-        releasedDate,
-      });
-      return res.data;
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['portal', 'claims'] });
-      queryClient.invalidateQueries({ queryKey: portalClaimsWorkbenchQueryKey });
-      queryClient.setQueryData(portalClaimQueryKey(data.id), data);
-    },
-  });
-}
-
 type PortalClaimDownloadFormat = 'csv' | 'xlsx' | 'pdf';
 
 export function useDownloadPortalClaimReport(
@@ -296,4 +236,40 @@ export function useDownloadPortalClaimReport(
 
 export function useDownloadPortalClaimCsv(claimId: string | undefined) {
   return useDownloadPortalClaimReport(claimId, 'csv');
+}
+
+export function useDownloadPortalClaimCertificate(claimId: string | undefined) {
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+
+  const download = useCallback(
+    async (overrideFilename?: string) => {
+      if (!claimId) return;
+      setError(null);
+      setIsDownloading(true);
+      try {
+        const res = await portalClaimsApi.downloadClaimCertificate(claimId);
+        const blob =
+          res.data instanceof Blob
+            ? res.data
+            : new Blob([res.data as unknown as ArrayBuffer], { type: 'application/pdf' });
+        const url = window.URL.createObjectURL(blob);
+        const a = window.document.createElement('a');
+        a.href = url;
+        a.download = overrideFilename ?? `claim_certificate_${claimId}.pdf`;
+        window.document.body.appendChild(a);
+        a.click();
+        window.document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } catch (err) {
+        setError(err);
+        throw err;
+      } finally {
+        setIsDownloading(false);
+      }
+    },
+    [claimId],
+  );
+
+  return { download, isDownloading, error };
 }

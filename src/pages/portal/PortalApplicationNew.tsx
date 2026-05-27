@@ -1,9 +1,9 @@
 /**
- * Scheme Portal — New Loan Application wizard.
+ * Borrower Portal - New Loan Application wizard.
  *
  * Steps:
  *   1. Entity & Product  — pick entity (if borrower has >1) + loan product
- *   2. Loan details      — amount + tenure + purpose
+ *   2. Loan details      — borrower-facing amount, tenure, purpose, and project details
  *   3. Fund utilisation  — split the requested amount across categories
  *   4. Documents         — stage supporting docs for draft upload + submit
  *   5. Review & submit   — confirmation
@@ -20,8 +20,8 @@
  */
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ChevronLeft, ChevronRight, CloudUpload, Loader2, Plus, Send, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { ChevronLeft, ChevronRight, CloudUpload, Loader2, Send, Trash2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 
@@ -77,55 +77,17 @@ import {
   submitApplicationSchema,
   type SubmitApplicationInput,
 } from '@/schemas/portal/applicationSchema';
+import type { PortalApplicationDocumentRequirement } from '@/services/portalApi';
 
-type Step = 'entity' | 'loan' | 'funding' | 'utilization' | 'documents' | 'review';
+type Step = 'entity' | 'loan' | 'utilization' | 'documents' | 'review';
 
 const STEPS: { key: Step; label: string }[] = [
   { key: 'entity', label: 'Entity & product' },
   { key: 'loan', label: 'Loan details' },
-  { key: 'funding', label: 'Funding & lenders' },
   { key: 'utilization', label: 'Fund utilisation' },
   { key: 'documents', label: 'Documents' },
   { key: 'review', label: 'Review & submit' },
 ];
-
-const PRODUCT_FALLBACK: { id: string; name: string }[] = [];
-
-const DEFAULT_FUNDING_SOURCES = [
-  { sourceCode: 'EQUITY_SHARE_CAPITAL', sourceLabel: 'Equity share capital' },
-  { sourceCode: 'PROMOTER_CONTRIBUTION', sourceLabel: 'Promoter contribution' },
-  { sourceCode: 'BANK_TERM_LOAN', sourceLabel: 'Bank / FI term loan' },
-  { sourceCode: 'NBFC_TERM_LOAN', sourceLabel: 'NBFC term loan' },
-  { sourceCode: 'GOVERNMENT_GRANT', sourceLabel: 'Government support / grant' },
-  { sourceCode: 'INTERNAL_ACCRUALS', sourceLabel: 'Internal accruals' },
-  { sourceCode: 'OTHER_SOURCES', sourceLabel: 'Other sources' },
-];
-
-function emptyLenderLoan() {
-  return {
-    loanType: 'Term Loan',
-    loanAmount: '',
-    lenderName: '',
-    lenderCategory: 'Bank',
-    lenderContact: '',
-    lenderEmail: '',
-    lenderAddress: '',
-    lenderState: '',
-    lenderDistrict: '',
-    lenderPincode: '',
-    sanctionReference: '',
-    sanctionDate: '',
-    interestRatePercent: '',
-    emiPeriodicity: 'Monthly',
-    interestDebitingPeriodicity: 'Monthly',
-    loanAccountNumber: '',
-    ifscCode: '',
-    securityType: '',
-    disbursementCallType: '',
-    emiAmount: '',
-    emiDueDate: '',
-  };
-}
 
 interface StagedDocument {
   id: string;
@@ -157,16 +119,7 @@ export default function PortalApplicationNew(): JSX.Element {
       projectCost: '',
       shipyardName: '',
       maritimeSegment: '',
-      lenderName: '',
-      lenderBranch: '',
-      sanctionReference: '',
       declarationAccepted: false,
-      fundingSources: DEFAULT_FUNDING_SOURCES.map((source) => ({
-        ...source,
-        amount: '',
-        remarks: null,
-      })),
-      lenderLoans: [emptyLenderLoan()],
       lines: [],
     },
     mode: 'onBlur',
@@ -179,20 +132,37 @@ export default function PortalApplicationNew(): JSX.Element {
   const submitApplication = useSubmitPortalApplication();
   const uploadDocument = useUploadApplicationDocument();
 
+  const selectedProductId = form.watch('productId');
+  const productOptions = productsQuery.data ?? [];
+  const selectedProduct = productOptions.find((product) => product.id === selectedProductId);
+  const documentRequirements = selectedProduct?.documentRequirements ?? [];
+  const stagedDocumentCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    stagedDocuments.forEach((doc) => {
+      counts.set(doc.documentType, (counts.get(doc.documentType) ?? 0) + 1);
+    });
+    return counts;
+  }, [stagedDocuments]);
+  const missingMandatoryDocuments = documentRequirements.filter(
+    (requirement) =>
+      requirement.isMandatory &&
+      (stagedDocumentCounts.get(requirement.code) ?? 0) < requirement.minFileCount,
+  );
+
   const lines = form.watch('lines');
   const requestedAmount = form.watch('requestedAmount');
-  const projectCost = form.watch('projectCost');
-  const fundingSources = form.watch('fundingSources');
-  const lenderLoans = form.watch('lenderLoans');
 
   const totalAllocated = lines.reduce((acc, l) => acc + Number(l.amount || 0), 0);
   const requestedNumeric = Number(requestedAmount || 0);
-  const projectCostNumeric = Number(projectCost || 0);
   const remainder = requestedNumeric - totalAllocated;
-  const totalFundingSources = fundingSources.reduce((acc, l) => acc + Number(l.amount || 0), 0);
-  const fundingRemainder = projectCostNumeric - totalFundingSources;
-  const totalLenderLoans = lenderLoans.reduce((acc, l) => acc + Number(l.loanAmount || 0), 0);
-  const lenderRemainder = requestedNumeric - totalLenderLoans;
+
+  useEffect(() => {
+    const currentEntityId = form.getValues('entityId');
+    const resolvedEntityId = activeEntityId ?? (entities.length === 1 ? entities[0]?.id : null);
+    if (!currentEntityId && resolvedEntityId) {
+      form.setValue('entityId', resolvedEntityId, { shouldValidate: true });
+    }
+  }, [activeEntityId, entities, form]);
 
   useEffect(() => {
     if ((form.getValues('lines') ?? []).length > 0) {
@@ -214,6 +184,45 @@ export default function PortalApplicationNew(): JSX.Element {
     );
   }, [form, utilizationCategoriesQuery.data]);
 
+  useEffect(() => {
+    if (!selectedProduct) {
+      return;
+    }
+    const currentTenure = form.getValues('tenureMonths');
+    if (!currentTenure && selectedProduct.defaultTenureMonths) {
+      form.setValue('tenureMonths', selectedProduct.defaultTenureMonths, {
+        shouldValidate: true,
+      });
+    }
+  }, [form, selectedProduct]);
+
+  const validateSelectedProductPolicy = () => {
+    if (!selectedProduct) {
+      return true;
+    }
+    const amount = Number(form.getValues('requestedAmount') || 0);
+    const tenure = Number(form.getValues('tenureMonths') || 0);
+    const minAmount = Number(selectedProduct.minAmount);
+    const maxAmount = Number(selectedProduct.maxAmount);
+    if (amount < minAmount || amount > maxAmount) {
+      toast({
+        title: 'Amount outside product policy',
+        description: 'Enter a requested amount within the selected product limits.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    if (tenure < selectedProduct.minTenureMonths || tenure > selectedProduct.maxTenureMonths) {
+      toast({
+        title: 'Tenure outside product policy',
+        description: 'Enter a tenure within the selected product limits.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+    return true;
+  };
+
   const goNext = async () => {
     let valid = true;
     switch (step) {
@@ -231,22 +240,23 @@ export default function PortalApplicationNew(): JSX.Element {
           'projectCost',
           'shipyardName',
           'maritimeSegment',
-          'lenderName',
-          'lenderBranch',
-          'sanctionReference',
           'declarationAccepted',
         ]);
-        if (valid) setStep('funding');
-        break;
-      case 'funding':
-        valid = await form.trigger(['fundingSources', 'lenderLoans']);
-        if (valid) setStep('utilization');
+        if (valid && validateSelectedProductPolicy()) setStep('utilization');
         break;
       case 'utilization':
         valid = await form.trigger(['lines']);
         if (valid) setStep('documents');
         break;
       case 'documents':
+        if (missingMandatoryDocuments.length > 0) {
+          toast({
+            title: 'Required documents missing',
+            description: `${missingMandatoryDocuments.length} mandatory document requirement(s) still need files.`,
+            variant: 'destructive',
+          });
+          return;
+        }
         setStep('review');
         break;
       case 'review':
@@ -287,39 +297,7 @@ export default function PortalApplicationNew(): JSX.Element {
     projectCost: values.projectCost || null,
     shipyardName: values.shipyardName || null,
     maritimeSegment: values.maritimeSegment || null,
-    lenderName: values.lenderName || null,
-    lenderBranch: values.lenderBranch || null,
-    sanctionReference: values.sanctionReference || null,
     declarationAccepted: values.declarationAccepted,
-    fundingSources: values.fundingSources.map((source) => ({
-      sourceCode: source.sourceCode,
-      sourceLabel: source.sourceLabel,
-      amount: source.amount || '0',
-      remarks: source.remarks ?? null,
-    })),
-    lenderLoans: values.lenderLoans.map((loan) => ({
-      loanType: loan.loanType,
-      loanAmount: loan.loanAmount,
-      lenderName: loan.lenderName,
-      lenderCategory: loan.lenderCategory || null,
-      lenderContact: loan.lenderContact || null,
-      lenderEmail: loan.lenderEmail || null,
-      lenderAddress: loan.lenderAddress || null,
-      lenderState: loan.lenderState || null,
-      lenderDistrict: loan.lenderDistrict || null,
-      lenderPincode: loan.lenderPincode || null,
-      sanctionReference: loan.sanctionReference || null,
-      sanctionDate: loan.sanctionDate || null,
-      interestRatePercent: loan.interestRatePercent || null,
-      emiPeriodicity: loan.emiPeriodicity || null,
-      interestDebitingPeriodicity: loan.interestDebitingPeriodicity || null,
-      loanAccountNumber: loan.loanAccountNumber || null,
-      ifscCode: loan.ifscCode || null,
-      securityType: loan.securityType || null,
-      disbursementCallType: loan.disbursementCallType || null,
-      emiAmount: loan.emiAmount || null,
-      emiDueDate: loan.emiDueDate || null,
-    })),
     fundUtilization: values.lines.map((l) => ({
       categoryId: l.categoryId,
       amount: l.amount,
@@ -366,7 +344,7 @@ export default function PortalApplicationNew(): JSX.Element {
 
       toast({
         title: 'Application submitted',
-        description: `Application ${created.applicationNumber} is now in the scheme review queue.`,
+        description: `Application ${created.applicationNumber} is now in the SFC review queue.`,
       });
       navigate(`/portal/applications/${created.id}`);
     } catch (err) {
@@ -387,17 +365,16 @@ export default function PortalApplicationNew(): JSX.Element {
     }
   });
 
-  const productOptions = productsQuery.data ?? PRODUCT_FALLBACK;
   const submitting =
     createDraft.isPending || submitApplication.isPending || uploadDocument.isPending;
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="New scheme application"
-        subtitle="Provide institutional borrower, project, lender, and utilisation details for scheme review."
+        title="New loan application"
+        subtitle="Provide institutional borrower, project, and utilisation details for SFC review."
         breadcrumbs={[
-          { label: 'Scheme Portal', to: '/portal/workbench' },
+          { label: 'Borrower Portal', to: '/portal/workbench' },
           { label: 'Applications', to: '/portal/applications' },
           { label: 'New' },
         ]}
@@ -509,7 +486,17 @@ export default function PortalApplicationNew(): JSX.Element {
                     <FormItem>
                       <FormLabel>Loan product</FormLabel>
                       <FormControl>
-                        {productOptions.length > 0 ? (
+                        {productsQuery.isLoading ? (
+                          <div className="rounded-md border p-3 text-sm text-muted-foreground">
+                            Loading eligible products...
+                          </div>
+                        ) : productsQuery.isError ? (
+                          <ErrorState
+                            title="Could not load products"
+                            error={productsQuery.error}
+                            onRetry={() => productsQuery.refetch()}
+                          />
+                        ) : productOptions.length > 0 ? (
                           <Select value={field.value} onValueChange={field.onChange}>
                             <SelectTrigger>
                               <SelectValue placeholder="Pick a product" />
@@ -523,15 +510,12 @@ export default function PortalApplicationNew(): JSX.Element {
                             </SelectContent>
                           </Select>
                         ) : (
-                          <Input
-                            {...field}
-                            placeholder="Paste the scheme product ID provided by SMFCL"
+                          <EmptyState
+                            title="No eligible products configured"
+                            subtitle="Ask SFC to enable a borrower product for this organisation."
                           />
                         )}
                       </FormControl>
-                      {productsQuery.isLoading ? (
-                        <p className="text-xs text-muted-foreground">Loading eligible products…</p>
-                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -554,6 +538,13 @@ export default function PortalApplicationNew(): JSX.Element {
                           placeholder="Loan amount"
                         />
                       </FormControl>
+                      {selectedProduct ? (
+                        <p className="text-xs text-muted-foreground">
+                          Product range:{' '}
+                          <AmountDisplay amount={Number(selectedProduct.minAmount)} /> to{' '}
+                          <AmountDisplay amount={Number(selectedProduct.maxAmount)} />
+                        </p>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -567,12 +558,18 @@ export default function PortalApplicationNew(): JSX.Element {
                       <FormControl>
                         <Input
                           type="number"
-                          min={1}
-                          max={360}
+                          min={selectedProduct?.minTenureMonths ?? 1}
+                          max={selectedProduct?.maxTenureMonths ?? 600}
                           {...field}
                           onChange={(e) => field.onChange(Number(e.target.value))}
                         />
                       </FormControl>
+                      {selectedProduct ? (
+                        <p className="text-xs text-muted-foreground">
+                          Product range: {selectedProduct.minTenureMonths}-
+                          {selectedProduct.maxTenureMonths} months
+                        </p>
+                      ) : null}
                       <FormMessage />
                     </FormItem>
                   )}
@@ -668,47 +665,6 @@ export default function PortalApplicationNew(): JSX.Element {
                       </FormItem>
                     )}
                   />
-                  <FormField
-                    control={form.control}
-                    name="lenderName"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Primary lender</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Scheduled lender / bank name" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                  <FormField
-                    control={form.control}
-                    name="lenderBranch"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Lender branch / office</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Branch or credit office" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="sanctionReference"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Sanction reference</FormLabel>
-                        <FormControl>
-                          <Input {...field} placeholder="Reference / sanction memo number" />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
                 </div>
                 <FormField
                   control={form.control}
@@ -729,8 +685,8 @@ export default function PortalApplicationNew(): JSX.Element {
                           </FormLabel>
                           <p className="text-sm text-muted-foreground">
                             We confirm that the organisation is an eligible institutional borrower
-                            and that the submitted project, lender, and utilisation details are
-                            complete and accurate.
+                            and that the submitted project and utilisation details are complete and
+                            accurate.
                           </p>
                         </div>
                       </div>
@@ -738,176 +694,6 @@ export default function PortalApplicationNew(): JSX.Element {
                     </FormItem>
                   )}
                 />
-              </div>
-            )}
-
-            {step === 'funding' && (
-              <div className="space-y-6">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-base">Project funding composition</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap gap-4 text-sm">
-                      <span>
-                        <span className="text-muted-foreground">Project cost: </span>
-                        <span className="font-medium">
-                          <AmountDisplay amount={projectCostNumeric} />
-                        </span>
-                      </span>
-                      <span>
-                        <span className="text-muted-foreground">Funding total: </span>
-                        <span className="font-medium">
-                          <AmountDisplay amount={totalFundingSources} />
-                        </span>
-                      </span>
-                      <span>
-                        <span className="text-muted-foreground">Remaining: </span>
-                        <span
-                          className={`font-medium ${
-                            projectCostNumeric > 0 && Math.abs(fundingRemainder) > 0.01
-                              ? 'text-amber-600'
-                              : 'text-emerald-700'
-                          }`}
-                        >
-                          <AmountDisplay amount={fundingRemainder} />
-                        </span>
-                      </span>
-                    </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Source</TableHead>
-                          <TableHead className="text-right">Amount</TableHead>
-                          <TableHead>Remarks</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {fundingSources.map((source, idx) => (
-                          <TableRow key={source.sourceCode}>
-                            <TableCell>
-                              <div className="font-medium">{source.sourceLabel}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {source.sourceCode}
-                              </div>
-                            </TableCell>
-                            <TableCell className="text-right">
-                              <AmountInput
-                                value={source.amount ? Number(source.amount) : undefined}
-                                onChange={(amount) => {
-                                  const next = [...form.getValues('fundingSources')];
-                                  next[idx] = {
-                                    ...next[idx]!,
-                                    amount: amount === undefined ? '' : String(amount),
-                                  };
-                                  form.setValue('fundingSources', next, {
-                                    shouldValidate: true,
-                                  });
-                                }}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <Input
-                                value={source.remarks ?? ''}
-                                onChange={(event) => {
-                                  const next = [...form.getValues('fundingSources')];
-                                  next[idx] = {
-                                    ...next[idx]!,
-                                    remarks: event.target.value || null,
-                                  };
-                                  form.setValue('fundingSources', next);
-                                }}
-                              />
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                    {form.formState.errors.fundingSources ? (
-                      <p className="text-sm text-destructive">
-                        {String(form.formState.errors.fundingSources.message ?? '')}
-                      </p>
-                    ) : null}
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between gap-3">
-                      <CardTitle className="text-base">Tagged lender loans</CardTitle>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() =>
-                          form.setValue('lenderLoans', [
-                            ...form.getValues('lenderLoans'),
-                            emptyLenderLoan(),
-                          ])
-                        }
-                      >
-                        <Plus className="mr-2 h-4 w-4" />
-                        Add lender
-                      </Button>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="flex flex-wrap gap-4 text-sm">
-                      <span>
-                        <span className="text-muted-foreground">Requested loan: </span>
-                        <span className="font-medium">
-                          <AmountDisplay amount={requestedNumeric} />
-                        </span>
-                      </span>
-                      <span>
-                        <span className="text-muted-foreground">Tagged loans: </span>
-                        <span className="font-medium">
-                          <AmountDisplay amount={totalLenderLoans} />
-                        </span>
-                      </span>
-                      <span>
-                        <span className="text-muted-foreground">Remaining: </span>
-                        <span
-                          className={`font-medium ${
-                            Math.abs(lenderRemainder) > 0.01 ? 'text-amber-600' : 'text-emerald-700'
-                          }`}
-                        >
-                          <AmountDisplay amount={lenderRemainder} />
-                        </span>
-                      </span>
-                    </div>
-                    <div className="space-y-4">
-                      {lenderLoans.map((loan, idx) => (
-                        <div key={idx} className="rounded-lg border p-4">
-                          <div className="mb-4 flex items-center justify-between gap-3">
-                            <p className="font-medium">Lender loan {idx + 1}</p>
-                            {lenderLoans.length > 1 ? (
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => {
-                                  const next = form
-                                    .getValues('lenderLoans')
-                                    .filter((_, loanIdx) => loanIdx !== idx);
-                                  form.setValue('lenderLoans', next, { shouldValidate: true });
-                                }}
-                                aria-label="Remove lender loan"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            ) : null}
-                          </div>
-                          <LenderLoanFields form={form} index={idx} />
-                        </div>
-                      ))}
-                    </div>
-                    {form.formState.errors.lenderLoans ? (
-                      <p className="text-sm text-destructive">
-                        {String(form.formState.errors.lenderLoans.message ?? '')}
-                      </p>
-                    ) : null}
-                  </CardContent>
-                </Card>
               </div>
             )}
 
@@ -943,7 +729,7 @@ export default function PortalApplicationNew(): JSX.Element {
                 ) : lines.length === 0 ? (
                   <EmptyState
                     title="No utilisation categories configured"
-                    subtitle="Ask the scheme administrator to configure fund-utilisation categories before creating applications."
+                    subtitle="Ask SFC to configure fund-utilisation categories before creating applications."
                   />
                 ) : (
                   <Table>
@@ -962,7 +748,7 @@ export default function PortalApplicationNew(): JSX.Element {
                               {line.categoryLabel ?? line.categoryId}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              Scheme-configured utilisation bucket
+                              SFC-configured utilisation bucket
                             </div>
                           </TableCell>
                           <TableCell className="text-right tabular-nums">
@@ -1012,41 +798,19 @@ export default function PortalApplicationNew(): JSX.Element {
 
             {step === 'documents' && (
               <div className="space-y-4">
-                <UploadStager onAdd={stageDocument} />
-                {stagedDocuments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No documents staged yet. Documents are uploaded onto the draft application
-                    before the final submit call.
-                  </p>
+                {documentRequirements.length === 0 ? (
+                  <EmptyState
+                    title="No product document requirements configured"
+                    subtitle="Ask SFC to configure borrower document requirements for this product before submission."
+                  />
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>File</TableHead>
-                        <TableHead>Type</TableHead>
-                        <TableHead className="w-12" />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {stagedDocuments.map((d) => (
-                        <TableRow key={d.id}>
-                          <TableCell>{d.file.name}</TableCell>
-                          <TableCell>{d.documentType}</TableCell>
-                          <TableCell>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeStagedDocument(d.id)}
-                              aria-label="Remove staged document"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <UploadStager
+                    requirements={documentRequirements}
+                    stagedDocuments={stagedDocuments}
+                    stagedDocumentCounts={stagedDocumentCounts}
+                    onAdd={stageDocument}
+                    onRemove={removeStagedDocument}
+                  />
                 )}
               </div>
             )}
@@ -1061,214 +825,108 @@ export default function PortalApplicationNew(): JSX.Element {
   );
 }
 
-function LenderLoanFields({
-  form,
-  index,
-}: {
-  form: ReturnType<typeof useForm<SubmitApplicationInput>>;
-  index: number;
-}): JSX.Element {
-  const loans = form.watch('lenderLoans');
-  const loan = loans[index] ?? emptyLenderLoan();
-
-  const updateLoan = (field: keyof typeof loan, value: string) => {
-    const next = [...form.getValues('lenderLoans')];
-    next[index] = { ...next[index]!, [field]: value };
-    form.setValue('lenderLoans', next, { shouldValidate: true });
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-      <div className="space-y-2">
-        <Label>Loan type</Label>
-        <Input
-          value={loan.loanType}
-          onChange={(event) => updateLoan('loanType', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Lender name</Label>
-        <Input
-          value={loan.lenderName}
-          onChange={(event) => updateLoan('lenderName', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Lender category</Label>
-        <Select
-          value={loan.lenderCategory || 'Bank'}
-          onValueChange={(value) => updateLoan('lenderCategory', value)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Bank">Bank</SelectItem>
-            <SelectItem value="NBFC">NBFC</SelectItem>
-            <SelectItem value="Financial Institution">Financial Institution</SelectItem>
-            <SelectItem value="Other">Other</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>Loan amount</Label>
-        <AmountInput
-          value={loan.loanAmount ? Number(loan.loanAmount) : undefined}
-          onChange={(amount) =>
-            updateLoan('loanAmount', amount === undefined ? '' : String(amount))
-          }
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Interest rate (%)</Label>
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          step="0.01"
-          value={loan.interestRatePercent ?? ''}
-          onChange={(event) => updateLoan('interestRatePercent', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Sanction date</Label>
-        <Input
-          type="date"
-          value={loan.sanctionDate ?? ''}
-          onChange={(event) => updateLoan('sanctionDate', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Sanction reference</Label>
-        <Input
-          value={loan.sanctionReference ?? ''}
-          onChange={(event) => updateLoan('sanctionReference', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Loan account number</Label>
-        <Input
-          value={loan.loanAccountNumber ?? ''}
-          onChange={(event) => updateLoan('loanAccountNumber', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>IFSC</Label>
-        <Input
-          value={loan.ifscCode ?? ''}
-          onChange={(event) => updateLoan('ifscCode', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>EMI periodicity</Label>
-        <Select
-          value={loan.emiPeriodicity || 'Monthly'}
-          onValueChange={(value) => updateLoan('emiPeriodicity', value)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Monthly">Monthly</SelectItem>
-            <SelectItem value="Quarterly">Quarterly</SelectItem>
-            <SelectItem value="Half-yearly">Half-yearly</SelectItem>
-            <SelectItem value="Annual">Annual</SelectItem>
-            <SelectItem value="Bullet">Bullet</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>Interest debiting</Label>
-        <Select
-          value={loan.interestDebitingPeriodicity || 'Monthly'}
-          onValueChange={(value) => updateLoan('interestDebitingPeriodicity', value)}
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="Monthly">Monthly</SelectItem>
-            <SelectItem value="Quarterly">Quarterly</SelectItem>
-            <SelectItem value="Half-yearly">Half-yearly</SelectItem>
-            <SelectItem value="Annual">Annual</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>EMI amount</Label>
-        <AmountInput
-          value={loan.emiAmount ? Number(loan.emiAmount) : undefined}
-          onChange={(amount) => updateLoan('emiAmount', amount === undefined ? '' : String(amount))}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>EMI due date</Label>
-        <Input
-          type="date"
-          value={loan.emiDueDate ?? ''}
-          onChange={(event) => updateLoan('emiDueDate', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Security type</Label>
-        <Input
-          value={loan.securityType ?? ''}
-          onChange={(event) => updateLoan('securityType', event.target.value)}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label>Disbursement call type</Label>
-        <Input
-          value={loan.disbursementCallType ?? ''}
-          onChange={(event) => updateLoan('disbursementCallType', event.target.value)}
-        />
-      </div>
-    </div>
-  );
-}
-
 function UploadStager({
+  requirements,
+  stagedDocuments,
+  stagedDocumentCounts,
   onAdd,
+  onRemove,
 }: {
+  requirements: PortalApplicationDocumentRequirement[];
+  stagedDocuments: StagedDocument[];
+  stagedDocumentCounts: Map<string, number>;
   onAdd: (file: File, documentType: string) => void;
+  onRemove: (id: string) => void;
 }): JSX.Element {
-  const [type, setType] = useState('SUPPORTING_DOCUMENT');
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Stage a document</CardTitle>
+        <CardTitle className="text-base">Product document requirements</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-3">
-          <div className="space-y-2 md:col-span-1">
-            <Label>Type</Label>
-            <Select value={type} onValueChange={setType}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="BOARD_RESOLUTION">Board resolution</SelectItem>
-                <SelectItem value="FINANCIAL_STATEMENT">Financial statement</SelectItem>
-                <SelectItem value="PROJECT_PROPOSAL">Project proposal</SelectItem>
-                <SelectItem value="SUPPORTING_DOCUMENT">Supporting document</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <Label>File</Label>
-            <Input
-              type="file"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  onAdd(file, type);
-                  e.target.value = '';
-                }
-              }}
-            />
-          </div>
+        <div className="space-y-4">
+          {requirements.map((requirement) => {
+            const stagedForRequirement = stagedDocuments.filter(
+              (doc) => doc.documentType === requirement.code,
+            );
+            const stagedCount = stagedDocumentCounts.get(requirement.code) ?? 0;
+            const maxCount = Math.max(requirement.maxFileCount, requirement.minFileCount);
+            return (
+              <div key={requirement.code} className="rounded-lg border p-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-medium">{requirement.name}</p>
+                      {requirement.isMandatory ? (
+                        <span className="rounded bg-red-50 px-2 py-0.5 text-xs text-red-700">
+                          Mandatory
+                        </span>
+                      ) : (
+                        <span className="rounded bg-slate-50 px-2 py-0.5 text-xs text-slate-600">
+                          Optional
+                        </span>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {requirement.helpText || requirement.category}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Files required: {requirement.minFileCount}
+                      {requirement.maxFileCount !== requirement.minFileCount
+                        ? `-${requirement.maxFileCount}`
+                        : ''}
+                      . Staged: {stagedCount}
+                    </p>
+                  </div>
+                  <div className="min-w-64">
+                    <Label htmlFor={`upload-${requirement.code}`}>File</Label>
+                    <Input
+                      id={`upload-${requirement.code}`}
+                      type="file"
+                      disabled={stagedCount >= maxCount}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          onAdd(file, requirement.code);
+                          e.target.value = '';
+                        }
+                      }}
+                    />
+                  </div>
+                </div>
+                {stagedForRequirement.length > 0 ? (
+                  <Table className="mt-3">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>File</TableHead>
+                        <TableHead className="w-12" />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {stagedForRequirement.map((doc) => (
+                        <TableRow key={doc.id}>
+                          <TableCell>{doc.file.name}</TableCell>
+                          <TableCell>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => onRemove(doc.id)}
+                              aria-label="Remove staged document"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
-        <p className="mt-3 flex items-center gap-1 text-xs text-muted-foreground">
+        <p className="mt-4 flex items-center gap-1 text-xs text-muted-foreground">
           <CloudUpload className="h-3.5 w-3.5" />
           PDF / images up to 50 MB. Files are uploaded onto the draft application before the final
           submit call.
@@ -1287,8 +945,6 @@ function ReviewPanel({
 }): JSX.Element {
   const v = form.getValues();
   const sum = v.lines.reduce((acc, l) => acc + Number(l.amount || 0), 0);
-  const fundingTotal = v.fundingSources.reduce((acc, l) => acc + Number(l.amount || 0), 0);
-  const lenderTotal = v.lenderLoans.reduce((acc, l) => acc + Number(l.loanAmount || 0), 0);
   return (
     <div className="space-y-4 text-sm">
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -1324,53 +980,6 @@ function ReviewPanel({
           <p className="text-muted-foreground">Location</p>
           <p className="font-medium">{v.projectLocation || '—'}</p>
         </div>
-        <div>
-          <p className="text-muted-foreground">Primary lender</p>
-          <p className="font-medium">{v.lenderName || '—'}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Sanction reference</p>
-          <p className="font-medium">{v.sanctionReference || '—'}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div>
-          <p className="text-muted-foreground">Funding-source total</p>
-          <p className="font-medium">
-            <AmountDisplay amount={fundingTotal} />
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Tagged lender-loan total</p>
-          <p className="font-medium">
-            <AmountDisplay amount={lenderTotal} />
-          </p>
-        </div>
-      </div>
-      <div>
-        <p className="mb-2 text-muted-foreground">Tagged lender loans</p>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Lender</TableHead>
-              <TableHead>Loan type</TableHead>
-              <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Sanction</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {v.lenderLoans.map((loan, idx) => (
-              <TableRow key={`${loan.lenderName}-${idx}`}>
-                <TableCell>{loan.lenderName || '—'}</TableCell>
-                <TableCell>{loan.loanType || '—'}</TableCell>
-                <TableCell className="text-right tabular-nums">
-                  <AmountDisplay amount={Number(loan.loanAmount || 0)} />
-                </TableCell>
-                <TableCell>{loan.sanctionReference || '—'}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
       </div>
       <div>
         <p className="mb-2 text-muted-foreground">Fund utilisation</p>

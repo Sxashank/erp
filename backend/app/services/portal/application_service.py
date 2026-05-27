@@ -13,12 +13,11 @@ the camelCase wire model out of the admin LOS service.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from io import BytesIO
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -32,13 +31,16 @@ from app.models.lending.application import (
     ApplicationDocument,
     LoanApplication,
 )
+from app.models.lending.application_query import (
+    ApplicationQueryStatus,
+    LosApplicationQuery,
+)
 from app.models.lending.entity import Entity
 from app.models.lending.enums import ApplicationStage, ApplicationStatus, DocumentStage
+from app.models.lending.iif.application_lender_loan import ApplicationLenderLoan
 from app.models.lending.iif.application_utilization import (
     ApplicationUtilization,
 )
-from app.models.lending.iif.application_funding_source import ApplicationFundingSource
-from app.models.lending.iif.application_lender_loan import ApplicationLenderLoan
 from app.models.lending.iif.fund_utilization_category import (
     FundUtilizationCategory,
 )
@@ -53,10 +55,6 @@ from app.schemas.portal.application import (
     ApplicationDetailResponse,
     ApplicationDocumentRequirementResponse,
     ApplicationDocumentResponse,
-    ApplicationFundingSourceLine,
-    ApplicationFundingSourceResponseLine,
-    ApplicationLenderLoanLine,
-    ApplicationLenderLoanResponseLine,
     ApplicationListItem,
     ApplicationListResponse,
     ApplicationStatusEvent,
@@ -213,26 +211,6 @@ class PortalApplicationService:
         )
         utilization_rows = list((await self.db.execute(util_stmt)).scalars().all())
 
-        funding_stmt = (
-            select(ApplicationFundingSource)
-            .where(
-                ApplicationFundingSource.application_id == application_id,
-                ApplicationFundingSource.deleted_at.is_(None),
-            )
-            .order_by(ApplicationFundingSource.created_at.asc(), ApplicationFundingSource.id.asc())
-        )
-        funding_rows = list((await self.db.execute(funding_stmt)).scalars().all())
-
-        lender_loan_stmt = (
-            select(ApplicationLenderLoan)
-            .where(
-                ApplicationLenderLoan.application_id == application_id,
-                ApplicationLenderLoan.deleted_at.is_(None),
-            )
-            .order_by(ApplicationLenderLoan.created_at.asc(), ApplicationLenderLoan.id.asc())
-        )
-        lender_loan_rows = list((await self.db.execute(lender_loan_stmt)).scalars().all())
-
         doc_stmt = (
             select(ApplicationDocument)
             .where(
@@ -290,9 +268,6 @@ class PortalApplicationService:
             project_cost=application.project_cost,
             shipyard_name=(application.extra_data or {}).get("shipyard_name"),
             maritime_segment=(application.extra_data or {}).get("maritime_segment"),
-            lender_name=(application.extra_data or {}).get("lender_name"),
-            lender_branch=(application.extra_data or {}).get("lender_branch"),
-            sanction_reference=(application.extra_data or {}).get("sanction_reference"),
             declaration_accepted=(application.extra_data or {}).get("declaration_accepted"),
             review_remarks=(application.extra_data or {}).get("review_remarks"),
             rejection_reason=application.rejection_reason,
@@ -307,12 +282,6 @@ class PortalApplicationService:
                     remarks=row.remarks,
                 )
                 for row in utilization_rows
-            ],
-            funding_sources=[
-                self._to_funding_source_response(row) for row in funding_rows
-            ],
-            lender_loans=[
-                self._to_lender_loan_response(row) for row in lender_loan_rows
             ],
             documents=[self._to_doc_response(d) for d in documents],
             document_requirements=self._build_document_requirement_responses(
@@ -388,12 +357,13 @@ class PortalApplicationService:
             project_name=payload.project_name,
             project_cost=payload.project_cost,
             project_location=payload.project_location,
+            preferred_interest_type=product.interest_type,
+            preferred_repayment_frequency=product.default_repayment_frequency,
+            preferred_repayment_mode=product.default_repayment_mode,
+            requested_moratorium_months=0,
             extra_data={
                 "shipyard_name": payload.shipyard_name,
                 "maritime_segment": payload.maritime_segment,
-                "lender_name": payload.lender_name,
-                "lender_branch": payload.lender_branch,
-                "sanction_reference": payload.sanction_reference,
                 "declaration_accepted": payload.declaration_accepted,
             },
         )
@@ -425,20 +395,6 @@ class PortalApplicationService:
                 current_user=_ServiceCurrentUser(portal_user.id),
             )
 
-        if payload.funding_sources:
-            await self._replace_funding_sources(
-                organization_id=entity.organization_id,
-                application_id=application.id,
-                lines=payload.funding_sources,
-            )
-
-        if payload.lender_loans:
-            await self._replace_lender_loans(
-                organization_id=entity.organization_id,
-                application_id=application.id,
-                lines=payload.lender_loans,
-            )
-
         return await self.get_application(portal_user, application.id)
 
     async def update_application(
@@ -454,7 +410,7 @@ class PortalApplicationService:
         ).scalar_one_or_none()
         if entity is None or not is_scheme_eligible_entity_type(entity.entity_type):
             raise BadRequestException(
-                "Scheme portal supports institutional borrowers only",
+                "SFC borrower portal supports institutional borrowers only",
                 error_code="ENTITY_TYPE_NOT_ALLOWED",
             )
 
@@ -489,9 +445,6 @@ class PortalApplicationService:
                     **{
                         "shipyard_name": payload.shipyard_name,
                         "maritime_segment": payload.maritime_segment,
-                        "lender_name": payload.lender_name,
-                        "lender_branch": payload.lender_branch,
-                        "sanction_reference": payload.sanction_reference,
                         "declaration_accepted": payload.declaration_accepted,
                     },
                 }
@@ -500,9 +453,6 @@ class PortalApplicationService:
                     for value in (
                         payload.shipyard_name,
                         payload.maritime_segment,
-                        payload.lender_name,
-                        payload.lender_branch,
-                        payload.sanction_reference,
                         payload.declaration_accepted,
                     )
                 )
@@ -529,20 +479,6 @@ class PortalApplicationService:
                     submit=False,
                 ),
                 current_user=_ServiceCurrentUser(portal_user.id),
-            )
-
-        if payload.funding_sources is not None:
-            await self._replace_funding_sources(
-                organization_id=application.organization_id,
-                application_id=application.id,
-                lines=payload.funding_sources,
-            )
-
-        if payload.lender_loans is not None:
-            await self._replace_lender_loans(
-                organization_id=application.organization_id,
-                application_id=application.id,
-                lines=payload.lender_loans,
             )
 
         return await self.get_application(portal_user, application.id)
@@ -581,10 +517,10 @@ class PortalApplicationService:
             await self.db.flush()
             await self._notify_application_transition(
                 application=refreshed,
-                title="Scheme application submitted",
+                title="SFC application submitted",
                 body=(
                     f"Application {refreshed.application_number} has been submitted "
-                    "for lender review."
+                    "for SFC review."
                 ),
                 notification_type="SCHEME_APPLICATION_SUBMITTED",
                 target_roles=list(APPLICATION_LENDER_ROLES),
@@ -598,7 +534,15 @@ class PortalApplicationService:
     ) -> ApplicationDetailResponse:
         self._require_borrower(portal_user)
         application = await assert_application_access(portal_user, application_id, self.db)
-        if application.status != ApplicationStatus.ADDITIONAL_INFO_REQUIRED:
+        current_portal_status = derive_scheme_application_status(
+            application.status,
+            application.stage,
+            application.extra_data or {},
+        )
+        if (
+            application.status != ApplicationStatus.ADDITIONAL_INFO_REQUIRED
+            and current_portal_status != "QUERY_PENDING"
+        ):
             raise BadRequestException(
                 "Only queried applications can be resubmitted",
                 error_code="INVALID_TRANSITION",
@@ -615,6 +559,7 @@ class PortalApplicationService:
             application,
             entity.entity_type,
         )
+        await self._ensure_application_queries_ready(application)
 
         extra = dict(application.extra_data or {})
         resume_review_state = str(extra.get("resume_review_state") or "LENDER_REVIEW").upper()
@@ -641,7 +586,7 @@ class PortalApplicationService:
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
-            title="Scheme application resubmitted",
+            title="SFC application resubmitted",
             body=(
                 f"Application {application.application_number} has been resubmitted "
                 "after responding to the review query."
@@ -685,7 +630,7 @@ class PortalApplicationService:
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
-            title="Scheme application withdrawn",
+            title="SFC application withdrawn",
             body=(
                 f"Application {application.application_number} has been withdrawn "
                 f"by the borrower. Reason: {reason}"
@@ -713,7 +658,7 @@ class PortalApplicationService:
             != "LENDER_REVIEW"
         ):
             raise BadRequestException(
-                "Only lender-review applications can be validated",
+                "Only SFC-review applications can be validated",
                 error_code="INVALID_TRANSITION",
             )
         extra = dict(application.extra_data or {})
@@ -743,10 +688,10 @@ class PortalApplicationService:
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
-            title="Lender review completed",
+            title="SFC review completed",
             body=(
-                f"Application {application.application_number} has completed lender validation "
-                "and moved to SMFCL review."
+                f"Application {application.application_number} has completed SFC validation "
+                "and moved to SFC review."
             ),
             notification_type="SCHEME_APPLICATION_LENDER_VALIDATED",
             target_roles=list(APPLICATION_SMFCL_REVIEW_ROLES),
@@ -784,8 +729,8 @@ class PortalApplicationService:
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
-            title="SMFCL appraisal started",
-            body=(f"Application {application.application_number} is now under SMFCL appraisal."),
+            title="SFC appraisal started",
+            body=(f"Application {application.application_number} is now under SFC appraisal."),
             notification_type="SCHEME_APPLICATION_APPRAISAL_STARTED",
             target_roles=list(APPLICATION_APPROVER_ROLES),
         )
@@ -866,7 +811,7 @@ class PortalApplicationService:
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
-            title="Scheme application approved",
+            title="SFC application approved",
             body=(
                 f"Application {application.application_number} has been approved."
                 + (f" Remarks: {remarks}" if remarks else "")
@@ -897,7 +842,7 @@ class PortalApplicationService:
         await self.db.flush()
         await self._notify_application_transition(
             application=application,
-            title="Scheme application rejected",
+            title="SFC application rejected",
             body=(
                 f"Application {application.application_number} has been rejected. "
                 f"Reason: {reason}"
@@ -929,7 +874,11 @@ class PortalApplicationService:
             entities_stmt = entities_stmt.where(Entity.id == entity_id)
         entities = list((await self.db.execute(entities_stmt)).scalars().all())
         eligible_types = {
-            entity.entity_type.value
+            (
+                entity.entity_type.value
+                if hasattr(entity.entity_type, "value")
+                else str(entity.entity_type)
+            )
             for entity in entities
             if is_scheme_eligible_entity_type(entity.entity_type)
         }
@@ -952,6 +901,26 @@ class PortalApplicationService:
             entity_types = set(product.eligible_entity_types or [])
             if entity_types and not entity_types.intersection(eligible_types):
                 continue
+            matched_entity_type = next(
+                (
+                    entity.entity_type
+                    for entity in entities
+                    if (
+                        not entity_types
+                        or (
+                            entity.entity_type.value
+                            if hasattr(entity.entity_type, "value")
+                            else str(entity.entity_type)
+                        )
+                        in entity_types
+                    )
+                ),
+                entities[0].entity_type if entities else None,
+            )
+            requirement_rows = await self._get_document_requirements(
+                product_id=product.id,
+                entity_type=matched_entity_type,
+            )
             out.append(
                 ProductListItem(
                     id=product.id,
@@ -966,6 +935,18 @@ class PortalApplicationService:
                     max_amount=product.max_amount,
                     min_tenure_months=product.min_tenure_months,
                     max_tenure_months=product.max_tenure_months,
+                    default_tenure_months=product.default_tenure_months,
+                    allows_moratorium=product.allows_moratorium,
+                    max_moratorium_months=product.max_moratorium_months,
+                    interest_type=product.interest_type,
+                    allowed_repayment_frequencies=list(product.allowed_repayment_frequencies or []),
+                    default_repayment_frequency=product.default_repayment_frequency,
+                    allowed_repayment_modes=list(product.allowed_repayment_modes or []),
+                    default_repayment_mode=product.default_repayment_mode,
+                    document_requirements=self._build_document_requirement_responses(
+                        requirement_rows,
+                        [],
+                    ),
                 )
             )
         return out
@@ -1073,7 +1054,10 @@ class PortalApplicationService:
         portal_user: PortalUser,
         application_id: UUID,
     ) -> list[ApplicationDocumentResponse]:
-        await assert_application_access(portal_user, application_id, self.db)
+        if is_borrower_role(portal_user):
+            await assert_application_access(portal_user, application_id, self.db)
+        else:
+            await self._get_review_application(portal_user, application_id)
         stmt = (
             select(ApplicationDocument)
             .where(
@@ -1091,7 +1075,10 @@ class PortalApplicationService:
         application_id: UUID,
         document_id: UUID,
     ) -> ApplicationDocument:
-        await assert_application_access(portal_user, application_id, self.db)
+        if is_borrower_role(portal_user):
+            await assert_application_access(portal_user, application_id, self.db)
+        else:
+            await self._get_review_application(portal_user, application_id)
         stmt = select(ApplicationDocument).where(
             ApplicationDocument.id == document_id,
             ApplicationDocument.application_id == application_id,
@@ -1165,117 +1152,6 @@ class PortalApplicationService:
             ),
         )
 
-    async def _replace_funding_sources(
-        self,
-        *,
-        organization_id: UUID,
-        application_id: UUID,
-        lines: Sequence[ApplicationFundingSourceLine],
-    ) -> None:
-        await self.db.execute(
-            delete(ApplicationFundingSource).where(
-                ApplicationFundingSource.application_id == application_id
-            )
-        )
-        for line in lines:
-            self.db.add(
-                ApplicationFundingSource(
-                    organization_id=organization_id,
-                    application_id=application_id,
-                    source_code=line.source_code.strip().upper(),
-                    source_label=line.source_label.strip(),
-                    amount=line.amount,
-                    remarks=line.remarks,
-                )
-            )
-        await self.db.flush()
-
-    async def _replace_lender_loans(
-        self,
-        *,
-        organization_id: UUID,
-        application_id: UUID,
-        lines: Sequence[ApplicationLenderLoanLine],
-    ) -> None:
-        await self.db.execute(
-            delete(ApplicationLenderLoan).where(
-                ApplicationLenderLoan.application_id == application_id
-            )
-        )
-        for line in lines:
-            self.db.add(
-                ApplicationLenderLoan(
-                    organization_id=organization_id,
-                    application_id=application_id,
-                    loan_type=line.loan_type.strip(),
-                    loan_amount=line.loan_amount,
-                    lender_name=line.lender_name.strip(),
-                    lender_category=line.lender_category,
-                    lender_contact=line.lender_contact,
-                    lender_email=line.lender_email,
-                    lender_address=line.lender_address,
-                    lender_state=line.lender_state,
-                    lender_district=line.lender_district,
-                    lender_pincode=line.lender_pincode,
-                    sanction_reference=line.sanction_reference,
-                    sanction_date=line.sanction_date,
-                    interest_rate_percent=line.interest_rate_percent,
-                    emi_periodicity=line.emi_periodicity,
-                    interest_debiting_periodicity=line.interest_debiting_periodicity,
-                    loan_account_number=line.loan_account_number,
-                    ifsc_code=line.ifsc_code,
-                    security_type=line.security_type,
-                    disbursement_call_type=line.disbursement_call_type,
-                    emi_amount=line.emi_amount,
-                    emi_due_date=line.emi_due_date,
-                )
-            )
-        await self.db.flush()
-
-    def _to_funding_source_response(
-        self,
-        row: ApplicationFundingSource,
-    ) -> ApplicationFundingSourceResponseLine:
-        return ApplicationFundingSourceResponseLine(
-            id=row.id,
-            source_code=row.source_code,
-            source_label=row.source_label,
-            amount=row.amount,
-            remarks=row.remarks,
-        )
-
-    def _to_lender_loan_response(
-        self,
-        row: ApplicationLenderLoan,
-    ) -> ApplicationLenderLoanResponseLine:
-        return ApplicationLenderLoanResponseLine(
-            id=row.id,
-            loan_type=row.loan_type,
-            loan_amount=row.loan_amount,
-            lender_name=row.lender_name,
-            lender_category=row.lender_category,
-            lender_contact=row.lender_contact,
-            lender_email=row.lender_email,
-            lender_address=row.lender_address,
-            lender_state=row.lender_state,
-            lender_district=row.lender_district,
-            lender_pincode=row.lender_pincode,
-            sanction_reference=row.sanction_reference,
-            sanction_date=row.sanction_date,
-            interest_rate_percent=row.interest_rate_percent,
-            emi_periodicity=row.emi_periodicity,
-            interest_debiting_periodicity=row.interest_debiting_periodicity,
-            loan_account_number=row.loan_account_number,
-            ifsc_code=row.ifsc_code,
-            security_type=row.security_type,
-            disbursement_call_type=row.disbursement_call_type,
-            emi_amount=row.emi_amount,
-            emi_due_date=row.emi_due_date,
-            lender_validation_status=row.lender_validation_status,
-            lender_validation_remarks=row.lender_validation_remarks,
-            lender_validated_at=row.lender_validated_at,
-        )
-
     async def _get_document_requirements(
         self,
         *,
@@ -1287,17 +1163,18 @@ class PortalApplicationService:
             .where(
                 DocumentChecklist.product_id == product_id,
                 DocumentChecklist.required_at_stage == DocumentStage.APPLICATION,
-                DocumentChecklist.is_active == True,
+                DocumentChecklist.is_active.is_(True),
             )
             .order_by(DocumentChecklist.display_order.asc(), DocumentChecklist.name.asc())
         )
         rows = list((await self.db.execute(stmt)).scalars().all())
         if entity_type is None:
             return rows
+        entity_type_code = entity_type.value if hasattr(entity_type, "value") else str(entity_type)
         return [
             row
             for row in rows
-            if not row.applicable_entity_types or entity_type.value in row.applicable_entity_types
+            if not row.applicable_entity_types or entity_type_code in row.applicable_entity_types
         ]
 
     async def _get_checklist_item_by_code(
@@ -1389,6 +1266,52 @@ class PortalApplicationService:
                 error_code="APPLICATION_DOCUMENTS_REQUIRED",
             )
         return resolved
+
+    async def _ensure_application_queries_ready(
+        self,
+        application: LoanApplication,
+    ) -> None:
+        query_stmt = (
+            select(LosApplicationQuery)
+            .where(
+                LosApplicationQuery.organization_id == application.organization_id,
+                LosApplicationQuery.application_id == application.id,
+                LosApplicationQuery.deleted_at.is_(None),
+            )
+            .order_by(LosApplicationQuery.query_number.asc())
+        )
+        queries = list((await self.db.execute(query_stmt)).scalars().all())
+        open_queries = [
+            query.query_number
+            for query in queries
+            if query.status
+            in {
+                ApplicationQueryStatus.RAISED,
+                ApplicationQueryStatus.LAPSED,
+                ApplicationQueryStatus.RE_REVIEW,
+            }
+        ]
+        if open_queries:
+            raise BadRequestException(
+                "Respond to all open SFC queries before resubmitting. "
+                f"Pending query numbers: {', '.join(f'Q{num}' for num in open_queries)}",
+                error_code="APPLICATION_QUERY_RESPONSE_REQUIRED",
+            )
+
+        missing_attachments = [
+            query.query_number
+            for query in queries
+            if query.status == ApplicationQueryStatus.RESPONDED
+            and query.required_attachments
+            and not query.response_attachments
+        ]
+        if missing_attachments:
+            missing_attachment_labels = ", ".join(f"Q{num}" for num in missing_attachments)
+            raise BadRequestException(
+                "Upload the documents requested by SFC before resubmitting. "
+                f"Queries missing attachments: {missing_attachment_labels}",
+                error_code="APPLICATION_QUERY_ATTACHMENTS_REQUIRED",
+            )
 
     def _build_timeline(self, application: LoanApplication) -> list[ApplicationStatusEvent]:
         current_status = derive_scheme_application_status(

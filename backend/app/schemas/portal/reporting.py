@@ -1,4 +1,4 @@
-"""Scheme-portal reporting schemas."""
+"""SFC borrower-portal reporting schemas."""
 
 from __future__ import annotations
 
@@ -47,10 +47,10 @@ class PortalReportBorrowerBreakdownItem(CamelSchema):
     claims_released_amount: Decimal
 
 
-class PortalReportLenderBreakdownItem(CamelSchema):
-    lender_name: str
+class PortalReportReviewBreakdownItem(CamelSchema):
+    review_owner: str
     application_count: int
-    pending_lender_review: int
+    pending_sfc_review: int
     approved_count: int
     requested_amount: Decimal
 
@@ -75,5 +75,5 @@ class PortalReportingResponse(CamelSchema):
     )
     claim_status_breakdown: list[PortalReportStatusBreakdownItem] = Field(default_factory=list)
     borrower_breakdown: list[PortalReportBorrowerBreakdownItem] = Field(default_factory=list)
-    lender_breakdown: list[PortalReportLenderBreakdownItem] = Field(default_factory=list)
+    review_breakdown: list[PortalReportReviewBreakdownItem] = Field(default_factory=list)
     recent_releases: list[PortalReportRecentReleaseItem] = Field(default_factory=list)

@@ -15,15 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock data
 const warehouses = [
   {
@@ -193,7 +184,9 @@ export default function WarehouseList() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">{wh.totalItems}</TableCell>
-                  <TableCell className="text-right">{formatCurrency(wh.totalValue)}</TableCell>
+                  <TableCell className="text-right">
+                    {formatIndianCompactCurrency(wh.totalValue)}
+                  </TableCell>
                   <TableCell>
                     <Badge variant={wh.status === 'ACTIVE' ? 'default' : 'secondary'}>
                       {wh.status}

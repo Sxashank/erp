@@ -43,7 +43,14 @@ class DashboardResponse(BaseModel):
 
 
 class LoanSummary(BaseModel):
-    """Loan summary."""
+    """Loan summary returned by the portal dashboard endpoints.
+
+    Fields are kept in snake_case to match the borrower-portal FE types in
+    ``src/types/portal/index.ts`` — every property here is something the
+    FE reads (e.g. ``loan.sanctioned_amount``). Adding here without a
+    matching FE reader is fine; the reverse — FE reading a missing field —
+    is what surfaces as NaN on the page.
+    """
 
     id: str
     loan_account_id: str
@@ -51,10 +58,19 @@ class LoanSummary(BaseModel):
     product_name: str
     sanctioned_amount: float
     disbursed_amount: float
+    outstanding_principal: float = 0
+    outstanding_interest: float = 0
     total_outstanding: float
     overdue_amount: float
     overdue_days: int
     emi_amount: float
+    interest_rate: float = 0
+    tenure_months: int = 0
+    remaining_tenure: int = 0
+    disbursement_date: str | None = None
+    maturity_date: str | None = None
+    next_emi_date: str | None = None
+    next_emi_amount: float | None = None
     status: str
     dpd: int
 
@@ -78,12 +94,13 @@ class LoanDetails(BaseModel):
     interest_outstanding: float
     outstanding_principal: float
     outstanding_interest: float
-    charges_outstanding: float
-    charges_due: float
+    charges_outstanding: float = 0
+    charges_due: float = 0
     total_outstanding: float
     overdue_amount: float
     emi_amount: float
-    emi_date: int
+    # Day-of-month the EMI debits — derived from next_emi_date when present.
+    emi_date: int = 5
     next_emi_date: str | None = None
     remaining_emis: int
     remaining_tenure: int
@@ -194,7 +211,8 @@ class PaginatedResponse(BaseModel):
 
 @router.get(
     "",
-    response_model=DashboardResponse, response_model_by_alias=True,
+    response_model=DashboardResponse,
+    response_model_by_alias=True,
     summary="Get Dashboard",
 )
 async def get_dashboard(
@@ -226,7 +244,8 @@ async def get_dashboard(
 
 @router.get(
     "/loans",
-    response_model=list[LoanSummary], response_model_by_alias=True,
+    response_model=list[LoanSummary],
+    response_model_by_alias=True,
     summary="Get All Loans",
 )
 async def get_loans(
@@ -245,7 +264,8 @@ async def get_loans(
 
 @router.get(
     "/loans/{loan_account_id}",
-    response_model=LoanDetails, response_model_by_alias=True,
+    response_model=LoanDetails,
+    response_model_by_alias=True,
     summary="Get Loan Details",
 )
 async def get_loan_details(
@@ -269,7 +289,8 @@ async def get_loan_details(
 
 @router.get(
     "/loans/{loan_account_id}/schedule",
-    response_model=list[RepaymentScheduleItem], response_model_by_alias=True,
+    response_model=list[RepaymentScheduleItem],
+    response_model_by_alias=True,
     summary="Get Repayment Schedule",
 )
 async def get_repayment_schedule(
@@ -295,7 +316,8 @@ async def get_repayment_schedule(
 
 @router.get(
     "/upcoming-dues",
-    response_model=list[UpcomingDue], response_model_by_alias=True,
+    response_model=list[UpcomingDue],
+    response_model_by_alias=True,
     summary="Get Upcoming Dues",
 )
 async def get_upcoming_dues(
@@ -335,7 +357,8 @@ async def get_overdue_summary(
 
 @router.get(
     "/loans/{loan_account_id}/payments",
-    response_model=PaginatedResponse, response_model_by_alias=True,
+    response_model=PaginatedResponse,
+    response_model_by_alias=True,
     summary="Get Payment History",
 )
 async def get_payment_history(
@@ -375,7 +398,8 @@ async def get_payment_history(
 
 @router.get(
     "/loans/{loan_account_id}/prepayment-quote",
-    response_model=PrepaymentQuote, response_model_by_alias=True,
+    response_model=PrepaymentQuote,
+    response_model_by_alias=True,
     summary="Get Prepayment Quote",
 )
 async def get_prepayment_quote(
@@ -403,7 +427,8 @@ async def get_prepayment_quote(
 
 @router.get(
     "/loans/{loan_account_id}/foreclosure-quote",
-    response_model=ForeclosureQuote, response_model_by_alias=True,
+    response_model=ForeclosureQuote,
+    response_model_by_alias=True,
     summary="Get Foreclosure Quote",
 )
 async def get_foreclosure_quote(
@@ -531,7 +556,8 @@ def _dpd_for(installment: "_ScheduleInstallment") -> int:
 
 @router.get(
     "/loans/{loan_account_id}/schedule/failed",
-    response_model=list[_ScheduleAlertItem], response_model_by_alias=True,
+    response_model=list[_ScheduleAlertItem],
+    response_model_by_alias=True,
     summary="List failed / bounced installments for the borrower",
 )
 async def get_failed_installments(
@@ -586,7 +612,8 @@ async def get_failed_installments(
 
 @router.get(
     "/loans/{loan_account_id}/schedule/missed",
-    response_model=list[_ScheduleAlertItem], response_model_by_alias=True,
+    response_model=list[_ScheduleAlertItem],
+    response_model_by_alias=True,
     summary="List missed installments for the borrower",
 )
 async def get_missed_installments(

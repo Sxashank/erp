@@ -5,23 +5,36 @@ from decimal import Decimal
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
+from app.api.deps import ESSUserContext, get_current_ess_user, get_ess_db_with_tenant
 from app.services.ess.reimbursement_service import ESSReimbursementService
 from app.models.ess.enums import ClaimType, ClaimStatus
 from app.core.exceptions import BadRequestException, NotFoundException
 
-
 router = APIRouter(prefix="/reimbursements", tags=["ESS Reimbursements"])
+
+
+async def _get_owned_claim(
+    service: ESSReimbursementService,
+    claim_id: UUID,
+    employee_id: UUID,
+):
+    """Return a claim only if it belongs to the authenticated employee."""
+    claim = await service.get_claim_by_id(claim_id, include_items=True)
+    if not claim or claim.employee_id != employee_id:
+        raise NotFoundException("Claim not found")
+    return claim
 
 
 # ==================== Schemas ====================
 
+
 class ReimbursementCategoryResponse(BaseModel):
     """Reimbursement category response."""
+
     id: str
     code: str
     name: str
@@ -35,6 +48,7 @@ class ReimbursementCategoryResponse(BaseModel):
 
 class ClaimLineItemCreate(BaseModel):
     """Create claim line item."""
+
     expense_date: date
     description: str
     amount: Decimal
@@ -50,6 +64,7 @@ class ClaimLineItemCreate(BaseModel):
 
 class ClaimCreate(BaseModel):
     """Create reimbursement claim."""
+
     claim_type: ClaimType
     category_id: Optional[UUID] = None
     expense_from: date
@@ -67,6 +82,7 @@ class ClaimCreate(BaseModel):
 
 class ClaimUpdate(BaseModel):
     """Update claim details."""
+
     description: Optional[str] = None
     purpose: Optional[str] = None
     expense_from: Optional[date] = None
@@ -79,6 +95,7 @@ class ClaimUpdate(BaseModel):
 
 class ClaimLineItemResponse(BaseModel):
     """Claim line item response."""
+
     id: str
     line_number: int
     expense_date: date
@@ -93,6 +110,7 @@ class ClaimLineItemResponse(BaseModel):
 
 class ClaimResponse(BaseModel):
     """Claim response."""
+
     id: str
     claim_number: str
     claim_date: date
@@ -110,6 +128,7 @@ class ClaimResponse(BaseModel):
 
 class ClaimDetailResponse(ClaimResponse):
     """Detailed claim response with line items."""
+
     purpose: Optional[str]
     travel_from: Optional[str]
     travel_to: Optional[str]
@@ -125,6 +144,7 @@ class ClaimDetailResponse(ClaimResponse):
 
 class ClaimSummaryResponse(BaseModel):
     """Claim summary response."""
+
     financial_year: str
     total_claims: int
     total_claimed: float
@@ -136,14 +156,17 @@ class ClaimSummaryResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.get("/categories", response_model=List[ReimbursementCategoryResponse], response_model_by_alias=True)
+
+@router.get(
+    "/categories", response_model=List[ReimbursementCategoryResponse], response_model_by_alias=True
+)
 async def get_categories(
-    organization_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get reimbursement categories."""
     service = ESSReimbursementService(session)
-    categories = await service.get_categories(organization_id)
+    categories = await service.get_categories(ess_context.organization_id)
 
     return [
         ReimbursementCategoryResponse(
@@ -164,18 +187,16 @@ async def get_categories(
 @router.post("", response_model=ClaimResponse, response_model_by_alias=True)
 async def create_claim(
     request: ClaimCreate,
-    organization_id: UUID,  # From authenticated user
-    ess_user_id: UUID,  # From authenticated user
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Create a new reimbursement claim."""
     service = ESSReimbursementService(session)
 
     claim = await service.create_claim(
-        organization_id=organization_id,
-        ess_user_id=ess_user_id,
-        employee_id=employee_id,
+        organization_id=ess_context.organization_id,
+        ess_user_id=ess_context.ess_user_id,
+        employee_id=ess_context.employee_id,
         claim_type=request.claim_type,
         category_id=request.category_id,
         expense_from=request.expense_from,
@@ -212,20 +233,20 @@ async def create_claim(
 
 @router.get("", response_model=List[ClaimResponse], response_model_by_alias=True)
 async def get_claims(
-    employee_id: UUID,  # From authenticated user
     status: Optional[ClaimStatus] = None,
     claim_type: Optional[ClaimType] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get claims for the employee."""
     service = ESSReimbursementService(session)
 
     claims, total = await service.get_claims_by_employee(
-        employee_id=employee_id,
+        employee_id=ess_context.employee_id,
         status=status,
         claim_type=claim_type,
         from_date=from_date,
@@ -256,27 +277,25 @@ async def get_claims(
 
 @router.get("/summary", response_model=ClaimSummaryResponse, response_model_by_alias=True)
 async def get_claim_summary(
-    employee_id: UUID,  # From authenticated user
     financial_year: Optional[str] = None,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get claim summary for the employee."""
     service = ESSReimbursementService(session)
-    summary = await service.get_claim_summary(employee_id, financial_year)
+    summary = await service.get_claim_summary(ess_context.employee_id, financial_year)
     return ClaimSummaryResponse(**summary)
 
 
 @router.get("/{claim_id}", response_model=ClaimDetailResponse, response_model_by_alias=True)
 async def get_claim_detail(
     claim_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get claim details with line items."""
     service = ESSReimbursementService(session)
-    claim = await service.get_claim_by_id(claim_id, include_items=True)
-
-    if not claim:
-        raise NotFoundException(detail="Claim not found", error_code="CLAIM_NOT_FOUND")
+    claim = await _get_owned_claim(service, claim_id, ess_context.employee_id)
 
     return ClaimDetailResponse(
         id=str(claim.id),
@@ -324,15 +343,16 @@ async def get_claim_detail(
 async def update_claim(
     claim_id: UUID,
     request: ClaimUpdate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Update a draft claim."""
     service = ESSReimbursementService(session)
+    await _get_owned_claim(service, claim_id, ess_context.employee_id)
 
     try:
         claim = await service.update_claim(
-            claim_id=claim_id,
-            **request.model_dump(exclude_unset=True)
+            claim_id=claim_id, **request.model_dump(exclude_unset=True)
         )
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
@@ -362,10 +382,12 @@ async def update_claim(
 @router.post("/{claim_id}/submit", response_model=ClaimResponse, response_model_by_alias=True)
 async def submit_claim(
     claim_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Submit a draft claim for approval."""
     service = ESSReimbursementService(session)
+    await _get_owned_claim(service, claim_id, ess_context.employee_id)
 
     try:
         claim = await service.submit_claim(claim_id)
@@ -398,10 +420,12 @@ async def submit_claim(
 async def cancel_claim(
     claim_id: UUID,
     reason: Optional[str] = None,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Cancel a claim."""
     service = ESSReimbursementService(session)
+    await _get_owned_claim(service, claim_id, ess_context.employee_id)
 
     try:
         claim = await service.cancel_claim(claim_id, reason)
@@ -418,20 +442,22 @@ async def cancel_claim(
 
 # ==================== Line Items ====================
 
-@router.post("/{claim_id}/items", response_model=ClaimLineItemResponse, response_model_by_alias=True)
+
+@router.post(
+    "/{claim_id}/items", response_model=ClaimLineItemResponse, response_model_by_alias=True
+)
 async def add_line_item(
     claim_id: UUID,
     request: ClaimLineItemCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Add a line item to a claim."""
     service = ESSReimbursementService(session)
+    await _get_owned_claim(service, claim_id, ess_context.employee_id)
 
     try:
-        item = await service.add_line_item(
-            claim_id=claim_id,
-            **request.model_dump()
-        )
+        item = await service.add_line_item(claim_id=claim_id, **request.model_dump())
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
@@ -455,10 +481,12 @@ async def add_line_item(
 async def remove_line_item(
     claim_id: UUID,
     item_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Remove a line item from a claim."""
     service = ESSReimbursementService(session)
+    await _get_owned_claim(service, claim_id, ess_context.employee_id)
 
     try:
         success = await service.remove_line_item(claim_id, item_id)

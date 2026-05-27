@@ -1,47 +1,29 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  ArrowLeft,
-  Target,
-  Plus,
-  Edit,
-  Trash2,
-  CheckCircle,
-  Clock,
-  AlertCircle,
-  Calendar,
-  Percent,
-  Save,
-} from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { z } from 'zod';
 
+import { DataTable, type Column } from '@/components/common/DataTable';
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { StatusPill } from '@/components/common/StatusPill';
 import { HrisConfirmDialog } from '@/components/hris/HrisConfirmDialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Progress } from '@/components/ui/progress';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -49,517 +31,589 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Slider } from '@/components/ui/slider';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  useCycleEmployees,
+  useCreateGoal,
+  useDeleteGoal,
+  useEmployeePerformanceDetail,
+  usePerformanceCycle,
+  useSubmitGoals,
+  useUpdateGoal,
+} from '@/hooks/hris/usePerformance';
 import { useToast } from '@/hooks/use-toast';
-import { formatDate } from '@/lib/utils';
+import type {
+  PerformanceEmployeeSummary,
+  PerformanceGoal,
+  PerformanceGoalPayload,
+} from '@/services/hris/performanceApi';
 
 const goalSchema = z.object({
   title: z.string().min(5, 'Goal title must be at least 5 characters'),
-  description: z.string().min(20, 'Description must be at least 20 characters'),
-  category: z.enum(['BUSINESS', 'FUNCTIONAL', 'BEHAVIORAL', 'DEVELOPMENT']),
-  weightage: z.number().min(5).max(50, 'Weightage must be between 5-50%'),
-  target_date: z.string().min(1, 'Target date is required'),
-  key_results: z.string().min(10, 'Key results are required'),
-  measurement_criteria: z.string().min(10, 'Measurement criteria is required'),
+  description: z.string().optional(),
+  category: z.string().optional(),
+  weightage: z.coerce.number().min(1).max(100),
+  targetValue: z.string().optional(),
+  measurementCriteria: z.string().min(5, 'Measurement criteria is required'),
+  startDate: z.string().optional(),
+  dueDate: z.string().optional(),
 });
 
-type GoalFormData = z.infer<typeof goalSchema>;
+type GoalFormValues = z.infer<typeof goalSchema>;
+type GoalFormInput = z.input<typeof goalSchema>;
 
-type GoalStatus =
-  | 'DRAFT'
-  | 'PENDING_APPROVAL'
-  | 'APPROVED'
-  | 'IN_PROGRESS'
-  | 'COMPLETED'
-  | 'NOT_ACHIEVED';
-
-interface Goal {
-  id: string;
+function SummaryCard({
+  title,
+  value,
+  subtitle,
+}: {
   title: string;
-  description: string;
-  category: string;
-  weightage: number;
-  target_date: string;
-  status: GoalStatus;
-  progress: number;
-  key_results: string;
-  measurement_criteria: string;
-  manager_comments?: string;
-}
-
-interface EmployeeInfo {
-  id: string;
-  name: string;
-  code: string;
-  department: string;
-  designation: string;
-  manager: string;
-}
-
-interface CycleInfo {
-  id: string;
-  name: string;
-  goal_setting_deadline: string;
-  total_weightage: number;
-}
-
-const getEmployeeInfo = (): EmployeeInfo | null => null;
-const getCycleInfo = (): CycleInfo | null => null;
-const initialGoals: Goal[] = [];
-
-const getStatusBadge = (status: GoalStatus) => {
-  const config: Record<
-    GoalStatus,
-    { variant: 'default' | 'secondary' | 'destructive' | 'outline'; color?: string; label: string }
-  > = {
-    DRAFT: { variant: 'outline', label: 'Draft' },
-    PENDING_APPROVAL: {
-      variant: 'secondary',
-      color: 'bg-yellow-100 text-yellow-800',
-      label: 'Pending Approval',
-    },
-    APPROVED: { variant: 'secondary', color: 'bg-blue-100 text-blue-800', label: 'Approved' },
-    IN_PROGRESS: { variant: 'default', color: 'bg-green-100 text-green-800', label: 'In Progress' },
-    COMPLETED: { variant: 'default', label: 'Completed' },
-    NOT_ACHIEVED: { variant: 'destructive', label: 'Not Achieved' },
-  };
-  const cfg = config[status];
+  value: string | number;
+  subtitle: string;
+}) {
   return (
-    <Badge variant={cfg.variant} className={cfg.color}>
-      {cfg.label}
-    </Badge>
+    <Card>
+      <CardContent className="pt-6">
+        <p className="text-sm text-muted-foreground">{title}</p>
+        <p className="mt-2 text-3xl font-semibold">{value}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+      </CardContent>
+    </Card>
   );
-};
+}
 
-const getCategoryColor = (category: string) => {
-  const colors: Record<string, string> = {
-    BUSINESS: 'bg-purple-100 text-purple-800',
-    FUNCTIONAL: 'bg-blue-100 text-blue-800',
-    BEHAVIORAL: 'bg-green-100 text-green-800',
-    DEVELOPMENT: 'bg-orange-100 text-orange-800',
-  };
-  return colors[category] || 'bg-gray-100 text-gray-800';
-};
+function GoalDialog({
+  open,
+  initialGoal,
+  pending,
+  onOpenChange,
+  onSubmit,
+}: {
+  open: boolean;
+  initialGoal?: PerformanceGoal | null;
+  pending: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (payload: GoalFormValues) => Promise<void>;
+}) {
+  const form = useForm<GoalFormInput, unknown, GoalFormValues>({
+    resolver: zodResolver(goalSchema),
+    values: initialGoal
+      ? {
+          title: initialGoal.title,
+          description: initialGoal.description ?? '',
+          category: initialGoal.category ?? '',
+          weightage: initialGoal.weightage,
+          targetValue: initialGoal.targetValue ?? '',
+          measurementCriteria: initialGoal.measurementCriteria ?? '',
+          startDate: initialGoal.startDate ?? '',
+          dueDate: initialGoal.dueDate ?? '',
+        }
+      : {
+          title: '',
+          description: '',
+          category: '',
+          weightage: 20,
+          targetValue: '',
+          measurementCriteria: '',
+          startDate: '',
+          dueDate: '',
+        },
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>{initialGoal ? 'Edit Goal' : 'Add Goal'}</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form
+            className="space-y-4"
+            onSubmit={form.handleSubmit(async (values) => {
+              await onSubmit(values);
+              form.reset();
+            })}
+          >
+            <div className="grid gap-4 md:grid-cols-2">
+              <FormField
+                control={form.control}
+                name="title"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Goal Title</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Improve monthly collection efficiency" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Category</FormLabel>
+                    <FormControl>
+                      <Input placeholder="BUSINESS / FUNCTIONAL / DEVELOPMENT" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="weightage"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Weightage (%)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={field.value == null ? '' : String(field.value)}
+                        onChange={(event) => field.onChange(event.target.value)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Start Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" value={field.value ?? ''} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Due Date</FormLabel>
+                    <FormControl>
+                      <Input type="date" value={field.value ?? ''} onChange={field.onChange} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="targetValue"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Target Value</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="98% efficiency / 50 accounts / 0 overdue exceptions"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="measurementCriteria"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Measurement Criteria</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        rows={3}
+                        placeholder="Define how the goal will be measured and reviewed."
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem className="md:col-span-2">
+                    <FormLabel>Description</FormLabel>
+                    <FormControl>
+                      <Textarea rows={3} placeholder="Goal context and scope" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={pending}>
+                {pending ? 'Saving…' : initialGoal ? 'Update Goal' : 'Add Goal'}
+              </Button>
+            </div>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 export default function GoalSetting() {
   const navigate = useNavigate();
-  const { cycleId, employeeId } = useParams();
   const { toast } = useToast();
-  const employeeInfo = getEmployeeInfo();
-  const cycleInfo = getCycleInfo();
-  const [goals, setGoals] = useState(initialGoals);
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
-  const [deleteGoalId, setDeleteGoalId] = useState<string | null>(null);
+  const { cycleId, employeeId: employeeIdParam } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedEmployeeId = searchParams.get('employeeId') ?? employeeIdParam ?? '';
+  const [goalDialogOpen, setGoalDialogOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<PerformanceGoal | null>(null);
+  const [goalToDelete, setGoalToDelete] = useState<PerformanceGoal | null>(null);
 
-  const form = useForm<GoalFormData>({
-    resolver: zodResolver(goalSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      category: 'BUSINESS',
-      weightage: 20,
-      target_date: '',
-      key_results: '',
-      measurement_criteria: '',
-    },
-  });
+  const cycleQuery = usePerformanceCycle(cycleId);
+  const employeesQuery = useCycleEmployees(cycleId);
+  const detailQuery = useEmployeePerformanceDetail(cycleId, selectedEmployeeId || undefined);
+  const createGoalMutation = useCreateGoal(cycleId ?? '', selectedEmployeeId || '');
+  const updateGoalMutation = useUpdateGoal();
+  const deleteGoalMutation = useDeleteGoal();
+  const submitGoalsMutation = useSubmitGoals(cycleId ?? '', selectedEmployeeId || '');
 
-  if (!employeeInfo || !cycleInfo) {
+  const employeeOptions = employeesQuery.data ?? [];
+  const currentEmployee = employeeOptions.find(
+    (employee) => employee.employeeId === selectedEmployeeId,
+  );
+  const goals = detailQuery.data?.goals ?? [];
+  const totalWeightage = useMemo(
+    () => goals.reduce((sum, goal) => sum + Number(goal.weightage), 0),
+    [goals],
+  );
+  const canEditGoals = detailQuery.data?.appraisal.status === 'GOAL_SETTING';
+
+  if (!cycleId) {
     return (
       <div className="space-y-6">
         <PageHeader
           title="Goal Setting"
-          subtitle={employeeId ? `Employee ${employeeId}` : 'Employee details unavailable'}
+          subtitle="Select a cycle from the appraisal workbench to manage an employee goal packet."
           breadcrumbs={[
             { label: 'Performance Cycles', to: '/admin/hris/performance/cycles' },
             { label: 'Goal Setting' },
           ]}
         />
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Goal setting data is pending backend HRIS performance endpoints for cycle{' '}
-            {cycleId ?? 'selected'}.
-          </CardContent>
-        </Card>
+        <EmptyState
+          title="No cycle selected"
+          subtitle="Goal packets are managed inside a specific appraisal cycle."
+          action={
+            <Button onClick={() => navigate('/admin/hris/performance/cycles')}>
+              Back to Cycles
+            </Button>
+          }
+        />
       </div>
     );
   }
 
-  const totalWeightage = goals.reduce((sum, g) => sum + g.weightage, 0);
-  const remainingWeightage = cycleInfo.total_weightage - totalWeightage;
+  if (cycleQuery.isError) {
+    return <ErrorState error={cycleQuery.error} onRetry={() => void cycleQuery.refetch()} />;
+  }
 
-  const handleAddGoal = (data: GoalFormData) => {
-    const newGoal: Goal = {
-      id: `new-${Date.now()}`,
-      ...data,
-      status: 'DRAFT',
-      progress: 0,
+  if (!selectedEmployeeId) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Goal Setting"
+          subtitle={cycleQuery.data?.name ?? 'Appraisal Cycle'}
+          breadcrumbs={[
+            { label: 'Performance Cycles', to: '/admin/hris/performance/cycles' },
+            {
+              label: cycleQuery.data?.name ?? 'Cycle',
+              to: `/admin/hris/performance/cycles/${cycleId}`,
+            },
+            { label: 'Goal Setting' },
+          ]}
+        />
+        <DataTable
+          data={employeeOptions}
+          columns={[
+            {
+              key: 'employeeName',
+              header: 'Employee',
+              render: (row: PerformanceEmployeeSummary) => (
+                <div>
+                  <div className="font-medium">{row.employeeName}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {row.employeeCode}
+                    {row.department ? ` · ${row.department}` : ''}
+                  </div>
+                </div>
+              ),
+            },
+            {
+              key: 'status',
+              header: 'Status',
+              render: (row: PerformanceEmployeeSummary) => (
+                <StatusPill type="application" status={row.status} />
+              ),
+            },
+            {
+              key: 'goalCount',
+              header: 'Goals',
+              align: 'right',
+              render: (row: PerformanceEmployeeSummary) => `${row.submittedGoals}/${row.goalCount}`,
+            },
+          ]}
+          getRowId={(row) => row.appraisalId}
+          isLoading={employeesQuery.isLoading}
+          error={employeesQuery.error}
+          onRetry={() => void employeesQuery.refetch()}
+          onRowClick={(row) => setSearchParams({ employeeId: row.employeeId })}
+          emptyTitle="No employee packets"
+          emptySubtitle="Create a cycle with employees before assigning goals."
+        />
+      </div>
+    );
+  }
+
+  const handleSaveGoal = async (values: GoalFormValues) => {
+    const payload: PerformanceGoalPayload = {
+      title: values.title,
+      description: values.description || undefined,
+      category: values.category || undefined,
+      weightage: values.weightage,
+      targetValue: values.targetValue || undefined,
+      measurementCriteria: values.measurementCriteria || undefined,
+      startDate: values.startDate || null,
+      dueDate: values.dueDate || null,
     };
-    setGoals([...goals, newGoal]);
-    form.reset();
-    setShowAddDialog(false);
-  };
-
-  const handleDeleteGoal = (goalId: string) => {
-    setDeleteGoalId(goalId);
-  };
-
-  const handleSubmitForApproval = () => {
-    if (totalWeightage !== 100) {
-      toast({
-        title: 'Goal weightage must equal 100%',
-        description: `Current total is ${totalWeightage}%. Adjust goals before submitting.`,
-        variant: 'destructive',
-      });
-      return;
+    if (editingGoal) {
+      await updateGoalMutation.mutateAsync({ goalId: editingGoal.id, payload });
+      toast({ title: 'Goal updated' });
+    } else {
+      await createGoalMutation.mutateAsync(payload);
+      toast({ title: 'Goal added' });
     }
-    setGoals(goals.map((g) => ({ ...g, status: 'PENDING_APPROVAL' as GoalStatus })));
-    toast({ title: 'Goals submitted for manager approval' });
-  };
-
-  const handleUpdateProgress = (goalId: string, progress: number) => {
-    setGoals(goals.map((g) => (g.id === goalId ? { ...g, progress } : g)));
+    setEditingGoal(null);
+    setGoalDialogOpen(false);
   };
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Goal Setting"
-        subtitle={cycleInfo.name}
+        subtitle={cycleQuery.data?.name ?? 'Appraisal Cycle'}
         breadcrumbs={[
           { label: 'Performance Cycles', to: '/admin/hris/performance/cycles' },
+          {
+            label: cycleQuery.data?.name ?? 'Cycle',
+            to: `/admin/hris/performance/cycles/${cycleId}`,
+          },
           { label: 'Goal Setting' },
         ]}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setShowAddDialog(true)}>
-              <Plus className="mr-2 h-4 w-4" />
+            <Select
+              value={selectedEmployeeId}
+              onValueChange={(value) => setSearchParams({ employeeId: value })}
+            >
+              <SelectTrigger className="w-[280px]">
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent>
+                {employeeOptions.map((employee) => (
+                  <SelectItem key={employee.employeeId} value={employee.employeeId}>
+                    {employee.employeeName} ({employee.employeeCode})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingGoal(null);
+                setGoalDialogOpen(true);
+              }}
+              disabled={!canEditGoals}
+            >
               Add Goal
             </Button>
-            <Button onClick={handleSubmitForApproval} disabled={totalWeightage !== 100}>
-              <Save className="mr-2 h-4 w-4" />
-              Submit for Approval
+            <Button
+              onClick={() => void submitGoalsMutation.mutateAsync()}
+              disabled={
+                !canEditGoals ||
+                goals.length === 0 ||
+                totalWeightage !== 100 ||
+                submitGoalsMutation.isPending
+              }
+            >
+              {submitGoalsMutation.isPending ? 'Submitting…' : 'Submit Goals'}
             </Button>
           </div>
         }
       />
 
-      {/* Employee & Summary Info */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Employee</div>
-            <div className="font-semibold">{employeeInfo.name}</div>
-            <div className="text-xs text-muted-foreground">
-              {employeeInfo.code} • {employeeInfo.department}
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Reporting Manager</div>
-            <div className="font-semibold">{employeeInfo.manager}</div>
-            <div className="text-xs text-muted-foreground">Approver</div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Goal Setting Deadline</div>
-            <div className="font-semibold">{formatDate(cycleInfo.goal_setting_deadline)}</div>
-            <div className="text-xs text-muted-foreground">Submit by this date</div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className={
-            totalWeightage === 100
-              ? 'bg-green-50'
-              : totalWeightage > 100
-                ? 'bg-red-50'
-                : 'bg-yellow-50'
+      <div className="grid gap-4 md:grid-cols-4">
+        <SummaryCard
+          title="Employee"
+          value={currentEmployee?.employeeName ?? '—'}
+          subtitle={currentEmployee?.employeeCode ?? 'Select an employee'}
+        />
+        <SummaryCard
+          title="Packet Status"
+          value={detailQuery.data?.appraisal.status ?? '—'}
+          subtitle={currentEmployee?.reviewerName ?? 'Reviewer not assigned'}
+        />
+        <SummaryCard
+          title="Goal Weightage"
+          value={`${totalWeightage}%`}
+          subtitle="Must total 100% before submission"
+        />
+        <SummaryCard
+          title="Self Appraisal Deadline"
+          value={detailQuery.data?.cycle.selfAppraisalEnd ?? '—'}
+          subtitle={
+            detailQuery.data?.cycle.selfAppraisalEnd
+              ? 'Cycle self-appraisal deadline'
+              : 'No deadline configured'
           }
-        >
-          <CardContent className="pt-6">
-            <div className="text-sm text-muted-foreground">Total Weightage</div>
-            <div
-              className={`text-2xl font-bold ${totalWeightage === 100 ? 'text-green-700' : totalWeightage > 100 ? 'text-red-700' : 'text-yellow-700'}`}
-            >
-              {totalWeightage}%
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {totalWeightage === 100 ? 'Weightage complete' : `${remainingWeightage}% remaining`}
-            </div>
-          </CardContent>
-        </Card>
+        />
       </div>
 
-      {/* Weightage Warning */}
-      {totalWeightage !== 100 && (
-        <Alert variant={totalWeightage > 100 ? 'destructive' : 'default'}>
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Weightage {totalWeightage > 100 ? 'Exceeds' : 'Incomplete'}</AlertTitle>
-          <AlertDescription>
-            {totalWeightage > 100
-              ? `Total weightage is ${totalWeightage}%. Please reduce by ${totalWeightage - 100}%.`
-              : `Total weightage is ${totalWeightage}%. Add ${remainingWeightage}% more to reach 100%.`}
-          </AlertDescription>
-        </Alert>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Employee Packet</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <Label className="text-muted-foreground">Employee</Label>
+            <p className="mt-1 font-medium">{currentEmployee?.employeeName ?? '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Department</Label>
+            <p className="mt-1 font-medium">{currentEmployee?.department ?? '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Designation</Label>
+            <p className="mt-1 font-medium">{currentEmployee?.designation ?? '—'}</p>
+          </div>
+          <div>
+            <Label className="text-muted-foreground">Reviewer</Label>
+            <p className="mt-1 font-medium">{currentEmployee?.reviewerName ?? '—'}</p>
+          </div>
+        </CardContent>
+      </Card>
 
-      {/* Goals List */}
-      <div className="space-y-4">
-        {goals.map((goal) => (
-          <Card key={goal.id}>
-            <CardContent className="pt-6">
-              <div className="mb-4 flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="mb-1 flex items-center gap-2">
-                    <h3 className="text-lg font-semibold">{goal.title}</h3>
-                    <Badge variant="secondary" className={getCategoryColor(goal.category)}>
-                      {goal.category}
-                    </Badge>
-                    {getStatusBadge(goal.status)}
-                  </div>
-                  <p className="text-sm text-muted-foreground">{goal.description}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="px-3 py-1 text-lg">
-                    <Percent className="mr-1 h-4 w-4" />
-                    {goal.weightage}%
-                  </Badge>
-                  {goal.status === 'DRAFT' && (
-                    <Button variant="ghost" size="icon" onClick={() => handleDeleteGoal(goal.id)}>
-                      <Trash2 className="h-4 w-4 text-red-500" />
-                    </Button>
-                  )}
-                </div>
+      <DataTable
+        data={goals}
+        columns={[
+          {
+            key: 'title',
+            header: 'Goal',
+            render: (row: PerformanceGoal) => (
+              <div>
+                <div className="font-medium">{row.title}</div>
+                <div className="text-xs text-muted-foreground">{row.category || 'General'}</div>
               </div>
-
-              <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">Key Results</p>
-                  <p className="whitespace-pre-line text-sm">{goal.key_results}</p>
-                </div>
-                <div>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">
-                    Measurement Criteria
-                  </p>
-                  <p className="text-sm">{goal.measurement_criteria}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between border-t pt-4">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Calendar className="h-4 w-4 text-muted-foreground" />
-                    <span>Target: {formatDate(goal.target_date)}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-4">
-                  <div className="w-40">
-                    <div className="mb-1 flex justify-between text-xs">
-                      <span>Progress</span>
-                      <span>{goal.progress}%</span>
-                    </div>
-                    <Progress value={goal.progress} className="h-2" />
-                  </div>
-                  {(goal.status === 'IN_PROGRESS' || goal.status === 'APPROVED') && (
-                    <div className="flex items-center gap-2">
-                      <Slider
-                        value={[goal.progress]}
-                        max={100}
-                        step={5}
-                        className="w-24"
-                        onValueChange={(value) => handleUpdateProgress(goal.id, value[0])}
-                      />
-                      <span className="w-12 text-sm">{goal.progress}%</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {goal.manager_comments && (
-                <div className="mt-4 rounded-lg bg-blue-50 p-3">
-                  <p className="mb-1 text-xs font-medium text-blue-700">Manager Comments</p>
-                  <p className="text-sm text-blue-800">{goal.manager_comments}</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Add Goal Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Add New Goal</DialogTitle>
-            <DialogDescription>
-              Define a SMART goal with clear key results and measurement criteria
-            </DialogDescription>
-          </DialogHeader>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleAddGoal)} className="space-y-4">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Goal Title</FormLabel>
-                    <FormControl>
-                      <Input placeholder="e.g., Deliver Project X on time" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Describe the goal in detail..."
-                        className="min-h-[80px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <div className="grid grid-cols-3 gap-4">
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="BUSINESS">Business</SelectItem>
-                          <SelectItem value="FUNCTIONAL">Functional</SelectItem>
-                          <SelectItem value="BEHAVIORAL">Behavioral</SelectItem>
-                          <SelectItem value="DEVELOPMENT">Development</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="weightage"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Weightage (%)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={5}
-                          max={50}
-                          {...field}
-                          onChange={(e) => field.onChange(parseInt(e.target.value))}
-                        />
-                      </FormControl>
-                      <FormDescription>Max {remainingWeightage}% available</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="target_date"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Target Date</FormLabel>
-                      <FormControl>
-                        <Input type="date" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="key_results"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Key Results</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="List specific, measurable key results (one per line)..."
-                        className="min-h-[80px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>What specific outcomes define success?</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="measurement_criteria"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Measurement Criteria</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="How will progress and completion be measured?"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setShowAddDialog(false)}>
-                  Cancel
+            ),
+          },
+          {
+            key: 'dueDate',
+            header: 'Due Date',
+            render: (row: PerformanceGoal) => <DateDisplay date={row.dueDate ?? null} />,
+          },
+          {
+            key: 'weightage',
+            header: 'Weight',
+            align: 'right',
+            render: (row: PerformanceGoal) => `${Number(row.weightage).toFixed(2)}%`,
+            sortable: true,
+            sortValue: (row: PerformanceGoal) => Number(row.weightage),
+          },
+          {
+            key: 'progressPercent',
+            header: 'Progress',
+            align: 'right',
+            render: (row: PerformanceGoal) => `${Number(row.progressPercent).toFixed(2)}%`,
+          },
+          {
+            key: 'status',
+            header: 'Status',
+            render: (row: PerformanceGoal) => <StatusPill type="application" status={row.status} />,
+          },
+          {
+            key: 'actions',
+            header: 'Actions',
+            render: (row: PerformanceGoal) => (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setEditingGoal(row);
+                    setGoalDialogOpen(true);
+                  }}
+                  disabled={!canEditGoals}
+                >
+                  Edit
                 </Button>
-                <Button type="submit">
-                  <Target className="mr-2 h-4 w-4" />
-                  Add Goal
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setGoalToDelete(row)}
+                  disabled={!canEditGoals}
+                >
+                  Delete
                 </Button>
-              </DialogFooter>
-            </form>
-          </Form>
-        </DialogContent>
-      </Dialog>
-      <HrisConfirmDialog
-        open={Boolean(deleteGoalId)}
-        title="Delete goal"
-        description="This removes the goal from the current appraisal plan and recalculates total weightage."
-        confirmLabel="Delete goal"
-        destructive
+              </div>
+            ),
+          },
+        ]}
+        getRowId={(row) => row.id}
+        isLoading={detailQuery.isLoading}
+        error={detailQuery.error}
+        onRetry={() => void detailQuery.refetch()}
+        emptyTitle="No goals created"
+        emptySubtitle="Add goals for this employee before submitting the goal packet."
+      />
+
+      <GoalDialog
+        open={goalDialogOpen}
+        initialGoal={editingGoal}
+        pending={createGoalMutation.isPending || updateGoalMutation.isPending}
         onOpenChange={(open) => {
-          if (!open) setDeleteGoalId(null);
+          setGoalDialogOpen(open);
+          if (!open) {
+            setEditingGoal(null);
+          }
+        }}
+        onSubmit={handleSaveGoal}
+      />
+
+      <HrisConfirmDialog
+        open={Boolean(goalToDelete)}
+        title="Delete goal"
+        description={`Remove "${goalToDelete?.title ?? 'this goal'}" from the employee packet?`}
+        confirmLabel="Delete Goal"
+        destructive
+        busy={deleteGoalMutation.isPending}
+        onOpenChange={(open) => {
+          if (!open) {
+            setGoalToDelete(null);
+          }
         }}
         onConfirm={() => {
-          if (deleteGoalId) {
-            setGoals(goals.filter((goal) => goal.id !== deleteGoalId));
-            setDeleteGoalId(null);
-          }
+          if (!goalToDelete) return;
+          void deleteGoalMutation.mutateAsync(goalToDelete.id).then(() => {
+            toast({ title: 'Goal deleted' });
+            setGoalToDelete(null);
+          });
         }}
       />
     </div>

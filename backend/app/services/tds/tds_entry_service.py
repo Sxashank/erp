@@ -167,13 +167,11 @@ class TDSEntryService:
         single_threshold = section.threshold_single
         annual_threshold = section.threshold_annual
         current_aggregate = Decimal("0")
-        financial_year_id = None
 
         # Get aggregate if vendor is specified
         if vendor_id:
             fy = await self.repo.get_financial_year_for_date(organization_id, deduction_date)
             if fy:
-                financial_year_id = fy.id
                 current_aggregate = await self.repo.get_vendor_aggregate(
                     organization_id, vendor_id, tds_section_id, fy.id
                 )
@@ -332,6 +330,7 @@ class TDSEntryService:
         detailed_entry = await self.repo.get_with_details(entry.id)
         if detailed_entry is None:
             raise NotFoundException("TDS entry not found after creation")
+        await self.session.commit()
         return detailed_entry
 
     async def update(
@@ -358,6 +357,7 @@ class TDSEntryService:
         detailed_entry = await self.repo.get_with_details(entry.id)
         if detailed_entry is None:
             raise NotFoundException("TDS entry not found after update")
+        await self.session.commit()
         return detailed_entry
 
     async def get(self, id: UUID) -> TDSEntry:
@@ -433,6 +433,7 @@ class TDSEntryService:
         detailed_entry = await self.repo.get_with_details(entry.id)
         if detailed_entry is None:
             raise NotFoundException("TDS entry not found after challan update")
+        await self.session.commit()
         return detailed_entry
 
     async def delete(self, id: UUID, deleted_by: UUID) -> None:
@@ -444,3 +445,4 @@ class TDSEntryService:
             raise ValidationException("Cannot delete TDS entry after return is filed")
         entry.soft_delete(deleted_by)
         await self.session.flush()
+        await self.session.commit()

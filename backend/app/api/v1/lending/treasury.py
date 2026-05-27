@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.schemas.base import PaginatedResponse as PaginatedResponseBase
 from app.schemas.lending.treasury import (
@@ -211,11 +211,11 @@ async def create_fund_deployment(
     dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
 )
 async def list_fund_deployments(
-    borrowing_id: UUID | None = Query(None),
-    loan_account_id: UUID | None = Query(None),
+    borrowing_id: UUID | None = Query(None, alias="borrowingId"),
+    loan_account_id: UUID | None = Query(None, alias="loanAccountId"),
     deployment_status: str | None = Query(None, alias="status"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -264,9 +264,9 @@ async def create_lender(
     dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
 )
 async def list_lenders(
-    lender_type: str | None = Query(None),
+    lender_type: str | None = Query(None, alias="lenderType"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -293,7 +293,7 @@ async def get_lender(
 ):
     """Get lender details."""
     service = TreasuryService(db)
-    lender = await service.get_lender(lender_id)
+    lender = await service.get_lender_for_org(current_user.organization_id, lender_id)
     return LenderResponse.model_validate(lender)
 
 
@@ -311,7 +311,12 @@ async def update_lender(
 ):
     """Update a lender."""
     service = TreasuryService(db)
-    lender = await service.update_lender(lender_id, data, current_user.user_id)
+    lender = await service.update_lender(
+        current_user.organization_id,
+        lender_id,
+        data,
+        current_user.user_id,
+    )
     await db.commit()
     return LenderResponse.model_validate(lender)
 
@@ -348,10 +353,10 @@ async def create_borrowing(
     dependencies=[Depends(RequirePermissions("TREASURY_READ"))],
 )
 async def list_borrowings(
-    lender_id: UUID | None = Query(None),
+    lender_id: UUID | None = Query(None, alias="lenderId"),
     status: str | None = Query(None),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):
@@ -378,7 +383,10 @@ async def get_borrowing(
 ):
     """Get borrowing details with tranches, schedule, and covenants."""
     service = TreasuryService(db)
-    borrowing = await service.get_borrowing_with_details(borrowing_id)
+    borrowing = await service.get_borrowing_with_details_for_org(
+        current_user.organization_id,
+        borrowing_id,
+    )
     return BorrowingDetailResponse.model_validate(borrowing)
 
 
@@ -396,7 +404,12 @@ async def update_borrowing(
 ):
     """Update a borrowing."""
     service = TreasuryService(db)
-    borrowing = await service.update_borrowing(borrowing_id, data, current_user.user_id)
+    borrowing = await service.update_borrowing(
+        current_user.organization_id,
+        borrowing_id,
+        data,
+        current_user.user_id,
+    )
     await db.commit()
     return BorrowingResponse.model_validate(borrowing)
 

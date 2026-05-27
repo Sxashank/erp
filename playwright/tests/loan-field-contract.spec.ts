@@ -17,13 +17,13 @@ interface EndpointContract {
 const LIST_CONTRACTS: EndpointContract[] = [
   {
     name: 'LOS entities',
-    path: '/lending/entities?page=1&page_size=5',
+    path: '/lending/entities?page=1&pageSize=5',
     expectedKeys: ['id', 'entityCode', 'legalName', 'tradeName', 'entityType', 'status'],
     forbiddenKeys: ['entity_id', 'entity_code', 'entity_type'],
   },
   {
     name: 'LOS products',
-    path: '/lending/products?page=1&page_size=5',
+    path: '/lending/products?page=1&pageSize=5',
     expectedKeys: ['id', 'code', 'name', 'category', 'interestType'],
     forbiddenKeys: [
       'product_id',
@@ -35,31 +35,31 @@ const LIST_CONTRACTS: EndpointContract[] = [
   },
   {
     name: 'LOS applications',
-    path: '/lending/applications?page=1&page_size=5',
+    path: '/lending/applications?page=1&pageSize=5',
     expectedKeys: ['id', 'applicationNumber', 'entityName', 'requestedAmount', 'status'],
     forbiddenKeys: ['application_id', 'application_number', 'entity_name', 'requested_amount'],
   },
   {
     name: 'LOS sanctions',
-    path: '/lending/sanctions?page=1&page_size=5',
+    path: '/lending/sanctions?page=1&pageSize=5',
     expectedKeys: ['id', 'sanctionNumber', 'entityName', 'sanctionedAmount', 'status'],
     forbiddenKeys: ['sanction_id', 'sanction_number', 'entity_name', 'sanctioned_amount'],
   },
   {
     name: 'LMS accounts',
-    path: '/lending/loan-accounts?page=1&page_size=5',
+    path: '/lending/loan-accounts?page=1&pageSize=5',
     expectedKeys: ['id', 'loanAccountNumber', 'entityName', 'sanctionedAmount', 'status'],
     forbiddenKeys: ['loan_account_id', 'loan_account_number', 'entity_name', 'sanctioned_amount'],
   },
   {
     name: 'Treasury lenders',
-    path: '/lending/treasury/lenders?page=1&page_size=5',
+    path: '/lending/treasury/lenders?page=1&pageSize=5',
     expectedKeys: ['id', 'lenderCode', 'lenderName', 'lenderType', 'status'],
     forbiddenKeys: ['lender_id', 'lender_code', 'lender_name', 'lender_type'],
   },
   {
     name: 'Treasury borrowings',
-    path: '/lending/treasury/borrowings?page=1&page_size=5',
+    path: '/lending/treasury/borrowings?page=1&pageSize=5',
     expectedKeys: ['id', 'borrowingNumber', 'lenderName', 'sanctionedAmount', 'status'],
     forbiddenKeys: ['borrowing_id', 'borrowing_number', 'lender_name', 'sanctioned_amount'],
   },
@@ -73,7 +73,7 @@ async function adminToken() {
   expect(response.ok(), await response.text()).toBeTruthy();
   const body = await response.json();
   await ctx.dispose();
-  return body.access_token as string;
+  return (body.accessToken ?? body.access_token) as string;
 }
 
 function listItems(payload: unknown): Record<string, unknown>[] {
@@ -84,7 +84,10 @@ function listItems(payload: unknown): Record<string, unknown>[] {
 }
 
 test.describe('loan API field contracts', () => {
-  test.skip(!LIVE_BACKEND_ENABLED, 'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live loan API contract suite.');
+  test.skip(
+    !LIVE_BACKEND_ENABLED,
+    'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live loan API contract suite.',
+  );
 
   test('representative loan list endpoints emit one camelCase contract', async () => {
     const token = await adminToken();

@@ -6,27 +6,11 @@ const optionalString = z.string().optional();
 const optionalPositiveNumber = z.number().positive().optional();
 const optionalNonNegativeNumber = z.number().nonnegative().optional();
 
-export const borrowingTypeSchema = z.enum([
-  'TERM_LOAN',
-  'WORKING_CAPITAL',
-  'CASH_CREDIT',
-  'NCD',
-  'CP',
-  'SUBORDINATED_DEBT',
-  'ECB',
-  'REFINANCE',
-  'ICD',
-]);
+export const borrowingTypeSchema = z.string().min(1, 'Borrowing type is required');
 
-export const rateTypeSchema = z.enum(['FIXED', 'FLOATING']);
+export const rateTypeSchema = z.string().min(1, 'Rate type is required');
 
-export const repaymentFrequencySchema = z.enum([
-  'MONTHLY',
-  'QUARTERLY',
-  'HALF_YEARLY',
-  'YEARLY',
-  'BULLET',
-]);
+export const repaymentFrequencySchema = z.string().min(1, 'Repayment frequency is required');
 
 export const borrowingFormSchema = z.object({
   lenderId: z.string().min(1, 'Lender is required'),
@@ -101,22 +85,20 @@ export const borrowingDetailToFormValues = (
   borrowing: BorrowingDetail,
 ): Partial<BorrowingFormData> => ({
   lenderId: borrowing.lenderId,
-  borrowingType: borrowing.borrowingType as BorrowingFormData['borrowingType'],
+  borrowingType: borrowing.borrowingType,
   sanctionDate: borrowing.sanctionDate,
   sanctionReference: borrowing.sanctionReference ?? '',
   sanctionedAmount: numberFromDecimal(borrowing.sanctionedAmount),
   currency: borrowing.currency,
-  rateType: borrowing.rateType as BorrowingFormData['rateType'],
+  rateType: borrowing.rateType,
   baseRateName: borrowing.baseRateName ?? '',
   baseRateValue: numberFromDecimal(borrowing.baseRateValue),
   spreadBps: borrowing.spreadBps,
   effectiveRate: numberFromDecimal(borrowing.effectiveRate),
   rateResetFrequency: borrowing.rateResetFrequency ?? 'QUARTERLY',
   dayCountConvention: borrowing.dayCountConvention,
-  interestPaymentFrequency:
-    borrowing.interestPaymentFrequency as BorrowingFormData['interestPaymentFrequency'],
-  principalPaymentFrequency:
-    borrowing.principalPaymentFrequency as BorrowingFormData['principalPaymentFrequency'],
+  interestPaymentFrequency: borrowing.interestPaymentFrequency,
+  principalPaymentFrequency: borrowing.principalPaymentFrequency,
   tenureMonths: borrowing.tenureMonths,
   moratoriumMonths: borrowing.moratoriumMonths,
   firstInterestDate: borrowing.firstInterestDate ?? '',

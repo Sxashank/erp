@@ -39,17 +39,24 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { hasPermission, Permissions } from '@/lib/permissions';
 import { biChartApi } from '@/services/biApi';
+import { useAuthStore } from '@/stores/authStore';
 import type { ChartDefinitionListItem, BIModule, ChartType } from '@/types/bi';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 const MODULES: BIModule[] = [
-  'FINANCE', 'LENDING', 'HR', 'TREASURY', 'PROCUREMENT',
-  'INVENTORY', 'TAX', 'COLLECTIONS', 'LEGAL', 'PORTAL'
+  'FINANCE',
+  'LENDING',
+  'HR',
+  'TREASURY',
+  'PROCUREMENT',
+  'INVENTORY',
+  'TAX',
+  'COLLECTIONS',
+  'LEGAL',
+  'PORTAL',
 ];
 
-const CHART_TYPES: ChartType[] = [
-  'LINE', 'BAR', 'PIE', 'DONUT', 'AREA', 'GAUGE', 'KPI', 'TABLE'
-];
+const CHART_TYPES: ChartType[] = ['LINE', 'BAR', 'PIE', 'DONUT', 'AREA', 'GAUGE', 'KPI', 'TABLE'];
 
 export function ChartDefinitionList() {
   const navigate = useNavigate();
@@ -66,7 +73,7 @@ export function ChartDefinitionList() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
   // Permissions
-  const userPermissions = JSON.parse(localStorage.getItem('user_permissions') || '["SUPER_ADMIN"]');
+  const userPermissions = Array.from(useAuthStore((state) => state.permissions));
   const canCreate = hasPermission(userPermissions, Permissions.BI_CHART_CREATE);
   const canEdit = hasPermission(userPermissions, Permissions.BI_CHART_UPDATE);
   const canDelete = hasPermission(userPermissions, Permissions.BI_CHART_DELETE);
@@ -100,9 +107,7 @@ export function ChartDefinitionList() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
-        (c) =>
-          c.name.toLowerCase().includes(query) ||
-          c.code.toLowerCase().includes(query)
+        (c) => c.name.toLowerCase().includes(query) || c.code.toLowerCase().includes(query),
       );
     }
 
@@ -163,7 +168,7 @@ export function ChartDefinitionList() {
         actions={
           canCreate ? (
             <Button onClick={() => navigate('/admin/bi/chart-definitions/new')}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               New Chart
             </Button>
           ) : undefined
@@ -179,12 +184,12 @@ export function ChartDefinitionList() {
             </CardTitle>
             <div className="flex items-center gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search charts..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
+                  className="w-64 pl-10"
                 />
               </div>
               <Select value={moduleFilter} onValueChange={setModuleFilter}>
@@ -222,7 +227,7 @@ export function ChartDefinitionList() {
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
           ) : filteredCharts.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="py-8 text-center text-muted-foreground">
               {charts.length === 0
                 ? 'No chart definitions found. Create your first chart to get started.'
                 : 'No charts match your filters.'}
@@ -242,15 +247,11 @@ export function ChartDefinitionList() {
               <TableBody>
                 {filteredCharts.map((chart) => (
                   <TableRow key={chart.id}>
-                    <TableCell className="font-mono text-sm">
-                      {chart.code}
-                    </TableCell>
+                    <TableCell className="font-mono text-sm">{chart.code}</TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {chart.name}
-                        {chart.is_system && (
-                          <Badge variant="secondary">System</Badge>
-                        )}
+                        {chart.is_system && <Badge variant="secondary">System</Badge>}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -261,7 +262,7 @@ export function ChartDefinitionList() {
                         {chart.chart_type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
+                    <TableCell className="text-sm text-muted-foreground">
                       {chart.has_data_source ? 'Connected' : 'None'}
                     </TableCell>
                     <TableCell className="text-right">
@@ -270,9 +271,7 @@ export function ChartDefinitionList() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() =>
-                              navigate(`/admin/bi/chart-definitions/${chart.id}/edit`)
-                            }
+                            onClick={() => navigate(`/admin/bi/chart-definitions/${chart.id}/edit`)}
                             title="Edit"
                           >
                             <Edit className="h-4 w-4" />
@@ -315,7 +314,7 @@ export function ChartDefinitionList() {
               disabled={deleting}
               className="bg-red-600 hover:bg-red-700"
             >
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

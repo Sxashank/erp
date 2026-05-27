@@ -6,7 +6,7 @@ from uuid import UUID
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import NotFoundException, ConflictException
+from app.core.exceptions import NotFoundException, ConflictException, BadRequestException
 from app.models.bi.datasource import DataSource
 from app.schemas.bi.datasource import DataSourceCreate, DataSourceUpdate
 
@@ -151,13 +151,7 @@ class DataSourceService:
         data_source_id: UUID,
         parameters: Optional[dict] = None,
     ) -> dict:
-        """Fetch data from a data source.
-
-        This is a placeholder implementation. In production, this would:
-        - For API_ENDPOINT: Make HTTP request to the configured endpoint
-        - For SQL_QUERY: Execute the query template with parameters
-        - For STATIC: Return the static data
-        """
+        """Fetch data from a supported data source."""
         data_source = await self.get_data_source(data_source_id)
 
         from app.models.bi.enums import DataSourceType
@@ -166,13 +160,15 @@ class DataSourceService:
             return data_source.static_data or {}
 
         if data_source.source_type == DataSourceType.API_ENDPOINT:
-            # In production, make actual HTTP request
-            # For now, return sample data based on the endpoint
-            return {"message": "API data fetch not implemented", "endpoint": data_source.api_endpoint}
+            raise BadRequestException(
+                "API endpoint BI data sources are not enabled in this release. "
+                "Use a STATIC data source for manual-first dashboards."
+            )
 
         if data_source.source_type == DataSourceType.SQL_QUERY:
-            # In production, execute the query
-            # For now, return sample data
-            return {"message": "SQL query execution not implemented", "query": data_source.query_template}
+            raise BadRequestException(
+                "SQL-query BI data sources are not enabled in this release. "
+                "Use a STATIC data source for manual-first dashboards."
+            )
 
         return {}

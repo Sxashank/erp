@@ -18,16 +18,12 @@ from app.models.lending.enums import (
     DisbursementMode,
     DisbursementStatus,
     InstallmentStatus,
-    InterestType,
     LoanAccountStatus,
     MandateStatus,
     ProvisioningCategory,
-    RateResetFrequency,
     ReceiptMode,
     ReceiptStatus,
     ReceiptType,
-    RepaymentFrequency,
-    RepaymentMode,
     ScheduleType,
     WaiverType,
 )
@@ -64,6 +60,147 @@ class LoanAccountCreate(LoanAccountBase):
     )
 
 
+class HistoricalInstallmentCreate(CamelSchema):
+    """One EMI/EPI row imported from the client's existing loan register.
+
+    This is intentionally an operational-history contract. It preserves the
+    original due dates, component split, payment status and receipt reference
+    without forcing the historical period through today's new-loan workflow.
+    """
+
+    installment_number: int = Field(..., ge=1)
+    due_date: date
+    opening_balance: Decimal = Field(..., ge=0)
+    principal_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    interest_amount: Decimal = Field(default=Decimal("0"), ge=0)
+    emi_amount: Decimal = Field(..., ge=0)
+    closing_balance: Decimal = Field(..., ge=0)
+    principal_paid: Decimal = Field(default=Decimal("0"), ge=0)
+    interest_paid: Decimal = Field(default=Decimal("0"), ge=0)
+    penal_interest_due: Decimal = Field(default=Decimal("0"), ge=0)
+    penal_interest_paid: Decimal = Field(default=Decimal("0"), ge=0)
+    status: InstallmentStatus | None = None
+    paid_date: date | None = None
+    receipt_reference: str | None = Field(None, max_length=50)
+    receipt_mode: ReceiptMode = ReceiptMode.ADJUSTMENT
+    remarks: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_paid_amounts(self):
+        if self.principal_paid > self.principal_amount:
+            raise ValueError("principalPaid cannot exceed principalAmount")
+        if self.interest_paid > self.interest_amount:
+            raise ValueError("interestPaid cannot exceed interestAmount")
+        if self.penal_interest_paid > self.penal_interest_due:
+            raise ValueError("penalInterestPaid cannot exceed penalInterestDue")
+        if (self.principal_paid + self.interest_paid + self.penal_interest_paid) > (
+            self.emi_amount + self.penal_interest_due
+        ):
+            raise ValueError("paid components cannot exceed EMI plus penal due")
+        return self
+
+
+class HistoricalLoanOnboardingCreate(CamelSchema):
+    """Create an active/closed legacy loan account from pre-go-live records."""
+
+    entity_id: UUID | None = None
+    entity_code: str | None = Field(None, max_length=50)
+    product_id: UUID | None = None
+    product_code: str | None = Field(None, max_length=50)
+
+    legacy_loan_number: str | None = Field(None, max_length=50)
+    loan_account_number: str | None = Field(None, max_length=50)
+    loan_reference_number: str | None = Field(None, max_length=50)
+
+    application_date: date
+    sanction_date: date
+    account_open_date: date
+    first_disbursement_date: date | None = None
+    last_disbursement_date: date | None = None
+    repayment_start_date: date | None = None
+    maturity_date: date | None = None
+    cutover_date: date
+
+    sanctioned_amount: Decimal = Field(..., gt=0)
+    total_disbursed_amount: Decimal = Field(..., ge=0)
+    principal_outstanding: Decimal = Field(..., ge=0)
+    interest_outstanding: Decimal = Field(default=Decimal("0"), ge=0)
+    interest_overdue: Decimal | None = Field(default=None, ge=0)
+    principal_overdue: Decimal | None = Field(default=None, ge=0)
+    penal_interest_outstanding: Decimal = Field(default=Decimal("0"), ge=0)
+    charges_outstanding: Decimal = Field(default=Decimal("0"), ge=0)
+    total_outstanding: Decimal | None = Field(default=None, ge=0)
+
+    tenure_months: int = Field(..., ge=1)
+    moratorium_months: int = Field(default=0, ge=0)
+    interest_type: str = Field(..., min_length=1, max_length=80)
+    current_interest_rate: Decimal = Field(..., ge=0, le=100)
+    penal_interest_rate: Decimal = Field(default=Decimal("2.00"), ge=0, le=100)
+    repayment_frequency: str = Field(..., min_length=1, max_length=80)
+    repayment_mode: str = Field(..., min_length=1, max_length=80)
+    day_count_convention: DayCountConvention = DayCountConvention.ACT_365
+    current_emi_amount: Decimal | None = Field(default=None, ge=0)
+
+    days_past_due: int | None = Field(default=None, ge=0)
+    asset_classification: AssetClassification | None = None
+    npa_date: date | None = None
+
+    purpose: str = Field(default="Legacy loan onboarding", max_length=500)
+    project_name: str | None = Field(None, max_length=500)
+    remarks: str | None = None
+    create_historical_receipts: bool = True
+    post_historical_accounting: bool = False
+    installments: list[HistoricalInstallmentCreate] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_onboarding(self):
+        if not self.entity_id and not self.entity_code:
+            raise ValueError("entityId or entityCode is required")
+        if not self.product_id and not self.product_code:
+            raise ValueError("productId or productCode is required")
+        if self.total_disbursed_amount > self.sanctioned_amount:
+            raise ValueError("totalDisbursedAmount cannot exceed sanctionedAmount")
+        if self.account_open_date < self.sanction_date:
+            raise ValueError("accountOpenDate cannot be before sanctionDate")
+        if self.cutover_date < self.account_open_date:
+            raise ValueError("cutoverDate cannot be before accountOpenDate")
+        if self.first_disbursement_date and self.first_disbursement_date < self.account_open_date:
+            raise ValueError("firstDisbursementDate cannot be before accountOpenDate")
+        if self.last_disbursement_date and self.first_disbursement_date:
+            if self.last_disbursement_date < self.first_disbursement_date:
+                raise ValueError("lastDisbursementDate cannot be before firstDisbursementDate")
+        installment_numbers = [row.installment_number for row in self.installments]
+        if len(installment_numbers) != len(set(installment_numbers)):
+            raise ValueError("installmentNumber must be unique within a loan")
+        return self
+
+
+class HistoricalLoanOnboardingResult(CamelSchema):
+    """Result for one historical loan onboarding operation."""
+
+    loan_account_id: UUID | None = None
+    loan_account_number: str | None = None
+    application_id: UUID | None = None
+    sanction_id: UUID | None = None
+    schedule_id: UUID | None = None
+    imported_installments: int = 0
+    imported_receipts: int = 0
+    dry_run: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    errors: list[str] = Field(default_factory=list)
+
+
+class HistoricalLoanOnboardingBatchResponse(CamelSchema):
+    """Import/validation response for a batch of historical loans."""
+
+    dry_run: bool
+    total_loans: int
+    imported_loans: int
+    total_installments: int
+    imported_receipts: int
+    results: list[HistoricalLoanOnboardingResult]
+
+
 class LoanAccountUpdate(CamelSchema):
     """Schema for updating a loan account."""
 
@@ -95,11 +232,11 @@ class LoanAccountResponse(MaskedPIIModel, LoanAccountBase):
     tenure_months: int
     moratorium_months: int
     moratorium_end_date: date | None = None
-    interest_type: InterestType
+    interest_type: str
     current_interest_rate: Decimal
     penal_interest_rate: Decimal
-    repayment_frequency: RepaymentFrequency
-    repayment_mode: RepaymentMode
+    repayment_frequency: str
+    repayment_mode: str
     current_emi_amount: Decimal | None = None
     total_disbursed_amount: Decimal
     undisbursed_amount: Decimal
@@ -211,13 +348,13 @@ class LoanAccountViewResponse(CamelSchema):
     penal_interest_outstanding: Decimal
     charges_outstanding: Decimal
     total_outstanding: Decimal
-    interest_type: InterestType
+    interest_type: str
     current_interest_rate: Decimal
     penal_interest_rate: Decimal
     current_base_rate: Decimal | None = None
     spread_bps: int = 0
-    repayment_frequency: RepaymentFrequency
-    repayment_mode: RepaymentMode
+    repayment_frequency: str
+    repayment_mode: str
     day_count_convention: DayCountConvention
     tenure_months: int
     moratorium_months: int
@@ -301,7 +438,7 @@ class LoanAccountDetailResponse(LoanAccountResponse):
     base_rate_id: UUID | None = None
     current_base_rate: Decimal | None = None
     spread_bps: int
-    rate_reset_frequency: RateResetFrequency | None = None
+    rate_reset_frequency: str | None = None
     next_rate_reset_date: date | None = None
     last_rate_reset_date: date | None = None
     day_count_convention: DayCountConvention

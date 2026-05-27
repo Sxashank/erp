@@ -58,15 +58,6 @@ export default function PortalLoanDetail() {
   const loan = loanQuery.data;
   const schedule = scheduleQuery.data ?? [];
   const payments = paymentsQuery.data ?? [];
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   if (loanQuery.isLoading && !loan) {
     return (
       <div className="space-y-6">
@@ -126,12 +117,23 @@ export default function PortalLoanDetail() {
         subtitle={loan.product_name}
         breadcrumbs={[{ label: 'Loans', to: '/portal/loans' }, { label: loan.loan_account_number }]}
         actions={
-          <Link to={`/portal/payments?loan=${loan.id}`}>
-            <Button className="bg-emerald-600 hover:bg-emerald-700">
-              <CreditCard className="mr-2 h-4 w-4" />
-              Make Payment
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link to={`/portal/loans/${loan.id}/timeline`}>
+              <Button variant="outline">Timeline</Button>
+            </Link>
+            <Link to={`/portal/loans/${loan.id}/foreclosure-quote`}>
+              <Button variant="outline">Foreclosure Quote</Button>
+            </Link>
+            <Link to={`/portal/loans/${loan.id}/transfer-out`}>
+              <Button variant="outline">Transfer Out</Button>
+            </Link>
+            <Link to={`/portal/payments?loan=${loan.id}`}>
+              <Button className="bg-emerald-600 hover:bg-emerald-700">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Make Payment
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -140,25 +142,31 @@ export default function PortalLoanDetail() {
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Sanctioned Amount</p>
-            <p className="text-xl font-bold">{formatCurrency(loan.sanctioned_amount)}</p>
+            <p className="text-xl font-bold">
+              {formatIndianCompactCurrency(loan.sanctioned_amount)}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Disbursed Amount</p>
-            <p className="text-xl font-bold">{formatCurrency(loan.disbursed_amount)}</p>
+            <p className="text-xl font-bold">
+              {formatIndianCompactCurrency(loan.disbursed_amount)}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Outstanding</p>
-            <p className="text-xl font-bold">{formatCurrency(loan.total_outstanding)}</p>
+            <p className="text-xl font-bold">
+              {formatIndianCompactCurrency(loan.total_outstanding)}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">EMI Amount</p>
-            <p className="text-xl font-bold">{formatCurrency(loan.emi_amount)}</p>
+            <p className="text-xl font-bold">{formatIndianCompactCurrency(loan.emi_amount)}</p>
           </CardContent>
         </Card>
       </div>
@@ -173,7 +181,8 @@ export default function PortalLoanDetail() {
                 <div>
                   <p className="font-medium text-red-800">Payment Overdue</p>
                   <p className="text-sm text-red-600">
-                    {formatCurrency(loan.overdue_amount)} is overdue by {loan.overdue_days} days
+                    {formatIndianCompactCurrency(loan.overdue_amount)} is overdue by{' '}
+                    {loan.overdue_days} days
                   </p>
                 </div>
               </div>
@@ -274,19 +283,27 @@ export default function PortalLoanDetail() {
                 <div className="grid grid-cols-2 gap-4 pt-4">
                   <div>
                     <p className="text-sm text-gray-500">Total Paid</p>
-                    <p className="font-medium text-green-600">{formatCurrency(loan.total_paid)}</p>
+                    <p className="font-medium text-green-600">
+                      {formatIndianCompactCurrency(loan.total_paid)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Principal Paid</p>
-                    <p className="font-medium">{formatCurrency(loan.total_principal_paid)}</p>
+                    <p className="font-medium">
+                      {formatIndianCompactCurrency(loan.total_principal_paid)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Interest Paid</p>
-                    <p className="font-medium">{formatCurrency(loan.total_interest_paid)}</p>
+                    <p className="font-medium">
+                      {formatIndianCompactCurrency(loan.total_interest_paid)}
+                    </p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Prepaid Amount</p>
-                    <p className="font-medium">{formatCurrency(loan.prepaid_amount)}</p>
+                    <p className="font-medium">
+                      {formatIndianCompactCurrency(loan.prepaid_amount)}
+                    </p>
                   </div>
                 </div>
 
@@ -294,19 +311,25 @@ export default function PortalLoanDetail() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-sm text-gray-500">Outstanding Principal</p>
-                      <p className="font-medium">{formatCurrency(loan.outstanding_principal)}</p>
+                      <p className="font-medium">
+                        {formatIndianCompactCurrency(loan.outstanding_principal)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Outstanding Interest</p>
-                      <p className="font-medium">{formatCurrency(loan.outstanding_interest)}</p>
+                      <p className="font-medium">
+                        {formatIndianCompactCurrency(loan.outstanding_interest)}
+                      </p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Charges Due</p>
-                      <p className="font-medium">{formatCurrency(loan.charges_due)}</p>
+                      <p className="font-medium">{formatIndianCompactCurrency(loan.charges_due)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-gray-500">Total Outstanding</p>
-                      <p className="text-lg font-bold">{formatCurrency(loan.total_outstanding)}</p>
+                      <p className="text-lg font-bold">
+                        {formatIndianCompactCurrency(loan.total_outstanding)}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -351,18 +374,20 @@ export default function PortalLoanDetail() {
                     {schedule.map((item) => (
                       <TableRow key={item.installment_number}>
                         <TableCell>{item.installment_number}</TableCell>
-                        <TableCell><DateDisplay date={item.due_date} /></TableCell>
-                        <TableCell className="text-right">
-                          {formatCurrency(item.emi_amount)}
+                        <TableCell>
+                          <DateDisplay date={item.due_date} />
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.principal)}
+                          {formatIndianCompactCurrency(item.emi_amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.interest)}
+                          {formatIndianCompactCurrency(item.principal)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(item.closing_balance)}
+                          {formatIndianCompactCurrency(item.interest)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(item.closing_balance)}
                         </TableCell>
                         <TableCell>{getStatusBadge(item.status)}</TableCell>
                       </TableRow>
@@ -442,13 +467,13 @@ export default function PortalLoanDetail() {
                             <DateDisplay date={payment.payment_date} />
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(payment.amount)}
+                            {formatIndianCompactCurrency(payment.amount)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(payment.principal_applied)}
+                            {formatIndianCompactCurrency(payment.principal_applied)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(payment.interest_applied)}
+                            {formatIndianCompactCurrency(payment.interest_applied)}
                           </TableCell>
                           <TableCell>{payment.payment_mode}</TableCell>
                           <TableCell>

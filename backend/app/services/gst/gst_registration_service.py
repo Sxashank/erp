@@ -38,6 +38,7 @@ class GSTRegistrationService:
         self.session.add(registration)
         await self.session.flush()
         await self.session.refresh(registration)
+        await self.session.commit()
         return registration
 
     async def update(
@@ -62,6 +63,7 @@ class GSTRegistrationService:
 
         await self.session.flush()
         await self.session.refresh(registration)
+        await self.session.commit()
         return registration
 
     async def get(self, id: UUID) -> GSTRegistration:
@@ -86,9 +88,7 @@ class GSTRegistrationService:
         include_inactive: bool = False,
     ) -> Tuple[List[GSTRegistration], int]:
         """Get all GST registrations for an organization."""
-        return await self.repo.get_by_organization(
-            organization_id, skip, limit, include_inactive
-        )
+        return await self.repo.get_by_organization(organization_id, skip, limit, include_inactive)
 
     async def get_by_unit(self, unit_id: UUID) -> Optional[GSTRegistration]:
         """Get GST registration for a unit."""
@@ -101,3 +101,4 @@ class GSTRegistrationService:
             raise NotFoundException("GST registration not found")
         registration.soft_delete(deleted_by)
         await self.session.flush()
+        await self.session.commit()

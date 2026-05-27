@@ -8,19 +8,20 @@ from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
+from app.api.deps import ESSUserContext, get_current_ess_user, get_ess_db_with_tenant
 from app.services.ess.profile_service import ESSProfileService
 from app.models.ess.enums import ProfileUpdateType, ProfileUpdateStatus
 from app.core.exceptions import NotFoundException
-
 
 router = APIRouter(prefix="/profile", tags=["ESS Profile"])
 
 
 # ==================== Schemas ====================
 
+
 class EmployeeProfileResponse(BaseModel):
     """Employee profile response."""
+
     id: str
     employee_code: str
     first_name: str
@@ -42,6 +43,7 @@ class EmployeeProfileResponse(BaseModel):
 
 class ProfileUpdateRequestCreate(BaseModel):
     """Request to update profile."""
+
     update_type: ProfileUpdateType
     current_values: dict
     requested_values: dict
@@ -51,6 +53,7 @@ class ProfileUpdateRequestCreate(BaseModel):
 
 class ProfileUpdateRequestResponse(BaseModel):
     """Profile update request response."""
+
     id: str
     request_number: str
     update_type: str
@@ -66,6 +69,7 @@ class ProfileUpdateRequestResponse(BaseModel):
 
 class PayslipSummary(BaseModel):
     """Payslip summary."""
+
     id: str
     pay_period: str
     gross_salary: float
@@ -76,6 +80,7 @@ class PayslipSummary(BaseModel):
 
 class YTDSummary(BaseModel):
     """Year-to-date salary summary."""
+
     financial_year: str
     total_gross: float
     total_deductions: float
@@ -86,6 +91,7 @@ class YTDSummary(BaseModel):
 
 class LeaveBalanceResponse(BaseModel):
     """Leave balance response."""
+
     type: str
     code: str
     balance: float
@@ -94,6 +100,7 @@ class LeaveBalanceResponse(BaseModel):
 
 class AttendanceSummaryResponse(BaseModel):
     """Attendance summary response."""
+
     month: str
     working_days: float
     present: int
@@ -106,6 +113,7 @@ class AttendanceSummaryResponse(BaseModel):
 
 class DashboardResponse(BaseModel):
     """Dashboard response."""
+
     employee: dict
     leave_balance: List[LeaveBalanceResponse]
     latest_payslip: Optional[dict]
@@ -115,14 +123,15 @@ class DashboardResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
+
 @router.get("/me", response_model=EmployeeProfileResponse, response_model_by_alias=True)
 async def get_my_profile(
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get current user's profile."""
     service = ESSProfileService(session)
-    employee = await service.get_employee_profile(employee_id)
+    employee = await service.get_employee_profile(ess_context.employee_id)
 
     if not employee:
         raise NotFoundException(detail="Profile not found", error_code="PROFILE_NOT_FOUND")
@@ -150,34 +159,36 @@ async def get_my_profile(
 
 @router.get("/dashboard", response_model=DashboardResponse, response_model_by_alias=True)
 async def get_dashboard(
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get ESS dashboard data."""
     service = ESSProfileService(session)
-    data = await service.get_dashboard_data(employee_id)
+    data = await service.get_dashboard_data(ess_context.employee_id)
 
     if not data:
-        raise NotFoundException(detail="Dashboard data not found", error_code="DASHBOARD_DATA_NOT_FOUND")
+        raise NotFoundException(
+            detail="Dashboard data not found", error_code="DASHBOARD_DATA_NOT_FOUND"
+        )
 
     return data
 
 
-@router.post("/update-requests", response_model=ProfileUpdateRequestResponse, response_model_by_alias=True)
+@router.post(
+    "/update-requests", response_model=ProfileUpdateRequestResponse, response_model_by_alias=True
+)
 async def create_update_request(
     request: ProfileUpdateRequestCreate,
-    organization_id: UUID,  # From authenticated user
-    ess_user_id: UUID,  # From authenticated user
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Create a profile update request."""
     service = ESSProfileService(session)
 
     update_request = await service.request_profile_update(
-        organization_id=organization_id,
-        ess_user_id=ess_user_id,
-        employee_id=employee_id,
+        organization_id=ess_context.organization_id,
+        ess_user_id=ess_context.ess_user_id,
+        employee_id=ess_context.employee_id,
         update_type=request.update_type,
         current_values=request.current_values,
         requested_values=request.requested_values,
@@ -202,19 +213,23 @@ async def create_update_request(
     )
 
 
-@router.get("/update-requests", response_model=List[ProfileUpdateRequestResponse], response_model_by_alias=True)
+@router.get(
+    "/update-requests",
+    response_model=List[ProfileUpdateRequestResponse],
+    response_model_by_alias=True,
+)
 async def get_update_requests(
-    employee_id: UUID,  # From authenticated user
     status: Optional[ProfileUpdateStatus] = None,
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get profile update requests."""
     service = ESSProfileService(session)
 
     requests, total = await service.get_profile_update_requests(
-        employee_id=employee_id,
+        employee_id=ess_context.employee_id,
         status=status,
         limit=limit,
         offset=offset,
@@ -240,19 +255,20 @@ async def get_update_requests(
 
 # ==================== Payslip Endpoints ====================
 
+
 @router.get("/payslips", response_model=List[PayslipSummary], response_model_by_alias=True)
 async def get_payslips(
-    employee_id: UUID,  # From authenticated user
     financial_year: Optional[str] = None,
     limit: int = Query(12, le=36),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get payslips for the employee."""
     service = ESSProfileService(session)
 
     payslips, total = await service.get_payslips(
-        employee_id=employee_id,
+        employee_id=ess_context.employee_id,
         financial_year=financial_year,
         limit=limit,
         offset=offset,
@@ -261,11 +277,11 @@ async def get_payslips(
     return [
         PayslipSummary(
             id=str(p.id),
-            pay_period=p.pay_period,
+            pay_period=service.payslip_period(p),
             gross_salary=float(p.gross_salary),
             total_deductions=float(p.total_deductions),
             net_salary=float(p.net_salary),
-            tax_deducted=float(p.tax_deducted) if p.tax_deducted else 0,
+            tax_deducted=0,
         )
         for p in payslips
     ]
@@ -274,13 +290,13 @@ async def get_payslips(
 @router.get("/payslips/{payslip_id}")
 async def get_payslip_detail(
     payslip_id: UUID,
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get detailed payslip."""
     service = ESSProfileService(session)
 
-    payslip = await service.get_payslip_by_id(payslip_id, employee_id)
+    payslip = await service.get_payslip_by_id(payslip_id, ess_context.employee_id)
 
     if not payslip:
         raise NotFoundException(detail="Payslip not found", error_code="PAYSLIP_NOT_FOUND")
@@ -288,45 +304,47 @@ async def get_payslip_detail(
     # Return full payslip details
     return {
         "id": str(payslip.id),
-        "pay_period": payslip.pay_period,
+        "pay_period": service.payslip_period(payslip),
         "gross_salary": float(payslip.gross_salary),
-        "basic_salary": float(payslip.basic_salary) if payslip.basic_salary else 0,
         "total_earnings": float(payslip.total_earnings) if payslip.total_earnings else 0,
         "total_deductions": float(payslip.total_deductions),
         "net_salary": float(payslip.net_salary),
-        "tax_deducted": float(payslip.tax_deducted) if payslip.tax_deducted else 0,
-        "earnings": payslip.earnings if hasattr(payslip, 'earnings') else {},
-        "deductions": payslip.deductions if hasattr(payslip, 'deductions') else {},
+        "tax_deducted": 0,
+        "earnings": {},
+        "deductions": {},
     }
 
 
 @router.get("/ytd-summary", response_model=YTDSummary, response_model_by_alias=True)
 async def get_ytd_summary(
-    employee_id: UUID,  # From authenticated user
     financial_year: Optional[str] = None,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get year-to-date salary summary."""
     service = ESSProfileService(session)
-    summary = await service.get_ytd_summary(employee_id, financial_year)
+    summary = await service.get_ytd_summary(ess_context.employee_id, financial_year)
     return YTDSummary(**summary)
 
 
 # ==================== Leave Endpoints ====================
 
-@router.get("/leave-balance", response_model=List[LeaveBalanceResponse], response_model_by_alias=True)
+
+@router.get(
+    "/leave-balance", response_model=List[LeaveBalanceResponse], response_model_by_alias=True
+)
 async def get_leave_balance(
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get leave balances."""
     service = ESSProfileService(session)
-    balances = await service.get_leave_balances(employee_id)
+    balances = await service.get_leave_balances(ess_context.employee_id)
 
     return [
         LeaveBalanceResponse(
-            type=lb.leave_type.name if lb.leave_type else "Unknown",
-            code=lb.leave_type.code if lb.leave_type else "",
+            type=lb.leave_type.leave_name if lb.leave_type else "Unknown",
+            code=lb.leave_type.leave_code if lb.leave_type else "",
             balance=float(lb.balance),
             used=float(lb.used),
         )
@@ -336,37 +354,42 @@ async def get_leave_balance(
 
 # ==================== Attendance Endpoints ====================
 
+
 @router.get("/attendance")
 async def get_attendance(
-    employee_id: UUID,  # From authenticated user
     from_date: date = Query(...),
     to_date: date = Query(...),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get attendance records."""
     service = ESSProfileService(session)
-    records = await service.get_attendance(employee_id, from_date, to_date)
+    records = await service.get_attendance(ess_context.employee_id, from_date, to_date)
 
     return [
         {
             "date": r.attendance_date.isoformat(),
             "status": r.status,
-            "in_time": r.in_time.isoformat() if r.in_time else None,
-            "out_time": r.out_time.isoformat() if r.out_time else None,
-            "working_hours": float(r.working_hours) if r.working_hours else 0,
-            "shift": r.shift.name if hasattr(r, 'shift') and r.shift else None,
+            "in_time": r.first_in.isoformat() if r.first_in else None,
+            "out_time": r.last_out.isoformat() if r.last_out else None,
+            "working_hours": (
+                round(r.effective_work_minutes / 60, 2) if r.effective_work_minutes else 0
+            ),
+            "shift": None,
         }
         for r in records
     ]
 
 
-@router.get("/attendance/summary", response_model=AttendanceSummaryResponse, response_model_by_alias=True)
+@router.get(
+    "/attendance/summary", response_model=AttendanceSummaryResponse, response_model_by_alias=True
+)
 async def get_attendance_summary(
-    employee_id: UUID,  # From authenticated user
     month: str = Query(..., pattern=r"^\d{4}-\d{2}$"),  # YYYY-MM
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get attendance summary for a month."""
     service = ESSProfileService(session)
-    summary = await service.get_attendance_summary(employee_id, month)
+    summary = await service.get_attendance_summary(ess_context.employee_id, month)
     return AttendanceSummaryResponse(**summary)

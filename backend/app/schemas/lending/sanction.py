@@ -8,19 +8,12 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from app.models.lending.enums import (
-    ChargeType,
     ConditionCategory,
     ConditionComplianceStatus,
     ConditionType,
     DayCountConvention,
-    InterestType,
-    RateResetFrequency,
-    RepaymentFrequency,
-    RepaymentMode,
     SanctionStatus,
-    SecurityCategory,
     SecurityStatus,
-    SecurityType,
 )
 from app.schemas.base import CamelSchema
 
@@ -122,9 +115,9 @@ class LoanSecurityBase(CamelSchema):
 
     security_number: int | None = Field(None, ge=1)
     security_code: str | None = Field(None, max_length=50)
-    security_category: SecurityCategory
-    security_type: SecurityType
-    charge_type: ChargeType = ChargeType.FIRST
+    security_category: str = Field(..., min_length=1, max_length=80)
+    security_type: str = Field(..., min_length=1, max_length=80)
+    charge_type: str = Field(default="FIRST", min_length=1, max_length=80)
     description: str = Field(..., min_length=1)
     detailed_description: str | None = None
 
@@ -202,9 +195,9 @@ class LoanSecurityUpdate(CamelSchema):
 
     security_number: int | None = Field(None, ge=1)
     security_code: str | None = Field(None, max_length=50)
-    security_category: SecurityCategory | None = None
-    security_type: SecurityType | None = None
-    charge_type: ChargeType | None = None
+    security_category: str | None = Field(None, min_length=1, max_length=80)
+    security_type: str | None = Field(None, min_length=1, max_length=80)
+    charge_type: str | None = Field(None, min_length=1, max_length=80)
     description: str | None = Field(None, min_length=1)
     detailed_description: str | None = None
 
@@ -289,19 +282,19 @@ class LoanSanctionBase(CamelSchema):
     moratorium_type: str | None = Field(None, max_length=20)
 
     # Interest
-    interest_type: InterestType
+    interest_type: str = Field(..., min_length=1, max_length=80)
     base_rate_id: UUID | None = None
     base_rate_at_sanction: Decimal | None = Field(None, ge=0, le=100)
     spread_bps: int = Field(default=0, ge=0)
     effective_rate: Decimal = Field(..., ge=0, le=100)
-    rate_reset_frequency: RateResetFrequency | None = None
+    rate_reset_frequency: str | None = Field(None, max_length=80)
     first_rate_reset_date: date | None = None
     penal_interest_rate: Decimal = Field(default=Decimal("2.00"), ge=0, le=100)
     day_count_convention: DayCountConvention = DayCountConvention.ACT_365
 
     # Repayment
-    repayment_mode: RepaymentMode
-    repayment_frequency: RepaymentFrequency
+    repayment_mode: str = Field(..., min_length=1, max_length=80)
+    repayment_frequency: str = Field(..., min_length=1, max_length=80)
     repayment_start_date: date | None = None
 
     # Prepayment Terms
@@ -344,18 +337,18 @@ class LoanSanctionUpdate(CamelSchema):
     moratorium_months: int | None = Field(None, ge=0)
     moratorium_type: str | None = Field(None, max_length=20)
 
-    interest_type: InterestType | None = None
+    interest_type: str | None = Field(None, min_length=1, max_length=80)
     base_rate_id: UUID | None = None
     base_rate_at_sanction: Decimal | None = Field(None, ge=0, le=100)
     spread_bps: int | None = Field(None, ge=0)
     effective_rate: Decimal | None = Field(None, ge=0, le=100)
-    rate_reset_frequency: RateResetFrequency | None = None
+    rate_reset_frequency: str | None = Field(None, max_length=80)
     first_rate_reset_date: date | None = None
     penal_interest_rate: Decimal | None = Field(None, ge=0, le=100)
     day_count_convention: DayCountConvention | None = None
 
-    repayment_mode: RepaymentMode | None = None
-    repayment_frequency: RepaymentFrequency | None = None
+    repayment_mode: str | None = Field(None, min_length=1, max_length=80)
+    repayment_frequency: str | None = Field(None, min_length=1, max_length=80)
     repayment_start_date: date | None = None
 
     allows_prepayment: bool | None = None

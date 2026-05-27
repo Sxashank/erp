@@ -510,6 +510,7 @@ class LoanChecklistService:
             item = LoanChecklistItem(
                 checklist_id=checklist.id,
                 template_item_id=t_item.id,
+                catalog_item_id=t_item.catalog_item_id,
                 code=t_item.code,
                 label=t_item.label,
                 description=t_item.description,

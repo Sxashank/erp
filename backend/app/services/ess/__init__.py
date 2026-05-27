@@ -15,6 +15,8 @@ from app.services.ess.profile_service import ESSProfileService
 from app.services.ess.reimbursement_service import ESSReimbursementService
 from app.services.ess.helpdesk_service import ESSHelpdeskService
 from app.services.ess.it_declaration_service import ESSITDeclarationService
+from app.services.ess.asset_service import ESSAssetService
+from app.services.ess.training_service import ESSTrainingService
 
 __all__ = [
     "ESSAuthService",
@@ -22,4 +24,6 @@ __all__ = [
     "ESSReimbursementService",
     "ESSHelpdeskService",
     "ESSITDeclarationService",
+    "ESSAssetService",
+    "ESSTrainingService",
 ]

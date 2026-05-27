@@ -28,7 +28,7 @@ import { useToast } from '@/hooks/use-toast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface BRSReportItem {
   id: string;
   date: string;
@@ -164,11 +164,7 @@ export function BRSReport() {
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   const handlePrint = () => {
@@ -523,9 +519,7 @@ export function BRSReport() {
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span>Balance as per Books:</span>
-                  <span className="font-medium">
-                    {formatAmount(reportData.bookClosingBalance)}
-                  </span>
+                  <span className="font-medium">{formatAmount(reportData.bookClosingBalance)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Add: Deposits in Transit:</span>

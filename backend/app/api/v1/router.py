@@ -22,6 +22,8 @@ from app.api.v1.compliance import router as compliance_router
 from app.api.v1.core.integrations import router as integrations_router
 from app.api.v1.dashboard.dashboard import router as dashboard_router
 from app.api.v1.dms import router as dms_router
+from app.api.v1.document_studio import router as document_studio_router
+from app.api.v1.documents import router as documents_router
 from app.api.v1.ess import router as ess_router
 from app.api.v1.finance.account_groups import router as account_groups_router
 from app.api.v1.finance.accounts import router as accounts_router
@@ -185,6 +187,8 @@ api_router.include_router(notification_router, tags=["Notifications"])
 
 # DMS (Document Management System) routes
 api_router.include_router(dms_router, tags=["DMS"])
+api_router.include_router(document_studio_router)
+api_router.include_router(documents_router)
 
 # Inventory Module routes
 api_router.include_router(inventory_router, prefix="/inventory", tags=["Inventory"])

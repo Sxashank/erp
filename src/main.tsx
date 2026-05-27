@@ -6,6 +6,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { AuthProvider } from './contexts/AuthContext';
 import { queryClient } from './lib/queryClient';
+import './setupGlobals';
 import './styles.css';
 
 const rootElement = document.getElementById('root');

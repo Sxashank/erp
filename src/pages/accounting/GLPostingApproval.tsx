@@ -28,15 +28,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { vouchersApi } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-import { logger } from "@/lib/logger";
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
+import { logger } from '@/lib/logger';
 interface PendingPosting {
   id: string;
   postingId: string;
@@ -88,36 +80,42 @@ export default function GLPostingApproval() {
   const [approvalRemarks, setApprovalRemarks] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const mapVoucher = useCallback((voucher: VoucherDto): PendingPosting => ({
-    id: voucher.id,
-    postingId: voucher.voucherNumber || '-',
-    description: voucher.narration || voucher.voucherTypeName || 'Voucher posting',
-    postingDate: voucher.voucherDate || '-',
-    period: voucher.financialYearCode || '-',
-    entries: (voucher.lines || []).map((line) => ({
-      id: line.id,
-      accountCode: line.accountCode || '-',
-      accountName: line.accountName || '-',
-      debit: Number(line.debitAmount || 0),
-      credit: Number(line.creditAmount || 0),
-    })),
-    totalDebit: Number(voucher.totalDebit || 0),
-    totalCredit: Number(voucher.totalCredit || 0),
-    createdBy: voucher.createdBy || '-',
-    createdAt: voucher.createdAt || '-',
-    priority: Number(voucher.totalDebit || 0) >= 5000000 ? 'HIGH' : 'NORMAL',
-    remarks: voucher.narration || undefined,
-  }), []);
+  const mapVoucher = useCallback(
+    (voucher: VoucherDto): PendingPosting => ({
+      id: voucher.id,
+      postingId: voucher.voucherNumber || '-',
+      description: voucher.narration || voucher.voucherTypeName || 'Voucher posting',
+      postingDate: voucher.voucherDate || '-',
+      period: voucher.financialYearCode || '-',
+      entries: (voucher.lines || []).map((line) => ({
+        id: line.id,
+        accountCode: line.accountCode || '-',
+        accountName: line.accountName || '-',
+        debit: Number(line.debitAmount || 0),
+        credit: Number(line.creditAmount || 0),
+      })),
+      totalDebit: Number(voucher.totalDebit || 0),
+      totalCredit: Number(voucher.totalCredit || 0),
+      createdBy: voucher.createdBy || '-',
+      createdAt: voucher.createdAt || '-',
+      priority: Number(voucher.totalDebit || 0) >= 5000000 ? 'HIGH' : 'NORMAL',
+      remarks: voucher.narration || undefined,
+    }),
+    [],
+  );
 
-  const selectPosting = useCallback(async (posting: PendingPosting) => {
-    try {
-      const response = await vouchersApi.get(posting.id);
-      setSelectedPosting(mapVoucher(response.data as VoucherDto));
-    } catch (error) {
-      logger.error('Failed to load posting detail:', error);
-      setSelectedPosting(posting);
-    }
-  }, [mapVoucher]);
+  const selectPosting = useCallback(
+    async (posting: PendingPosting) => {
+      try {
+        const response = await vouchersApi.get(posting.id);
+        setSelectedPosting(mapVoucher(response.data as VoucherDto));
+      } catch (error) {
+        logger.error('Failed to load posting detail:', error);
+        setSelectedPosting(posting);
+      }
+    },
+    [mapVoucher],
+  );
 
   const loadPendingPostings = useCallback(async () => {
     if (!organizationId) return;
@@ -161,7 +159,10 @@ export default function GLPostingApproval() {
     if (!selectedPosting) return;
     setIsProcessing(true);
     try {
-      await vouchersApi.reject(selectedPosting.id, approvalRemarks || 'Rejected during approval review');
+      await vouchersApi.reject(
+        selectedPosting.id,
+        approvalRemarks || 'Rejected during approval review',
+      );
       await loadPendingPostings();
       setSelectedPosting(null);
       setApprovalRemarks('');
@@ -175,14 +176,18 @@ export default function GLPostingApproval() {
       case 'HIGH':
         return <Badge variant="destructive">High Priority</Badge>;
       case 'URGENT':
-        return <Badge variant="destructive" className="bg-red-600">Urgent</Badge>;
+        return (
+          <Badge variant="destructive" className="bg-red-600">
+            Urgent
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">Normal</Badge>;
     }
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="GL Posting Approval"
         subtitle="Review and approve pending GL postings"
@@ -193,14 +198,14 @@ export default function GLPostingApproval() {
       />
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Clock className="h-4 w-4" />
               Pending Approval
             </div>
-            <div className="text-2xl font-bold mt-1 text-yellow-600">{pendingPostings.length}</div>
+            <div className="mt-1 text-2xl font-bold text-yellow-600">{pendingPostings.length}</div>
           </CardContent>
         </Card>
         <Card>
@@ -209,28 +214,33 @@ export default function GLPostingApproval() {
               <AlertTriangle className="h-4 w-4 text-red-500" />
               High Priority
             </div>
-            <div className="text-2xl font-bold mt-1 text-red-600">
-              {pendingPostings.filter(p => p.priority === 'HIGH' || p.priority === 'URGENT').length}
+            <div className="mt-1 text-2xl font-bold text-red-600">
+              {
+                pendingPostings.filter((p) => p.priority === 'HIGH' || p.priority === 'URGENT')
+                  .length
+              }
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total Debit Value</div>
-            <div className="text-2xl font-bold mt-1">
-              {formatCurrency(pendingPostings.reduce((sum, p) => sum + p.totalDebit, 0))}
+            <div className="mt-1 text-2xl font-bold">
+              {formatIndianCompactCurrency(
+                pendingPostings.reduce((sum, p) => sum + p.totalDebit, 0),
+              )}
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Oldest Pending</div>
-            <div className="text-2xl font-bold mt-1">2 days</div>
+            <div className="mt-1 text-2xl font-bold">2 days</div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Pending List */}
         <Card className="lg:col-span-1">
           <CardHeader>
@@ -243,23 +253,25 @@ export default function GLPostingApproval() {
                 <button
                   type="button"
                   key={posting.id}
-                  className={`w-full p-4 border rounded-lg text-left transition-colors ${
-                    selectedPosting?.id === posting.id ? 'border-primary bg-muted/50' : 'hover:bg-muted/30'
+                  className={`w-full rounded-lg border p-4 text-left transition-colors ${
+                    selectedPosting?.id === posting.id
+                      ? 'border-primary bg-muted/50'
+                      : 'hover:bg-muted/30'
                   }`}
                   onClick={() => selectPosting(posting)}
                 >
                   <div className="flex items-start justify-between">
                     <div>
                       <div className="font-mono text-sm">{posting.postingId}</div>
-                      <div className="font-medium text-sm mt-1">{posting.description}</div>
-                      <div className="text-xs text-muted-foreground mt-1">
+                      <div className="mt-1 text-sm font-medium">{posting.description}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
                         by {posting.createdBy} • {posting.postingDate}
                       </div>
                     </div>
                     {getPriorityBadge(posting.priority)}
                   </div>
                   <div className="mt-2 text-sm font-medium">
-                    {formatCurrency(posting.totalDebit)}
+                    {formatIndianCompactCurrency(posting.totalDebit)}
                   </div>
                 </button>
               ))}
@@ -276,7 +288,7 @@ export default function GLPostingApproval() {
             {selectedPosting ? (
               <div className="space-y-6">
                 {/* Header Info */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
                   <div>
                     <p className="text-muted-foreground">Posting ID</p>
                     <p className="font-mono font-medium">{selectedPosting.postingId}</p>
@@ -296,20 +308,20 @@ export default function GLPostingApproval() {
                 </div>
 
                 <div>
-                  <p className="text-sm text-muted-foreground mb-1">Description</p>
+                  <p className="mb-1 text-sm text-muted-foreground">Description</p>
                   <p className="font-medium">{selectedPosting.description}</p>
                 </div>
 
                 {selectedPosting.remarks && (
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm text-muted-foreground mb-1">Remarks</p>
+                  <div className="rounded-lg bg-muted p-3">
+                    <p className="mb-1 text-sm text-muted-foreground">Remarks</p>
                     <p className="text-sm">{selectedPosting.remarks}</p>
                   </div>
                 )}
 
                 {/* Journal Entries */}
                 <div>
-                  <h4 className="font-medium mb-3">Journal Entries</h4>
+                  <h4 className="mb-3 font-medium">Journal Entries</h4>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -326,22 +338,26 @@ export default function GLPostingApproval() {
                             <div className="text-sm text-muted-foreground">{entry.accountName}</div>
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {entry.debit > 0 ? formatCurrency(entry.debit) : '-'}
+                            {entry.debit > 0 ? formatIndianCompactCurrency(entry.debit) : '-'}
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {entry.credit > 0 ? formatCurrency(entry.credit) : '-'}
+                            {entry.credit > 0 ? formatIndianCompactCurrency(entry.credit) : '-'}
                           </TableCell>
                         </TableRow>
                       ))}
                       <TableRow className="bg-muted/50 font-bold">
                         <TableCell>Total</TableCell>
-                        <TableCell className="text-right">{formatCurrency(selectedPosting.totalDebit)}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(selectedPosting.totalCredit)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(selectedPosting.totalDebit)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(selectedPosting.totalCredit)}
+                        </TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
 
-                  <div className="mt-3 p-3 bg-green-50 rounded-lg flex items-center gap-2">
+                  <div className="mt-3 flex items-center gap-2 rounded-lg bg-green-50 p-3">
                     <CheckCircle className="h-4 w-4 text-green-600" />
                     <span className="text-sm text-green-800">Entries are balanced</span>
                   </div>
@@ -367,7 +383,7 @@ export default function GLPostingApproval() {
                 </div>
 
                 {/* Approval Form */}
-                <div className="border-t pt-6 space-y-4">
+                <div className="space-y-4 border-t pt-6">
                   <div>
                     <Label>Approval Remarks</Label>
                     <Textarea
@@ -385,20 +401,16 @@ export default function GLPostingApproval() {
                       disabled={isProcessing}
                       className="bg-green-600 hover:bg-green-700"
                     >
-                      <CheckCircle className="h-4 w-4 mr-2" />
+                      <CheckCircle className="mr-2 h-4 w-4" />
                       Approve & Post
                     </Button>
-                    <Button
-                      variant="destructive"
-                      onClick={handleReject}
-                      disabled={isProcessing}
-                    >
-                      <XCircle className="h-4 w-4 mr-2" />
+                    <Button variant="destructive" onClick={handleReject} disabled={isProcessing}>
+                      <XCircle className="mr-2 h-4 w-4" />
                       Reject
                     </Button>
                     <Link to={`/admin/accounting/gl-postings/${selectedPosting.id}`}>
                       <Button variant="outline">
-                        <History className="h-4 w-4 mr-2" />
+                        <History className="mr-2 h-4 w-4" />
                         View Full Details
                       </Button>
                     </Link>
@@ -406,8 +418,8 @@ export default function GLPostingApproval() {
                 </div>
               </div>
             ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                <BookOpen className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <div className="py-12 text-center text-muted-foreground">
+                <BookOpen className="mx-auto mb-4 h-12 w-12 opacity-50" />
                 <p>Select a posting from the list to review</p>
               </div>
             )}

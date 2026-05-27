@@ -7,6 +7,7 @@ import {
   Receipt,
   AlertTriangle,
   Loader2,
+  Upload,
 } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -95,6 +96,12 @@ export default function LoanAccountList() {
       <PageHeader
         title="Loan Accounts"
         subtitle="Manage active loan accounts, schedules, and statements"
+        actions={
+          <Button onClick={() => navigate('/admin/lending/accounts/historical-import')}>
+            <Upload className="mr-2 h-4 w-4" />
+            Historical Import
+          </Button>
+        }
       />
 
       {/* Summary Cards */}

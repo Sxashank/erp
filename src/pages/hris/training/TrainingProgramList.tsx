@@ -1,24 +1,28 @@
 import {
-  Search,
-  Plus,
-  Eye,
-  MoreHorizontal,
-  GraduationCap,
   Calendar,
-  Users,
-  Clock,
-  MapPin,
   CheckCircle,
-  XCircle,
+  Clock,
+  Eye,
+  GraduationCap,
+  MapPin,
+  MoreHorizontal,
   PlayCircle,
+  Plus,
+  Search,
+  Users,
+  XCircle,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { DateDisplay } from '@/components/common/DateDisplay';
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
+import { SkeletonTable } from '@/components/common/SkeletonTable';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,89 +45,95 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { formatDate } from '@/lib/utils';
+import { useTrainingPrograms } from '@/hooks/hris/useTraining';
+import type { TrainingProgramMode, TrainingProgramStatus } from '@/services/hris/trainingApi';
 
-type TrainingStatus = 'DRAFT' | 'SCHEDULED' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED';
-type TrainingMode = 'CLASSROOM' | 'VIRTUAL' | 'E_LEARNING' | 'WORKSHOP' | 'ON_THE_JOB';
+const MODE_OPTIONS: { label: string; value: TrainingProgramMode }[] = [
+  { label: 'Classroom', value: 'CLASSROOM' },
+  { label: 'Virtual', value: 'VIRTUAL' },
+  { label: 'E-Learning', value: 'E_LEARNING' },
+  { label: 'Workshop', value: 'WORKSHOP' },
+  { label: 'On-the-Job', value: 'ON_THE_JOB' },
+];
 
-interface TrainingProgram {
-  id: string;
-  program_code: string;
-  title: string;
-  description: string;
-  category: string;
-  mode: TrainingMode;
-  trainer_name: string;
-  trainer_type: 'INTERNAL' | 'EXTERNAL';
-  start_date: string;
-  end_date: string;
-  duration_hours: number;
-  location: string;
-  max_participants: number;
-  enrolled_count: number;
-  status: TrainingStatus;
-  cost_per_participant: number;
+function getStatusBadge(status: TrainingProgramStatus) {
+  switch (status) {
+    case 'DRAFT':
+      return (
+        <Badge variant="outline" className="flex w-fit items-center">
+          <Clock className="mr-1 h-3 w-3" />
+          Draft
+        </Badge>
+      );
+    case 'SCHEDULED':
+      return (
+        <Badge variant="secondary" className="flex w-fit items-center">
+          <Calendar className="mr-1 h-3 w-3" />
+          Scheduled
+        </Badge>
+      );
+    case 'IN_PROGRESS':
+      return (
+        <Badge variant="default" className="flex w-fit items-center">
+          <PlayCircle className="mr-1 h-3 w-3" />
+          In Progress
+        </Badge>
+      );
+    case 'COMPLETED':
+      return (
+        <Badge variant="default" className="flex w-fit items-center bg-green-100 text-green-800">
+          <CheckCircle className="mr-1 h-3 w-3" />
+          Completed
+        </Badge>
+      );
+    case 'CANCELLED':
+      return (
+        <Badge variant="destructive" className="flex w-fit items-center">
+          <XCircle className="mr-1 h-3 w-3" />
+          Cancelled
+        </Badge>
+      );
+  }
 }
 
-const trainingPrograms: TrainingProgram[] = [];
-
-const trainingSummary = {
-  total_programs: trainingPrograms.length,
-  scheduled: trainingPrograms.filter((program) => program.status === 'SCHEDULED').length,
-  in_progress: trainingPrograms.filter((program) => program.status === 'IN_PROGRESS').length,
-  completed: trainingPrograms.filter((program) => program.status === 'COMPLETED').length,
-  total_participants: trainingPrograms.reduce((sum, program) => sum + program.enrolled_count, 0),
-};
-
-const getStatusBadge = (status: TrainingStatus) => {
-  const config: Record<TrainingStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; icon: React.ReactNode; label: string }> = {
-    DRAFT: { variant: 'outline', icon: <Clock className="h-3 w-3 mr-1" />, label: 'Draft' },
-    SCHEDULED: { variant: 'secondary', icon: <Calendar className="h-3 w-3 mr-1" />, label: 'Scheduled' },
-    IN_PROGRESS: { variant: 'default', icon: <PlayCircle className="h-3 w-3 mr-1" />, label: 'In Progress' },
-    COMPLETED: { variant: 'default', icon: <CheckCircle className="h-3 w-3 mr-1" />, label: 'Completed' },
-    CANCELLED: { variant: 'destructive', icon: <XCircle className="h-3 w-3 mr-1" />, label: 'Cancelled' },
-  };
-  const cfg = config[status];
-  return (
-    <Badge variant={cfg.variant} className="flex items-center w-fit">
-      {cfg.icon}
-      {cfg.label}
-    </Badge>
-  );
-};
-
-const getModeBadge = (mode: TrainingMode) => {
-  const modeLabels: Record<TrainingMode, string> = {
-    CLASSROOM: 'Classroom',
-    VIRTUAL: 'Virtual',
-    E_LEARNING: 'E-Learning',
-    WORKSHOP: 'Workshop',
-    ON_THE_JOB: 'On-the-Job',
-  };
+function getModeBadge(mode: TrainingProgramMode) {
+  const label =
+    MODE_OPTIONS.find((option) => option.value === mode)?.label ?? mode.replace(/_/g, ' ');
   return (
     <Badge variant="outline" className="text-xs">
-      {modeLabels[mode]}
+      {label}
     </Badge>
   );
-};
+}
 
 export default function TrainingProgramList() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [modeFilter, setModeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | TrainingProgramStatus>('all');
+  const [modeFilter, setModeFilter] = useState<'all' | TrainingProgramMode>('all');
 
-  const filteredPrograms = trainingPrograms.filter((p) => {
-    const matchesSearch =
-      p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.program_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.trainer_name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
-    const matchesStatus = statusFilter === 'all' || p.status === statusFilter;
-    const matchesMode = modeFilter === 'all' || p.mode === modeFilter;
-    return matchesSearch && matchesCategory && matchesStatus && matchesMode;
+  const query = useTrainingPrograms({
+    search: searchTerm || undefined,
+    category: categoryFilter !== 'all' ? categoryFilter : undefined,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    mode: modeFilter !== 'all' ? modeFilter : undefined,
+    skip: 0,
+    limit: 100,
   });
+
+  const programs = query.data?.items ?? [];
+  const summary = query.data?.summary ?? {
+    totalPrograms: 0,
+    scheduled: 0,
+    inProgress: 0,
+    completed: 0,
+    totalParticipants: 0,
+  };
+  const categories = useMemo(
+    () => Array.from(new Set(programs.map((program) => program.category))).sort(),
+    [programs],
+  );
 
   return (
     <div className="space-y-6">
@@ -132,14 +142,13 @@ export default function TrainingProgramList() {
         subtitle="Manage employee training and development programs"
         actions={
           <Button onClick={() => navigate('/admin/hris/training/new')}>
-            <Plus className="h-4 w-4 mr-2" />
-            Create Program
+            <Plus className="mr-2 h-4 w-4" />
+            Create Training Program
           </Button>
         }
       />
 
-      {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -147,53 +156,37 @@ export default function TrainingProgramList() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{trainingSummary.total_programs}</div>
-            <p className="text-xs text-muted-foreground">This year</p>
+            <div className="text-3xl font-bold">{summary.totalPrograms}</div>
+            <p className="text-xs text-muted-foreground">Available in the active org</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Scheduled
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Scheduled</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-blue-600">
-              {trainingSummary.scheduled}
-            </div>
-            <p className="text-xs text-muted-foreground">Upcoming</p>
+            <div className="text-3xl font-bold text-blue-600">{summary.scheduled}</div>
+            <p className="text-xs text-muted-foreground">Upcoming sessions</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              In Progress
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-green-600">
-              {trainingSummary.in_progress}
-            </div>
-            <p className="text-xs text-muted-foreground">Ongoing</p>
+            <div className="text-3xl font-bold text-green-600">{summary.inProgress}</div>
+            <p className="text-xs text-muted-foreground">Currently running</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Completed
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-purple-600">
-              {trainingSummary.completed}
-            </div>
-            <p className="text-xs text-muted-foreground">This year</p>
+            <div className="text-3xl font-bold text-purple-600">{summary.completed}</div>
+            <p className="text-xs text-muted-foreground">Closed programs</p>
           </CardContent>
         </Card>
-
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -201,58 +194,63 @@ export default function TrainingProgramList() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-orange-600">
-              {trainingSummary.total_participants}
-            </div>
-            <p className="text-xs text-muted-foreground">Trained</p>
+            <div className="text-3xl font-bold text-orange-600">{summary.totalParticipants}</div>
+            <p className="text-xs text-muted-foreground">Nominated or attended</p>
           </CardContent>
         </Card>
       </div>
 
-      {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <div className="flex flex-wrap gap-4">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
                 placeholder="Search by title, code, or trainer..."
                 className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-44">
                 <SelectValue placeholder="Category" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="Leadership">Leadership</SelectItem>
-                <SelectItem value="Technical">Technical</SelectItem>
-                <SelectItem value="Compliance">Compliance</SelectItem>
-                <SelectItem value="Soft Skills">Soft Skills</SelectItem>
-                <SelectItem value="Management">Management</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category} value={category}>
+                    {category}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Select value={modeFilter} onValueChange={setModeFilter}>
-              <SelectTrigger className="w-36">
+            <Select
+              value={modeFilter}
+              onValueChange={(value) => setModeFilter(value as typeof modeFilter)}
+            >
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Mode" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Modes</SelectItem>
-                <SelectItem value="CLASSROOM">Classroom</SelectItem>
-                <SelectItem value="VIRTUAL">Virtual</SelectItem>
-                <SelectItem value="E_LEARNING">E-Learning</SelectItem>
-                <SelectItem value="WORKSHOP">Workshop</SelectItem>
+                {MODE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-36">
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}
+            >
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="DRAFT">Draft</SelectItem>
                 <SelectItem value="SCHEDULED">Scheduled</SelectItem>
                 <SelectItem value="IN_PROGRESS">In Progress</SelectItem>
                 <SelectItem value="COMPLETED">Completed</SelectItem>
@@ -263,124 +261,118 @@ export default function TrainingProgramList() {
         </CardContent>
       </Card>
 
-      {/* Programs Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <GraduationCap className="h-5 w-5" />
             Training Programs
           </CardTitle>
-          <CardDescription>{filteredPrograms.length} programs found</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Program</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Mode</TableHead>
-                <TableHead>Schedule</TableHead>
-                <TableHead>Trainer</TableHead>
-                <TableHead>Enrollment</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredPrograms.length === 0 ? (
+          {query.isLoading ? (
+            <SkeletonTable rows={6} columns={8} />
+          ) : query.isError ? (
+            <ErrorState error={query.error} onRetry={() => void query.refetch()} />
+          ) : programs.length === 0 ? (
+            <EmptyState
+              title="No training programs found"
+              subtitle="Create a training program to start scheduling nominations and feedback."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
                 <TableRow>
-                  <TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">
-                    Training program data is pending backend HRIS training endpoints.
-                  </TableCell>
+                  <TableHead>Program</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Schedule</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Trainer</TableHead>
+                  <TableHead>Participants</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ) : (
-                filteredPrograms.map((program) => (
-                <TableRow key={program.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{program.title}</div>
-                      <div className="text-xs text-muted-foreground">{program.program_code}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{program.category}</Badge>
-                  </TableCell>
-                  <TableCell>{getModeBadge(program.mode)}</TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="text-sm flex items-center gap-1">
-                        <Calendar className="h-3 w-3" />
-                        {formatDate(program.start_date)}
+              </TableHeader>
+              <TableBody>
+                {programs.map((program) => (
+                  <TableRow key={program.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{program.title}</div>
+                        <div className="text-xs text-muted-foreground">{program.programCode}</div>
                       </div>
-                      <div className="text-xs text-muted-foreground flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        {program.duration_hours} hours
+                    </TableCell>
+                    <TableCell>{program.category}</TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        <div>
+                          <DateDisplay date={program.startDate} /> to{' '}
+                          <DateDisplay date={program.endDate} />
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {program.durationHours} hours
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <div className="text-sm">{program.trainer_name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {program.trainer_type === 'INTERNAL' ? 'Internal' : 'External'}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {getModeBadge(program.mode)}
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                          <MapPin className="h-3 w-3" />
+                          {program.location}
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Users className="h-4 w-4 text-muted-foreground" />
-                      <span>
-                        {program.enrolled_count}/{program.max_participants}
-                      </span>
-                    </div>
-                    <div className="w-24 bg-gray-200 rounded-full h-1.5 mt-1">
-                      <div
-                        className="bg-blue-600 h-1.5 rounded-full"
-                        style={{
-                          width: `${(program.enrolled_count / program.max_participants) * 100}%`,
-                        }}
-                      />
-                    </div>
-                  </TableCell>
-                  <TableCell>{getStatusBadge(program.status)}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={() => navigate(`/admin/hris/training/${program.id}`)}
-                        >
-                          <Eye className="h-4 w-4 mr-2" />
-                          View Details
-                        </DropdownMenuItem>
-                        {program.status === 'SCHEDULED' && (
+                    </TableCell>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{program.trainerName}</div>
+                        <div className="text-xs text-muted-foreground">{program.trainerType}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        <span>
+                          {program.enrolledCount}/{program.maxParticipants}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>{getStatusBadge(program.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => navigate(`/admin/hris/training/${program.id}/nominations`)}
+                            onClick={() => navigate(`/admin/hris/training/${program.id}`)}
                           >
-                            <Users className="h-4 w-4 mr-2" />
+                            <Eye className="mr-2 h-4 w-4" />
+                            Edit Program
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              navigate(`/admin/hris/training/${program.id}/nominations`)
+                            }
+                          >
+                            <Users className="mr-2 h-4 w-4" />
                             Manage Nominations
                           </DropdownMenuItem>
-                        )}
-                        {program.status === 'COMPLETED' && (
                           <DropdownMenuItem
                             onClick={() => navigate(`/admin/hris/training/${program.id}/feedback`)}
                           >
-                            <CheckCircle className="h-4 w-4 mr-2" />
+                            <CheckCircle className="mr-2 h-4 w-4" />
                             View Feedback
                           </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

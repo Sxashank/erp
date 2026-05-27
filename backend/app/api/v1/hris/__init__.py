@@ -6,7 +6,10 @@ from app.api.v1.hris.employees import router as employees_router
 from app.api.v1.hris.shifts import router as shifts_router
 from app.api.v1.hris.leaves import router as leaves_router
 from app.api.v1.hris.attendance import router as attendance_router
+from app.api.v1.hris.dashboard import router as dashboard_router
 from app.api.v1.hris.separation import router as separation_router
+from app.api.v1.hris.performance import router as performance_router
+from app.api.v1.hris.training import router as training_router
 
 router = APIRouter()
 
@@ -15,3 +18,6 @@ router.include_router(shifts_router, tags=["HRIS - Shifts & Holidays"])
 router.include_router(leaves_router, prefix="/leaves", tags=["HRIS - Leave Management"])
 router.include_router(attendance_router, prefix="/attendance", tags=["HRIS - Attendance"])
 router.include_router(separation_router, tags=["HRIS - Separation & FnF"])
+router.include_router(training_router, tags=["HRIS - Training"])
+router.include_router(dashboard_router, tags=["HRIS - Dashboard"])
+router.include_router(performance_router, tags=["HRIS - Performance"])

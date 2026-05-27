@@ -131,11 +131,34 @@ export async function hydrateFromServer(): Promise<void> {
       params: { limit: 200 },
     }),
   ]);
-  useAuthStore
-    .getState()
-    .setUser(mapMeToUser(me.data), Array.isArray(me.data.permissions) ? me.data.permissions : []);
+  const effectivePermissions = new Set(
+    Array.isArray(me.data.permissions) ? me.data.permissions : [],
+  );
+  for (const role of Array.isArray(me.data.roles) ? me.data.roles : []) {
+    if (role?.code) {
+      effectivePermissions.add(role.code);
+    }
+  }
+  useAuthStore.getState().setUser(mapMeToUser(me.data), Array.from(effectivePermissions));
   const orgList = Array.isArray(orgs.data) ? orgs.data : orgs.data.items;
-  useOrganizationStore.getState().setOrganizations(orgList.map(mapOrg));
+  const mappedOrganizations = orgList.map(mapOrg);
+  const userOrganizationId = me.data.organizationId;
+  const previousOrganizationId = useOrganizationStore.getState().activeOrganizationId;
+
+  useOrganizationStore.getState().setOrganizations(mappedOrganizations);
+
+  const userOrgIsAccessible = Boolean(
+    userOrganizationId &&
+    mappedOrganizations.some((organization) => organization.id === userOrganizationId),
+  );
+  const previousOrgIsAccessible = Boolean(
+    previousOrganizationId &&
+    mappedOrganizations.some((organization) => organization.id === previousOrganizationId),
+  );
+
+  if (userOrgIsAccessible && !previousOrgIsAccessible) {
+    useOrganizationStore.getState().setActiveOrganization(userOrganizationId);
+  }
 }
 
 /**

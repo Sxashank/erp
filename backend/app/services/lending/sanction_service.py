@@ -1,14 +1,13 @@
 """Loan Sanction service for the lending module."""
 
 import logging
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-logger = logging.getLogger(__name__)
 
 from app.core.exceptions import (
     BadRequestException,
@@ -25,6 +24,7 @@ from app.models.lending.enums import (
     SecurityCategory,
     SecurityStatus,
 )
+from app.models.lending.masters import LendingOption
 from app.models.lending.sanction import (
     LoanSanction,
     LoanSecurity,
@@ -50,6 +50,8 @@ from app.services.lending.checklist.loan_checklist_service import (
     LoanChecklistService,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class SanctionService:
     """Service for Loan Sanction operations."""
@@ -67,6 +69,90 @@ class SanctionService:
     # Loan Sanction Operations
     # =========================================================================
 
+    @staticmethod
+    def _code(value: Any) -> str | None:
+        if value is None:
+            return None
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value)
+
+    def _validate_product_terms(
+        self,
+        *,
+        product: Any,
+        sanctioned_amount: Decimal,
+        tenure_months: int,
+        moratorium_months: int,
+        interest_type: Any,
+        repayment_frequency: Any,
+        repayment_mode: Any,
+    ) -> None:
+        if sanctioned_amount < product.min_amount:
+            raise ValidationException(
+                f"Sanctioned amount is below product minimum ({product.min_amount})"
+            )
+        if sanctioned_amount > product.max_amount:
+            raise ValidationException(
+                f"Sanctioned amount exceeds product maximum ({product.max_amount})"
+            )
+        if tenure_months < product.min_tenure_months:
+            raise ValidationException(
+                f"Sanction tenure is below product minimum ({product.min_tenure_months} months)"
+            )
+        if tenure_months > product.max_tenure_months:
+            raise ValidationException(
+                f"Sanction tenure exceeds product maximum ({product.max_tenure_months} months)"
+            )
+        interest_code = self._code(interest_type)
+        if product.interest_type and interest_code != product.interest_type:
+            raise ValidationException(
+                f"Interest type '{interest_code}' is not allowed for product {product.code}"
+            )
+        frequency_code = self._code(repayment_frequency)
+        allowed_frequencies = set(product.allowed_repayment_frequencies or [])
+        if allowed_frequencies and frequency_code not in allowed_frequencies:
+            raise ValidationException(
+                f"Repayment frequency '{frequency_code}' is not allowed for product {product.code}"
+            )
+        mode_code = self._code(repayment_mode)
+        allowed_modes = set(product.allowed_repayment_modes or [])
+        if allowed_modes and mode_code not in allowed_modes:
+            raise ValidationException(
+                f"Repayment mode '{mode_code}' is not allowed for product {product.code}"
+            )
+        if moratorium_months > 0 and not product.allows_moratorium:
+            raise ValidationException(f"Moratorium is not allowed for product {product.code}")
+        if (
+            product.max_moratorium_months is not None
+            and moratorium_months > product.max_moratorium_months
+        ):
+            raise ValidationException(
+                "Sanction moratorium exceeds product maximum "
+                f"({product.max_moratorium_months} months)"
+            )
+
+    async def _validate_lending_option(
+        self,
+        organization_id: UUID,
+        option_group: str,
+        code: str | None,
+        label: str,
+    ) -> None:
+        if not code:
+            raise ValidationException(f"{label} is required")
+        result = await self.session.execute(
+            select(LendingOption.id).where(
+                LendingOption.organization_id == organization_id,
+                LendingOption.option_group == option_group,
+                LendingOption.code == code,
+                LendingOption.is_active.is_(True),
+                LendingOption.deleted_at.is_(None),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise ValidationException(f"{label} '{code}' is not configured in lending masters")
+
     async def create_sanction(self, data: LoanSanctionCreate, created_by: UUID) -> LoanSanction:
         """Create a new loan sanction."""
         # Verify application exists
@@ -81,13 +167,25 @@ class SanctionService:
 
         # Get product for generating sanction number
         product = await self.product_repo.get(application.product_id)
+        if not product:
+            raise NotFoundException("Loan product not found")
+
+        self._validate_product_terms(
+            product=product,
+            sanctioned_amount=data.sanctioned_amount,
+            tenure_months=data.tenure_months,
+            moratorium_months=data.moratorium_months,
+            interest_type=data.interest_type,
+            repayment_frequency=data.repayment_frequency,
+            repayment_mode=data.repayment_mode,
+        )
 
         organization_id = data.organization_id or application.organization_id
         entity_id = data.entity_id or application.entity_id
 
         # Generate sanction number
         sanction_number = await self.sanction_repo.generate_sanction_number(
-            organization_id, product.code if product else "GEN"
+            organization_id, product.code
         )
 
         # Create sanction
@@ -121,6 +219,24 @@ class SanctionService:
         # Add securities
         for index, security_data in enumerate(data.securities, start=1):
             security_payload = security_data.model_dump(exclude={"sanction_id"})
+            await self._validate_lending_option(
+                organization_id,
+                "SECURITY_NATURE",
+                security_payload.get("security_category"),
+                "Security nature",
+            )
+            await self._validate_lending_option(
+                organization_id,
+                "SECURITY_CATEGORY",
+                security_payload.get("security_type"),
+                "Security type",
+            )
+            await self._validate_lending_option(
+                organization_id,
+                "CHARGE_TYPE",
+                security_payload.get("charge_type"),
+                "Charge type",
+            )
             security_payload["security_number"] = security_payload.get("security_number") or index
             if security_payload.get("net_value") is None:
                 acceptable_value = security_payload.get("acceptable_value") or Decimal("0")
@@ -149,6 +265,37 @@ class SanctionService:
 
         if sanction.status not in [SanctionStatus.DRAFT, SanctionStatus.PENDING_APPROVAL]:
             raise ValidationException("Sanction cannot be updated in current status")
+
+        product = await self.product_repo.get(sanction.product_id)
+        if not product:
+            raise NotFoundException("Loan product not found")
+        self._validate_product_terms(
+            product=product,
+            sanctioned_amount=(
+                data.sanctioned_amount
+                if data.sanctioned_amount is not None
+                else sanction.sanctioned_amount
+            ),
+            tenure_months=(
+                data.tenure_months if data.tenure_months is not None else sanction.tenure_months
+            ),
+            moratorium_months=(
+                data.moratorium_months
+                if data.moratorium_months is not None
+                else sanction.moratorium_months
+            ),
+            interest_type=(
+                data.interest_type if data.interest_type is not None else sanction.interest_type
+            ),
+            repayment_frequency=(
+                data.repayment_frequency
+                if data.repayment_frequency is not None
+                else sanction.repayment_frequency
+            ),
+            repayment_mode=(
+                data.repayment_mode if data.repayment_mode is not None else sanction.repayment_mode
+            ),
+        )
 
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
@@ -306,6 +453,101 @@ class SanctionService:
             application.stage = ApplicationStage.SANCTION
             application.status = ApplicationStatus.SANCTIONED
 
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        lifecycle = LifecycleService(self.session)
+        await lifecycle.record_event(
+            organization_id=sanction.organization_id,
+            subject_type=LifecycleSubjectType.SANCTION,
+            subject_id=sanction.id,
+            event_type="SANCTION_APPROVED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=approved_by,
+            business_number=getattr(sanction, "sanction_reference", None),
+            state_from="PENDING_APPROVAL",
+            state_to="APPROVED",
+            reason_text=remarks,
+            regulatory_tags=["SANCTION_APPROVED"],
+        )
+        if application:
+            await lifecycle.record_event(
+                organization_id=sanction.organization_id,
+                subject_type=LifecycleSubjectType.APPLICATION,
+                subject_id=application.id,
+                event_type="SANCTION_APPROVED",
+                actor_kind=LifecycleActorKind.LENDER,
+                actor_user_id=approved_by,
+                business_number=application.application_number,
+                state_to="SANCTIONED",
+                regulatory_tags=["SANCTION_APPROVED"],
+            )
+
+        # Auto-issue KFS — RBI Oct-2024 mandate. Borrower must ack on portal
+        # before acceptance is allowed (gate enforced in
+        # record_borrower_acceptance below).
+        try:
+            from app.services.lending.certificate_service import CertificateService
+
+            cert_service = CertificateService(self.session)
+
+            # Resolve organization name + address for the PDF header.
+            from app.models.masters.organization import Organization
+
+            organization = await self.session.get(Organization, sanction.organization_id)
+            org_name = organization.name if organization is not None else "—"
+            org_address = (
+                getattr(organization, "registered_address", None) if organization else None
+            )
+
+            from app.models.lending.entity import Entity
+
+            entity = (
+                await self.session.get(Entity, application.entity_id)
+                if application and application.entity_id
+                else None
+            )
+            borrower_name = entity.legal_name if entity else "Borrower"
+
+            merge_data = {
+                "borrower_name": borrower_name,
+                "sanction_number": getattr(sanction, "sanction_reference", "—"),
+                "sanctioned_amount": sanction.sanctioned_amount,
+                "tenure_months": getattr(sanction, "tenure_months", "—"),
+                "interest_rate": getattr(sanction, "interest_rate", "—"),
+                "issued_on": datetime.now(datetime.UTC).date(),
+            }
+            summary = {
+                "borrower_name": borrower_name,
+                "loan_amount": sanction.sanctioned_amount,
+                "tenure_months": getattr(sanction, "tenure_months", None),
+                "interest_rate": getattr(sanction, "interest_rate", None),
+                "rate_type": getattr(sanction, "interest_type", "FIXED"),
+                "instalment_amount": getattr(sanction, "emi_amount", None),
+                "apr": getattr(sanction, "interest_rate", None),
+                "total_interest": None,
+                "total_payable": None,
+                "cooling_off_days": 3,
+            }
+            await cert_service.issue_kfs(
+                organization_id=sanction.organization_id,
+                sanction_id=sanction.id,
+                application_id=sanction.application_id,
+                issued_by_id=approved_by,
+                organization_name=org_name,
+                organization_address=org_address,
+                merge_data=merge_data,
+                summary=summary,
+            )
+        except Exception:  # noqa: BLE001 — never block sanction approval on KFS issue failure
+            logger.exception(
+                "KFS auto-issue failed sanction_id=%s — proceeding without KFS",
+                sanction.id,
+            )
+
         await self.session.flush()
         await self.session.refresh(sanction)
         return sanction
@@ -325,6 +567,34 @@ class SanctionService:
         if sanction.status != SanctionStatus.APPROVED:
             raise ValidationException("Sanction must be approved before acceptance")
 
+        # Gate: KFS must be acknowledged before acceptance is allowed
+        # (RBI Oct-2024 mandate). Look for the most-recent KFS certificate
+        # against this sanction; if it exists, it must be acknowledged.
+        from sqlalchemy import select
+
+        from app.models.lending.loan_certificate import (
+            CertificateType,
+            LoanCertificate,
+        )
+
+        kfs_stmt = (
+            select(LoanCertificate)
+            .where(
+                LoanCertificate.organization_id == sanction.organization_id,
+                LoanCertificate.sanction_id == sanction.id,
+                LoanCertificate.certificate_type == CertificateType.KFS,
+            )
+            .order_by(LoanCertificate.issued_at.desc())
+            .limit(1)
+        )
+        kfs = (await self.session.execute(kfs_stmt)).scalar_one_or_none()
+        if kfs is not None and not kfs.is_acknowledged:
+            raise ValidationException(
+                "Borrower must acknowledge the Key Facts Statement (KFS) on "
+                "the portal before accepting the sanction. RBI Oct-2024 mandate.",
+                error_code="KFS_ACK_REQUIRED",
+            )
+
         sanction.borrower_acceptance_date = acceptance_date
         sanction.borrower_acceptance_document_path = document_path
         sanction.status = SanctionStatus.ACCEPTED
@@ -334,6 +604,82 @@ class SanctionService:
         application = await self.app_repo.get(sanction.application_id)
         if application:
             application.stage = ApplicationStage.POST_SANCTION
+
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.session).record_event(
+            organization_id=sanction.organization_id,
+            subject_type=LifecycleSubjectType.SANCTION,
+            subject_id=sanction.id,
+            event_type="SANCTION_ACCEPTED",
+            actor_kind=LifecycleActorKind.BORROWER,
+            actor_user_id=updated_by,
+            business_number=getattr(sanction, "sanction_reference", None),
+            state_from="APPROVED",
+            state_to="ACCEPTED",
+            payload={
+                "acceptance_date": acceptance_date.isoformat(),
+                "document_path": document_path,
+            },
+            regulatory_tags=["SANCTION_ACCEPTED"],
+        )
+
+        # C.5 — trigger eSign on acceptance. The ESignService persists
+        # everything we wired in the previous session into sys_esign_request.
+        # Best-effort: never block acceptance on eSign init failure.
+        try:
+            from app.integrations.esign.service import ESignService
+
+            esign_service = ESignService(db=self.session)
+
+            entity_id = application.entity_id if application else None
+            signers = []
+            if entity_id is not None:
+                from app.models.lending.entity import Entity
+
+                entity = await self.session.get(Entity, entity_id)
+                if entity is not None:
+                    signers.append(
+                        {
+                            "name": entity.legal_name,
+                            "email": getattr(entity, "primary_email", "") or "",
+                            "phone": getattr(entity, "primary_phone", "") or "",
+                            "aadhaar_number": None,
+                            "pan_number": getattr(entity, "pan", None),
+                            "signer_type": "ENTITY",
+                            "auth_mode": "AADHAAR_OTP",
+                            "sign_positions": [],
+                        }
+                    )
+            if signers and document_path:
+                from app.config import settings as _settings
+
+                await esign_service.create_signing_request(
+                    document_path=document_path,
+                    document_name=f"Loan Agreement — {sanction.sanction_reference or sanction.id}",
+                    signers=signers,
+                    organization_id=sanction.organization_id,
+                    entity_type="loan_agreement",
+                    entity_id=sanction.id,
+                    callback_url=f"{_settings.FRONTEND_URL}/portal/sanctions/{sanction.id}/sign-callback",
+                )
+                await LifecycleService(self.session).record_event(
+                    organization_id=sanction.organization_id,
+                    subject_type=LifecycleSubjectType.SANCTION,
+                    subject_id=sanction.id,
+                    event_type="AGREEMENT_ESIGN_INITIATED",
+                    actor_kind=LifecycleActorKind.SYSTEM,
+                    business_number=getattr(sanction, "sanction_reference", None),
+                )
+        except Exception:  # noqa: BLE001
+            logger.exception(
+                "eSign auto-init failed sanction_id=%s — acceptance proceeded",
+                sanction.id,
+            )
 
         await self.session.flush()
         await self.session.refresh(sanction)
@@ -546,6 +892,24 @@ class SanctionService:
             raise NotFoundException("Sanction not found")
 
         security_payload = data.model_dump()
+        await self._validate_lending_option(
+            sanction.organization_id,
+            "SECURITY_NATURE",
+            security_payload.get("security_category"),
+            "Security nature",
+        )
+        await self._validate_lending_option(
+            sanction.organization_id,
+            "SECURITY_CATEGORY",
+            security_payload.get("security_type"),
+            "Security type",
+        )
+        await self._validate_lending_option(
+            sanction.organization_id,
+            "CHARGE_TYPE",
+            security_payload.get("charge_type"),
+            "Charge type",
+        )
         if security_payload.get("security_number") is None:
             existing_securities = await self.security_repo.get_by_sanction(data.sanction_id)
             security_payload["security_number"] = len(existing_securities) + 1
@@ -577,7 +941,31 @@ class SanctionService:
         if not security:
             raise NotFoundException("Security not found")
 
+        sanction = await self.sanction_repo.get(security.sanction_id)
+        if not sanction:
+            raise NotFoundException("Sanction not found")
         update_data = data.model_dump(exclude_unset=True)
+        next_category = update_data.get("security_category", security.security_category)
+        next_type = update_data.get("security_type", security.security_type)
+        next_charge = update_data.get("charge_type", security.charge_type)
+        await self._validate_lending_option(
+            sanction.organization_id,
+            "SECURITY_NATURE",
+            next_category,
+            "Security nature",
+        )
+        await self._validate_lending_option(
+            sanction.organization_id,
+            "SECURITY_CATEGORY",
+            next_type,
+            "Security type",
+        )
+        await self._validate_lending_option(
+            sanction.organization_id,
+            "CHARGE_TYPE",
+            next_charge,
+            "Charge type",
+        )
         for field, value in update_data.items():
             setattr(security, field, value)
         security.updated_by = updated_by

@@ -8,15 +8,12 @@ from uuid import UUID, uuid4
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.core.exceptions import ValidationException
-from app.database import get_db
 from app.models.auth.user import User
 from app.models.lending.enums import (
     EntityStatus,
-    EntityType,
     KYCVerificationMethod,
-    RiskCategory,
 )
 from app.schemas.base import CamelSchema, PaginatedResponse
 from app.schemas.lending.entity import (
@@ -52,6 +49,19 @@ class EntityKYCVerificationRequest(CamelSchema):
     remarks: str | None = None
 
 
+class EntityKYCDocumentTypeOption(CamelSchema):
+    """Configured KYC document type option for entity uploads."""
+
+    id: UUID
+    code: str
+    name: str
+    category: str
+    is_mandatory: bool
+    has_expiry: bool
+    allowed_file_types: list[str]
+    max_file_size_mb: int
+
+
 # =============================================================================
 # Entity CRUD Endpoints
 # =============================================================================
@@ -64,15 +74,15 @@ class EntityKYCVerificationRequest(CamelSchema):
 )
 async def list_entities(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, alias="pageSize", ge=1, le=100),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     search: str | None = Query(None, description="Search in code, name, PAN, GSTIN"),
-    entity_type: EntityType | None = Query(None),
+    entity_type: str | None = Query(None, alias="entityType"),
     status: EntityStatus | None = Query(None),
-    risk_category: RiskCategory | None = Query(None),
-    relationship_manager_id: UUID | None = Query(None),
+    risk_category: str | None = Query(None, alias="riskCategory"),
+    relationship_manager_id: UUID | None = Query(None, alias="relationshipManagerId"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of entities for an organization."""
     service = EntityService(db)
@@ -98,9 +108,9 @@ async def list_entities(
     response_model_by_alias=True,
 )
 async def list_active_entities(
-    entity_type: EntityType | None = Query(None),
+    entity_type: str | None = Query(None, alias="entityType"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get active entities for dropdown lists."""
     service = EntityService(db)
@@ -112,7 +122,7 @@ async def list_active_entities(
 async def create_entity(
     data: EntityCreate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new entity/borrower."""
     service = EntityService(db)
@@ -121,11 +131,43 @@ async def create_entity(
     return EntityResponse.model_validate(entity)
 
 
+@router.get(
+    "/kyc-document-types",
+    response_model=list[EntityKYCDocumentTypeOption],
+    response_model_by_alias=True,
+)
+async def list_entity_kyc_document_types(
+    include_inactive: bool = Query(False, alias="includeInactive"),
+    current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
+    db: AsyncSession = Depends(get_db_with_tenant),
+) -> list[EntityKYCDocumentTypeOption]:
+    """List configured KYC document types for manual entity document uploads."""
+    service = KYCService(db)
+    document_types, _ = await service.get_all_document_types(
+        organization_id=current_user.organization_id,
+        limit=500,
+        include_inactive=include_inactive,
+    )
+    return [
+        EntityKYCDocumentTypeOption(
+            id=doc.id,
+            code=doc.code,
+            name=doc.name,
+            category=doc.category.value if hasattr(doc.category, "value") else str(doc.category),
+            is_mandatory=doc.is_mandatory,
+            has_expiry=doc.has_expiry,
+            allowed_file_types=list(doc.allowed_file_types or []),
+            max_file_size_mb=doc.max_file_size_mb,
+        )
+        for doc in document_types
+    ]
+
+
 @router.get("/{entity_id}", response_model=EntityResponse, response_model_by_alias=True)
 async def get_entity(
     entity_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get entity by ID."""
     service = EntityService(db)
@@ -139,7 +181,7 @@ async def get_entity(
 async def get_entity_details(
     entity_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get entity with all related data."""
     service = EntityService(db)
@@ -152,7 +194,7 @@ async def update_entity(
     entity_id: UUID,
     data: EntityUpdate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update an entity."""
     service = EntityService(db)
@@ -164,7 +206,7 @@ async def update_entity(
 async def delete_entity(
     entity_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Soft delete an entity."""
     service = EntityService(db)
@@ -184,9 +226,9 @@ async def delete_entity(
 )
 async def list_entity_contacts(
     entity_id: UUID,
-    include_inactive: bool = Query(False),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all contacts for an entity."""
     service = EntityService(db)
@@ -201,7 +243,7 @@ async def add_entity_contact(
     entity_id: UUID,
     data: EntityContactCreate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add a contact to an entity."""
     data.entity_id = entity_id
@@ -217,7 +259,7 @@ async def update_entity_contact(
     contact_id: UUID,
     data: EntityContactUpdate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update an entity contact."""
     service = EntityService(db)
@@ -229,7 +271,7 @@ async def update_entity_contact(
 async def delete_entity_contact(
     contact_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete an entity contact."""
     service = EntityService(db)
@@ -249,9 +291,9 @@ async def delete_entity_contact(
 )
 async def list_entity_addresses(
     entity_id: UUID,
-    include_inactive: bool = Query(False),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all addresses for an entity."""
     service = EntityService(db)
@@ -266,7 +308,7 @@ async def add_entity_address(
     entity_id: UUID,
     data: EntityAddressCreate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add an address to an entity."""
     data.entity_id = entity_id
@@ -282,7 +324,7 @@ async def update_entity_address(
     address_id: UUID,
     data: EntityAddressUpdate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update an entity address."""
     service = EntityService(db)
@@ -294,7 +336,7 @@ async def update_entity_address(
 async def delete_entity_address(
     address_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete an entity address."""
     service = EntityService(db)
@@ -314,9 +356,9 @@ async def delete_entity_address(
 )
 async def list_entity_bank_accounts(
     entity_id: UUID,
-    include_inactive: bool = Query(False),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all bank accounts for an entity."""
     service = EntityService(db)
@@ -333,7 +375,7 @@ async def add_entity_bank_account(
     entity_id: UUID,
     data: EntityBankAccountCreate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add a bank account to an entity."""
     data.entity_id = entity_id
@@ -351,7 +393,7 @@ async def update_entity_bank_account(
     account_id: UUID,
     data: EntityBankAccountUpdate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update an entity bank account."""
     service = EntityService(db)
@@ -363,7 +405,7 @@ async def update_entity_bank_account(
 async def delete_entity_bank_account(
     account_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete an entity bank account."""
     service = EntityService(db)
@@ -383,9 +425,9 @@ async def delete_entity_bank_account(
 )
 async def list_entity_financials(
     entity_id: UUID,
-    include_inactive: bool = Query(False),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all financial data for an entity."""
     service = EntityService(db)
@@ -401,7 +443,7 @@ async def list_entity_financials(
 async def get_latest_financial(
     entity_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get latest financial data for an entity."""
     service = EntityService(db)
@@ -418,7 +460,7 @@ async def add_entity_financial(
     entity_id: UUID,
     data: EntityFinancialCreate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add financial data for an entity."""
     data.entity_id = entity_id
@@ -436,7 +478,7 @@ async def update_entity_financial(
     financial_id: UUID,
     data: EntityFinancialUpdate,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update entity financial data."""
     service = EntityService(db)
@@ -448,7 +490,7 @@ async def update_entity_financial(
 async def delete_entity_financial(
     financial_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Delete entity financial data."""
     service = EntityService(db)
@@ -468,9 +510,9 @@ async def delete_entity_financial(
 )
 async def list_entity_kyc_documents(
     entity_id: UUID,
-    include_inactive: bool = Query(False),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all KYC documents for an entity."""
     service = KYCService(db)
@@ -486,12 +528,12 @@ async def list_entity_kyc_documents(
 async def upload_entity_kyc_document(
     entity_id: UUID,
     file: UploadFile = File(...),
-    document_type: str = Form(...),
-    document_number: str | None = Form(None),
-    issue_date: date | None = Form(None),
-    expiry_date: date | None = Form(None),
+    document_type: str = Form(..., alias="documentType"),
+    document_number: str | None = Form(None, alias="documentNumber"),
+    issue_date: date | None = Form(None, alias="issueDate"),
+    expiry_date: date | None = Form(None, alias="expiryDate"),
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Upload a manually collected KYC document for an entity."""
     service = KYCService(db)
@@ -556,7 +598,7 @@ async def verify_entity_kyc_document(
     document_id: UUID,
     data: EntityKYCVerificationRequest,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Verify or reject an entity KYC document manually."""
     service = KYCService(db)
@@ -585,7 +627,7 @@ async def delete_entity_kyc_document(
     entity_id: UUID,
     document_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_ENTITY_DELETE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Soft delete an entity KYC document."""
     service = KYCService(db)

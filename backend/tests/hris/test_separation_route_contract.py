@@ -4,27 +4,14 @@ import inspect
 from types import SimpleNamespace
 from uuid import uuid4
 
-import pytest
-from fastapi import HTTPException
-
 from app.api.v1.hris import separation
 
 
-def test_tenant_organization_uses_authenticated_user_org():
+def test_tenant_organization_requires_authenticated_context():
     user_org_id = uuid4()
-    spoofed_org_id = uuid4()
     current_user = SimpleNamespace(organization_id=user_org_id)
 
-    assert separation._tenant_organization_id(current_user, spoofed_org_id) == user_org_id
-
-
-def test_tenant_organization_requires_context_for_platform_user():
-    current_user = SimpleNamespace(organization_id=None)
-
-    with pytest.raises(HTTPException) as exc_info:
-        separation._tenant_organization_id(current_user)
-
-    assert exc_info.value.status_code == 400
+    assert separation._require_organization_id(current_user) == user_org_id
 
 
 def test_separation_mutations_use_authenticated_actor():
@@ -62,3 +49,14 @@ def test_checklist_routes_are_registered_before_dynamic_separation_id_route():
     assert get_routes.index("/separation/checklist") < get_routes.index(
         "/separation/{separation_id}"
     )
+
+
+def test_checklist_routes_do_not_accept_explicit_organization_parameters():
+    handlers = [
+        separation.create_checklist_item,
+        separation.list_checklist_items,
+        separation.seed_default_checklist,
+    ]
+
+    for handler in handlers:
+        assert "organization_id" not in inspect.signature(handler).parameters

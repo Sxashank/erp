@@ -44,7 +44,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { organizationsApi } from '@/services/api';
 import type { Organization, PaginatedResponse } from '@/types';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface InsurancePolicy {
   id: string;
   policy_number: string;
@@ -230,16 +230,6 @@ export function InsuranceList() {
       logger.error('Failed to fetch claims:', error);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-
   const getPolicyStatusBadge = (status: string, daysToExpiry: number) => {
     if (status === 'EXPIRED') {
       return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Expired</Badge>;
@@ -248,7 +238,9 @@ export function InsuranceList() {
       return <Badge className="bg-slate-50 text-slate-700 hover:bg-slate-50">Cancelled</Badge>;
     }
     if (daysToExpiry <= 30) {
-      return <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">Expiring Soon</Badge>;
+      return (
+        <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">Expiring Soon</Badge>
+      );
     }
     return <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">Active</Badge>;
   };
@@ -262,13 +254,23 @@ export function InsuranceList() {
       REJECTED: 'bg-red-50 text-red-700',
       SETTLED: 'bg-purple-50 text-purple-700',
     };
-    return <Badge className={`${styles[status]} hover:${styles[status]}`}>{status.replace('_', ' ')}</Badge>;
+    return (
+      <Badge className={`${styles[status]} hover:${styles[status]}`}>
+        {status.replace('_', ' ')}
+      </Badge>
+    );
   };
 
-  const activePolicies = policies.filter(p => p.status === 'ACTIVE').length;
-  const expiringPolicies = policies.filter(p => p.days_to_expiry > 0 && p.days_to_expiry <= 30).length;
-  const totalSumInsured = policies.filter(p => p.status === 'ACTIVE').reduce((sum, p) => sum + p.sum_insured, 0);
-  const totalPremium = policies.filter(p => p.status === 'ACTIVE').reduce((sum, p) => sum + p.premium_amount, 0);
+  const activePolicies = policies.filter((p) => p.status === 'ACTIVE').length;
+  const expiringPolicies = policies.filter(
+    (p) => p.days_to_expiry > 0 && p.days_to_expiry <= 30,
+  ).length;
+  const totalSumInsured = policies
+    .filter((p) => p.status === 'ACTIVE')
+    .reduce((sum, p) => sum + p.sum_insured, 0);
+  const totalPremium = policies
+    .filter((p) => p.status === 'ACTIVE')
+    .reduce((sum, p) => sum + p.premium_amount, 0);
 
   return (
     <div className="space-y-6">
@@ -317,7 +319,9 @@ export function InsuranceList() {
             <FileText className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{formatCurrency(totalSumInsured)}</div>
+            <div className="text-2xl font-bold text-blue-600">
+              {formatIndianCompactCurrency(totalSumInsured)}
+            </div>
             <p className="text-xs text-slate-500">Coverage value</p>
           </CardContent>
         </Card>
@@ -327,7 +331,9 @@ export function InsuranceList() {
             <Calendar className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{formatCurrency(totalPremium)}</div>
+            <div className="text-2xl font-bold text-purple-600">
+              {formatIndianCompactCurrency(totalPremium)}
+            </div>
             <p className="text-xs text-slate-500">Total premium cost</p>
           </CardContent>
         </Card>
@@ -349,7 +355,7 @@ export function InsuranceList() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
                       placeholder="Search policies..."
-                      className="pl-8 w-[200px]"
+                      className="w-[200px] pl-8"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -417,17 +423,25 @@ export function InsuranceList() {
                           <Badge variant="outline">{policy.policy_type.replace('_', ' ')}</Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(policy.sum_insured)}
+                          {formatIndianCompactCurrency(policy.sum_insured)}
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(policy.premium_amount)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(policy.premium_amount)}
+                        </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <p><DateDisplay date={policy.start_date} /></p>
-                            <p className="text-slate-500">to <DateDisplay date={policy.end_date} /></p>
+                            <p>
+                              <DateDisplay date={policy.start_date} />
+                            </p>
+                            <p className="text-slate-500">
+                              to <DateDisplay date={policy.end_date} />
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell>{policy.assets_covered} assets</TableCell>
-                        <TableCell>{getPolicyStatusBadge(policy.status, policy.days_to_expiry)}</TableCell>
+                        <TableCell>
+                          {getPolicyStatusBadge(policy.status, policy.days_to_expiry)}
+                        </TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -496,15 +510,19 @@ export function InsuranceList() {
                             <p className="text-sm text-slate-500">{claim.asset_name}</p>
                           </div>
                         </TableCell>
-                        <TableCell><DateDisplay date={claim.incident_date} /></TableCell>
+                        <TableCell>
+                          <DateDisplay date={claim.incident_date} />
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">{claim.claim_type.replace('_', ' ')}</Badge>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(claim.claim_amount)}
+                          {formatIndianCompactCurrency(claim.claim_amount)}
                         </TableCell>
                         <TableCell className="text-right">
-                          {claim.approved_amount ? formatCurrency(claim.approved_amount) : '-'}
+                          {claim.approved_amount
+                            ? formatIndianCompactCurrency(claim.approved_amount)
+                            : '-'}
                         </TableCell>
                         <TableCell>{getClaimStatusBadge(claim.status)}</TableCell>
                         <TableCell>

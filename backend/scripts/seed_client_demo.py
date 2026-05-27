@@ -60,12 +60,13 @@ from app.services.portal.scheme_rules import derive_scheme_application_status
 from app.api.v1.lending.iif.claims import _report_to_csv, _report_to_pdf, _report_to_xlsx
 from scripts import seed_uat_manual_lending
 
-
 ORG_CODE = "SMFC_UAT"
 ADMIN_USERNAME = seed_uat_manual_lending.ADMIN_USERNAME
 ADMIN_PASSWORD = seed_uat_manual_lending.ADMIN_PASSWORD
 PORTAL_EMAIL = seed_uat_manual_lending.PORTAL_EMAIL
 PORTAL_PASSWORD = seed_uat_manual_lending.PORTAL_PASSWORD
+PORTAL_ADMIN_EMAIL = seed_uat_manual_lending.PORTAL_ADMIN_EMAIL
+PORTAL_ADMIN_PASSWORD = seed_uat_manual_lending.PORTAL_ADMIN_PASSWORD
 APPLICATION_NUMBER = "UAT/APP/2026/001"
 LOAN_ACCOUNT_NUMBER = "UAT-LA-2026-001"
 CLAIM_REFERENCE = "UAT/IIF/2026Q1/00001"
@@ -76,6 +77,7 @@ class DemoValidation:
     organization_id: str
     admin_user_id: str
     portal_user_id: str
+    portal_admin_user_id: str
     entity_id: str
     application_id: str
     loan_account_id: str
@@ -134,6 +136,24 @@ async def validate_demo() -> DemoValidation:
             "portal registration is not approved/ACTIVE",
         )
 
+        portal_admin = await _one(
+            session,
+            select(PortalUser).where(
+                PortalUser.organization_id == org.id,
+                PortalUser.email == PORTAL_ADMIN_EMAIL,
+            ),
+            f"portal admin user {PORTAL_ADMIN_EMAIL}",
+        )
+        _assert(
+            verify_password(PORTAL_ADMIN_PASSWORD, portal_admin.password_hash or ""),
+            "portal admin password is not valid",
+        )
+        _assert(portal_admin.status == PortalUserStatus.ACTIVE, "portal admin user is not ACTIVE")
+        _assert(
+            portal_admin.registration_status == PortalRegistrationStatus.ACTIVE,
+            "portal admin registration is not ACTIVE",
+        )
+
         link = await _one(
             session,
             select(PortalUserEntity).where(
@@ -153,7 +173,9 @@ async def validate_demo() -> DemoValidation:
             ),
             f"loan application {APPLICATION_NUMBER}",
         )
-        _assert(application.entity_id == link.entity_id, "application is not linked to portal entity")
+        _assert(
+            application.entity_id == link.entity_id, "application is not linked to portal entity"
+        )
         _assert(application.status == ApplicationStatus.SANCTIONED, "application is not sanctioned")
         _assert(
             application.stage in {ApplicationStage.SANCTION, ApplicationStage.DISBURSED},
@@ -249,6 +271,7 @@ async def validate_demo() -> DemoValidation:
             organization_id=str(org.id),
             admin_user_id=str(admin.id),
             portal_user_id=str(portal_user.id),
+            portal_admin_user_id=str(portal_admin.id),
             entity_id=str(link.entity_id),
             application_id=str(application.id),
             loan_account_id=str(loan.id),
@@ -287,6 +310,7 @@ def print_summary(result: DemoValidation) -> None:
     print(f"Organization: {ORG_CODE} ({result.organization_id})")
     print(f"Admin login: {ADMIN_USERNAME} / {ADMIN_PASSWORD}")
     print(f"Portal login: {PORTAL_EMAIL} / {PORTAL_PASSWORD}")
+    print(f"Portal admin login: {PORTAL_ADMIN_EMAIL} / {PORTAL_ADMIN_PASSWORD}")
     print(f"Portal entity id: {result.entity_id}")
     print(f"Approved application: {APPLICATION_NUMBER} ({result.application_id})")
     print(f"Active loan account: {LOAN_ACCOUNT_NUMBER} ({result.loan_account_id})")

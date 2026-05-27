@@ -45,7 +45,7 @@ import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
 import { organizationsApi, voucherTemplatesApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
@@ -53,23 +53,23 @@ interface Organization {
 
 interface VoucherTemplate {
   id: string;
-  template_name: string;
-  voucher_type_name: string;
-  voucher_type_code: string;
-  total_amount: number;
+  templateName: string;
+  voucherTypeName: string;
+  voucherTypeCode: string;
+  totalAmount: number;
   category: string | null;
-  is_active: boolean;
-  is_favorite: boolean;
-  usage_count: number;
-  last_used_at: string | null;
+  isActive: boolean;
+  isFavorite: boolean;
+  usageCount: number;
+  lastUsedAt: string | null;
 }
 
 interface TemplateStats {
-  total_templates: number;
-  active_templates: number;
-  favorite_templates: number;
+  totalTemplates: number;
+  activeTemplates: number;
+  favoriteTemplates: number;
   categories: { category: string; count: number }[];
-  most_used: VoucherTemplate[];
+  mostUsed: VoucherTemplate[];
 }
 
 type VoucherTemplateListParams = Parameters<typeof voucherTemplatesApi.list>[0];
@@ -115,9 +115,9 @@ export function VoucherTemplates() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const params: VoucherTemplateListParams = { page_size: 50 };
+      const params: VoucherTemplateListParams = { pageSize: 50 };
       if (filterCategory && filterCategory !== 'ALL') params.category = filterCategory;
-      if (filterFavorite !== undefined) params.is_favorite = filterFavorite;
+      if (filterFavorite !== undefined) params.isFavorite = filterFavorite;
       if (searchQuery) params.search = searchQuery;
 
       const [listRes, statsRes] = await Promise.all([
@@ -193,7 +193,9 @@ export function VoucherTemplates() {
                 ))}
               </SelectContent>
             </Select>
-            <Button onClick={() => navigate(`/admin/finance/voucher-templates/new?org=${selectedOrgId}`)}>
+            <Button
+              onClick={() => navigate(`/admin/finance/voucher-templates/new?org=${selectedOrgId}`)}
+            >
               <Plus className="mr-2 h-4 w-4" />
               New Template
             </Button>
@@ -203,23 +205,23 @@ export function VoucherTemplates() {
 
       {/* Stats Cards */}
       {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm text-slate-500">Total Templates</div>
-              <div className="text-2xl font-bold text-slate-800">{stats.total_templates}</div>
+              <div className="text-2xl font-bold text-slate-800">{stats.totalTemplates}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm text-slate-500">Active</div>
-              <div className="text-2xl font-bold text-emerald-600">{stats.active_templates}</div>
+              <div className="text-2xl font-bold text-emerald-600">{stats.activeTemplates}</div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
               <div className="text-sm text-slate-500">Favorites</div>
-              <div className="text-2xl font-bold text-amber-600">{stats.favorite_templates}</div>
+              <div className="text-2xl font-bold text-amber-600">{stats.favoriteTemplates}</div>
             </CardContent>
           </Card>
           <Card>
@@ -232,29 +234,29 @@ export function VoucherTemplates() {
       )}
 
       {/* Most Used Templates */}
-      {stats && stats.most_used.length > 0 && (
+      {stats && stats.mostUsed.length > 0 && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-lg">
               <Star className="h-5 w-5 text-amber-500" />
               Most Used Templates
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="flex flex-wrap gap-2">
-              {stats.most_used.map((t) => (
+              {stats.mostUsed.map((t) => (
                 <button
                   type="button"
                   key={t.id}
-                  className="flex items-center gap-3 bg-slate-50 rounded-lg px-4 py-2 hover:bg-slate-100 text-left"
+                  className="flex items-center gap-3 rounded-lg bg-slate-50 px-4 py-2 text-left hover:bg-slate-100"
                   onClick={() => navigate(`/admin/finance/voucher-templates/${t.id}/use`)}
                 >
                   <div>
-                    <p className="font-medium text-sm">{t.template_name}</p>
-                    <p className="text-xs text-slate-500">Used {t.usage_count} times</p>
+                    <p className="text-sm font-medium">{t.templateName}</p>
+                    <p className="text-xs text-slate-500">Used {t.usageCount} times</p>
                   </div>
                   <Badge variant="outline">
-                    <AmountDisplay amount={t.total_amount} />
+                    <AmountDisplay amount={t.totalAmount} />
                   </Badge>
                 </button>
               ))}
@@ -265,8 +267,8 @@ export function VoucherTemplates() {
 
       {/* Filters */}
       <div className="flex gap-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+        <div className="relative max-w-sm flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <Input
             placeholder="Search templates..."
             className="pl-10"
@@ -291,7 +293,7 @@ export function VoucherTemplates() {
           variant={filterFavorite ? 'default' : 'outline'}
           onClick={() => setFilterFavorite(filterFavorite ? undefined : true)}
         >
-          <Heart className={`h-4 w-4 mr-2 ${filterFavorite ? 'fill-current' : ''}`} />
+          <Heart className={`mr-2 h-4 w-4 ${filterFavorite ? 'fill-current' : ''}`} />
           Favorites
         </Button>
       </div>
@@ -300,12 +302,12 @@ export function VoucherTemplates() {
       <Card>
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex justify-center items-center py-12">
+            <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
           ) : templates.length === 0 ? (
-            <div className="text-center py-12 text-slate-500">
-              <FileText className="h-12 w-12 mx-auto mb-3 text-slate-300" />
+            <div className="py-12 text-center text-slate-500">
+              <FileText className="mx-auto mb-3 h-12 w-12 text-slate-300" />
               <p>No templates found</p>
               <p className="text-sm">Create one to speed up voucher entry</p>
             </div>
@@ -335,26 +337,34 @@ export function VoucherTemplates() {
                           handleToggleFavorite(t.id);
                         }}
                       >
-                        <Star className={`h-4 w-4 ${t.is_favorite ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+                        <Star
+                          className={`h-4 w-4 ${t.isFavorite ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                        />
                       </Button>
                     </TableCell>
                     <TableCell
                       className="font-medium"
                       onClick={() => navigate(`/admin/finance/voucher-templates/${t.id}/use`)}
                     >
-                      {t.template_name}
+                      {t.templateName}
                     </TableCell>
-                    <TableCell>{t.voucher_type_name}</TableCell>
+                    <TableCell>{t.voucherTypeName}</TableCell>
                     <TableCell>
                       {t.category && <Badge variant="outline">{t.category}</Badge>}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      <AmountDisplay amount={t.total_amount} />
+                      <AmountDisplay amount={t.totalAmount} />
                     </TableCell>
-                    <TableCell className="text-center">{t.usage_count}</TableCell>
+                    <TableCell className="text-center">{t.usageCount}</TableCell>
                     <TableCell className="text-center">
-                      <Badge className={t.is_active ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-500'}>
-                        {t.is_active ? 'Active' : 'Inactive'}
+                      <Badge
+                        className={
+                          t.isActive
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-slate-100 text-slate-500'
+                        }
+                      >
+                        {t.isActive ? 'Active' : 'Inactive'}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -365,11 +375,17 @@ export function VoucherTemplates() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/admin/finance/voucher-templates/${t.id}/use`)}>
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/admin/finance/voucher-templates/${t.id}/use`)}
+                          >
                             <FileText className="mr-2 h-4 w-4" />
                             Use Template
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => navigate(`/admin/finance/voucher-templates/${t.id}/edit`)}>
+                          <DropdownMenuItem
+                            onClick={() =>
+                              navigate(`/admin/finance/voucher-templates/${t.id}/edit`)
+                            }
+                          >
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
@@ -378,7 +394,10 @@ export function VoucherTemplates() {
                             Duplicate
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
-                          <DropdownMenuItem className="text-red-600" onClick={() => handleDelete(t.id)}>
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={() => handleDelete(t.id)}
+                          >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>

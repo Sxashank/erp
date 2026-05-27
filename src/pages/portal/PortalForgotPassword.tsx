@@ -12,7 +12,7 @@ import {
   resolvePortalOrganizationId,
   type PortalForgotPasswordResponse,
 } from '@/services/portalApi';
-import { getErrorMessage } from "@/lib/errorMessage";
+import { getErrorMessage } from '@/lib/errorMessage';
 
 export default function PortalForgotPassword(): JSX.Element {
   const [email, setEmail] = useState('');
@@ -51,10 +51,8 @@ export default function PortalForgotPassword(): JSX.Element {
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-600 text-white">
             <Mail className="h-7 w-7" />
           </div>
-          <CardTitle className="text-2xl">Reset internal actor password</CardTitle>
-          <CardDescription>
-            Use this for lender, SMFCL, ministry, and scheme-admin portal accounts.
-          </CardDescription>
+          <CardTitle className="text-2xl">Reset portal password</CardTitle>
+          <CardDescription>Use this for authorised SFC portal accounts.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error ? (
@@ -100,7 +98,7 @@ export default function PortalForgotPassword(): JSX.Element {
 
           <div className="text-sm text-slate-600">
             <Link to="/portal/login" className="font-medium text-emerald-700 hover:underline">
-              Back to scheme portal sign-in
+              Back to borrower portal sign-in
             </Link>
           </div>
         </CardContent>

@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 
+import { ErrorState } from '@/components/common';
 import { AmountInput } from '@/components/lending/common/AmountInput';
 import { useWizard } from '@/components/lending/wizard/WizardContext';
 import { Input } from '@/components/ui/input';
@@ -12,6 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
+import { useLoanProduct } from '@/hooks/lending/useLoanProduct';
 
 interface StepData {
   requestedAmount?: number;
@@ -21,11 +24,31 @@ interface StepData {
   proposedRate?: number;
   requestedMoratoriumMonths?: number;
   preferredRepaymentFrequency?: string;
+  preferredRepaymentMode?: string;
 }
 
 export default function Step2LoanDetails() {
   const { data, updateStepData, setValidation } = useWizard();
   const stepData = (data['loan-details'] || {}) as StepData;
+  const entityProduct = (data['entity-product'] || {}) as { productId?: string };
+  const productQuery = useLoanProduct(entityProduct.productId);
+  const rateTypesQuery = useLendingOptionRows('RATE_TYPE');
+  const repaymentFrequenciesQuery = useLendingOptionRows('REPAYMENT_FREQUENCY');
+  const repaymentModesQuery = useLendingOptionRows('REPAYMENT_MODE');
+  const product = productQuery.data;
+
+  const masterLabel = (
+    rows: { data: Record<string, unknown> }[] | undefined,
+    code: string | undefined,
+  ) => String(rows?.find((row) => String(row.data.code) === code)?.data.label ?? code ?? '');
+  const repaymentFrequencyOptions = (product?.allowedRepaymentFrequencies ?? []).map((code) => ({
+    value: code,
+    label: masterLabel(repaymentFrequenciesQuery.data?.items, code),
+  }));
+  const repaymentModeOptions = (product?.allowedRepaymentModes ?? []).map((code) => ({
+    value: code,
+    label: masterLabel(repaymentModesQuery.data?.items, code),
+  }));
 
   useEffect(() => {
     const isValid = Boolean(
@@ -33,14 +56,43 @@ export default function Step2LoanDetails() {
       stepData.requestedTenureMonths &&
       stepData.purpose &&
       stepData.preferredInterestType &&
-      stepData.preferredRepaymentFrequency,
+      stepData.preferredRepaymentFrequency &&
+      stepData.preferredRepaymentMode,
     );
     setValidation('loan-details', isValid);
   }, [stepData, setValidation]);
 
+  useEffect(() => {
+    if (!product) return;
+    const patch: Partial<StepData> = {};
+    if (!stepData.preferredInterestType) patch.preferredInterestType = product.interestType;
+    if (!stepData.preferredRepaymentFrequency) {
+      patch.preferredRepaymentFrequency = product.defaultRepaymentFrequency;
+    }
+    if (!stepData.preferredRepaymentMode) {
+      patch.preferredRepaymentMode = product.defaultRepaymentMode;
+    }
+    if (!stepData.requestedTenureMonths && product.defaultTenureMonths) {
+      patch.requestedTenureMonths = product.defaultTenureMonths;
+    }
+    if (Object.keys(patch).length > 0) {
+      updateStepData('loan-details', { ...stepData, ...patch });
+    }
+  }, [product, stepData, updateStepData]);
+
   const handleChange = (field: string, value: string | number) => {
     updateStepData('loan-details', { ...stepData, [field]: value });
   };
+
+  if (productQuery.isError) {
+    return (
+      <ErrorState
+        title="Could not load selected product policy"
+        error={productQuery.error}
+        onRetry={() => productQuery.refetch()}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -68,8 +120,8 @@ export default function Step2LoanDetails() {
           <Input
             id="requestedTenureMonths"
             type="number"
-            min={1}
-            max={360}
+            min={product?.minTenureMonths ?? 1}
+            max={product?.maxTenureMonths ?? 600}
             value={stepData.requestedTenureMonths || ''}
             onChange={(e) => handleChange('requestedTenureMonths', parseInt(e.target.value))}
             placeholder="Enter tenure in months"
@@ -82,13 +134,28 @@ export default function Step2LoanDetails() {
           <Select
             value={stepData.preferredInterestType || ''}
             onValueChange={(value) => handleChange('preferredInterestType', value)}
+            disabled={Boolean(product?.interestType)}
           >
             <SelectTrigger>
               <SelectValue placeholder="Select interest type" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="FIXED">Fixed Rate</SelectItem>
-              <SelectItem value="FLOATING">Floating Rate</SelectItem>
+              {(product?.interestType
+                ? [
+                    {
+                      value: product.interestType,
+                      label: masterLabel(rateTypesQuery.data?.items, product.interestType),
+                    },
+                  ]
+                : (rateTypesQuery.data?.items ?? []).map((row) => ({
+                    value: String(row.data.code),
+                    label: String(row.data.label ?? row.data.code),
+                  }))
+              ).map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -100,8 +167,8 @@ export default function Step2LoanDetails() {
             id="proposedRate"
             type="number"
             step="0.01"
-            min={0}
-            max={50}
+            min={product?.minEffectiveRate ? Number(product.minEffectiveRate) : 0}
+            max={product?.maxEffectiveRate ? Number(product.maxEffectiveRate) : 100}
             value={stepData.proposedRate || ''}
             onChange={(e) => handleChange('proposedRate', parseFloat(e.target.value))}
             placeholder="e.g., 12.50"
@@ -119,11 +186,31 @@ export default function Step2LoanDetails() {
               <SelectValue placeholder="Select frequency" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="MONTHLY">Monthly</SelectItem>
-              <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-              <SelectItem value="HALF_YEARLY">Half-Yearly</SelectItem>
-              <SelectItem value="YEARLY">Yearly</SelectItem>
-              <SelectItem value="BULLET">Bullet (At Maturity)</SelectItem>
+              {repaymentFrequencyOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Repayment Mode */}
+        <div className="space-y-2">
+          <Label>Repayment Mode *</Label>
+          <Select
+            value={stepData.preferredRepaymentMode || ''}
+            onValueChange={(value) => handleChange('preferredRepaymentMode', value)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select mode" />
+            </SelectTrigger>
+            <SelectContent>
+              {repaymentModeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -135,7 +222,8 @@ export default function Step2LoanDetails() {
             id="requestedMoratoriumMonths"
             type="number"
             min={0}
-            max={36}
+            max={product?.maxMoratoriumMonths ?? 0}
+            disabled={!product?.allowsMoratorium}
             value={stepData.requestedMoratoriumMonths || ''}
             onChange={(e) => handleChange('requestedMoratoriumMonths', parseInt(e.target.value))}
             placeholder="Enter moratorium period"

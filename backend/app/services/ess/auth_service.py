@@ -12,7 +12,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.ess.ess_user import ESSUser, ESSSession, ESSDevice, ESSOTP
 from app.models.ess.enums import ESSUserStatus
 from app.models.hris.employee import Employee
-from app.core.security import create_access_token, create_refresh_token, verify_password, get_password_hash
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    verify_password,
+    get_password_hash,
+)
+
+
+def _truncate(value: Optional[str], limit: int) -> Optional[str]:
+    """Clip external device metadata to the target column width."""
+    if value is None:
+        return None
+    return value[:limit]
 
 
 class ESSAuthService:
@@ -31,9 +43,7 @@ class ESSAuthService:
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
-    async def get_ess_user_by_employee(
-        self, employee_id: UUID
-    ) -> Optional[ESSUser]:
+    async def get_ess_user_by_employee(self, employee_id: UUID) -> Optional[ESSUser]:
         """Get ESS user by employee ID."""
         query = select(ESSUser).where(ESSUser.employee_id == employee_id)
         result = await self.session.execute(query)
@@ -113,14 +123,18 @@ class ESSAuthService:
             Tuple of (success, error_message)
         """
         # Find the latest unused OTP for this mobile
-        query = select(ESSOTP).where(
-            and_(
-                ESSOTP.mobile == mobile,
-                ESSOTP.otp_type == otp_type,
-                ESSOTP.is_used == False,
-                ESSOTP.expires_at > datetime.utcnow(),
+        query = (
+            select(ESSOTP)
+            .where(
+                and_(
+                    ESSOTP.mobile == mobile,
+                    ESSOTP.otp_type == otp_type,
+                    ESSOTP.is_used == False,
+                    ESSOTP.expires_at > datetime.utcnow(),
+                )
             )
-        ).order_by(ESSOTP.created_at.desc())
+            .order_by(ESSOTP.created_at.desc())
+        )
 
         result = await self.session.execute(query)
         otp = result.scalar_one_or_none()
@@ -177,11 +191,10 @@ class ESSAuthService:
         # Create tokens
         access_token = create_access_token(
             subject=str(ess_user.id),
-            token_type="ess",
             additional_claims={
                 "employee_id": str(ess_user.employee_id),
                 "organization_id": str(ess_user.organization_id),
-            }
+            },
         )
         refresh_token = create_refresh_token(subject=str(ess_user.id))
 
@@ -190,13 +203,13 @@ class ESSAuthService:
             ess_user_id=ess_user.id,
             session_token=access_token,
             refresh_token=refresh_token,
-            device_type=device_info.get("device_type") if device_info else None,
-            device_name=device_info.get("device_name") if device_info else None,
-            os_name=device_info.get("os_name") if device_info else None,
-            os_version=device_info.get("os_version") if device_info else None,
-            browser=device_info.get("browser") if device_info else None,
-            app_version=device_info.get("app_version") if device_info else None,
-            ip_address=ip_address,
+            device_type=_truncate(device_info.get("device_type"), 50) if device_info else None,
+            device_name=_truncate(device_info.get("device_name"), 200) if device_info else None,
+            os_name=_truncate(device_info.get("os_name"), 50) if device_info else None,
+            os_version=_truncate(device_info.get("os_version"), 50) if device_info else None,
+            browser=_truncate(device_info.get("browser"), 100) if device_info else None,
+            app_version=_truncate(device_info.get("app_version"), 20) if device_info else None,
+            ip_address=_truncate(ip_address, 50),
             login_at=datetime.utcnow(),
             expires_at=datetime.utcnow() + timedelta(days=7),
             last_activity=datetime.utcnow(),
@@ -222,7 +235,7 @@ class ESSAuthService:
                 "employee_id": str(ess_user.employee_id),
                 "mobile": ess_user.mobile,
                 "email": ess_user.email,
-            }
+            },
         }, None
 
     async def refresh_token(
@@ -256,11 +269,10 @@ class ESSAuthService:
         # Generate new tokens
         new_access_token = create_access_token(
             subject=str(ess_user.id),
-            token_type="ess",
             additional_claims={
                 "employee_id": str(ess_user.employee_id),
                 "organization_id": str(ess_user.organization_id),
-            }
+            },
         )
         new_refresh_token = create_refresh_token(subject=str(ess_user.id))
 
@@ -281,46 +293,60 @@ class ESSAuthService:
 
     async def logout(self, session_token: str) -> bool:
         """Logout user by invalidating session."""
-        query = update(ESSSession).where(
-            ESSSession.session_token == session_token
-        ).values(is_active=False)
+        query = (
+            update(ESSSession)
+            .where(ESSSession.session_token == session_token)
+            .values(is_active=False)
+        )
         await self.session.execute(query)
         await self.session.flush()
         return True
 
     async def logout_all_sessions(self, ess_user_id: UUID) -> int:
         """Logout all sessions for a user."""
-        query = update(ESSSession).where(
-            and_(
-                ESSSession.ess_user_id == ess_user_id,
-                ESSSession.is_active == True,
+        query = (
+            update(ESSSession)
+            .where(
+                and_(
+                    ESSSession.ess_user_id == ess_user_id,
+                    ESSSession.is_active == True,
+                )
             )
-        ).values(is_active=False)
+            .values(is_active=False)
+        )
         result = await self.session.execute(query)
         await self.session.flush()
         return result.rowcount
 
     async def get_active_sessions(self, ess_user_id: UUID) -> list[ESSSession]:
         """Get all active sessions for a user."""
-        query = select(ESSSession).where(
-            and_(
-                ESSSession.ess_user_id == ess_user_id,
-                ESSSession.is_active == True,
-                ESSSession.expires_at > datetime.utcnow(),
+        query = (
+            select(ESSSession)
+            .where(
+                and_(
+                    ESSSession.ess_user_id == ess_user_id,
+                    ESSSession.is_active == True,
+                    ESSSession.expires_at > datetime.utcnow(),
+                )
             )
-        ).order_by(ESSSession.last_activity.desc())
+            .order_by(ESSSession.last_activity.desc())
+        )
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
     async def revoke_session(self, ess_user_id: UUID, session_id: UUID) -> bool:
         """Revoke one active session owned by a user."""
-        query = update(ESSSession).where(
-            and_(
-                ESSSession.id == session_id,
-                ESSSession.ess_user_id == ess_user_id,
-                ESSSession.is_active == True,
+        query = (
+            update(ESSSession)
+            .where(
+                and_(
+                    ESSSession.id == session_id,
+                    ESSSession.ess_user_id == ess_user_id,
+                    ESSSession.is_active == True,
+                )
             )
-        ).values(is_active=False)
+            .values(is_active=False)
+        )
         result = await self.session.execute(query)
         await self.session.flush()
         return bool(result.rowcount)
@@ -332,7 +358,7 @@ class ESSAuthService:
         device_name: str,
         device_type: str,
         fcm_token: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ) -> ESSDevice:
         """Register a new device for push notifications."""
         # Check if device already exists
@@ -366,7 +392,7 @@ class ESSAuthService:
             fcm_token=fcm_token,
             is_active=True,
             last_used=datetime.utcnow(),
-            **kwargs
+            **kwargs,
         )
         self.session.add(device)
         await self.session.flush()

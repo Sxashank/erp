@@ -116,9 +116,21 @@ from app.models.dms import (
     DMSFolder,
     DMSFolderAccess,
     DMSTag,
+    DocumentFilingRule,
     DocumentAccessLevel,
     # Enums
     DocumentStatus,
+)
+from app.models.document_studio import (
+    DocumentModule,
+    DocumentPackage,
+    DocumentPackageItem,
+    DocumentPackageStatus,
+    DocumentStudioTemplate,
+    DocumentStudioTemplateVersion,
+    DocumentTemplateFormat,
+    DocumentTemplateStatus,
+    GeneratedDocument,
 )
 from app.models.finance.account import Account
 from app.models.finance.account_group import AccountGroup
@@ -158,7 +170,9 @@ from app.models.hris.employee import (
     EmployeeStatutory,
 )
 from app.models.hris.leave import LeaveApplication, LeaveBalance, LeaveEncashment, LeaveType
+from app.models.hris.performance import AppraisalCycle, EmployeeAppraisal, PerformanceGoal
 from app.models.hris.shift import Holiday, HolidayCalendar, Shift
+from app.models.hris.training import TrainingFeedback, TrainingNomination, TrainingProgram
 
 # Legal models
 from app.models.legal import (
@@ -566,8 +580,19 @@ __all__ = [
     "DMSDocumentHistory",
     "DMSFolder",
     "DMSFolderAccess",
+    "DocumentFilingRule",
     "DMSTag",
     "DMSDocumentTag",
+    # Document Studio
+    "DocumentModule",
+    "DocumentTemplateStatus",
+    "DocumentTemplateFormat",
+    "DocumentPackageStatus",
+    "DocumentStudioTemplate",
+    "DocumentStudioTemplateVersion",
+    "GeneratedDocument",
+    "DocumentPackage",
+    "DocumentPackageItem",
     # BI/Analytics Enums
     "WidgetType",
     "ChartType",

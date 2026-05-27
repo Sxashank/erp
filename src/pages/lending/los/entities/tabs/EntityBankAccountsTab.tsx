@@ -30,22 +30,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { entityApi } from '@/services/lending';
 import type { EntityBankAccount } from '@/types/lending';
-
-const ACCOUNT_TYPES = [
-  { value: 'SAVINGS', label: 'Savings Account' },
-  { value: 'CURRENT', label: 'Current Account' },
-  { value: 'OD', label: 'Overdraft Account' },
-  { value: 'CC', label: 'Cash Credit Account' },
-];
 
 const bankAccountSchema = z.object({
   bankName: z.string().min(2, 'Bank name is required'),
   branchName: z.string().min(2, 'Branch name is required'),
   accountNumber: z.string().min(9, 'Account number must be at least 9 digits').max(30),
   ifscCode: z.string().regex(/^[A-Z]{4}0[A-Z0-9]{6}$/, 'Invalid IFSC code format'),
-  accountType: z.enum(['SAVINGS', 'CURRENT', 'OD', 'CC']),
+  accountType: z.string().min(1, 'Account type is required'),
   accountHolderName: z.string().min(2, 'Account holder name is required'),
   isPrimary: z.boolean(),
 });
@@ -62,6 +56,8 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const accountTypesQuery = useLendingOptionRows('BANK_ACCOUNT_TYPE');
+  const accountTypes = masterRowsToOptions(accountTypesQuery.data?.items);
 
   const form = useForm<BankAccountFormData>({
     resolver: zodResolver(bankAccountSchema),
@@ -97,7 +93,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
       branchName: '',
       accountNumber: '',
       ifscCode: '',
-      accountType: 'CURRENT',
+      accountType: accountTypes[0]?.value ?? 'CURRENT',
       accountHolderName: '',
       isPrimary: false,
     });
@@ -111,7 +107,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
       branchName: account.branchName || '',
       accountNumber: account.accountNumber,
       ifscCode: account.ifscCode,
-      accountType: account.accountType as BankAccountFormData['accountType'],
+      accountType: account.accountType,
       accountHolderName: account.accountHolderName || '',
       isPrimary: account.isPrimary,
     });
@@ -278,7 +274,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {ACCOUNT_TYPES.map((type) => (
+                            {accountTypes.map((type) => (
                               <SelectItem key={type.value} value={type.value}>
                                 {type.label}
                               </SelectItem>
@@ -354,7 +350,7 @@ export default function EntityBankAccountsTab({ entityId }: EntityBankAccountsTa
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{account.bankName}</p>
                     <Badge variant="outline">
-                      {ACCOUNT_TYPES.find((t) => t.value === account.accountType)?.label ||
+                      {accountTypes.find((t) => t.value === account.accountType)?.label ||
                         account.accountType}
                     </Badge>
                     {account.isPrimary && <Badge>Primary</Badge>}

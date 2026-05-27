@@ -46,9 +46,11 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { hasPermission, Permissions } from '@/lib/permissions';
 import { biDataSourceApi } from '@/services/biApi';
-import type { DataSourceListItem, DataSourceType } from '@/types/bi';
+import { useAuthStore } from '@/stores/authStore';
+import type { DataSourceFetchResponse, DataSourceListItem, DataSourceType } from '@/types/bi';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
+
 const SOURCE_TYPES: DataSourceType[] = ['API_ENDPOINT', 'SQL_QUERY', 'STATIC'];
 
 export function DataSourceList() {
@@ -63,7 +65,7 @@ export function DataSourceList() {
   // Preview drawer state
   const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
   const [previewId, setPreviewId] = useState<string | null>(null);
-  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<DataSourceFetchResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   // Filters
@@ -71,7 +73,7 @@ export function DataSourceList() {
   const [typeFilter, setTypeFilter] = useState<string>('all');
 
   // Permissions
-  const userPermissions = JSON.parse(localStorage.getItem('user_permissions') || '["SUPER_ADMIN"]');
+  const userPermissions = Array.from(useAuthStore((state) => state.permissions));
   const canCreate = hasPermission(userPermissions, Permissions.BI_DATASOURCE_CREATE);
   const canEdit = hasPermission(userPermissions, Permissions.BI_DATASOURCE_UPDATE);
   const canDelete = hasPermission(userPermissions, Permissions.BI_DATASOURCE_DELETE);
@@ -105,9 +107,7 @@ export function DataSourceList() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
-        (ds) =>
-          ds.name.toLowerCase().includes(query) ||
-          ds.code.toLowerCase().includes(query)
+        (ds) => ds.name.toLowerCase().includes(query) || ds.code.toLowerCase().includes(query),
       );
     }
 
@@ -176,11 +176,11 @@ export function DataSourceList() {
     <div className="space-y-6">
       <PageHeader
         title="Data Sources"
-        subtitle="Configure data sources for BI widgets"
+        subtitle="Configure BI widget data sources. Static/manual JSON sources execute in this release; legacy API and SQL sources are compatibility-only records."
         actions={
           canCreate ? (
             <Button onClick={() => navigate('/admin/bi/data-sources/new')}>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               New Data Source
             </Button>
           ) : undefined
@@ -196,12 +196,12 @@ export function DataSourceList() {
             </CardTitle>
             <div className="flex items-center gap-4">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Search data sources..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 w-64"
+                  className="w-64 pl-10"
                 />
               </div>
               <Select value={typeFilter} onValueChange={setTypeFilter}>
@@ -226,7 +226,7 @@ export function DataSourceList() {
               <Loader2 className="h-6 w-6 animate-spin" />
             </div>
           ) : filteredDataSources.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="py-8 text-center text-muted-foreground">
               {dataSources.length === 0
                 ? 'No data sources found. Create your first data source to get started.'
                 : 'No data sources match your filters.'}
@@ -269,9 +269,7 @@ export function DataSourceList() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            onClick={() =>
-                              navigate(`/admin/bi/data-sources/${ds.id}/edit`)
-                            }
+                            onClick={() => navigate(`/admin/bi/data-sources/${ds.id}/edit`)}
                             title="Edit"
                           >
                             <Edit className="h-4 w-4" />
@@ -302,9 +300,7 @@ export function DataSourceList() {
         <SheetContent className="sm:max-w-xl">
           <SheetHeader>
             <SheetTitle>Data Preview</SheetTitle>
-            <SheetDescription>
-              Preview data from this data source
-            </SheetDescription>
+            <SheetDescription>Preview data from this data source</SheetDescription>
           </SheetHeader>
 
           <div className="py-6">
@@ -316,23 +312,23 @@ export function DataSourceList() {
               <div className="space-y-4">
                 {previewData.data && Array.isArray(previewData.data) ? (
                   <div className="max-h-96 overflow-auto">
-                    <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto">
+                    <pre className="overflow-x-auto rounded-lg bg-muted p-4 text-xs">
                       {JSON.stringify(previewData.data.slice(0, 10), null, 2)}
                     </pre>
                     {previewData.data.length > 10 && (
-                      <p className="text-sm text-muted-foreground mt-2">
+                      <p className="mt-2 text-sm text-muted-foreground">
                         Showing first 10 of {previewData.data.length} records
                       </p>
                     )}
                   </div>
                 ) : (
-                  <pre className="text-xs bg-muted p-4 rounded-lg overflow-x-auto max-h-96">
+                  <pre className="max-h-96 overflow-x-auto rounded-lg bg-muted p-4 text-xs">
                     {JSON.stringify(previewData, null, 2)}
                   </pre>
                 )}
               </div>
             ) : (
-              <div className="text-center py-8 text-muted-foreground">
+              <div className="py-8 text-center text-muted-foreground">
                 No data available or error fetching data
               </div>
             )}
@@ -346,8 +342,8 @@ export function DataSourceList() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Data Source</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete this data source? This action cannot be undone.
-              Charts and widgets using this data source will lose their data connection.
+              Are you sure you want to delete this data source? This action cannot be undone. Charts
+              and widgets using this data source will lose their data connection.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -357,7 +353,7 @@ export function DataSourceList() {
               disabled={deleting}
               className="bg-red-600 hover:bg-red-700"
             >
-              {deleting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

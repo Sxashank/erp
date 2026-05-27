@@ -8,26 +8,20 @@
  * fixed assets, inventory, compliance, and fixed deposits.
  */
 
-import { expect, request as pwRequest, test as base, type Page } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import { chromium, expect, test as base, type Page } from '@playwright/test';
+
+import { loginAsAdmin } from '../fixtures/auth';
 
 const env =
   (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
-const API_BASE = env.PLAYWRIGHT_API_BASE || 'http://127.0.0.1:8001/api/v1';
 const ADMIN_USERNAME = env.UAT_ADMIN_USERNAME || 'krishna';
 const ADMIN_PASSWORD = env.UAT_ADMIN_PASSWORD || 'ChangeMe123!';
 const LIVE_BACKEND_ENABLED = env.PLAYWRIGHT_LIVE_BACKEND === '1';
 const ROUTE_TIMEOUT_MS = 8_000;
-
-interface AuthBundle {
-  accessToken: string;
-  refreshToken: string;
-  organizationId: string | null;
-  user: {
-    organization_id?: string;
-    organizationId?: string;
-    permissions?: string[];
-  };
-}
 
 interface RouteSpec {
   path: string;
@@ -352,94 +346,35 @@ const CREATE_BUTTON_FLOWS = [
   },
 ];
 
-let cachedBundle: AuthBundle | null = null;
+const test = base.extend<{}, { storageStatePath: string }>({
+  storageStatePath: [
+    async (_args, use) => {
+      const dir = mkdtempSync(join(tmpdir(), 'operations-smoke-'));
+      const path = join(dir, 'storage.json');
+      const browser = await chromium.launch();
+      const ctx = await browser.newContext({
+        baseURL: env.PLAYWRIGHT_BASE_URL || 'http://localhost:5176',
+      });
+      const page = await ctx.newPage();
+      await loginAsAdmin(page, {
+        username: ADMIN_USERNAME,
+        password: ADMIN_PASSWORD,
+      });
+      await ctx.storageState({ path });
+      await ctx.close();
+      await browser.close();
+      await use(path);
+    },
+    { scope: 'worker' },
+  ],
 
-async function getAuthBundle(): Promise<AuthBundle> {
-  if (cachedBundle) return cachedBundle;
-
-  let lastFailure = '';
-  for (const waitMs of [0, 5_000, 10_000, 30_000, 60_000]) {
-    if (waitMs) {
-      await new Promise((resolve) => setTimeout(resolve, waitMs));
-    }
-
-    const ctx = await pwRequest.newContext();
-    const res = await ctx.post(`${API_BASE}/auth/login`, {
-      data: { username: ADMIN_USERNAME, password: ADMIN_PASSWORD },
+  context: async ({ browser, storageStatePath }, use) => {
+    const ctx = await browser.newContext({
+      storageState: storageStatePath,
+      baseURL: env.PLAYWRIGHT_BASE_URL || 'http://localhost:5176',
     });
-    if (res.ok()) {
-      const body = await res.json();
-      let organizationId = body.user.organization_id ?? body.user.organizationId ?? null;
-      if (!organizationId) {
-        const orgRes = await ctx.get(`${API_BASE}/organizations`, {
-          headers: { Authorization: `Bearer ${body.access_token}` },
-          params: { limit: 1, include_inactive: false },
-        });
-        if (orgRes.ok()) {
-          const orgBody = await orgRes.json();
-          const firstOrg = Array.isArray(orgBody) ? orgBody[0] : orgBody.items?.[0];
-          organizationId = firstOrg?.id ?? null;
-        }
-      }
-      await ctx.dispose();
-
-      cachedBundle = {
-        accessToken: body.access_token,
-        refreshToken: body.refresh_token,
-        organizationId,
-        user: body.user,
-      };
-      return cachedBundle;
-    }
-
-    const text = await res.text();
-    lastFailure = `Login failed: ${res.status()} ${text}`;
-    await ctx.dispose();
-    if (res.status() !== 429) {
-      break;
-    }
-
-    try {
-      const payload = JSON.parse(text) as { retry_after_seconds?: number };
-      const retryAfterSeconds = payload.retry_after_seconds ?? 60;
-      await new Promise((resolve) => setTimeout(resolve, retryAfterSeconds * 1000));
-    } catch {
-      // Fall back to the next scheduled wait interval.
-    }
-  }
-
-  throw new Error(lastFailure || 'Login failed');
-}
-
-const test = base.extend<{ authedPage: Page; authBundle: AuthBundle }>({
-  // eslint-disable-next-line no-empty-pattern
-  authBundle: async ({}, use) => {
-    await use(await getAuthBundle());
-  },
-
-  authedPage: async ({ page, context, authBundle }, use) => {
-    await context.addInitScript(
-      (bundle) => {
-        window.localStorage.setItem('smfc-auth', JSON.stringify(bundle.auth));
-        window.localStorage.setItem('smfc-organization', JSON.stringify(bundle.org));
-      },
-      {
-        auth: {
-          state: {
-            accessToken: authBundle.accessToken,
-            refreshToken: authBundle.refreshToken,
-          },
-          version: 0,
-        },
-        org: {
-          state: {
-            activeOrganizationId: authBundle.organizationId,
-          },
-          version: 0,
-        },
-      },
-    );
-    await use(page);
+    await use(ctx);
+    await ctx.close();
   },
 });
 
@@ -486,7 +421,7 @@ test.describe('operations modules smoke', () => {
   );
 
   for (const spec of ROUTES) {
-    test(`/admin/${spec.path}`, async ({ authedPage: page }, testInfo) => {
+    test(`/admin/${spec.path}`, async ({ page }, testInfo) => {
       testInfo.setTimeout(45_000);
       const gate = await installRouteGates(page);
 
@@ -499,6 +434,7 @@ test.describe('operations modules smoke', () => {
       await page.waitForTimeout(200);
 
       await expect(page.locator('#root')).toBeVisible();
+      await expect(page).not.toHaveURL(/\/login$/);
       await expect(page).not.toHaveURL(/\/admin\/?$/);
       await expect(page.getByRole('heading', { name: /404|page not found/i })).toHaveCount(0);
 
@@ -523,13 +459,14 @@ test.describe('operations modules smoke', () => {
   }
 
   for (const flow of CREATE_BUTTON_FLOWS) {
-    test(`create button from /admin/${flow.from}`, async ({ authedPage: page }) => {
+    test(`create button from /admin/${flow.from}`, async ({ page }) => {
       await page.goto(`/admin/${flow.from}`, { waitUntil: 'domcontentloaded' });
       try {
         await page.waitForLoadState('networkidle', { timeout: ROUTE_TIMEOUT_MS });
       } catch {
         // Background queries may remain active.
       }
+      await expect(page).not.toHaveURL(/\/login$/);
 
       const button = page.getByRole('button', { name: flow.button }).first();
       await expect(button).toBeVisible();

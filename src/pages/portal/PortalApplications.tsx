@@ -1,5 +1,5 @@
 /**
- * Scheme Portal — Loan Applications list.
+ * Borrower Portal - Loan Applications list.
  *
  * Shows the borrower's applications scoped to their accessible entities.
  * Uses the canonical `<PageHeader>` + `<DataTable>` shell; status pill via
@@ -44,9 +44,9 @@ const STATUS_OPTIONS: {
 }[] = [
   { value: 'ALL', label: 'All statuses' },
   { value: 'DRAFT', label: 'Draft' },
-  { value: 'LENDER_REVIEW', label: 'Pending lender review' },
-  { value: 'LENDER_VALIDATED', label: 'Lender validated' },
-  { value: 'SMFCL_PRELIM_REVIEW', label: 'Pending SMFCL review' },
+  { value: 'LENDER_REVIEW', label: 'Pending SFC review' },
+  { value: 'LENDER_VALIDATED', label: 'SFC validated' },
+  { value: 'SMFCL_PRELIM_REVIEW', label: 'Pending SFC review' },
   { value: 'QUERY_PENDING', label: 'Query pending' },
   { value: 'SMFCL_APPRAISAL', label: 'In appraisal' },
   { value: 'APPROVED', label: 'Approved' },
@@ -117,7 +117,7 @@ export default function PortalApplications(): JSX.Element {
       },
       {
         key: 'schemeStatus',
-        header: 'Scheme status',
+        header: 'Status',
         render: (r) => <StatusPill type="application" status={r.schemeStatus} />,
         sortable: true,
         sortValue: (r) => r.schemeStatus,
@@ -136,7 +136,7 @@ export default function PortalApplications(): JSX.Element {
   const pageTitle = isBorrower ? 'Loan Applications' : 'Application Review Queue';
   const pageSubtitle = isBorrower
     ? 'Track institutional maritime and shipyard applications across borrower entities.'
-    : 'Review submitted applications, lender validations, appraisal cases, and borrower query responses.';
+    : 'Review submitted applications, SFC validations, appraisal cases, and borrower query responses.';
 
   return (
     <div className="space-y-6">
@@ -144,7 +144,7 @@ export default function PortalApplications(): JSX.Element {
         title={pageTitle}
         subtitle={pageSubtitle}
         breadcrumbs={[
-          { label: 'Scheme Portal', to: '/portal/workbench' },
+          { label: 'Borrower Portal', to: '/portal/workbench' },
           { label: 'Applications' },
         ]}
         actions={

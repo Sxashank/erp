@@ -124,7 +124,10 @@ async def get_current_user_info(
     from app.repositories.auth.user_repo import UserRepository
 
     user_repo = UserRepository(db)
-    permissions = await user_repo.get_user_permissions(current_user.id)
+    role_codes = [
+        ur.role.code for ur in current_user.user_roles if ur.is_valid and ur.role and ur.role.code
+    ]
+    permissions = set(await user_repo.get_user_permissions(current_user.id)) | set(role_codes)
 
     return UserResponse(
         id=current_user.id,
@@ -156,7 +159,7 @@ async def get_current_user_info(
             for ur in current_user.user_roles
             if ur.is_valid
         ],
-        permissions=list(permissions),
+        permissions=sorted(permissions),
     )
 
 
@@ -179,10 +182,12 @@ async def forgot_password(
         # Development only - return token for testing
         return MessageResponse(
             message="Password reset instructions sent",
-            data={"reset_token": token}  # Remove this in production
+            data={"reset_token": token},  # Remove this in production
         )
 
-    return MessageResponse(message="If the email exists, password reset instructions have been sent")
+    return MessageResponse(
+        message="If the email exists, password reset instructions have been sent"
+    )
 
 
 @router.post("/reset-password", response_model=MessageResponse, response_model_by_alias=True)

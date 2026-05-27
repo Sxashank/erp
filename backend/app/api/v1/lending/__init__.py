@@ -5,6 +5,12 @@ from fastapi import APIRouter
 # Phase 6: Account Aggregator Integration
 from app.api.v1.lending.aa import router as aa_router
 from app.api.v1.lending.applications import router as applications_router
+from app.api.v1.lending.certificates import router as certificates_router
+from app.api.v1.lending.lifecycle import router as lifecycle_router
+from app.api.v1.lending.charges import router as charges_router
+from app.api.v1.lending.masters import router as masters_router
+from app.api.v1.lending.phase_d import router as phase_d_router
+from app.api.v1.lending.reports import router as lending_reports_router
 
 # Approval Checklist (loan-application gating)
 from app.api.v1.lending.checklist import router as checklist_router
@@ -137,3 +143,21 @@ router.include_router(iif_router, prefix="/iif")
 
 # Approval Checklist — per-loan gating before sanction approval
 router.include_router(checklist_router, prefix="/checklist", tags=["LOS - Approval Checklist"])
+
+# Lifecycle event log + application query (bounce-back) — Phase A spine
+router.include_router(lifecycle_router, tags=["LOS/LMS - Lifecycle & Queries"])
+
+# Master data — Phase B (no-code-edit per client)
+router.include_router(masters_router, prefix="/masters", tags=["LENDING - Master Data"])
+
+# Certificates — Phase C
+router.include_router(certificates_router, tags=["LOS/LMS - Certificates"])
+
+# Phase-D lifecycle modules
+router.include_router(phase_d_router, tags=["LMS - Phase D Lifecycle"])
+
+# Phase-E reports
+router.include_router(lending_reports_router, tags=["LMS - Reports"])
+
+# Charge registration (CERSAI / ROC / NeSL / DG-Shipping)
+router.include_router(charges_router, tags=["LMS - Charge Registration"])

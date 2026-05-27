@@ -19,13 +19,7 @@ import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
 import type { FDSummary, FixedDeposit } from '@/services/fixedDepositService';
@@ -85,25 +79,16 @@ export default function FDDashboard() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Fixed Deposits"
         subtitle="Manage fixed deposits and interest calculations"
@@ -126,12 +111,10 @@ export default function FDDashboard() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4 lg:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Total FDs
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total FDs</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{summary?.total_fds || 0}</div>
@@ -139,14 +122,10 @@ export default function FDDashboard() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Active FDs
-            </CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Active FDs</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {summary?.active_fds || 0}
-            </div>
+            <div className="text-2xl font-bold text-green-600">{summary?.active_fds || 0}</div>
           </CardContent>
         </Card>
         <Card>
@@ -157,7 +136,7 @@ export default function FDDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {formatCurrency(summary?.total_deposit_amount || 0)}
+              {formatIndianCompactCurrency(summary?.total_deposit_amount || 0)}
             </div>
           </CardContent>
         </Card>
@@ -169,7 +148,7 @@ export default function FDDashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(summary?.total_maturity_amount || 0)}
+              {formatIndianCompactCurrency(summary?.total_maturity_amount || 0)}
             </div>
           </CardContent>
         </Card>
@@ -192,15 +171,13 @@ export default function FDDashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {summary?.maturing_next_month || 0}
-            </div>
+            <div className="text-2xl font-bold">{summary?.maturing_next_month || 0}</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Status Breakdown */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>By Status</CardTitle>
@@ -210,7 +187,7 @@ export default function FDDashboard() {
             <div className="space-y-3">
               {summary?.by_status &&
                 Object.entries(summary.by_status).map(([status, count]) => (
-                  <div key={status} className="flex justify-between items-center">
+                  <div key={status} className="flex items-center justify-between">
                     <Badge variant={STATUS_COLORS[status] || 'outline'}>
                       {status.replace('_', ' ')}
                     </Badge>
@@ -218,7 +195,7 @@ export default function FDDashboard() {
                   </div>
                 ))}
               {(!summary?.by_status || Object.keys(summary.by_status).length === 0) && (
-                <p className="text-center text-muted-foreground py-4">No data</p>
+                <p className="py-4 text-center text-muted-foreground">No data</p>
               )}
             </div>
           </CardContent>
@@ -233,14 +210,14 @@ export default function FDDashboard() {
             <div className="space-y-3">
               {summary?.by_customer_category &&
                 Object.entries(summary.by_customer_category).map(([category, count]) => (
-                  <div key={category} className="flex justify-between items-center">
+                  <div key={category} className="flex items-center justify-between">
                     <span className="text-sm">{category.replace('_', ' ')}</span>
                     <span className="font-medium">{count}</span>
                   </div>
                 ))}
               {(!summary?.by_customer_category ||
                 Object.keys(summary.by_customer_category).length === 0) && (
-                <p className="text-center text-muted-foreground py-4">No data</p>
+                <p className="py-4 text-center text-muted-foreground">No data</p>
               )}
             </div>
           </CardContent>
@@ -265,7 +242,7 @@ export default function FDDashboard() {
         </CardHeader>
         <CardContent>
           {maturingFDs.length === 0 ? (
-            <p className="text-center text-muted-foreground py-8">
+            <p className="py-8 text-center text-muted-foreground">
               No FDs maturing in the next 30 days
             </p>
           ) : (
@@ -273,7 +250,7 @@ export default function FDDashboard() {
               {maturingFDs.map((fd) => (
                 <div
                   key={fd.id}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                  className="flex cursor-pointer items-center justify-between rounded-lg border p-3 hover:bg-muted/50"
                   onClick={() => navigate(`/admin/fixed-deposits/${fd.id}`)}
                 >
                   <div className="flex items-center gap-4">
@@ -285,15 +262,13 @@ export default function FDDashboard() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="font-medium">{formatCurrency(fd.maturity_amount)}</p>
+                    <p className="font-medium">{formatIndianCompactCurrency(fd.maturity_amount)}</p>
                     <p className="text-sm text-muted-foreground">
                       Due: <DateDisplay date={fd.maturity_date} />
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    {fd.auto_renew && (
-                      <Badge variant="outline">Auto-Renew</Badge>
-                    )}
+                    {fd.auto_renew && <Badge variant="outline">Auto-Renew</Badge>}
                     <Badge variant={STATUS_COLORS[fd.status]}>{fd.status}</Badge>
                   </div>
                 </div>
@@ -304,7 +279,7 @@ export default function FDDashboard() {
       </Card>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card
           className="cursor-pointer hover:bg-muted/50"
           onClick={() => navigate('/admin/fixed-deposits')}

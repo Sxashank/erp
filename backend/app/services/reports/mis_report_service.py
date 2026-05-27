@@ -528,7 +528,10 @@ class MISReportService:
             .where(
                 ComplianceItem.organization_id == org_id,
                 ComplianceInstance.actual_due_date < as_of_date,
-                ComplianceInstance.status.notin_(["FILED", "COMPLETED"]),
+                # `compliancestatus` enum: PENDING / IN_PROGRESS / PREPARED /
+                # UNDER_REVIEW / FILED / ACKNOWLEDGED / DELAYED / NOT_APPLICABLE.
+                # FILED + ACKNOWLEDGED + NOT_APPLICABLE are the closure states.
+                ComplianceInstance.status.notin_(["FILED", "ACKNOWLEDGED", "NOT_APPLICABLE"]),
             )
         )
         failed_jobs = await self.db.scalar(

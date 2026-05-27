@@ -32,7 +32,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import BaseModel
 
 if TYPE_CHECKING:
-    pass
+    from app.models.lending.masters import ChecklistItemCatalog
 
 
 class ApprovalChecklistTemplate(BaseModel):
@@ -131,6 +131,12 @@ class ApprovalChecklistTemplateItem(BaseModel):
         ),
         nullable=False,
     )
+    catalog_item_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_checklist_item_catalog.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+    )
 
     code: Mapped[str] = mapped_column(String(50), nullable=False)
     label: Mapped[str] = mapped_column(String(300), nullable=False)
@@ -153,4 +159,9 @@ class ApprovalChecklistTemplateItem(BaseModel):
         back_populates="items",
         foreign_keys=[template_id],
         lazy="raise",
+    )
+    catalog_item: Mapped["ChecklistItemCatalog"] = relationship(
+        "ChecklistItemCatalog",
+        foreign_keys=[catalog_item_id],
+        lazy="selectin",
     )

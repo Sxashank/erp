@@ -9,13 +9,8 @@ from pydantic import Field, field_validator
 
 from app.core.pii import MaskedPIIModel
 from app.models.lending.enums import (
-    AddressType,
-    ContactType,
     EntityStatus,
-    EntityType,
-    IndustrySector,
     RelationType,
-    RiskCategory,
 )
 from app.schemas.base import CamelSchema
 
@@ -27,7 +22,7 @@ from app.schemas.base import CamelSchema
 class EntityContactBase(CamelSchema):
     """Base schema for entity contact."""
 
-    contact_type: ContactType
+    contact_type: str = Field(..., min_length=1, max_length=80)
     name: str = Field(..., min_length=1, max_length=200)
     designation: str | None = Field(None, max_length=100)
     is_primary: bool = False
@@ -61,7 +56,7 @@ class EntityContactCreate(EntityContactBase):
 class EntityContactUpdate(CamelSchema):
     """Schema for updating an entity contact."""
 
-    contact_type: ContactType | None = None
+    contact_type: str | None = Field(None, min_length=1, max_length=80)
     name: str | None = Field(None, min_length=1, max_length=200)
     designation: str | None = Field(None, max_length=100)
     is_primary: bool | None = None
@@ -96,7 +91,7 @@ class EntityContactResponse(EntityContactBase):
 class EntityAddressBase(CamelSchema):
     """Base schema for entity address."""
 
-    address_type: AddressType
+    address_type: str = Field(..., min_length=1, max_length=80)
     address_line1: str = Field(..., min_length=1, max_length=200)
     address_line2: str | None = Field(None, max_length=200)
     address_line3: str | None = Field(None, max_length=200)
@@ -129,7 +124,7 @@ class EntityAddressCreate(EntityAddressBase):
 class EntityAddressUpdate(CamelSchema):
     """Schema for updating an entity address."""
 
-    address_type: AddressType | None = None
+    address_type: str | None = Field(None, min_length=1, max_length=80)
     address_line1: str | None = Field(None, min_length=1, max_length=200)
     address_line2: str | None = Field(None, max_length=200)
     address_line3: str | None = Field(None, max_length=200)
@@ -413,7 +408,7 @@ class EntityFinancialResponse(EntityFinancialBase):
 class EntityBase(CamelSchema):
     """Base schema for Entity/Borrower."""
 
-    entity_type: EntityType
+    entity_type: str = Field(..., min_length=1, max_length=80)
     legal_name: str = Field(..., min_length=1, max_length=500)
     trade_name: str | None = Field(None, max_length=500)
 
@@ -437,12 +432,12 @@ class EntityBase(CamelSchema):
     kyc_verified_date: date | None = None
 
     # Classification
-    industry_sector: IndustrySector | None = None
+    industry_sector: str | None = Field(None, max_length=80)
     industry_sub_sector: str | None = Field(None, max_length=200)
     nic_code: str | None = Field(None, max_length=10, description="NIC Industry Code")
 
     # Risk & Rating
-    risk_category: RiskCategory = RiskCategory.MEDIUM
+    risk_category: str = Field(default="MEDIUM", min_length=1, max_length=80)
     internal_rating: str | None = Field(None, max_length=10)
     external_rating: str | None = Field(None, max_length=50)
     external_rating_agency: str | None = Field(None, max_length=50)
@@ -507,7 +502,7 @@ class EntityCreate(EntityBase):
 class EntityUpdate(CamelSchema):
     """Schema for updating an Entity/Borrower."""
 
-    entity_type: EntityType | None = None
+    entity_type: str | None = Field(None, min_length=1, max_length=80)
     legal_name: str | None = Field(None, min_length=1, max_length=500)
     trade_name: str | None = Field(None, max_length=500)
 
@@ -531,12 +526,12 @@ class EntityUpdate(CamelSchema):
     kyc_verified_date: date | None = None
 
     # Classification
-    industry_sector: IndustrySector | None = None
+    industry_sector: str | None = Field(None, max_length=80)
     industry_sub_sector: str | None = Field(None, max_length=200)
     nic_code: str | None = Field(None, max_length=10)
 
     # Risk & Rating
-    risk_category: RiskCategory | None = None
+    risk_category: str | None = Field(None, min_length=1, max_length=80)
     internal_rating: str | None = Field(None, max_length=10)
     external_rating: str | None = Field(None, max_length=50)
     external_rating_agency: str | None = Field(None, max_length=50)
@@ -583,14 +578,14 @@ class EntityListResponse(CamelSchema):
 
     id: UUID
     entity_code: str
-    entity_type: EntityType
+    entity_type: str
     legal_name: str
     trade_name: str | None = None
     pan: str
     gstin: str | None = None
-    industry_sector: IndustrySector | None = None
+    industry_sector: str | None = None
     internal_rating: str | None = None
-    risk_category: RiskCategory | None = None
+    risk_category: str | None = None
     status: EntityStatus
     is_active: bool = True
     created_at: datetime | None = None

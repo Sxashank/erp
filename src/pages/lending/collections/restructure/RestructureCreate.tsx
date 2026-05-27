@@ -2,6 +2,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { Save, Calculator, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
+import type { Resolver } from 'react-hook-form';
 import { useNavigate } from 'react-router-dom';
 import { z } from 'zod';
 
@@ -31,18 +32,14 @@ import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { logger } from '@/lib/logger';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
+import { useLoanAccounts } from '@/hooks/lending/useLoanAccounts';
+import { collectionApi } from '@/services/lending/collectionApi';
+import type { LoanAccountListItem } from '@/services/lending/loanAccountApi';
+
 const restructureSchema = z.object({
   loanAccountId: z.string().min(1, 'Loan account is required'),
-  restructureType: z.enum([
-    'TENURE_EXTENSION',
-    'EMI_REDUCTION',
-    'MORATORIUM',
-    'RATE_REDUCTION',
-    'PRINCIPAL_HAIRCUT',
-    'INTEREST_WAIVER',
-    'COMPREHENSIVE',
-    'COVID_RESTRUCTURE',
-  ]),
+  restructureType: z.string().min(1, 'Restructure type is required'),
   proposalDate: z.string().min(1, 'Proposal date is required'),
   // Pre-restructure values (read from loan account)
   preOutstandingPrincipal: z.coerce.number().min(0),
@@ -61,7 +58,7 @@ const restructureSchema = z.object({
   moratoriumMonths: z.coerce.number().int().min(0).default(0),
   moratoriumStartDate: z.string().optional(),
   moratoriumEndDate: z.string().optional(),
-  moratoriumInterestTreatment: z.enum(['CAPITALIZE', 'DEFER', 'WAIVE']).optional(),
+  moratoriumInterestTreatment: z.string().optional(),
   // Waivers
   interestWaived: z.coerce.number().min(0).default(0),
   penalWaived: z.coerce.number().min(0).default(0),
@@ -79,33 +76,20 @@ const restructureSchema = z.object({
 
 type RestructureFormValues = z.infer<typeof restructureSchema>;
 
-// Loan accounts eligible for restructure load from the BE once the
-// "eligible loan accounts" endpoint is wired (DPD ≥ 60, status ≠ CLOSED,
-// no in-flight restructure). For now the picker is empty until that
-// endpoint lands; the user can still enter the account by number.
-const mockLoanAccounts: {
-  id: string;
-  accountNumber: string;
-  entityName: string;
-  principalOutstanding: number;
-  interestOutstanding: number;
-  interestRate: number;
-  tenureMonths: number;
-  emiAmount: number;
-  maturityDate: string;
-  dpd: number;
-  classification: string;
-}[] = [];
-
 export default function RestructureCreate() {
   const navigate = useNavigate();
-  const [selectedLoan, setSelectedLoan] = useState<(typeof mockLoanAccounts)[0] | null>(null);
+  const [selectedLoan, setSelectedLoan] = useState<LoanAccountListItem | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const loanAccountsQuery = useLoanAccounts({ pageSize: 200, dpdFrom: 1 });
+  const restructureTypeRows = useLendingOptionRows('RESTRUCTURE_TYPE');
+  const moratoriumTreatmentRows = useLendingOptionRows('MORATORIUM_INTEREST_TREATMENT');
+  const restructureTypeOptions = masterRowsToOptions(restructureTypeRows.data?.items);
+  const moratoriumTreatmentOptions = masterRowsToOptions(moratoriumTreatmentRows.data?.items);
 
   const form = useForm<RestructureFormValues>({
     // RHF resolver type mismatch when schema has `.default(...)` fields and
-     // schema field types are computed (e.g. `coerce.number`).
-    resolver: zodResolver(restructureSchema) as any,
+    // schema field types are computed (e.g. `coerce.number`).
+    resolver: zodResolver(restructureSchema) as Resolver<RestructureFormValues>,
     defaultValues: {
       proposalDate: new Date().toISOString().split('T')[0],
       moratoriumMonths: 0,
@@ -118,22 +102,26 @@ export default function RestructureCreate() {
   });
 
   const handleLoanSelect = (loanId: string) => {
-    const loan = mockLoanAccounts.find((l) => l.id === loanId);
+    const loan = (loanAccountsQuery.data?.items ?? []).find((l) => l.id === loanId);
     if (loan) {
       setSelectedLoan(loan);
       form.setValue('loanAccountId', loan.id);
-      form.setValue('preOutstandingPrincipal', loan.principalOutstanding);
-      form.setValue('preOutstandingInterest', loan.interestOutstanding);
-      form.setValue('preInterestRate', loan.interestRate);
-      form.setValue('preTenureMonths', loan.tenureMonths);
-      form.setValue('preEmiAmount', loan.emiAmount);
-      form.setValue('preMaturityDate', loan.maturityDate);
-      // Set post values same as pre initially
-      form.setValue('postOutstandingPrincipal', loan.principalOutstanding);
-      form.setValue('postInterestRate', loan.interestRate);
-      form.setValue('postTenureMonths', loan.tenureMonths);
-      form.setValue('postEmiAmount', loan.emiAmount);
-      form.setValue('postMaturityDate', loan.maturityDate);
+      const principal = Number(loan.principalOutstanding);
+      const total = Number(loan.totalOutstanding);
+      const interest = Math.max(total - principal, 0);
+      const rate = Number(loan.currentInterestRate);
+      const maturityDate = loan.maturityDate ?? new Date().toISOString().split('T')[0];
+      form.setValue('preOutstandingPrincipal', principal);
+      form.setValue('preOutstandingInterest', interest);
+      form.setValue('preInterestRate', rate);
+      form.setValue('preTenureMonths', 1);
+      form.setValue('preEmiAmount', undefined);
+      form.setValue('preMaturityDate', maturityDate);
+      form.setValue('postOutstandingPrincipal', principal);
+      form.setValue('postInterestRate', rate);
+      form.setValue('postTenureMonths', 1);
+      form.setValue('postEmiAmount', undefined);
+      form.setValue('postMaturityDate', maturityDate);
     }
   };
 
@@ -141,7 +129,7 @@ export default function RestructureCreate() {
     setIsSubmitting(true);
     try {
       logger.debug('Restructure data:', data);
-      // API call would go here
+      await collectionApi.createRestructure(data);
       navigate('/admin/lending/collections/restructure');
     } catch {
     } finally {
@@ -189,13 +177,19 @@ export default function RestructureCreate() {
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder="Select a loan account" />
+                          <SelectValue
+                            placeholder={
+                              loanAccountsQuery.isLoading
+                                ? 'Loading loan accounts...'
+                                : 'Select a loan account'
+                            }
+                          />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {mockLoanAccounts.map((loan) => (
+                        {(loanAccountsQuery.data?.items ?? []).map((loan) => (
                           <SelectItem key={loan.id} value={loan.id}>
-                            {loan.accountNumber} - {loan.entityName}
+                            {loan.loanAccountNumber} - {loan.entityName ?? 'Unnamed entity'}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -220,18 +214,23 @@ export default function RestructureCreate() {
                       <div>
                         <span className="text-xs text-muted-foreground">Interest O/S</span>
                         <AmountDisplay
-                          amount={selectedLoan.interestOutstanding}
+                          amount={
+                            Number(selectedLoan.totalOutstanding) -
+                            Number(selectedLoan.principalOutstanding)
+                          }
                           className="font-semibold"
                         />
                       </div>
                       <div>
                         <span className="text-xs text-muted-foreground">DPD</span>
-                        <p className="font-semibold text-red-600">{selectedLoan.dpd} days</p>
+                        <p className="font-semibold text-red-600">
+                          {selectedLoan.daysPastDue} days
+                        </p>
                       </div>
                       <div>
                         <span className="text-xs text-muted-foreground">Classification</span>
                         <p className="font-semibold text-yellow-600">
-                          {selectedLoan.classification}
+                          {selectedLoan.assetClassification}
                         </p>
                       </div>
                     </div>
@@ -261,14 +260,11 @@ export default function RestructureCreate() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="TENURE_EXTENSION">Tenure Extension</SelectItem>
-                          <SelectItem value="EMI_REDUCTION">EMI Reduction</SelectItem>
-                          <SelectItem value="MORATORIUM">Moratorium</SelectItem>
-                          <SelectItem value="RATE_REDUCTION">Rate Reduction</SelectItem>
-                          <SelectItem value="PRINCIPAL_HAIRCUT">Principal Haircut</SelectItem>
-                          <SelectItem value="INTEREST_WAIVER">Interest Waiver</SelectItem>
-                          <SelectItem value="COMPREHENSIVE">Comprehensive</SelectItem>
-                          <SelectItem value="COVID_RESTRUCTURE">COVID Restructure</SelectItem>
+                          {restructureTypeOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -298,7 +294,9 @@ export default function RestructureCreate() {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg">Pre-Restructure Terms</CardTitle>
-                <CardDescription>Current loan terms (auto-populated)</CardDescription>
+                <CardDescription>
+                  Current loan terms from account data; edit if needed
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <FormField
@@ -308,7 +306,7 @@ export default function RestructureCreate() {
                     <FormItem>
                       <FormLabel>Principal Outstanding</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} disabled />
+                        <Input type="number" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -320,7 +318,7 @@ export default function RestructureCreate() {
                     <FormItem>
                       <FormLabel>Interest Rate (%)</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" {...field} disabled />
+                        <Input type="number" step="0.01" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -332,7 +330,7 @@ export default function RestructureCreate() {
                     <FormItem>
                       <FormLabel>Tenure (Months)</FormLabel>
                       <FormControl>
-                        <Input type="number" {...field} disabled />
+                        <Input type="number" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -344,7 +342,7 @@ export default function RestructureCreate() {
                     <FormItem>
                       <FormLabel>Maturity Date</FormLabel>
                       <FormControl>
-                        <Input type="date" {...field} disabled />
+                        <Input type="date" {...field} />
                       </FormControl>
                     </FormItem>
                   )}
@@ -507,9 +505,11 @@ export default function RestructureCreate() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="CAPITALIZE">Capitalize (Add to Principal)</SelectItem>
-                          <SelectItem value="DEFER">Defer (Collect Later)</SelectItem>
-                          <SelectItem value="WAIVE">Waive</SelectItem>
+                          {moratoriumTreatmentOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />

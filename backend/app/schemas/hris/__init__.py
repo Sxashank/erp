@@ -97,6 +97,24 @@ from app.schemas.hris.attendance import (
     LockAttendanceRequest,
     AttendanceProcessingResult,
 )
+from app.schemas.hris.training import (
+    TrainingAvailableEmployeeResponse,
+    TrainingFeedbackBundleResponse,
+    TrainingFeedbackCreate,
+    TrainingFeedbackDistributionItem,
+    TrainingFeedbackRatingSummary,
+    TrainingFeedbackResponse,
+    TrainingFeedbackSummaryResponse,
+    TrainingNominationBulkCreate,
+    TrainingNominationResponse,
+    TrainingNominationStatusUpdate,
+    TrainingProgramCreate,
+    TrainingProgramFilters,
+    TrainingProgramListBundleResponse,
+    TrainingProgramResponse,
+    TrainingProgramSummaryResponse,
+    TrainingProgramUpdate,
+)
 
 __all__ = [
     # Employee
@@ -192,4 +210,21 @@ __all__ = [
     "ProcessMonthlyAttendanceRequest",
     "LockAttendanceRequest",
     "AttendanceProcessingResult",
+    # Training
+    "TrainingAvailableEmployeeResponse",
+    "TrainingFeedbackBundleResponse",
+    "TrainingFeedbackCreate",
+    "TrainingFeedbackDistributionItem",
+    "TrainingFeedbackRatingSummary",
+    "TrainingFeedbackResponse",
+    "TrainingFeedbackSummaryResponse",
+    "TrainingNominationBulkCreate",
+    "TrainingNominationResponse",
+    "TrainingNominationStatusUpdate",
+    "TrainingProgramCreate",
+    "TrainingProgramFilters",
+    "TrainingProgramListBundleResponse",
+    "TrainingProgramResponse",
+    "TrainingProgramSummaryResponse",
+    "TrainingProgramUpdate",
 ]

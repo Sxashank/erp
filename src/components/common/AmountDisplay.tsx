@@ -1,10 +1,34 @@
+/**
+ * AmountDisplay — the only sanctioned way to render an INR amount in this app.
+ *
+ * Default: Indian-format compact ("₹1.02 Cr", "₹12.5 L", "₹4,500").
+ * On hover, the user sees the exact rupees+paise in a native tooltip.
+ *
+ * Use ``precise`` ONLY for the small set of screens where every rupee+paise
+ * matters: receipts/vouchers/payment lines/GST + TDS amounts/payslip
+ * statutory columns/bank reconciliation. Everywhere else — dashboards,
+ * cards, list tables, detail pages — leave the default on.
+ *
+ * See CLAUDE.md §5.8 — inline ``Intl.NumberFormat('INR', ...)``, hand-rolled
+ * ``formatCurrency``, ``toFixed(2)``, or ``toLocaleString`` for money is a
+ * defect. Everything goes through this component.
+ */
+
 import { cn } from '@/lib/utils';
+import { formatIndianCompactCurrency, formatPreciseCurrency } from '@/lib/currency';
 
 interface AmountDisplayProps {
   amount: number | string | null | undefined;
   currency?: string;
-  compact?: boolean;
+  /** Force exact ₹X,XX,XXX.YY. Use only where rupees+paise truly matter. */
+  precise?: boolean;
+  /**
+   * Legacy aliases — kept for back-compat while we sweep the codebase.
+   * - ``abbreviated`` (old) === default (do nothing).
+   * - ``compact`` (old) was a no-decimals override; superseded by the new default.
+   */
   abbreviated?: boolean;
+  compact?: boolean;
   className?: string;
 }
 
@@ -12,77 +36,34 @@ function normalizeAmount(amount: AmountDisplayProps['amount']): number | null {
   if (amount === null || amount === undefined || amount === '') {
     return null;
   }
-
   const value = typeof amount === 'string' ? Number(amount) : amount;
   return Number.isFinite(value) ? value : null;
 }
 
-function formatCurrency(amount: number, currency: string, compact: boolean) {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    maximumFractionDigits: compact ? 0 : 2,
-    minimumFractionDigits: compact ? 0 : 2,
-  }).format(amount);
-}
-
-function formatCompactValue(value: number) {
-  return value.toLocaleString('en-IN', {
-    maximumFractionDigits: 2,
-    minimumFractionDigits: Number.isInteger(value) ? 0 : 2,
-  });
-}
-
-function getCurrencySymbol(currency: string) {
-  const symbol =
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency,
-      maximumFractionDigits: 0,
-    })
-      .formatToParts(0)
-      .find((part) => part.type === 'currency')?.value ?? currency;
-
-  return symbol === '\u20B9' ? symbol : `${symbol} `;
-}
-
-export function formatIndianCompactCurrency(amount: number, currency = 'INR') {
-  const sign = amount < 0 ? '-' : '';
-  const absoluteAmount = Math.abs(amount);
-  const currencySymbol = getCurrencySymbol(currency);
-
-  if (absoluteAmount >= 10000000) {
-    return `${sign}${currencySymbol}${formatCompactValue(absoluteAmount / 10000000)} Cr`;
-  }
-
-  if (absoluteAmount >= 100000) {
-    return `${sign}${currencySymbol}${formatCompactValue(absoluteAmount / 100000)} L`;
-  }
-
-  return formatCurrency(amount, currency, false);
-}
+export { formatIndianCompactCurrency } from '@/lib/currency';
 
 export function AmountDisplay({
   amount,
   currency = 'INR',
-  compact = false,
-  abbreviated = false,
+  precise = false,
+  abbreviated, // legacy — implicitly true under the new default
+  compact, // legacy — implicitly true under the new default
   className,
 }: AmountDisplayProps) {
-  const numericAmount = normalizeAmount(amount);
+  void abbreviated;
+  void compact;
 
+  const numericAmount = normalizeAmount(amount);
   if (numericAmount === null) {
     return <span className={cn('text-gray-400', className)}>-</span>;
   }
 
-  const fullAmount = formatCurrency(numericAmount, currency, false);
-  const displayAmount = abbreviated
-    ? formatIndianCompactCurrency(numericAmount, currency)
-    : formatCurrency(numericAmount, currency, compact);
+  const exact = formatPreciseCurrency(numericAmount, currency);
+  const display = precise ? exact : formatIndianCompactCurrency(numericAmount, currency);
 
   return (
-    <span className={className} title={abbreviated ? fullAmount : undefined}>
-      {displayAmount}
+    <span className={cn('tabular-nums', className)} title={precise ? undefined : exact}>
+      {display}
     </span>
   );
 }

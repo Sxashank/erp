@@ -29,10 +29,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biDataSourceApi } from '@/services/biApi';
-import type { DataSource, DataSourceType, APIMethod } from '@/types/bi';
+import type { DataSource, DataSourceFetchResponse, DataSourceType, APIMethod } from '@/types/bi';
 
-import { logger } from "@/lib/logger";
-import { getErrorMessage } from "@/lib/errorMessage";
+import { logger } from '@/lib/logger';
+import { getErrorMessage } from '@/lib/errorMessage';
 interface FormData {
   code: string;
   name: string;
@@ -48,8 +48,6 @@ interface FormData {
 }
 
 const SOURCE_TYPES: { value: DataSourceType; label: string }[] = [
-  { value: 'API_ENDPOINT', label: 'API Endpoint' },
-  { value: 'SQL_QUERY', label: 'SQL Query' },
   { value: 'STATIC', label: 'Static Data' },
 ];
 
@@ -66,7 +64,7 @@ export function DataSourceEdit() {
 
   // Preview drawer state
   const [previewDrawerOpen, setPreviewDrawerOpen] = useState(false);
-  const [previewData, setPreviewData] = useState<any>(null);
+  const [previewData, setPreviewData] = useState<DataSourceFetchResponse | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
   const {
@@ -92,6 +90,7 @@ export function DataSourceEdit() {
   });
 
   const sourceType = watch('source_type');
+  const isUnsupportedExecutionMode = sourceType === 'API_ENDPOINT' || sourceType === 'SQL_QUERY';
 
   const fetchDataSource = async () => {
     if (!id) return;
@@ -262,7 +261,7 @@ export function DataSourceEdit() {
           { label: dataSource.code },
         ]}
         actions={
-          <Button variant="outline" onClick={handlePreview}>
+          <Button variant="outline" onClick={handlePreview} disabled={isUnsupportedExecutionMode}>
             <Eye className="mr-2 h-4 w-4" />
             Preview Data
           </Button>
@@ -314,6 +313,13 @@ export function DataSourceEdit() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    {(sourceType === 'API_ENDPOINT' || sourceType === 'SQL_QUERY') && (
+                      <SelectItem value={sourceType}>
+                        {sourceType === 'API_ENDPOINT'
+                          ? 'API Endpoint (unsupported in this release)'
+                          : 'SQL Query (unsupported in this release)'}
+                      </SelectItem>
+                    )}
                     {SOURCE_TYPES.map((t) => (
                       <SelectItem key={t.value} value={t.value}>
                         {t.label}
@@ -321,6 +327,10 @@ export function DataSourceEdit() {
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-sm text-muted-foreground">
+                  Manual-first BI supports Static Data execution in this release. Legacy API/SQL
+                  data sources can be reviewed and converted, but they will not execute.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -344,6 +354,12 @@ export function DataSourceEdit() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {isUnsupportedExecutionMode && (
+                <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  This source type is retained for compatibility only. Preview and widget execution
+                  are disabled until the API-endpoint and SQL-query runtimes are implemented.
+                </div>
+              )}
               {sourceType === 'API_ENDPOINT' && (
                 <>
                   <div className="space-y-2">

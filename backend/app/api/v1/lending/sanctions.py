@@ -7,8 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions
-from app.database import get_db
+from app.api.deps import RequirePermissions, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.lending.enums import (
     ConditionType,
@@ -45,15 +44,15 @@ router = APIRouter()
 )
 async def list_sanctions(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
-    include_inactive: bool = Query(False),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    include_inactive: bool = Query(False, alias="includeInactive"),
     search: str | None = Query(None, description="Search in sanction number"),
-    entity_id: UUID | None = Query(None),
+    entity_id: UUID | None = Query(None, alias="entityId"),
     status: SanctionStatus | None = Query(None),
-    from_date: date | None = Query(None),
-    to_date: date | None = Query(None),
+    from_date: date | None = Query(None, alias="fromDate"),
+    to_date: date | None = Query(None, alias="toDate"),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get paginated list of loan sanctions."""
     service = SanctionService(db)
@@ -82,7 +81,7 @@ async def get_entity_sanctions(
     entity_id: UUID,
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all sanctions for an entity."""
     service = SanctionService(db)
@@ -98,7 +97,7 @@ async def get_entity_sanctions(
 async def get_sanction_by_application(
     application_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get sanction for an application."""
     service = SanctionService(db)
@@ -113,7 +112,7 @@ async def get_total_sanctioned_amount(
     from_date: date | None = Query(None),
     to_date: date | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get total sanctioned amount for an organization."""
     service = SanctionService(db)
@@ -131,7 +130,7 @@ async def get_total_sanctioned_amount(
 async def create_sanction(
     data: LoanSanctionCreate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_CREATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new loan sanction."""
     data.organization_id = current_user.organization_id
@@ -148,7 +147,7 @@ async def create_sanction(
 async def get_sanction(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get loan sanction by ID."""
     service = SanctionService(db)
@@ -164,7 +163,7 @@ async def get_sanction(
 async def get_sanction_details(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get loan sanction with conditions and securities."""
     service = SanctionService(db)
@@ -181,7 +180,7 @@ async def update_sanction(
     sanction_id: UUID,
     data: LoanSanctionUpdate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a loan sanction."""
     service = SanctionService(db)
@@ -197,7 +196,7 @@ async def update_sanction(
 async def submit_for_approval(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Submit sanction for approval."""
     service = SanctionService(db)
@@ -214,7 +213,7 @@ async def approve_sanction(
     sanction_id: UUID,
     remarks: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Approve a sanction."""
     service = SanctionService(db)
@@ -232,7 +231,7 @@ async def record_borrower_acceptance(
     acceptance_date: date = Query(...),
     document_path: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Record borrower acceptance of sanction."""
     service = SanctionService(db)
@@ -246,7 +245,7 @@ async def record_borrower_acceptance(
 async def check_disbursement_eligibility(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Check if sanction is eligible for disbursement."""
     service = SanctionService(db)
@@ -268,7 +267,7 @@ async def list_conditions(
     sanction_id: UUID,
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all conditions for a sanction."""
     service = SanctionService(db)
@@ -285,7 +284,7 @@ async def get_pending_conditions(
     sanction_id: UUID,
     condition_type: ConditionType | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get pending conditions for a sanction."""
     service = SanctionService(db)
@@ -302,7 +301,7 @@ async def add_condition(
     sanction_id: UUID,
     data: SanctionConditionCreate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add a condition to a sanction."""
     data.sanction_id = sanction_id
@@ -320,7 +319,7 @@ async def update_condition(
     condition_id: UUID,
     data: SanctionConditionUpdate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a sanction condition."""
     service = SanctionService(db)
@@ -339,7 +338,7 @@ async def comply_condition(
     remarks: str | None = Query(None),
     document_path: str | None = Query(None),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Mark a condition as complied."""
     service = SanctionService(db)
@@ -358,7 +357,7 @@ async def waive_condition(
     condition_id: UUID,
     waiver_remarks: str = Query(...),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_APPROVE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Waive a condition."""
     service = SanctionService(db)
@@ -380,7 +379,7 @@ async def list_securities(
     sanction_id: UUID,
     include_inactive: bool = Query(False),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all securities for a sanction."""
     service = SanctionService(db)
@@ -392,7 +391,7 @@ async def list_securities(
 async def get_security_summary(
     sanction_id: UUID,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_VIEW")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get security summary for a sanction."""
     service = SanctionService(db)
@@ -409,7 +408,7 @@ async def add_security(
     sanction_id: UUID,
     data: LoanSecurityCreate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Add a security to a sanction."""
     data.sanction_id = sanction_id
@@ -427,7 +426,7 @@ async def update_security(
     security_id: UUID,
     data: LoanSecurityUpdate,
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Update a loan security."""
     service = SanctionService(db)
@@ -445,7 +444,7 @@ async def register_security(
     cersai_registration_id: str = Query(...),
     registration_date: date = Query(...),
     current_user: User = Depends(RequirePermissions("LOS_SANCTION_UPDATE")),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Register security with CERSAI."""
     service = SanctionService(db)

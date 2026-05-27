@@ -22,6 +22,15 @@ const DEFAULT_USERNAME = process.env.UAT_ADMIN_USERNAME ?? 'krishna';
 const DEFAULT_PASSWORD = process.env.UAT_ADMIN_PASSWORD ?? 'ChangeMe123!';
 const DEFAULT_EXPECT = /\/admin(\/|$)/;
 
+async function readRetryAfterSeconds(response: Awaited<ReturnType<Page['waitForResponse']>>) {
+  try {
+    const payload = (await response.json()) as { retry_after_seconds?: number };
+    return payload.retry_after_seconds ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function loginAsAdmin(page: Page, opts: LoginOpts = {}): Promise<void> {
   await loginAs(page, opts);
 }
@@ -33,12 +42,36 @@ export async function loginAs(page: Page, opts: LoginOpts = {}): Promise<void> {
 
   await page.goto('/login');
 
-  // Forms in this codebase wire `<label>` to inputs via shadcn RHF primitives;
-  // role + accessible-name lookup is stable across UI refactors.
-  await page.getByLabel(/^username/i).fill(username);
-  await page.getByLabel(/^password/i).fill(password);
-  await page.getByRole('button', { name: /^(sign in|log in|login)$/i }).click();
+  for (const extraWaitMs of [0, 5_000, 10_000]) {
+    if (extraWaitMs) {
+      await page.waitForTimeout(extraWaitMs);
+    }
 
-  await page.waitForURL(expectedPath, { timeout: 10_000 });
+    await page.getByLabel(/^username/i).fill(username);
+    await page.getByLabel(/^password/i).fill(password);
+
+    const loginResponsePromise = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'POST' && response.url().includes('/api/v1/auth/login'),
+    );
+
+    await page.getByRole('button', { name: /^(sign in|log in|login)$/i }).click();
+
+    const loginResponse = await loginResponsePromise;
+    if (loginResponse.ok()) {
+      await page.waitForURL(expectedPath, { timeout: 10_000 });
+      await expect(page).toHaveURL(expectedPath);
+      return;
+    }
+
+    if (loginResponse.status() === 429) {
+      const retryAfterSeconds = await readRetryAfterSeconds(loginResponse);
+      if (retryAfterSeconds > 0) {
+        await page.waitForTimeout(retryAfterSeconds * 1000);
+      }
+      continue;
+    }
+  }
+
   await expect(page).toHaveURL(expectedPath);
 }

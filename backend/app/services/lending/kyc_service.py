@@ -271,12 +271,19 @@ class KYCService:
     # =========================================================================
 
     async def search_ckyc(self, request: CKYCSearchRequest, initiated_by: UUID) -> CKYCTransaction:
-        """Search CKYC registry by PAN."""
+        """Search CKYC registry by PAN.
+
+        When ``ckyc_live`` feature flag is off, the transaction is recorded
+        as PENDING (not faked as SUCCESS) so the FE can show a clear
+        "integration pending" state. When the flag is on, the call goes to
+        the CKYC gateway via the configured provider client.
+        """
+        from app.core.feature_flags import is_live
+
         entity = await self.entity_repo.get(request.entity_id)
         if not entity:
             raise NotFoundException("Entity not found")
 
-        # Create transaction record
         transaction = CKYCTransaction(
             entity_id=request.entity_id,
             transaction_type=CKYCTransactionType.SEARCH,
@@ -290,11 +297,44 @@ class KYCService:
         self.session.add(transaction)
         await self.session.flush()
 
-        # TODO: Call actual CKYC API
-        # For now, simulate a response
-        transaction.status = "SUCCESS"
+        if not is_live("ckyc_live"):
+            transaction.status = "PENDING"
+            transaction.response_payload = {
+                "message": "CKYC live integration is gated by feature flag 'ckyc_live'. "
+                "The request was recorded; configure the tenant's CKYC IntegrationConfig "
+                "and turn on the flag to enable live search.",
+                "live": False,
+            }
+            await self.session.flush()
+            await self.session.refresh(transaction)
+            return transaction
+
+        try:
+            from app.integrations.ckyc.client import CKYCClient  # type: ignore[import-not-found]
+
+            client = CKYCClient.for_organization(self.session, entity.organization_id)
+            api_response = await client.search(
+                pan=request.pan.upper(),
+                dob=request.date_of_birth,
+                mobile=request.mobile_number,
+            )
+            transaction.status = "SUCCESS" if api_response.get("found") else "NOT_FOUND"
+            transaction.response_payload = api_response
+            if api_response.get("ckyc_number"):
+                transaction.ckyc_number = api_response["ckyc_number"]
+        except ImportError:
+            transaction.status = "FAILED"
+            transaction.response_payload = {
+                "message": "CKYC client module not yet present in this deployment.",
+                "live": True,
+            }
+        except Exception as exc:  # noqa: BLE001
+            transaction.status = "FAILED"
+            transaction.response_payload = {
+                "error": str(exc),
+                "live": True,
+            }
         transaction.completed_at = datetime.utcnow()
-        transaction.response_payload = {"message": "CKYC search completed - integration pending"}
 
         await self.session.flush()
         await self.session.refresh(transaction)
@@ -303,7 +343,13 @@ class KYCService:
     async def download_ckyc(
         self, request: CKYCDownloadRequest, initiated_by: UUID
     ) -> CKYCTransaction:
-        """Download CKYC record."""
+        """Download CKYC record.
+
+        Gated on ``ckyc_live`` feature flag — see ``search_ckyc`` for the
+        contract. PENDING when off, real call when on.
+        """
+        from app.core.feature_flags import is_live
+
         entity = await self.entity_repo.get(request.entity_id)
         if not entity:
             raise NotFoundException("Entity not found")
@@ -319,13 +365,34 @@ class KYCService:
         self.session.add(transaction)
         await self.session.flush()
 
-        # TODO: Call actual CKYC API
-        transaction.status = "SUCCESS"
-        transaction.completed_at = datetime.utcnow()
-        transaction.response_payload = {"message": "CKYC download completed - integration pending"}
+        if not is_live("ckyc_live"):
+            transaction.status = "PENDING"
+            transaction.response_payload = {
+                "message": "CKYC live integration is gated by feature flag 'ckyc_live'.",
+                "live": False,
+            }
+            await self.session.flush()
+            await self.session.refresh(transaction)
+            return transaction
 
-        # Update entity CKYC number
-        entity.ckyc_number = request.ckyc_number
+        try:
+            from app.integrations.ckyc.client import CKYCClient  # type: ignore[import-not-found]
+
+            client = CKYCClient.for_organization(self.session, entity.organization_id)
+            api_response = await client.download(ckyc_number=request.ckyc_number)
+            transaction.status = "SUCCESS"
+            transaction.response_payload = api_response
+            entity.ckyc_number = request.ckyc_number
+        except ImportError:
+            transaction.status = "FAILED"
+            transaction.response_payload = {
+                "message": "CKYC client module not yet present in this deployment.",
+                "live": True,
+            }
+        except Exception as exc:  # noqa: BLE001
+            transaction.status = "FAILED"
+            transaction.response_payload = {"error": str(exc), "live": True}
+        transaction.completed_at = datetime.utcnow()
 
         await self.session.flush()
         await self.session.refresh(transaction)
@@ -378,31 +445,65 @@ class KYCService:
         self.session.add(bureau_pull)
         await self.session.flush()
 
-        # TODO: Call actual bureau API
-        # For now, simulate a response
-        bureau_pull.status = BureauPullStatus.SUCCESS
-        bureau_pull.completed_at = datetime.utcnow()
-        bureau_pull.pull_reference_number = f"{request.bureau_type.value}-{bureau_pull.id}"
-        bureau_pull.report_valid_till = date.today().replace(
-            month=(
-                date.today().month + 3 if date.today().month <= 9 else (date.today().month + 3) % 12
-            ),
-            year=date.today().year if date.today().month <= 9 else date.today().year + 1,
-        )
+        # Per-bureau live feature flag: cibil_live / experian_live / crif_live.
+        # When OFF, the pull row stays in PENDING — we do NOT fabricate a
+        # 750-score report. The async webhook (services/lending/
+        # bureau_ingest_service.py) is the canonical ingestion path; this
+        # synchronous entry point only initiates the request.
+        from app.core.feature_flags import is_live
 
-        # Create a sample bureau report
-        bureau_report = BureauReport(
-            bureau_pull_id=bureau_pull.id,
-            report_reference_number=bureau_pull.pull_reference_number,
-            report_date=date.today(),
-            credit_score=750,  # Sample score
-            total_accounts=5,
-            active_accounts=3,
-            closed_accounts=2,
-            overdue_accounts=0,
-            raw_report={"message": "Bureau integration pending - sample data"},
-        )
-        self.session.add(bureau_report)
+        flag_name = f"{request.bureau_type.value.lower()}_live"
+        if not is_live(flag_name):
+            bureau_pull.status = BureauPullStatus.INITIATED
+            bureau_pull.response_payload = {
+                "message": (
+                    f"Bureau live integration is gated by feature flag '{flag_name}'. "
+                    "The request was recorded; the bureau's async webhook will deliver "
+                    "the actual report once live wiring + IntegrationConfig are in place."
+                ),
+                "live": False,
+            }
+            await self.session.flush()
+            await self.session.refresh(bureau_pull)
+            return bureau_pull
+
+        # Live branch — dispatch to the per-bureau client. The client returns
+        # synchronously when the bureau supports sync mode, else it returns
+        # an acknowledgement and the report arrives via webhook.
+        try:
+            from app.integrations.bureau.client import BureauClient  # type: ignore[import-not-found]
+
+            client = BureauClient.for_organization(
+                self.session,
+                entity.organization_id,
+                bureau_type=request.bureau_type,
+            )
+            api_response = await client.pull(
+                pan=request.pan,
+                name=request.name,
+                dob=request.date_of_birth,
+                mobile=request.mobile,
+                consent_id=request.consent_id,
+            )
+            bureau_pull.pull_reference_number = api_response.get("reference")
+            bureau_pull.response_payload = api_response
+            if api_response.get("sync"):
+                bureau_pull.status = BureauPullStatus.SUCCESS
+                bureau_pull.completed_at = datetime.utcnow()
+                bureau_pull.report_valid_till = api_response.get("valid_till")
+                # The client is responsible for upserting the BureauReport row;
+                # if it didn't, we leave the report unattached.
+            else:
+                bureau_pull.status = BureauPullStatus.AWAITING_CALLBACK
+        except ImportError:
+            bureau_pull.status = BureauPullStatus.FAILED
+            bureau_pull.response_payload = {
+                "message": "Bureau client module not yet present in this deployment.",
+                "live": True,
+            }
+        except Exception as exc:  # noqa: BLE001
+            bureau_pull.status = BureauPullStatus.FAILED
+            bureau_pull.response_payload = {"error": str(exc), "live": True}
 
         await self.session.flush()
         await self.session.refresh(bureau_pull)

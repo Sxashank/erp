@@ -53,7 +53,7 @@ export interface SanctionConditionCreatePayload {
 }
 
 export interface SanctionSecurityCreatePayload {
-  securityCategory: 'PRIMARY' | 'COLLATERAL' | 'GUARANTEE';
+  securityCategory: string;
   securityType: string;
   chargeType?: string;
   description: string;
@@ -68,7 +68,7 @@ export interface SanctionCreatePayload {
   sanctionedAmount: number;
   tenureMonths: number;
   moratoriumMonths?: number;
-  interestType: 'FIXED' | 'FLOATING';
+  interestType: string;
   spreadBps?: number;
   effectiveRate: number;
   repaymentMode: string;
@@ -94,12 +94,12 @@ export async function getSanctions(
   const params = new URLSearchParams();
 
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.entityId) params.append('entity_id', filters.entityId);
+  if (filters?.entityId) params.append('entityId', filters.entityId);
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.dateFrom) params.append('from_date', filters.dateFrom);
-  if (filters?.dateTo) params.append('to_date', filters.dateTo);
+  if (filters?.dateFrom) params.append('fromDate', filters.dateFrom);
+  if (filters?.dateTo) params.append('toDate', filters.dateTo);
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+  if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
   const response = await api.get<PaginatedResponse<SanctionListItem>>(
     `${BASE_URL}?${params.toString()}`,

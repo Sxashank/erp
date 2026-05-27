@@ -28,10 +28,10 @@ router = APIRouter()
 
 @router.get(
     "",
-    response_model=VoucherTemplateListResponse, response_model_by_alias=True,
+    response_model=VoucherTemplateListResponse,
+    response_model_by_alias=True,
 )
 async def list_voucher_templates(
-    organization_id: UUID,
     category: Optional[str] = None,
     is_active: Optional[bool] = None,
     is_favorite: Optional[bool] = None,
@@ -42,6 +42,12 @@ async def list_voucher_templates(
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """List voucher templates."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException(
+            detail="Current user is not mapped to an organization",
+            error_code="ORGANIZATION_REQUIRED",
+        )
     service = VoucherTemplateService(db)
     return await service.list(
         organization_id=organization_id,
@@ -56,35 +62,48 @@ async def list_voucher_templates(
 
 @router.get(
     "/categories",
-    response_model=list[TemplateCategory], response_model_by_alias=True,
+    response_model=list[TemplateCategory],
+    response_model_by_alias=True,
 )
 async def get_template_categories(
-    organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get all unique template categories."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException(
+            detail="Current user is not mapped to an organization",
+            error_code="ORGANIZATION_REQUIRED",
+        )
     service = VoucherTemplateService(db)
     return await service.get_categories(organization_id)
 
 
 @router.get(
     "/stats",
-    response_model=VoucherTemplateStats, response_model_by_alias=True,
+    response_model=VoucherTemplateStats,
+    response_model_by_alias=True,
 )
 async def get_template_stats(
-    organization_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get statistics for voucher templates."""
+    organization_id = current_user.organization_id
+    if not organization_id:
+        raise BadRequestException(
+            detail="Current user is not mapped to an organization",
+            error_code="ORGANIZATION_REQUIRED",
+        )
     service = VoucherTemplateService(db)
     return await service.get_stats(organization_id)
 
 
 @router.get(
     "/{template_id}",
-    response_model=VoucherTemplateResponse, response_model_by_alias=True,
+    response_model=VoucherTemplateResponse,
+    response_model_by_alias=True,
 )
 async def get_voucher_template(
     template_id: UUID,
@@ -104,7 +123,8 @@ async def get_voucher_template(
 
 @router.post(
     "",
-    response_model=VoucherTemplateResponse, response_model_by_alias=True,
+    response_model=VoucherTemplateResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_voucher_template(
@@ -124,7 +144,8 @@ async def create_voucher_template(
 
 @router.put(
     "/{template_id}",
-    response_model=VoucherTemplateResponse, response_model_by_alias=True,
+    response_model=VoucherTemplateResponse,
+    response_model_by_alias=True,
 )
 async def update_voucher_template(
     template_id: UUID,
@@ -164,7 +185,8 @@ async def delete_voucher_template(
 
 @router.post(
     "/{template_id}/toggle-favorite",
-    response_model=VoucherTemplateResponse, response_model_by_alias=True,
+    response_model=VoucherTemplateResponse,
+    response_model_by_alias=True,
 )
 async def toggle_template_favorite(
     template_id: UUID,
@@ -183,7 +205,8 @@ async def toggle_template_favorite(
 
 @router.post(
     "/{template_id}/use",
-    response_model=UseTemplateResponse, response_model_by_alias=True,
+    response_model=UseTemplateResponse,
+    response_model_by_alias=True,
 )
 async def use_voucher_template(
     template_id: UUID,
@@ -215,7 +238,8 @@ async def use_voucher_template(
 
 @router.post(
     "/{template_id}/duplicate",
-    response_model=VoucherTemplateResponse, response_model_by_alias=True,
+    response_model=VoucherTemplateResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
 )
 async def duplicate_voucher_template(

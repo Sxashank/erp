@@ -1,5 +1,5 @@
 /**
- * Scheme Portal — Borrower Registration
+ * Borrower Portal - Borrower Registration
  *
  * 2-step wizard:
  *   1. Organisation details (one-of CIN / GSTIN / LLPIN / PAN)
@@ -145,7 +145,7 @@ export default function PortalRegister(): JSX.Element {
           </div>
           <PageHeader
             title="Register your organisation"
-            subtitle="Onboard your institutional organisation to apply under the maritime and shipyard funding scheme."
+            subtitle="Onboard your institutional organisation to apply for SFC maritime and shipyard funding."
             className="items-center text-center"
           />
         </div>

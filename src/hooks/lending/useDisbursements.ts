@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveDisbursementRequest,
   createDisbursement,
+  getDisbursement,
   getDisbursements,
   processDisbursementRequest,
   rejectDisbursementRequest,
@@ -37,6 +38,16 @@ export function useDisbursements(filters?: DisbursementFilters) {
   return useQuery<PaginatedResponse<DisbursementListItem>>({
     queryKey: disbursementsQueryKey(filters),
     queryFn: () => getDisbursements(filters),
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useDisbursement(disbursementId: string | undefined) {
+  return useQuery<DisbursementListItem>({
+    queryKey: disbursementQueryKey(disbursementId ?? ''),
+    queryFn: () => getDisbursement(disbursementId as string),
+    enabled: Boolean(disbursementId),
     staleTime: 30_000,
     refetchOnWindowFocus: false,
   });

@@ -82,10 +82,10 @@ async def generate_batch(
 )
 async def list_batches(
     status: NachBatchStatus | None = None,
-    start_date: date | None = None,
-    end_date: date | None = None,
+    start_date: date | None = Query(None, alias="startDate"),
+    end_date: date | None = Query(None, alias="endDate"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=200),
+    page_size: int = Query(50, ge=1, le=200, alias="pageSize"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
 ):

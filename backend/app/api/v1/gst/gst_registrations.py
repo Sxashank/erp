@@ -5,8 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.api.deps import RequirePermissions, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_active_organization_id, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.gst.gst_registration_service import GSTRegistrationService
 from app.schemas.gst.gst_registration import (
@@ -44,11 +43,14 @@ def _to_response(reg) -> GSTRegistrationResponse:
     )
 
 
-@router.get("", response_model=PaginatedResponse[GSTRegistrationResponse], response_model_by_alias=True)
+@router.get(
+    "", response_model=PaginatedResponse[GSTRegistrationResponse], response_model_by_alias=True
+)
 async def list_gst_registrations(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     include_inactive: bool = Query(False, alias="includeInactive"),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -56,7 +58,7 @@ async def list_gst_registrations(
     service = GSTRegistrationService(db)
     skip = (page - 1) * page_size
     regs, total = await service.get_by_organization(
-        current_user.organization_id, skip, page_size, include_inactive
+        active_organization_id, skip, page_size, include_inactive
     )
     items = [_to_response(r) for r in regs]
     return PaginatedResponse.create(items, total, page, page_size)
@@ -65,16 +67,22 @@ async def list_gst_registrations(
 @router.post("", response_model=GSTRegistrationResponse, response_model_by_alias=True)
 async def create_gst_registration(
     data: GSTRegistrationCreate,
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_COA_CREATE")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Create a new GST registration."""
     service = GSTRegistrationService(db)
-    reg = await service.create(data, current_user.id)
+    reg = await service.create(
+        data.model_copy(update={"organization_id": active_organization_id}),
+        current_user.id,
+    )
     return _to_response(reg)
 
 
-@router.get("/{registration_id}", response_model=GSTRegistrationResponse, response_model_by_alias=True)
+@router.get(
+    "/{registration_id}", response_model=GSTRegistrationResponse, response_model_by_alias=True
+)
 async def get_gst_registration(
     registration_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_COA_VIEW")),
@@ -98,7 +106,9 @@ async def get_by_gstin(
     return _to_response(reg)
 
 
-@router.put("/{registration_id}", response_model=GSTRegistrationResponse, response_model_by_alias=True)
+@router.put(
+    "/{registration_id}", response_model=GSTRegistrationResponse, response_model_by_alias=True
+)
 async def update_gst_registration(
     registration_id: UUID,
     data: GSTRegistrationUpdate,

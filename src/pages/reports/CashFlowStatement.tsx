@@ -17,7 +17,7 @@ import {
 import { reportsApi, organizationsApi, financialYearsApi } from '@/services/api';
 import { exportCashFlowToExcel, exportCashFlowToPDF } from '@/utils/exportUtils';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
@@ -74,10 +74,10 @@ export function CashFlowStatement() {
 
   useEffect(() => {
     if (selectedFYId) {
-      const fy = financialYears.find(f => f.id === selectedFYId);
+      const fy = financialYears.find((f) => f.id === selectedFYId);
       if (fy) {
-        setFromDate(fy.start_date);
-        setToDate(fy.end_date);
+        setFromDate(fy.start_date ?? '');
+        setToDate(fy.end_date ?? '');
       }
     }
   }, [selectedFYId, financialYears]);
@@ -135,28 +135,19 @@ export function CashFlowStatement() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
-
-
   const handlePrint = () => {
     window.print();
   };
 
   const renderCashFlowSection = (section: CashFlowSection, bgColor: string) => (
-    <div className={`rounded-lg ${bgColor} p-4 mb-4`}>
-      <h3 className="text-lg font-semibold text-slate-800 mb-3">{section.section_name}</h3>
+    <div className={`rounded-lg ${bgColor} mb-4 p-4`}>
+      <h3 className="mb-3 text-lg font-semibold text-slate-800">{section.section_name}</h3>
       <div className="space-y-2">
         {section.items.map((item, index) => (
           <div
             key={index}
-            className={`flex justify-between items-center py-1 ${
-              item.is_subtotal ? 'border-t border-slate-300 pt-2 mt-2 font-semibold' : ''
+            className={`flex items-center justify-between py-1 ${
+              item.is_subtotal ? 'mt-2 border-t border-slate-300 pt-2 font-semibold' : ''
             }`}
           >
             <span className={`${item.is_subtotal ? 'text-slate-800' : 'text-slate-600'}`}>
@@ -167,15 +158,23 @@ export function CashFlowStatement() {
                 item.amount >= 0 ? 'text-emerald-600' : 'text-red-600'
               } ${item.is_subtotal ? 'text-lg' : ''}`}
             >
-              {item.amount < 0 && '('}{formatCurrency(item.amount)}{item.amount < 0 && ')'}
+              {item.amount < 0 && '('}
+              {formatIndianCompactCurrency(item.amount)}
+              {item.amount < 0 && ')'}
             </span>
           </div>
         ))}
       </div>
-      <div className="flex justify-between items-center border-t-2 border-slate-400 pt-3 mt-3">
-        <span className="font-bold text-slate-800">Net Cash from {section.section_name.replace('Cash Flow from ', '')}</span>
-        <span className={`font-mono font-bold text-lg ${section.net_cash_flow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-          {section.net_cash_flow < 0 && '('}{formatCurrency(section.net_cash_flow)}{section.net_cash_flow < 0 && ')'}
+      <div className="mt-3 flex items-center justify-between border-t-2 border-slate-400 pt-3">
+        <span className="font-bold text-slate-800">
+          Net Cash from {section.section_name.replace('Cash Flow from ', '')}
+        </span>
+        <span
+          className={`font-mono text-lg font-bold ${section.net_cash_flow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
+        >
+          {section.net_cash_flow < 0 && '('}
+          {formatIndianCompactCurrency(section.net_cash_flow)}
+          {section.net_cash_flow < 0 && ')'}
         </span>
       </div>
     </div>
@@ -253,11 +252,15 @@ export function CashFlowStatement() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate ?? ''}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input type="date" value={toDate ?? ''} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="flex items-end">
               <Button
@@ -279,22 +282,25 @@ export function CashFlowStatement() {
               <h2 className="text-xl font-bold">{reportData.organization_name}</h2>
               <h3 className="text-lg font-semibold text-slate-700">Cash Flow Statement</h3>
               <p className="text-sm text-slate-500">
-                For the period <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
+                For the period <DateDisplay date={reportData.from_date} /> to{' '}
+                <DateDisplay date={reportData.to_date} />
               </p>
-              <p className="text-xs text-slate-400 mt-1">(Prepared using Indirect Method)</p>
+              <p className="mt-1 text-xs text-slate-400">(Prepared using Indirect Method)</p>
             </div>
           </CardHeader>
           <CardContent>
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-slate-50 rounded-lg p-4 text-center">
+            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="rounded-lg bg-slate-50 p-4 text-center">
                 <p className="text-sm text-slate-500">Opening Cash Balance</p>
                 <p className="text-xl font-bold text-slate-800">
-                  {formatCurrency(reportData.opening_cash_balance)}
+                  {formatIndianCompactCurrency(reportData.opening_cash_balance)}
                 </p>
               </div>
-              <div className={`rounded-lg p-4 text-center ${reportData.net_increase_in_cash >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}>
-                <p className="text-sm text-slate-500 flex items-center justify-center gap-1">
+              <div
+                className={`rounded-lg p-4 text-center ${reportData.net_increase_in_cash >= 0 ? 'bg-emerald-50' : 'bg-red-50'}`}
+              >
+                <p className="flex items-center justify-center gap-1 text-sm text-slate-500">
                   {reportData.net_increase_in_cash >= 0 ? (
                     <>
                       <TrendingUp className="h-4 w-4 text-emerald-600" />
@@ -307,22 +313,28 @@ export function CashFlowStatement() {
                     </>
                   )}
                 </p>
-                <p className={`text-xl font-bold ${reportData.net_increase_in_cash >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {formatCurrency(reportData.net_increase_in_cash)}
+                <p
+                  className={`text-xl font-bold ${reportData.net_increase_in_cash >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
+                >
+                  {formatIndianCompactCurrency(reportData.net_increase_in_cash)}
                 </p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4 text-center">
+              <div className="rounded-lg bg-blue-50 p-4 text-center">
                 <p className="text-sm text-slate-500">Closing Cash Balance</p>
                 <p className="text-xl font-bold text-blue-700">
-                  {formatCurrency(reportData.closing_cash_balance)}
+                  {formatIndianCompactCurrency(reportData.closing_cash_balance)}
                 </p>
               </div>
-              <div className={`rounded-lg p-4 text-center ${reportData.profit_loss_type === 'PROFIT' ? 'bg-emerald-50' : 'bg-red-50'}`}>
+              <div
+                className={`rounded-lg p-4 text-center ${reportData.profit_loss_type === 'PROFIT' ? 'bg-emerald-50' : 'bg-red-50'}`}
+              >
                 <p className="text-sm text-slate-500">
                   Net {reportData.profit_loss_type === 'PROFIT' ? 'Profit' : 'Loss'}
                 </p>
-                <p className={`text-xl font-bold ${reportData.profit_loss_type === 'PROFIT' ? 'text-emerald-600' : 'text-red-600'}`}>
-                  {formatCurrency(reportData.net_profit_loss)}
+                <p
+                  className={`text-xl font-bold ${reportData.profit_loss_type === 'PROFIT' ? 'text-emerald-600' : 'text-red-600'}`}
+                >
+                  {formatIndianCompactCurrency(reportData.net_profit_loss)}
                 </p>
               </div>
             </div>
@@ -333,39 +345,47 @@ export function CashFlowStatement() {
             {renderCashFlowSection(reportData.financing_activities, 'bg-purple-50')}
 
             {/* Summary */}
-            <div className="bg-slate-800 text-white rounded-lg p-6 mt-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex justify-between items-center">
+            <div className="mt-6 rounded-lg bg-slate-800 p-6 text-white">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="flex items-center justify-between">
                   <span>Cash from Operating</span>
-                  <span className={`font-mono ${reportData.operating_activities.net_cash_flow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span
+                    className={`font-mono ${reportData.operating_activities.net_cash_flow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                  >
                     {reportData.operating_activities.net_cash_flow < 0 && '('}
-                    {formatCurrency(reportData.operating_activities.net_cash_flow)}
+                    {formatIndianCompactCurrency(reportData.operating_activities.net_cash_flow)}
                     {reportData.operating_activities.net_cash_flow < 0 && ')'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <span>Cash from Investing</span>
-                  <span className={`font-mono ${reportData.investing_activities.net_cash_flow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span
+                    className={`font-mono ${reportData.investing_activities.net_cash_flow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                  >
                     {reportData.investing_activities.net_cash_flow < 0 && '('}
-                    {formatCurrency(reportData.investing_activities.net_cash_flow)}
+                    {formatIndianCompactCurrency(reportData.investing_activities.net_cash_flow)}
                     {reportData.investing_activities.net_cash_flow < 0 && ')'}
                   </span>
                 </div>
-                <div className="flex justify-between items-center">
+                <div className="flex items-center justify-between">
                   <span>Cash from Financing</span>
-                  <span className={`font-mono ${reportData.financing_activities.net_cash_flow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span
+                    className={`font-mono ${reportData.financing_activities.net_cash_flow >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                  >
                     {reportData.financing_activities.net_cash_flow < 0 && '('}
-                    {formatCurrency(reportData.financing_activities.net_cash_flow)}
+                    {formatIndianCompactCurrency(reportData.financing_activities.net_cash_flow)}
                     {reportData.financing_activities.net_cash_flow < 0 && ')'}
                   </span>
                 </div>
               </div>
-              <div className="border-t border-slate-600 mt-4 pt-4">
-                <div className="flex justify-between items-center text-lg">
+              <div className="mt-4 border-t border-slate-600 pt-4">
+                <div className="flex items-center justify-between text-lg">
                   <span className="font-semibold">Net Change in Cash & Cash Equivalents</span>
-                  <span className={`font-mono font-bold text-xl ${reportData.net_increase_in_cash >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                  <span
+                    className={`font-mono text-xl font-bold ${reportData.net_increase_in_cash >= 0 ? 'text-emerald-400' : 'text-red-400'}`}
+                  >
                     {reportData.net_increase_in_cash < 0 && '('}
-                    {formatCurrency(reportData.net_increase_in_cash)}
+                    {formatIndianCompactCurrency(reportData.net_increase_in_cash)}
                     {reportData.net_increase_in_cash < 0 && ')'}
                   </span>
                 </div>
@@ -373,11 +393,15 @@ export function CashFlowStatement() {
               <div className="mt-4 space-y-2 text-slate-300">
                 <div className="flex justify-between">
                   <span>Opening Cash & Cash Equivalents</span>
-                  <span className="font-mono">{formatCurrency(reportData.opening_cash_balance)}</span>
+                  <span className="font-mono">
+                    {formatIndianCompactCurrency(reportData.opening_cash_balance)}
+                  </span>
                 </div>
-                <div className="flex justify-between text-white font-semibold border-t border-slate-600 pt-2">
+                <div className="flex justify-between border-t border-slate-600 pt-2 font-semibold text-white">
                   <span>Closing Cash & Cash Equivalents</span>
-                  <span className="font-mono text-lg">{formatCurrency(reportData.closing_cash_balance)}</span>
+                  <span className="font-mono text-lg">
+                    {formatIndianCompactCurrency(reportData.closing_cash_balance)}
+                  </span>
                 </div>
               </div>
             </div>
@@ -385,10 +409,14 @@ export function CashFlowStatement() {
             <div className="mt-4 flex justify-between text-xs text-slate-500 print:mt-8">
               <span>Generated on: {new Date(reportData.generated_at).toLocaleString('en-IN')}</span>
               <span>
-                {Math.abs(reportData.opening_cash_balance + reportData.net_increase_in_cash - reportData.closing_cash_balance) < 0.01 ? (
-                  <span className="text-emerald-600 font-medium">Cash reconciled</span>
+                {Math.abs(
+                  reportData.opening_cash_balance +
+                    reportData.net_increase_in_cash -
+                    reportData.closing_cash_balance,
+                ) < 0.01 ? (
+                  <span className="font-medium text-emerald-600">Cash reconciled</span>
                 ) : (
-                  <span className="text-red-600 font-medium">Cash mismatch detected</span>
+                  <span className="font-medium text-red-600">Cash mismatch detected</span>
                 )}
               </span>
             </div>

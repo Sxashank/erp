@@ -13,10 +13,11 @@ from typing import Annotated, Optional, List, Dict, Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, status, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
+from app.api.deps import get_current_user, get_db_with_tenant
+from app.models.auth.user import User
 from app.services.hris.separation_service import (
     SeparationService,
     ClearanceService,
@@ -30,16 +31,17 @@ from app.models.hris.separation import (
     ClearanceStatus,
     FnFStatus,
 )
-
-from app.api.deps import get_db_with_tenant
 from app.core.exceptions import BadRequestException, NotFoundException
+
 router = APIRouter(prefix="/separation", tags=["Separation & FnF"])
 
 
 # ============ Request/Response Schemas ============
 
+
 class SeparationInitiateRequest(BaseModel):
     """Request to initiate employee separation."""
+
     employee_id: UUID
     separation_type: SeparationType
     requested_last_working_date: date
@@ -50,22 +52,28 @@ class SeparationInitiateRequest(BaseModel):
 
 class SeparationApproveRequest(BaseModel):
     """Request to approve separation."""
+
     approved_last_working_date: date
     remarks: Optional[str] = None
 
 
 class SeparationRejectRequest(BaseModel):
     """Request to reject separation."""
+
     rejection_reason: str
 
 
 class SeparationWithdrawRequest(BaseModel):
     """Request to withdraw separation."""
+
     reason: Optional[str] = None
 
 
 class SeparationResponse(BaseModel):
     """Separation response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     employee_id: str
     employee_name: Optional[str] = None
@@ -86,18 +94,17 @@ class SeparationResponse(BaseModel):
     experience_letter_issued: bool
     remarks: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 class SeparationListResponse(BaseModel):
     """List of separations."""
+
     items: List[SeparationResponse]
     total: int
 
 
 class ClearanceUpdateRequest(BaseModel):
     """Request to update clearance status."""
+
     status: ClearanceStatus
     has_recovery: bool = False
     recovery_amount: Optional[Decimal] = None
@@ -107,6 +114,7 @@ class ClearanceUpdateRequest(BaseModel):
 
 class ClearanceStatusResponse(BaseModel):
     """Clearance status response."""
+
     total_items: int
     cleared: int
     pending: int
@@ -118,6 +126,7 @@ class ClearanceStatusResponse(BaseModel):
 
 class FnFCalculateRequest(BaseModel):
     """Request to calculate FnF."""
+
     include_gratuity: bool = True
     include_leave_encashment: bool = True
     additional_earnings: Optional[Dict[str, Decimal]] = None
@@ -126,6 +135,7 @@ class FnFCalculateRequest(BaseModel):
 
 class FnFPaymentRequest(BaseModel):
     """Request to process FnF payment."""
+
     payment_date: date
     payment_mode: str = Field(..., pattern="^(BANK_TRANSFER|CHEQUE|CASH)$")
     payment_reference: str
@@ -133,6 +143,9 @@ class FnFPaymentRequest(BaseModel):
 
 class FnFResponse(BaseModel):
     """FnF settlement response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     separation_id: str
     employee_id: str
@@ -167,12 +180,10 @@ class FnFResponse(BaseModel):
     payment_mode: Optional[str] = None
     payment_reference: Optional[str] = None
 
-    class Config:
-        from_attributes = True
-
 
 class ClearanceChecklistRequest(BaseModel):
     """Request to create clearance checklist item."""
+
     checklist_code: str = Field(..., max_length=20)
     checklist_item: str = Field(..., max_length=200)
     description: Optional[str] = None
@@ -184,6 +195,9 @@ class ClearanceChecklistRequest(BaseModel):
 
 class ClearanceChecklistResponse(BaseModel):
     """Clearance checklist response."""
+
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     checklist_code: str
     checklist_item: str
@@ -194,11 +208,9 @@ class ClearanceChecklistResponse(BaseModel):
     display_order: int
     is_active: bool
 
-    class Config:
-        from_attributes = True
-
 
 # ============ Dependencies ============
+
 
 def get_separation_service(
     session: Annotated[AsyncSession, Depends(get_db_with_tenant)],
@@ -224,19 +236,29 @@ def get_checklist_service(
     return ClearanceChecklistService(session)
 
 
+def _require_organization_id(current_user: User) -> UUID:
+    if not current_user.organization_id:
+        raise BadRequestException(
+            detail="Current user is not assigned to an organization",
+            error_code="ORGANIZATION_CONTEXT_REQUIRED",
+        )
+    return current_user.organization_id
+
+
 # ============ Separation Endpoints ============
+
 
 @router.post(
     "",
-    response_model=SeparationResponse, response_model_by_alias=True,
+    response_model=SeparationResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Initiate employee separation",
 )
 async def initiate_separation(
-    organization_id: UUID,
     request: SeparationInitiateRequest,
     service: Annotated[SeparationService, Depends(get_separation_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SeparationResponse:
     """
     Initiate employee separation process.
@@ -245,18 +267,16 @@ async def initiate_separation(
     - Creates separation record in INITIATED status
     - Calculates notice period requirements
     """
-    created_by = UUID("00000000-0000-0000-0000-000000000000")  # Replace with current_user.id
-
     try:
         separation = await service.initiate_separation(
-            organization_id=organization_id,
+            organization_id=_require_organization_id(current_user),
             employee_id=request.employee_id,
             separation_type=request.separation_type,
             requested_last_working_date=request.requested_last_working_date,
             reason_category=request.reason_category,
             reason_detail=request.reason_detail,
             resignation_letter_path=request.resignation_letter_path,
-            created_by=created_by,
+            created_by=current_user.id,
         )
         return _map_separation_response(separation)
     except ValueError as e:
@@ -264,8 +284,25 @@ async def initiate_separation(
 
 
 @router.get(
+    "/checklist",
+    response_model=List[ClearanceChecklistResponse],
+    response_model_by_alias=True,
+    summary="List clearance checklist items",
+)
+async def list_checklist_items(
+    service: Annotated[ClearanceChecklistService, Depends(get_checklist_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
+    active_only: bool = True,
+) -> List[ClearanceChecklistResponse]:
+    """List clearance checklist items for the authenticated organization."""
+    items = await service.list(_require_organization_id(current_user), active_only)
+    return [_map_checklist_response(item) for item in items]
+
+
+@router.get(
     "/{separation_id}",
-    response_model=SeparationResponse, response_model_by_alias=True,
+    response_model=SeparationResponse,
+    response_model_by_alias=True,
     summary="Get separation details",
 )
 async def get_separation(
@@ -284,12 +321,13 @@ async def get_separation(
 
 @router.get(
     "",
-    response_model=SeparationListResponse, response_model_by_alias=True,
+    response_model=SeparationListResponse,
+    response_model_by_alias=True,
     summary="List separations",
 )
 async def list_separations(
-    organization_id: UUID,
     service: Annotated[SeparationService, Depends(get_separation_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
     status_filter: Optional[SeparationStatus] = Query(None, alias="status"),
     separation_type: Optional[SeparationType] = None,
     employee_id: Optional[UUID] = None,
@@ -300,7 +338,7 @@ async def list_separations(
 ) -> SeparationListResponse:
     """List separations with filters."""
     separations, total = await service.list(
-        organization_id=organization_id,
+        organization_id=_require_organization_id(current_user),
         status=status_filter,
         separation_type=separation_type,
         employee_id=employee_id,
@@ -317,14 +355,15 @@ async def list_separations(
 
 @router.post(
     "/{separation_id}/approve",
-    response_model=SeparationResponse, response_model_by_alias=True,
+    response_model=SeparationResponse,
+    response_model_by_alias=True,
     summary="Approve separation",
 )
 async def approve_separation(
     separation_id: UUID,
     request: SeparationApproveRequest,
     service: Annotated[SeparationService, Depends(get_separation_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SeparationResponse:
     """
     Approve separation request.
@@ -332,13 +371,11 @@ async def approve_separation(
     - Sets final last working date
     - Initializes clearance items
     """
-    approved_by = UUID("00000000-0000-0000-0000-000000000000")  # Replace with current_user.id
-
     try:
         separation = await service.approve_separation(
             separation_id=separation_id,
             approved_last_working_date=request.approved_last_working_date,
-            approved_by=approved_by,
+            approved_by=current_user.id,
             remarks=request.remarks,
         )
         return _map_separation_response(separation)
@@ -348,23 +385,22 @@ async def approve_separation(
 
 @router.post(
     "/{separation_id}/reject",
-    response_model=SeparationResponse, response_model_by_alias=True,
+    response_model=SeparationResponse,
+    response_model_by_alias=True,
     summary="Reject separation",
 )
 async def reject_separation(
     separation_id: UUID,
     request: SeparationRejectRequest,
     service: Annotated[SeparationService, Depends(get_separation_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SeparationResponse:
     """Reject separation request."""
-    rejected_by = UUID("00000000-0000-0000-0000-000000000000")
-
     try:
         separation = await service.reject_separation(
             separation_id=separation_id,
             rejection_reason=request.rejection_reason,
-            rejected_by=rejected_by,
+            rejected_by=current_user.id,
         )
         return _map_separation_response(separation)
     except ValueError as e:
@@ -373,22 +409,21 @@ async def reject_separation(
 
 @router.post(
     "/{separation_id}/withdraw",
-    response_model=SeparationResponse, response_model_by_alias=True,
+    response_model=SeparationResponse,
+    response_model_by_alias=True,
     summary="Withdraw separation",
 )
 async def withdraw_separation(
     separation_id: UUID,
     request: SeparationWithdrawRequest,
     service: Annotated[SeparationService, Depends(get_separation_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> SeparationResponse:
     """Withdraw separation request (by employee)."""
-    withdrawn_by = UUID("00000000-0000-0000-0000-000000000000")
-
     try:
         separation = await service.withdraw_separation(
             separation_id=separation_id,
-            withdrawn_by=withdrawn_by,
+            withdrawn_by=current_user.id,
             reason=request.reason,
         )
         return _map_separation_response(separation)
@@ -398,9 +433,11 @@ async def withdraw_separation(
 
 # ============ Clearance Endpoints ============
 
+
 @router.get(
     "/{separation_id}/clearance",
-    response_model=ClearanceStatusResponse, response_model_by_alias=True,
+    response_model=ClearanceStatusResponse,
+    response_model_by_alias=True,
     summary="Get clearance status",
 )
 async def get_clearance_status(
@@ -420,16 +457,14 @@ async def update_clearance(
     clearance_id: UUID,
     request: ClearanceUpdateRequest,
     service: Annotated[ClearanceService, Depends(get_clearance_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> dict:
     """Update clearance item status."""
-    cleared_by = UUID("00000000-0000-0000-0000-000000000000")
-
     try:
         clearance = await service.update_clearance(
             clearance_id=clearance_id,
             status=request.status,
-            cleared_by=cleared_by,
+            cleared_by=current_user.id,
             has_recovery=request.has_recovery,
             recovery_amount=request.recovery_amount,
             recovery_description=request.recovery_description,
@@ -448,16 +483,18 @@ async def update_clearance(
 
 # ============ FnF Endpoints ============
 
+
 @router.post(
     "/{separation_id}/fnf/calculate",
-    response_model=FnFResponse, response_model_by_alias=True,
+    response_model=FnFResponse,
+    response_model_by_alias=True,
     summary="Calculate FnF settlement",
 )
 async def calculate_fnf(
     separation_id: UUID,
     request: FnFCalculateRequest,
     service: Annotated[FnFService, Depends(get_fnf_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> FnFResponse:
     """
     Calculate Full & Final settlement.
@@ -470,12 +507,10 @@ async def calculate_fnf(
     - Clearance recoveries
     - TDS deduction
     """
-    calculated_by = UUID("00000000-0000-0000-0000-000000000000")
-
     try:
         fnf = await service.calculate_fnf(
             separation_id=separation_id,
-            calculated_by=calculated_by,
+            calculated_by=current_user.id,
             include_gratuity=request.include_gratuity,
             include_leave_encashment=request.include_leave_encashment,
             additional_earnings=request.additional_earnings,
@@ -488,7 +523,8 @@ async def calculate_fnf(
 
 @router.get(
     "/{separation_id}/fnf",
-    response_model=FnFResponse, response_model_by_alias=True,
+    response_model=FnFResponse,
+    response_model_by_alias=True,
     summary="Get FnF settlement",
 )
 async def get_fnf(
@@ -507,22 +543,21 @@ async def get_fnf(
 
 @router.post(
     "/fnf/{fnf_id}/approve",
-    response_model=FnFResponse, response_model_by_alias=True,
+    response_model=FnFResponse,
+    response_model_by_alias=True,
     summary="Approve FnF settlement",
 )
 async def approve_fnf(
     fnf_id: UUID,
     service: Annotated[FnFService, Depends(get_fnf_service)],
+    current_user: Annotated[User, Depends(get_current_user)],
     remarks: Optional[str] = None,
-    # current_user: Annotated[User, Depends(get_current_user)],
 ) -> FnFResponse:
     """Approve FnF settlement."""
-    approved_by = UUID("00000000-0000-0000-0000-000000000000")
-
     try:
         fnf = await service.approve_fnf(
             fnf_id=fnf_id,
-            approved_by=approved_by,
+            approved_by=current_user.id,
             remarks=remarks,
         )
         return _map_fnf_response(fnf)
@@ -532,25 +567,24 @@ async def approve_fnf(
 
 @router.post(
     "/fnf/{fnf_id}/pay",
-    response_model=FnFResponse, response_model_by_alias=True,
+    response_model=FnFResponse,
+    response_model_by_alias=True,
     summary="Process FnF payment",
 )
 async def process_fnf_payment(
     fnf_id: UUID,
     request: FnFPaymentRequest,
     service: Annotated[FnFService, Depends(get_fnf_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> FnFResponse:
     """Process FnF payment."""
-    processed_by = UUID("00000000-0000-0000-0000-000000000000")
-
     try:
         fnf = await service.process_payment(
             fnf_id=fnf_id,
             payment_date=request.payment_date,
             payment_mode=request.payment_mode,
             payment_reference=request.payment_reference,
-            processed_by=processed_by,
+            processed_by=current_user.id,
         )
         return _map_fnf_response(fnf)
     except ValueError as e:
@@ -559,68 +593,54 @@ async def process_fnf_payment(
 
 # ============ Clearance Checklist Endpoints ============
 
+
 @router.post(
     "/checklist",
-    response_model=ClearanceChecklistResponse, response_model_by_alias=True,
+    response_model=ClearanceChecklistResponse,
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Create clearance checklist item",
 )
 async def create_checklist_item(
-    organization_id: UUID,
     request: ClearanceChecklistRequest,
     service: Annotated[ClearanceChecklistService, Depends(get_checklist_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> ClearanceChecklistResponse:
     """Create a new clearance checklist item."""
-    created_by = UUID("00000000-0000-0000-0000-000000000000")
-
     checklist = await service.create(
-        organization_id=organization_id,
+        organization_id=_require_organization_id(current_user),
         checklist_code=request.checklist_code,
         checklist_item=request.checklist_item,
         department_id=request.department_id,
         is_mandatory=request.is_mandatory,
         can_have_recovery=request.can_have_recovery,
         display_order=request.display_order,
-        created_by=created_by,
+        created_by=current_user.id,
     )
     return _map_checklist_response(checklist)
 
 
-@router.get(
-    "/checklist",
-    response_model=List[ClearanceChecklistResponse], response_model_by_alias=True,
-    summary="List clearance checklist items",
-)
-async def list_checklist_items(
-    organization_id: UUID,
-    service: Annotated[ClearanceChecklistService, Depends(get_checklist_service)],
-    active_only: bool = True,
-) -> List[ClearanceChecklistResponse]:
-    """List clearance checklist items for an organization."""
-    items = await service.list(organization_id, active_only)
-    return [_map_checklist_response(item) for item in items]
-
-
 @router.post(
     "/checklist/seed",
-    response_model=List[ClearanceChecklistResponse], response_model_by_alias=True,
+    response_model=List[ClearanceChecklistResponse],
+    response_model_by_alias=True,
     status_code=status.HTTP_201_CREATED,
     summary="Seed default checklist items",
 )
 async def seed_default_checklist(
-    organization_id: UUID,
     service: Annotated[ClearanceChecklistService, Depends(get_checklist_service)],
-    # current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_current_user)],
 ) -> List[ClearanceChecklistResponse]:
     """Seed default clearance checklist items for an organization."""
-    created_by = UUID("00000000-0000-0000-0000-000000000000")
-
-    items = await service.seed_default_checklist(organization_id, created_by)
+    items = await service.seed_default_checklist(
+        _require_organization_id(current_user),
+        current_user.id,
+    )
     return [_map_checklist_response(item) for item in items]
 
 
 # ============ Helper Functions ============
+
 
 def _map_separation_response(separation) -> SeparationResponse:
     """Map separation model to response."""

@@ -37,7 +37,7 @@ import { useToast } from '@/hooks/use-toast';
 import { bankReconciliationApi, accountsApi } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface BankStatement {
   id: string;
   transactionDate: string;
@@ -98,7 +98,9 @@ export function BankStatementList() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [total, setTotal] = useState(0);
-  const [selectedBankAccount, setSelectedBankAccount] = useState(searchParams.get('bank_account_id') || '');
+  const [selectedBankAccount, setSelectedBankAccount] = useState(
+    searchParams.get('bank_account_id') || '',
+  );
   const [selectedStatus, setSelectedStatus] = useState(searchParams.get('status') || 'all');
   const [selectedType, setSelectedType] = useState(searchParams.get('type') || 'all');
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
@@ -231,11 +233,7 @@ export function BankStatementList() {
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   const totalPages = Math.ceil(total / pageSize);
@@ -247,11 +245,20 @@ export function BankStatementList() {
         subtitle="Import and manage bank statements for reconciliation"
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/admin/ap-ar/bank-reconciliation/import')}>
+            <Button
+              variant="outline"
+              onClick={() => navigate('/admin/ap-ar/bank-reconciliation/import')}
+            >
               <Upload className="mr-2 h-4 w-4" />
               Import Statement
             </Button>
-            <Button onClick={() => navigate(`/admin/ap-ar/bank-reconciliation/reconcile?bank_account_id=${selectedBankAccount}`)}>
+            <Button
+              onClick={() =>
+                navigate(
+                  `/admin/ap-ar/bank-reconciliation/reconcile?bank_account_id=${selectedBankAccount}`,
+                )
+              }
+            >
               <RefreshCw className="mr-2 h-4 w-4" />
               Reconcile
             </Button>
@@ -280,19 +287,11 @@ export function BankStatementList() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input
-                type="date"
-                value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
-              />
+              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input
-                type="date"
-                value={toDate}
-                onChange={(e) => setToDate(e.target.value)}
-              />
+              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div>
               <Label>Status</Label>
@@ -430,9 +429,7 @@ export function BankStatementList() {
                       </TableCell>
                       <TableCell>
                         <Badge
-                          className={
-                            reconciliationStatusColors[statement.reconciliationStatus]
-                          }
+                          className={reconciliationStatusColors[statement.reconciliationStatus]}
                         >
                           {reconciliationStatusLabels[statement.reconciliationStatus]}
                         </Badge>
@@ -460,8 +457,8 @@ export function BankStatementList() {
               {totalPages > 1 && (
                 <div className="mt-4 flex items-center justify-between">
                   <p className="text-sm text-slate-500">
-                    Showing {(page - 1) * pageSize + 1} to{' '}
-                    {Math.min(page * pageSize, total)} of {total}
+                    Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of{' '}
+                    {total}
                   </p>
                   <div className="flex gap-2">
                     <Button

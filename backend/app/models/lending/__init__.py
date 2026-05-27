@@ -227,6 +227,68 @@ from app.models.lending.kyc import (
 )
 
 # Phase 2: Loan Accounting Models
+from app.models.lending.lifecycle_event import (
+    LifecycleActorKind,
+    LifecycleSubjectType,
+    LoanLifecycleEvent,
+)
+from app.models.lending.loan_certificate import (
+    CertificateType,
+    LoanCertificate,
+)
+
+# Phase D — keep the lifecycle_modules WriteOff* enums distinct from the
+# pre-existing `enums.WriteOffType` / `enums.WriteOffStatus` used by the
+# legacy `collections` write-off flow. Same for the new model FeeType vs.
+# the legacy enum FeeType.
+from app.models.lending.lifecycle_modules import (
+    DocReleaseStatus,
+    DocReleaseTracker,
+    InterestRevivalStatus,
+    LoanInterestRevival,
+    LoanTakeoverIn,
+    LoanTransferOut,
+    LoanWriteOff,
+    NachPresentation,
+    NachPresentationStatus,
+    RateResetChoice,
+    RateResetEvent,
+    TakeoverStatus,
+    TransferOutStatus,
+    WilfulDefaulterProceeding,
+    WilfulDefaulterStage,
+    WriteOffStatus as PhaseDWriteOffStatus,
+    WriteOffType as PhaseDWriteOffType,
+)
+from app.models.lending.application_query import (
+    ApplicationQueryRaisedReason,
+    ApplicationQueryStatus,
+    LosApplicationQuery,
+)
+from app.models.lending.masters import (
+    ApprovalMatrix,
+    AssetClass,
+    ChargeTriggerRule,
+    ChecklistItemCatalog,
+    ClassificationOverridePolicy,
+    CommunicationTemplate,
+    DayCountConvention as DayCountConventionMaster,
+    DocumentTemplate,
+    FeeGlMapping,
+    FeeType as FeeTypeMaster,
+    InsuranceType,
+    LendingOption,
+    LifecycleEventCatalog,
+    NachReturnReason,
+    NpaBucket,
+    PenalChargePolicy,
+    ProvisioningRate,
+    RateResetBenchmark,
+    RecoveryAgent,
+    RegistrationAuthority,
+    SLAMatrix,
+    WilfulDefaulterCommittee,
+)
 from app.models.lending.loan_account import (
     AssetClassificationHistory,
     Disbursement,
@@ -550,6 +612,7 @@ __all__ = [
     "ApprovalChecklistTemplateItem",
     "LoanChecklist",
     "LoanChecklistItem",
+    "LendingOption",
     # Approval Checklist Enums
     "ChecklistItemCategory",
     "ChecklistItemStatus",

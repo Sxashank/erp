@@ -17,15 +17,6 @@ import {
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
 import { essReimbursementApi } from '@/services/essApi';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 interface ExpenseLineItem {
   id: string;
   expense_date: string;
@@ -257,37 +248,42 @@ export default function ESSExpenseDetail() {
                 <TableBody>
                   {expense.line_items.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={5} className="py-8 text-center text-sm text-muted-foreground">
+                      <TableCell
+                        colSpan={5}
+                        className="py-8 text-center text-sm text-muted-foreground"
+                      >
                         No expense line items found.
                       </TableCell>
                     </TableRow>
-                  ) : expense.line_items.map((line) => (
-                    <TableRow key={line.id}>
-                      <TableCell>{line.expense_date}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{expense.category || expense.claim_type}</Badge>
-                      </TableCell>
-                      <TableCell>{line.description}</TableCell>
-                      <TableCell className="text-center">
-                        {line.attachment_url ? (
-                          <Button variant="ghost" size="sm">
-                            <FileText className="h-4 w-4 text-blue-500" />
-                          </Button>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">No receipt</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(line.amount)}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  ) : (
+                    expense.line_items.map((line) => (
+                      <TableRow key={line.id}>
+                        <TableCell>{line.expense_date}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{expense.category || expense.claim_type}</Badge>
+                        </TableCell>
+                        <TableCell>{line.description}</TableCell>
+                        <TableCell className="text-center">
+                          {line.attachment_url ? (
+                            <Button variant="ghost" size="sm">
+                              <FileText className="h-4 w-4 text-blue-500" />
+                            </Button>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">No receipt</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatIndianCompactCurrency(line.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                   <TableRow className="bg-muted/50">
                     <TableCell colSpan={4} className="font-medium">
                       Total
                     </TableCell>
                     <TableCell className="text-right font-bold">
-                      {formatCurrency(expense.claimed_amount)}
+                      {formatIndianCompactCurrency(expense.claimed_amount)}
                     </TableCell>
                   </TableRow>
                 </TableBody>
@@ -306,7 +302,7 @@ export default function ESSExpenseDetail() {
             <CardContent>
               <div className="text-center">
                 <div className="text-3xl font-bold text-primary">
-                  {formatCurrency(expense.approved_amount ?? expense.claimed_amount)}
+                  {formatIndianCompactCurrency(expense.approved_amount ?? expense.claimed_amount)}
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
                   {expense.line_items.length} expense items
@@ -342,27 +338,49 @@ export default function ESSExpenseDetail() {
             <CardContent>
               <div className="space-y-4">
                 {[
-                  { date: expense.created_at, action: 'Created', user: 'You', remarks: 'Expense claim created' },
+                  {
+                    date: expense.created_at,
+                    action: 'Created',
+                    user: 'You',
+                    remarks: 'Expense claim created',
+                  },
                   expense.approved_date
-                    ? { date: expense.approved_date, action: expense.status, user: expense.approved_by || 'Approver', remarks: expense.rejection_reason || '' }
+                    ? {
+                        date: expense.approved_date,
+                        action: expense.status,
+                        user: expense.approved_by || 'Approver',
+                        remarks: expense.rejection_reason || '',
+                      }
                     : null,
                   expense.payment_date
-                    ? { date: expense.payment_date, action: 'Paid', user: 'Payroll', remarks: expense.payment_reference || '' }
+                    ? {
+                        date: expense.payment_date,
+                        action: 'Paid',
+                        user: 'Payroll',
+                        remarks: expense.payment_reference || '',
+                      }
                     : null,
-                ].filter((item): item is { date: string; action: string; user: string; remarks: string } => Boolean(item)).map((item, index: number) => (
-                  <div key={index} className="flex gap-3">
-                    <div className="mt-1">{getTimelineIcon(item.action)}</div>
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{item.action}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {item.user} - {item.date}
+                ]
+                  .filter(
+                    (
+                      item,
+                    ): item is { date: string; action: string; user: string; remarks: string } =>
+                      Boolean(item),
+                  )
+                  .map((item, index: number) => (
+                    <div key={index} className="flex gap-3">
+                      <div className="mt-1">{getTimelineIcon(item.action)}</div>
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{item.action}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {item.user} - {item.date}
+                        </div>
+                        {item.remarks && (
+                          <div className="mt-1 text-sm text-muted-foreground">{item.remarks}</div>
+                        )}
                       </div>
-                      {item.remarks && (
-                        <div className="mt-1 text-sm text-muted-foreground">{item.remarks}</div>
-                      )}
                     </div>
-                  </div>
-                ))}
+                  ))}
               </div>
             </CardContent>
           </Card>

@@ -37,6 +37,7 @@ if TYPE_CHECKING:
 
 class VerificationStatus(str):
     """Status of physical verification."""
+
     SCHEDULED = "SCHEDULED"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
@@ -45,6 +46,7 @@ class VerificationStatus(str):
 
 class AssetCondition(str):
     """Condition of asset during verification."""
+
     GOOD = "GOOD"
     FAIR = "FAIR"
     POOR = "POOR"
@@ -54,6 +56,7 @@ class AssetCondition(str):
 
 class VerificationResult(str):
     """Result of individual asset verification."""
+
     FOUND = "FOUND"
     MISSING = "MISSING"
     MISPLACED = "MISPLACED"  # Found at different location
@@ -62,6 +65,7 @@ class VerificationResult(str):
 
 class DiscrepancyStatus(str):
     """Status of discrepancy resolution."""
+
     OPEN = "OPEN"
     INVESTIGATING = "INVESTIGATING"
     RESOLVED = "RESOLVED"
@@ -73,10 +77,7 @@ class PhysicalVerificationSchedule(BaseModel):
 
     __tablename__ = "txn_pv_schedule"
     __table_args__ = (
-        UniqueConstraint(
-            "organization_id", "schedule_reference",
-            name="uq_pv_schedule_org_ref"
-        ),
+        UniqueConstraint("organization_id", "schedule_reference", name="uq_pv_schedule_org_ref"),
     )
 
     # Organization
@@ -236,10 +237,7 @@ class PhysicalVerificationEntry(BaseModel):
 
     __tablename__ = "txn_pv_entry"
     __table_args__ = (
-        UniqueConstraint(
-            "schedule_id", "asset_id",
-            name="uq_pv_entry_schedule_asset"
-        ),
+        UniqueConstraint("schedule_id", "asset_id", name="uq_pv_entry_schedule_asset"),
     )
 
     # Schedule Reference
@@ -256,6 +254,14 @@ class PhysicalVerificationEntry(BaseModel):
         ForeignKey("mst_fixed_asset.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
+    )
+
+    legacy_status: Mapped[str] = mapped_column(
+        "status",
+        String(20),
+        nullable=False,
+        default="PENDING",
+        comment="Legacy verification status kept in sync for backward compatibility",
     )
 
     # Expected Location (from asset register)
@@ -276,6 +282,15 @@ class PhysicalVerificationEntry(BaseModel):
     verified_by: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("mst_user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    physical_location: Mapped[Optional[str]] = mapped_column(
+        String(200),
+        nullable=True,
+    )
+    physical_condition: Mapped[Optional[str]] = mapped_column(
+        String(100),
         nullable=True,
     )
 

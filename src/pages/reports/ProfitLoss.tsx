@@ -17,7 +17,7 @@ import {
 import { reportsApi, organizationsApi, financialYearsApi } from '@/services/api';
 import { exportProfitLossToExcel, exportProfitLossToPDF } from '@/utils/exportUtils';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
@@ -68,10 +68,10 @@ export function ProfitLoss() {
 
   useEffect(() => {
     if (selectedFYId) {
-      const fy = financialYears.find(f => f.id === selectedFYId);
+      const fy = financialYears.find((f) => f.id === selectedFYId);
       if (fy) {
-        setFromDate(fy.start_date);
-        setToDate(fy.end_date);
+        setFromDate(fy.start_date ?? '');
+        setToDate(fy.end_date ?? '');
       }
     }
   }, [selectedFYId, financialYears]);
@@ -129,14 +129,6 @@ export function ProfitLoss() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   const handlePrint = () => {
     window.print();
   };
@@ -213,14 +205,21 @@ export function ProfitLoss() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate ?? ''}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input type="date" value={toDate ?? ''} onChange={(e) => setToDate(e.target.value)} />
             </div>
             <div className="flex items-end">
-              <Button onClick={generateReport} disabled={loading || !selectedOrgId || !selectedFYId}>
+              <Button
+                onClick={generateReport}
+                disabled={loading || !selectedOrgId || !selectedFYId}
+              >
                 {loading ? 'Generating...' : 'Generate'}
               </Button>
             </div>
@@ -235,7 +234,8 @@ export function ProfitLoss() {
               <h2 className="text-xl font-bold">{reportData.organization_name}</h2>
               <h3 className="text-lg font-semibold text-slate-700">Profit & Loss Statement</h3>
               <p className="text-sm text-slate-500">
-                For the period <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
+                For the period <DateDisplay date={reportData.from_date} /> to{' '}
+                <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>
@@ -258,13 +258,15 @@ export function ProfitLoss() {
                       >
                         <span className="text-slate-700">{item.account_group_name}</span>
                         <span className="font-mono font-medium text-green-700">
-                          {formatCurrency(item.amount)}
+                          {formatIndianCompactCurrency(item.amount)}
                         </span>
                       </div>
                     ))}
                     <div className="flex justify-between border-t-2 border-green-300 pt-3 font-bold">
                       <span className="text-green-800">Total Income</span>
-                      <span className="font-mono text-green-700">{formatCurrency(reportData.total_income)}</span>
+                      <span className="font-mono text-green-700">
+                        {formatIndianCompactCurrency(reportData.total_income)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -287,13 +289,15 @@ export function ProfitLoss() {
                       >
                         <span className="text-slate-700">{item.account_group_name}</span>
                         <span className="font-mono font-medium text-red-700">
-                          {formatCurrency(item.amount)}
+                          {formatIndianCompactCurrency(item.amount)}
                         </span>
                       </div>
                     ))}
                     <div className="flex justify-between border-t-2 border-red-300 pt-3 font-bold">
                       <span className="text-red-800">Total Expenses</span>
-                      <span className="font-mono text-red-700">{formatCurrency(reportData.total_expenses)}</span>
+                      <span className="font-mono text-red-700">
+                        {formatIndianCompactCurrency(reportData.total_expenses)}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -301,20 +305,26 @@ export function ProfitLoss() {
             </div>
 
             {/* Net Profit/Loss */}
-            <div className={`mt-6 rounded-lg p-6 text-center ${
-              reportData.profit_loss_type === 'PROFIT'
-                ? 'bg-emerald-100 border border-emerald-300'
-                : 'bg-rose-100 border border-rose-300'
-            }`}>
-              <h4 className={`text-lg font-semibold ${
-                reportData.profit_loss_type === 'PROFIT' ? 'text-emerald-800' : 'text-rose-800'
-              }`}>
+            <div
+              className={`mt-6 rounded-lg p-6 text-center ${
+                reportData.profit_loss_type === 'PROFIT'
+                  ? 'border border-emerald-300 bg-emerald-100'
+                  : 'border border-rose-300 bg-rose-100'
+              }`}
+            >
+              <h4
+                className={`text-lg font-semibold ${
+                  reportData.profit_loss_type === 'PROFIT' ? 'text-emerald-800' : 'text-rose-800'
+                }`}
+              >
                 Net {reportData.profit_loss_type === 'PROFIT' ? 'Profit' : 'Loss'}
               </h4>
-              <p className={`text-3xl font-bold font-mono mt-2 ${
-                reportData.profit_loss_type === 'PROFIT' ? 'text-emerald-700' : 'text-rose-700'
-              }`}>
-                {formatCurrency(reportData.net_profit_loss)}
+              <p
+                className={`mt-2 font-mono text-3xl font-bold ${
+                  reportData.profit_loss_type === 'PROFIT' ? 'text-emerald-700' : 'text-rose-700'
+                }`}
+              >
+                {formatIndianCompactCurrency(reportData.net_profit_loss)}
               </p>
             </div>
 

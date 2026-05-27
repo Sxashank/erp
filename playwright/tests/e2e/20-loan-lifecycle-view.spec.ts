@@ -39,10 +39,11 @@ import { expect, test as base } from '../../fixtures/test';
 import { loginAsAdmin } from '../../fixtures/auth';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:5176';
+const LIVE_BACKEND_ENABLED = process.env.PLAYWRIGHT_LIVE_BACKEND === '1';
 
 const test = base.extend<{}, { storageStatePath: string }>({
   storageStatePath: [
-    async ({}, use) => {
+    async (_args, use) => {
       const dir = mkdtempSync(join(tmpdir(), 'e2e-loan-lifecycle-'));
       const path = join(dir, 'storage.json');
       const browser = await chromium.launch();
@@ -79,6 +80,24 @@ interface SeededIds {
   claimId: string;
 }
 
+function seededChainHint(): string {
+  if (!LIVE_BACKEND_ENABLED) {
+    return 'Run `python backend/scripts/seed_e2e_iif_chain.py` first.';
+  }
+  return (
+    'Run `DATABASE_URL=postgresql+asyncpg://smfc:smfc_secret@localhost:5432/smfc_erp ' +
+    'SEED_ORG_CODE=SMFC_UAT python backend/scripts/seed_e2e_iif_chain.py` first.'
+  );
+}
+
+function fmtAmount(amountStr: string): string {
+  const abs = Math.abs(Number(amountStr));
+  if (abs >= 10_000_000) return `₹ ${(abs / 10_000_000).toFixed(2)} Cr`;
+  if (abs >= 100_000) return `₹ ${(abs / 100_000).toFixed(2)} L`;
+  if (abs >= 1_000) return `₹ ${(abs / 1_000).toFixed(2)} K`;
+  return `₹ ${abs.toFixed(2)}`;
+}
+
 test.describe('E2E › loan lifecycle › view path', () => {
   test('the entire seeded chain is reachable through the admin UI', async ({
     page,
@@ -94,8 +113,7 @@ test.describe('E2E › loan lifecycle › view path', () => {
     if (entityRow.length === 0) {
       test.info().annotations.push({
         type: 'note',
-        description:
-          'No E2E IIF chain seeded — run `python backend/scripts/seed_e2e_iif_chain.py` first',
+        description: `No seeded IIF chain found in the active Playwright DB. ${seededChainHint()}`,
       });
       return;
     }
@@ -130,7 +148,7 @@ test.describe('E2E › loan lifecycle › view path', () => {
     };
 
     // ------------------------------------------------- Stage 1: Entity
-    await page.goto('/admin/lending/entities');
+    await page.goto(`/admin/lending/entities?search=${encodeURIComponent(ENTITY_CODE)}`);
     await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(ENTITY_CODE).first()).toBeVisible({ timeout: 10_000 });
 
@@ -141,7 +159,7 @@ test.describe('E2E › loan lifecycle › view path', () => {
     await expect(page.getByText(/E2E IIF Borrower/i).first()).toBeVisible({ timeout: 10_000 });
 
     // ------------------------------------------------- Stage 2: Application
-    await page.goto('/admin/lending/applications');
+    await page.goto(`/admin/lending/applications?search=${encodeURIComponent(APPLICATION_NUMBER)}`);
     await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(APPLICATION_NUMBER).first()).toBeVisible({ timeout: 10_000 });
 
@@ -152,6 +170,9 @@ test.describe('E2E › loan lifecycle › view path', () => {
     // ------------------------------------------------- Stage 3: Sanction
     await page.goto('/admin/lending/sanctions');
     await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 10_000 });
+    await page
+      .getByPlaceholder(/search by sanction number, entity name, or application/i)
+      .fill(SANCTION_NUMBER);
     await expect(page.getByText(SANCTION_NUMBER).first()).toBeVisible({ timeout: 10_000 });
 
     await page.goto(`/admin/lending/sanctions/${ids.sanctionId}`);
@@ -159,11 +180,14 @@ test.describe('E2E › loan lifecycle › view path', () => {
     await expect(page.getByText(SANCTION_NUMBER).first()).toBeVisible({ timeout: 10_000 });
 
     // ------------------------------------------------- Stage 4: Loan Account
-    await page.goto('/admin/lending/loan-accounts');
+    await page.goto('/admin/lending/accounts');
     await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 10_000 });
+    await page
+      .getByPlaceholder(/search by loan account number or entity name/i)
+      .fill(LOAN_ACCOUNT_NUMBER);
     await expect(page.getByText(LOAN_ACCOUNT_NUMBER).first()).toBeVisible({ timeout: 10_000 });
 
-    await page.goto(`/admin/lending/loan-accounts/${ids.loanAccountId}`);
+    await page.goto(`/admin/lending/accounts/${ids.loanAccountId}`);
     await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 10_000 });
     await expect(page.getByText(LOAN_ACCOUNT_NUMBER).first()).toBeVisible({ timeout: 10_000 });
 
@@ -172,6 +196,9 @@ test.describe('E2E › loan lifecycle › view path', () => {
     // reference appears in the list when the parent loan exists.
     await page.goto('/admin/lending/disbursements');
     await expect(page.locator('main, [role="main"]').first()).toBeVisible({ timeout: 10_000 });
+    await page
+      .getByPlaceholder(/search by disbursement number, entity, or loan account/i)
+      .fill(DISBURSEMENT_REF);
     // Disbursement reference OR loan account number must appear — either
     // is sufficient proof that the disbursement row is reachable.
     await expect(
@@ -195,10 +222,7 @@ test.describe('E2E › loan lifecycle › view path', () => {
     void consoleGate;
   });
 
-  test('IIF claim detail computation block renders the seeded amounts', async ({
-    page,
-    db,
-  }) => {
+  test('IIF claim detail computation block renders the seeded amounts', async ({ page, db }) => {
     const claimRow = await db.query<{
       id: string;
       interest_paid_in_period: string;
@@ -213,7 +237,7 @@ test.describe('E2E › loan lifecycle › view path', () => {
     if (claimRow.length === 0) {
       test.info().annotations.push({
         type: 'note',
-        description: 'No seeded IIF claim — see seed_e2e_iif_chain.py',
+        description: `No seeded IIF claim found in the active Playwright DB. ${seededChainHint()}`,
       });
       return;
     }
@@ -221,24 +245,15 @@ test.describe('E2E › loan lifecycle › view path', () => {
     await page.goto(`/admin/lending/iif/claims/${claim.id}`);
 
     // The "Computation" card renders interest_paid_in_period and
-    // applicable_subvention_amount via <AmountDisplay>, which formats
-    // amounts in the Indian abbreviated convention (Cr / L / K):
-    //   - ≥ 10,000,000 → "X.XX Cr"
-    //   - ≥ 100,000    → "X.XX L"
-    //   - ≥ 1,000      → "X.XX K"
-    // For the seeded values: 6,875,000 → "68.75 L" and 206,250 → "2.06 L".
-    const fmt = (amountStr: string) => {
-      const abs = Math.abs(Number(amountStr));
-      if (abs >= 10_000_000) return `${(abs / 10_000_000).toFixed(2)} Cr`;
-      if (abs >= 100_000) return `${(abs / 100_000).toFixed(2)} L`;
-      if (abs >= 1_000) return `${(abs / 1_000).toFixed(2)} K`;
-      return abs.toFixed(2);
-    };
-    await expect(page.getByText(fmt(claim.interest_paid_in_period)).first()).toBeVisible({
+    // applicable_subvention_amount via <AmountDisplay>, which prefixes the
+    // Indian abbreviated amount with the rupee symbol.
+    await expect(page.getByText(fmtAmount(claim.interest_paid_in_period)).first()).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText(fmt(claim.applicable_subvention_amount)).first()).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByText(fmtAmount(claim.applicable_subvention_amount)).first()).toBeVisible(
+      {
+        timeout: 10_000,
+      },
+    );
   });
 });

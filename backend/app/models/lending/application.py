@@ -28,10 +28,7 @@ from app.models.lending.enums import (
     ApplicationStatus,
     AppraisalRecommendation,
     AppraisalType,
-    InterestType,
     MilestoneStatus,
-    RepaymentFrequency,
-    RepaymentMode,
     TechnicalFeasibility,
 )
 
@@ -165,23 +162,23 @@ class LoanApplication(BaseModel):
     )
 
     # Interest preference
-    preferred_interest_type: Mapped[InterestType] = mapped_column(
-        Enum(InterestType),
+    preferred_interest_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=InterestType.FLOATING,
-        comment="Preferred interest type",
+        default="FLOATING",
+        comment="Preferred interest type code from mst_lending_option(RATE_TYPE)",
     )
-    preferred_repayment_frequency: Mapped[RepaymentFrequency] = mapped_column(
-        Enum(RepaymentFrequency),
+    preferred_repayment_frequency: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=RepaymentFrequency.MONTHLY,
-        comment="Preferred repayment frequency",
+        default="MONTHLY",
+        comment="Preferred repayment frequency code from mst_lending_option(REPAYMENT_FREQUENCY)",
     )
-    preferred_repayment_mode: Mapped[RepaymentMode] = mapped_column(
-        Enum(RepaymentMode),
+    preferred_repayment_mode: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=RepaymentMode.EMI,
-        comment="Preferred repayment mode",
+        default="EMI",
+        comment="Preferred repayment mode code from mst_lending_option(REPAYMENT_MODE)",
     )
     requested_moratorium_months: Mapped[int] = mapped_column(
         Integer,

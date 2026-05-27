@@ -46,7 +46,7 @@ import { vouchersApi, organizationsApi } from '@/services/api';
 import type { Voucher, Organization, PaginatedResponse } from '@/types';
 import { VOUCHER_STATUSES } from '@/types';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export function VoucherList() {
   const navigate = useNavigate();
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
@@ -70,32 +70,35 @@ export function VoucherList() {
     }
   }, []);
 
-  const fetchVouchers = useCallback(async (page = 1) => {
-    if (!selectedOrgId) return;
-    try {
-      setLoading(true);
-      const params: Parameters<typeof vouchersApi.list>[0] = {
-        page,
-        page_size: 20,
-        include_inactive: true,
-      };
+  const fetchVouchers = useCallback(
+    async (page = 1) => {
+      if (!selectedOrgId) return;
+      try {
+        setLoading(true);
+        const params: Parameters<typeof vouchersApi.list>[0] = {
+          page,
+          page_size: 20,
+          include_inactive: true,
+        };
 
-      if (activeTab === 'pending') {
-        params.status = 'PENDING_APPROVAL';
-      } else if (selectedStatus && selectedStatus !== 'all') {
-        params.status = selectedStatus;
+        if (activeTab === 'pending') {
+          params.status = 'PENDING_APPROVAL';
+        } else if (selectedStatus && selectedStatus !== 'all') {
+          params.status = selectedStatus;
+        }
+
+        const response = await vouchersApi.list(params);
+        const data: PaginatedResponse<Voucher> = response.data;
+        setVouchers(data.items);
+        setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
+      } catch (error) {
+        logger.error('Failed to fetch vouchers:', error);
+      } finally {
+        setLoading(false);
       }
-
-      const response = await vouchersApi.list(params);
-      const data: PaginatedResponse<Voucher> = response.data;
-      setVouchers(data.items);
-      setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
-    } catch (error) {
-      logger.error('Failed to fetch vouchers:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [activeTab, selectedOrgId, selectedStatus]);
+    },
+    [activeTab, selectedOrgId, selectedStatus],
+  );
 
   useEffect(() => {
     fetchOrganizations();
@@ -181,11 +184,7 @@ export function VoucherList() {
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   const renderVoucherTable = () => (
@@ -206,13 +205,15 @@ export function VoucherList() {
           {vouchers.map((voucher) => (
             <TableRow key={voucher.id}>
               <TableCell className="font-medium">{voucher.voucher_number}</TableCell>
-              <TableCell><DateDisplay date={voucher.voucher_date} /></TableCell>
               <TableCell>
-                <Badge variant="outline">{voucher.voucher_type_name || voucher.voucher_type_code}</Badge>
+                <DateDisplay date={voucher.voucher_date} />
               </TableCell>
-              <TableCell className="max-w-[200px] truncate">
-                {voucher.narration || '-'}
+              <TableCell>
+                <Badge variant="outline">
+                  {voucher.voucher_type_name || voucher.voucher_type_code}
+                </Badge>
               </TableCell>
+              <TableCell className="max-w-[200px] truncate">{voucher.narration || '-'}</TableCell>
               <TableCell className="text-right">{formatAmount(voucher.total_debit)}</TableCell>
               <TableCell>{getStatusBadge(voucher.status)}</TableCell>
               <TableCell>

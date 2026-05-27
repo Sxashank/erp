@@ -36,7 +36,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPaymentApi } from '@/services/vendorApi';
 import type { VendorPayment, VendorAgingReport } from '@/types/vendor';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function VendorPaymentList() {
   const { toast } = useToast();
 
@@ -80,16 +80,6 @@ export default function VendorPaymentList() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number | undefined) => {
-    if (amount === undefined || amount === null) return '-';
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const handleDownloadStatement = async () => {
     if (!fromDate || !toDate) {
       toast({ variant: 'destructive', title: 'Please select date range' });
@@ -115,52 +105,52 @@ export default function VendorPaymentList() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Payments"
-        subtitle="View your payment history and outstanding amounts"
-      />
+      <PageHeader title="Payments" subtitle="View your payment history and outstanding amounts" />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-green-50 border-green-200">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <TrendingUp className="h-5 w-5 text-green-600" />
               <span className="text-sm font-medium text-green-800">Total Outstanding</span>
             </div>
-            <p className="text-2xl font-bold text-green-900 mt-2">
-              {formatCurrency(summary?.total_outstanding as number)}
+            <p className="mt-2 text-2xl font-bold text-green-900">
+              {formatIndianCompactCurrency(summary?.total_outstanding as number)}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-blue-50 border-blue-200">
+        <Card className="border-blue-200 bg-blue-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <CreditCard className="h-5 w-5 text-blue-600" />
               <span className="text-sm font-medium text-blue-800">Pending Payments</span>
             </div>
-            <p className="text-2xl font-bold text-blue-900 mt-2">
+            <p className="mt-2 text-2xl font-bold text-blue-900">
               {(summary?.pending_payments as number) || 0}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-purple-50 border-purple-200">
+        <Card className="border-purple-200 bg-purple-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <Calendar className="h-5 w-5 text-purple-600" />
               <span className="text-sm font-medium text-purple-800">Last Payment</span>
             </div>
-            <DateDisplay date={summary?.last_payment_date as string | null | undefined} className="text-lg font-bold text-purple-900 mt-2" />
+            <DateDisplay
+              date={summary?.last_payment_date as string | null | undefined}
+              className="mt-2 text-lg font-bold text-purple-900"
+            />
           </CardContent>
         </Card>
-        <Card className="bg-orange-50 border-orange-200">
+        <Card className="border-orange-200 bg-orange-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <FileText className="h-5 w-5 text-orange-600" />
               <span className="text-sm font-medium text-orange-800">Last Amount</span>
             </div>
-            <p className="text-2xl font-bold text-orange-900 mt-2">
-              {formatCurrency(summary?.last_payment_amount as number)}
+            <p className="mt-2 text-2xl font-bold text-orange-900">
+              {formatIndianCompactCurrency(summary?.last_payment_amount as number)}
             </p>
           </CardContent>
         </Card>
@@ -182,12 +172,12 @@ export default function VendorPaymentList() {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="flex items-center justify-center h-64">
+                <div className="flex h-64 items-center justify-center">
                   <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
                 </div>
               ) : payments.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-                  <CreditCard className="h-12 w-12 text-gray-300 mb-2" />
+                <div className="flex h-64 flex-col items-center justify-center text-gray-500">
+                  <CreditCard className="mb-2 h-12 w-12 text-gray-300" />
                   <p>No payments found</p>
                 </div>
               ) : (
@@ -206,16 +196,20 @@ export default function VendorPaymentList() {
                     {payments.map((payment) => (
                       <TableRow key={payment.id}>
                         <TableCell className="font-medium">{payment.payment_reference}</TableCell>
-                        <TableCell><DateDisplay date={payment.payment_date} /></TableCell>
+                        <TableCell>
+                          <DateDisplay date={payment.payment_date} />
+                        </TableCell>
                         <TableCell>{payment.payment_mode}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(payment.amount)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(payment.amount)}
+                        </TableCell>
                         <TableCell>
                           <Badge className="bg-green-100 text-green-800">{payment.status}</Badge>
                         </TableCell>
                         <TableCell className="text-right">
                           <Link to={`/vendor/payments/${payment.id}`}>
                             <Button variant="ghost" size="sm">
-                              <Eye className="h-4 w-4 mr-1" />
+                              <Eye className="mr-1 h-4 w-4" />
                               View
                             </Button>
                           </Link>
@@ -235,19 +229,20 @@ export default function VendorPaymentList() {
             <CardHeader>
               <CardTitle>Aging Report</CardTitle>
               <CardDescription>
-                Outstanding invoices as of {aging?.as_of_date ? <DateDisplay date={aging.as_of_date} /> : 'today'}
+                Outstanding invoices as of{' '}
+                {aging?.as_of_date ? <DateDisplay date={aging.as_of_date} /> : 'today'}
               </CardDescription>
             </CardHeader>
             <CardContent>
               {aging ? (
                 <div className="space-y-6">
                   {/* Aging Buckets */}
-                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
                     {aging.buckets.map((bucket, index) => (
-                      <div key={index} className="p-4 bg-gray-50 rounded-lg text-center">
+                      <div key={index} className="rounded-lg bg-gray-50 p-4 text-center">
                         <p className="text-sm font-medium text-gray-600">{bucket.label}</p>
-                        <p className="text-xl font-bold text-gray-900 mt-1">
-                          {formatCurrency(bucket.amount)}
+                        <p className="mt-1 text-xl font-bold text-gray-900">
+                          {formatIndianCompactCurrency(bucket.amount)}
                         </p>
                         <p className="text-xs text-gray-500">{bucket.count} invoices</p>
                       </div>
@@ -270,10 +265,18 @@ export default function VendorPaymentList() {
                       {aging.invoices.map((inv, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">{inv.invoice_number}</TableCell>
-                          <TableCell><DateDisplay date={inv.invoice_date} /></TableCell>
-                          <TableCell><DateDisplay date={inv.due_date} /></TableCell>
-                          <TableCell className="text-right">{formatCurrency(inv.invoice_amount)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(inv.balance_amount)}</TableCell>
+                          <TableCell>
+                            <DateDisplay date={inv.invoice_date} />
+                          </TableCell>
+                          <TableCell>
+                            <DateDisplay date={inv.due_date} />
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatIndianCompactCurrency(inv.invoice_amount)}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {formatIndianCompactCurrency(inv.balance_amount)}
+                          </TableCell>
                           <TableCell className="text-right">
                             <Badge variant={inv.days_overdue > 0 ? 'destructive' : 'secondary'}>
                               {inv.days_overdue > 0 ? `${inv.days_overdue} days` : 'Current'}
@@ -285,7 +288,7 @@ export default function VendorPaymentList() {
                   </Table>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-64">
+                <div className="flex h-64 items-center justify-center">
                   <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
                 </div>
               )}
@@ -301,7 +304,7 @@ export default function VendorPaymentList() {
               <CardDescription>Download your account statement for a period</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3">
                 <div className="space-y-2">
                   <Label>From Date</Label>
                   <Input
@@ -312,14 +315,13 @@ export default function VendorPaymentList() {
                 </div>
                 <div className="space-y-2">
                   <Label>To Date</Label>
-                  <Input
-                    type="date"
-                    value={toDate}
-                    onChange={(e) => setToDate(e.target.value)}
-                  />
+                  <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
                 </div>
-                <Button onClick={handleDownloadStatement} className="bg-purple-600 hover:bg-purple-700">
-                  <Download className="h-4 w-4 mr-2" />
+                <Button
+                  onClick={handleDownloadStatement}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  <Download className="mr-2 h-4 w-4" />
                   Download Statement
                 </Button>
               </div>

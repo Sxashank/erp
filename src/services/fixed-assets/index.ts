@@ -198,13 +198,16 @@ function idempotencyHeaders(): Record<string, string> {
 export async function listAssetCategories(
   filters: AssetCategoryListFilters,
 ): Promise<OffsetPaginatedResponse<AssetCategory>> {
-  const { data } = await api.get<OffsetPaginatedResponse<AssetCategory>>('/fixed-assets/categories', {
-    params: {
-      organization_id: filters.organizationId,
-      skip: filters.skip ?? 0,
-      limit: filters.limit ?? 100,
+  const { data } = await api.get<OffsetPaginatedResponse<AssetCategory>>(
+    '/fixed-assets/categories',
+    {
+      params: {
+        organization_id: filters.organizationId,
+        skip: filters.skip ?? 0,
+        limit: filters.limit ?? 100,
+      },
     },
-  });
+  );
   return data;
 }
 
@@ -304,9 +307,13 @@ export async function transferFixedAsset(
   id: string,
   payload: AssetTransferPayload,
 ): Promise<AssetTransferRecord> {
-  const { data } = await api.post<AssetTransferRecord>(`/fixed-assets/assets/${id}/transfer`, payload, {
-    headers: idempotencyHeaders(),
-  });
+  const { data } = await api.post<AssetTransferRecord>(
+    `/fixed-assets/assets/${id}/transfer`,
+    payload,
+    {
+      headers: idempotencyHeaders(),
+    },
+  );
   return data;
 }
 
@@ -314,9 +321,13 @@ export async function revalueFixedAsset(
   id: string,
   payload: AssetRevaluePayload,
 ): Promise<AssetRevaluationRecord> {
-  const { data } = await api.post<AssetRevaluationRecord>(`/fixed-assets/assets/${id}/revalue`, payload, {
-    headers: idempotencyHeaders(),
-  });
+  const { data } = await api.post<AssetRevaluationRecord>(
+    `/fixed-assets/assets/${id}/revalue`,
+    payload,
+    {
+      headers: idempotencyHeaders(),
+    },
+  );
   return data;
 }
 
@@ -324,9 +335,13 @@ export async function impairFixedAsset(
   id: string,
   payload: AssetImpairPayload,
 ): Promise<AssetRevaluationRecord> {
-  const { data } = await api.post<AssetRevaluationRecord>(`/fixed-assets/assets/${id}/impair`, payload, {
-    headers: idempotencyHeaders(),
-  });
+  const { data } = await api.post<AssetRevaluationRecord>(
+    `/fixed-assets/assets/${id}/impair`,
+    payload,
+    {
+      headers: idempotencyHeaders(),
+    },
+  );
   return data;
 }
 
@@ -350,15 +365,18 @@ export async function listDisposals(
     limit?: number;
   },
 ): Promise<OffsetPaginatedResponse<DisposalRegisterItem>> {
-  const { data } = await api.get<OffsetPaginatedResponse<DisposalRegisterItem>>('/fixed-assets/disposals', {
-    params: {
-      status: params?.status,
-      disposal_type: params?.disposalType,
-      search: params?.search,
-      skip: params?.skip ?? 0,
-      limit: params?.limit ?? 20,
+  const { data } = await api.get<OffsetPaginatedResponse<DisposalRegisterItem>>(
+    '/fixed-assets/disposals',
+    {
+      params: {
+        status: params?.status,
+        disposal_type: params?.disposalType,
+        search: params?.search,
+        skip: params?.skip ?? 0,
+        limit: params?.limit ?? 20,
+      },
     },
-  });
+  );
   return data;
 }
 
@@ -385,12 +403,15 @@ export async function listDepreciationRuns(
   organizationId: string,
   params?: { skip?: number; limit?: number },
 ): Promise<OffsetPaginatedResponse<DepreciationRun>> {
-  const { data } = await api.get<OffsetPaginatedResponse<DepreciationRun>>('/fixed-assets/depreciation/runs', {
-    params: {
-      skip: params?.skip ?? 0,
-      limit: params?.limit ?? 20,
+  const { data } = await api.get<OffsetPaginatedResponse<DepreciationRun>>(
+    '/fixed-assets/depreciation/runs',
+    {
+      params: {
+        skip: params?.skip ?? 0,
+        limit: params?.limit ?? 20,
+      },
     },
-  });
+  );
   return data;
 }
 
@@ -628,7 +649,6 @@ export async function getAssetRegisterReport(
 ): Promise<AssetRegisterReport> {
   const { data } = await api.get<AssetRegisterReport>('/fixed-assets/reports/asset-register', {
     params: {
-      organization_id: filters.organizationId,
       category_id: filters.categoryId,
       location_id: filters.locationId,
       as_on_date: filters.asOnDate,

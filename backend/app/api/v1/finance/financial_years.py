@@ -6,8 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.api.deps import RequirePermissions, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_active_organization_id, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.finance.financial_year_service import FinancialYearService
 from app.services.finance.period_service import PeriodService
@@ -29,12 +28,15 @@ from app.schemas.base import PaginatedResponse, MessageResponse
 router = APIRouter()
 
 
-@router.get("", response_model=PaginatedResponse[FinancialYearResponse], response_model_by_alias=True)
+@router.get(
+    "", response_model=PaginatedResponse[FinancialYearResponse], response_model_by_alias=True
+)
 async def list_financial_years(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     include_inactive: bool = Query(False, alias="includeInactive"),
     current_user: User = Depends(RequirePermissions("FIN_FY_VIEW")),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
@@ -43,7 +45,7 @@ async def list_financial_years(
     """
     service = FinancialYearService(db)
     skip = (page - 1) * page_size
-    fys, total = await service.get_all(current_user.organization_id, skip, page_size, include_inactive)
+    fys, total = await service.get_all(active_organization_id, skip, page_size, include_inactive)
 
     items = [
         FinancialYearResponse(
@@ -71,6 +73,7 @@ async def list_financial_years(
 async def create_financial_year(
     data: FinancialYearCreate,
     current_user: User = Depends(RequirePermissions("FIN_FY_CREATE")),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
@@ -78,7 +81,10 @@ async def create_financial_year(
     Requires FIN_FY_CREATE permission.
     """
     service = FinancialYearService(db)
-    fy = await service.create(data, current_user.id)
+    fy = await service.create(
+        data.model_copy(update={"organization_id": active_organization_id}),
+        current_user.id,
+    )
 
     # Reload with periods
     fy = await service.get(fy.id)
@@ -86,9 +92,12 @@ async def create_financial_year(
     return _fy_to_response_with_periods(fy)
 
 
-@router.get("/current", response_model=Optional[FinancialYearResponse], response_model_by_alias=True)
+@router.get(
+    "/current", response_model=Optional[FinancialYearResponse], response_model_by_alias=True
+)
 async def get_current_financial_year(
     current_user: User = Depends(RequirePermissions("FIN_FY_VIEW")),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
@@ -96,7 +105,7 @@ async def get_current_financial_year(
     Requires FIN_FY_VIEW permission.
     """
     service = FinancialYearService(db)
-    fy = await service.get_current(current_user.organization_id)
+    fy = await service.get_current(active_organization_id)
 
     if not fy:
         return None
@@ -104,7 +113,9 @@ async def get_current_financial_year(
     return _fy_to_response(fy)
 
 
-@router.get("/{fy_id}", response_model=FinancialYearWithPeriodsResponse, response_model_by_alias=True)
+@router.get(
+    "/{fy_id}", response_model=FinancialYearWithPeriodsResponse, response_model_by_alias=True
+)
 async def get_financial_year(
     fy_id: UUID,
     current_user: User = Depends(RequirePermissions("FIN_FY_VIEW")),
@@ -137,7 +148,9 @@ async def update_financial_year(
     return _fy_to_response(fy)
 
 
-@router.post("/{fy_id}/close-period", response_model=FinancialPeriodResponse, response_model_by_alias=True)
+@router.post(
+    "/{fy_id}/close-period", response_model=FinancialPeriodResponse, response_model_by_alias=True
+)
 async def close_period(
     fy_id: UUID,
     data: ClosePeriodRequest,
@@ -153,7 +166,9 @@ async def close_period(
     return _period_to_response(period)
 
 
-@router.post("/{fy_id}/lock-period", response_model=FinancialPeriodResponse, response_model_by_alias=True)
+@router.post(
+    "/{fy_id}/lock-period", response_model=FinancialPeriodResponse, response_model_by_alias=True
+)
 async def lock_period(
     fy_id: UUID,
     data: LockPeriodRequest,
@@ -169,7 +184,9 @@ async def lock_period(
     return _period_to_response(period)
 
 
-@router.post("/{fy_id}/unlock-period", response_model=FinancialPeriodResponse, response_model_by_alias=True)
+@router.post(
+    "/{fy_id}/unlock-period", response_model=FinancialPeriodResponse, response_model_by_alias=True
+)
 async def unlock_period(
     fy_id: UUID,
     data: UnlockPeriodRequest,
@@ -185,7 +202,9 @@ async def unlock_period(
     return _period_to_response(period)
 
 
-@router.post("/{fy_id}/gst-filed", response_model=FinancialPeriodResponse, response_model_by_alias=True)
+@router.post(
+    "/{fy_id}/gst-filed", response_model=FinancialPeriodResponse, response_model_by_alias=True
+)
 async def set_gst_filed_date(
     fy_id: UUID,
     data: SetGSTFiledDateRequest,
@@ -206,6 +225,7 @@ async def set_gst_filed_date(
 async def validate_entry_date(
     data: ValidateDateRequest,
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """
@@ -213,7 +233,7 @@ async def validate_entry_date(
     Returns validation result with details about why entries may be blocked.
     """
     service = PeriodService(db)
-    result = await service.validate_entry_date(current_user.organization_id, data.entry_date)
+    result = await service.validate_entry_date(active_organization_id, data.entry_date)
     return ValidateDateResponse(
         allowed=result.allowed,
         period_id=result.period_id,
@@ -222,7 +242,9 @@ async def validate_entry_date(
     )
 
 
-@router.post("/{fy_id}/reopen-period", response_model=FinancialPeriodResponse, response_model_by_alias=True)
+@router.post(
+    "/{fy_id}/reopen-period", response_model=FinancialPeriodResponse, response_model_by_alias=True
+)
 async def reopen_period(
     fy_id: UUID,
     data: UnlockPeriodRequest,

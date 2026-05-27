@@ -10,6 +10,7 @@ from app.database import get_db
 from app.api.deps import get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.notification import NotificationCategory
+from app.models.notification import NotificationChannel, NotificationStatus
 from app.services.notification import NotificationService
 from app.schemas.notification import (
     NotificationCreate,
@@ -18,7 +19,8 @@ from app.schemas.notification import (
     NotificationPreferenceCreate,
     NotificationPreferenceUpdate,
     NotificationPreferenceResponse,
-    NotificationLogResponse,
+    NotificationLogListResponse,
+    NotificationLogWithTitleResponse,
     NotificationStatsResponse,
     MarkReadRequest,
     SendNotificationRequest,
@@ -79,6 +81,97 @@ async def get_unread_count(
     return {"unread_count": count}
 
 
+@router.get("/logs", response_model=NotificationLogListResponse, response_model_by_alias=True)
+async def get_notification_logs(
+    notification_id: Optional[UUID] = None,
+    channel: Optional[NotificationChannel] = None,
+    status_filter: Optional[NotificationStatus] = Query(default=None, alias="status"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+):
+    """Get delivery logs for the current tenant's notifications."""
+    service = NotificationService(db)
+    skip = (page - 1) * page_size
+    logs, total = await service.get_delivery_logs(
+        organization_id=current_user.organization_id,
+        notification_id=notification_id,
+        channel=channel,
+        status=status_filter,
+        skip=skip,
+        limit=page_size,
+    )
+    return NotificationLogListResponse(
+        items=[
+            NotificationLogWithTitleResponse(
+                id=log.id,
+                notification_id=log.notification_id,
+                notification_title=title,
+                channel=log.channel,
+                status=log.status,
+                attempt_number=log.attempt_number,
+                attempted_at=log.attempted_at,
+                response_code=log.response_code,
+                response_message=log.response_message,
+                provider=log.provider,
+                provider_message_id=log.provider_message_id,
+                cost=log.cost,
+                currency=log.currency,
+            )
+            for log, title in logs
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/preferences",
+    response_model=list[NotificationPreferenceResponse],
+    response_model_by_alias=True,
+)
+async def get_preferences(
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+):
+    """Get user's notification preferences."""
+    service = NotificationService(db)
+    preferences = await service.get_user_preferences(
+        user_id=current_user.id,
+        organization_id=current_user.organization_id,
+    )
+    return [NotificationPreferenceResponse.model_validate(p) for p in preferences]
+
+
+@router.post(
+    "/preferences", response_model=NotificationPreferenceResponse, response_model_by_alias=True
+)
+async def create_preference(
+    data: NotificationPreferenceCreate,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+):
+    """Create or update notification preference for a category."""
+    service = NotificationService(db)
+    preference = await service.update_user_preference(
+        user_id=current_user.id,
+        category=data.category,
+        organization_id=data.organization_id or current_user.organization_id,
+        email_enabled=data.email_enabled,
+        sms_enabled=data.sms_enabled,
+        push_enabled=data.push_enabled,
+        in_app_enabled=data.in_app_enabled,
+        whatsapp_enabled=data.whatsapp_enabled,
+        digest_mode=data.digest_mode,
+        digest_frequency=data.digest_frequency,
+        quiet_hours_start=data.quiet_hours_start,
+        quiet_hours_end=data.quiet_hours_end,
+    )
+    return NotificationPreferenceResponse.model_validate(preference)
+
+
 @router.get("/{notification_id}", response_model=NotificationResponse, response_model_by_alias=True)
 async def get_notification(
     notification_id: UUID,
@@ -90,7 +183,9 @@ async def get_notification(
     notification = await service.get_notification(notification_id)
 
     if not notification:
-        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
+        raise NotFoundException(
+            detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND"
+        )
 
     if notification.user_id != current_user.id:
         raise ForbiddenException(
@@ -101,7 +196,12 @@ async def get_notification(
     return NotificationResponse.model_validate(notification)
 
 
-@router.post("/", response_model=NotificationResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/",
+    response_model=NotificationResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_notification(
     data: NotificationCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -220,7 +320,9 @@ async def mark_single_notification_read(
     success = await service.mark_as_read(notification_id, current_user.id)
 
     if not success:
-        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
+        raise NotFoundException(
+            detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND"
+        )
 
     return {"status": "success"}
 
@@ -236,51 +338,16 @@ async def delete_notification(
     success = await service.delete_notification(notification_id, current_user.id)
 
     if not success:
-        raise NotFoundException(detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND")
+        raise NotFoundException(
+            detail="Notification not found", error_code="NOTIFICATION_NOT_FOUND"
+        )
 
 
-# Preferences endpoints
-
-@router.get("/preferences", response_model=list[NotificationPreferenceResponse], response_model_by_alias=True)
-async def get_preferences(
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-):
-    """Get user's notification preferences."""
-    service = NotificationService(db)
-    preferences = await service.get_user_preferences(
-        user_id=current_user.id,
-        organization_id=current_user.organization_id,
-    )
-    return [NotificationPreferenceResponse.model_validate(p) for p in preferences]
-
-
-@router.post("/preferences", response_model=NotificationPreferenceResponse, response_model_by_alias=True)
-async def create_preference(
-    data: NotificationPreferenceCreate,
-    db: AsyncSession = Depends(get_db_with_tenant),
-    current_user: User = Depends(get_current_user),
-):
-    """Create or update notification preference for a category."""
-    service = NotificationService(db)
-    preference = await service.update_user_preference(
-        user_id=current_user.id,
-        category=data.category,
-        organization_id=data.organization_id or current_user.organization_id,
-        email_enabled=data.email_enabled,
-        sms_enabled=data.sms_enabled,
-        push_enabled=data.push_enabled,
-        in_app_enabled=data.in_app_enabled,
-        whatsapp_enabled=data.whatsapp_enabled,
-        digest_mode=data.digest_mode,
-        digest_frequency=data.digest_frequency,
-        quiet_hours_start=data.quiet_hours_start,
-        quiet_hours_end=data.quiet_hours_end,
-    )
-    return NotificationPreferenceResponse.model_validate(preference)
-
-
-@router.put("/preferences/{category}", response_model=NotificationPreferenceResponse, response_model_by_alias=True)
+@router.put(
+    "/preferences/{category}",
+    response_model=NotificationPreferenceResponse,
+    response_model_by_alias=True,
+)
 async def update_preference(
     category: NotificationCategory,
     data: NotificationPreferenceUpdate,

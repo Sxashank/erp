@@ -33,6 +33,7 @@ class GSTRateService:
         self.session.add(rate)
         await self.session.flush()
         await self.session.refresh(rate)
+        await self.session.commit()
         return rate
 
     async def update(
@@ -53,6 +54,7 @@ class GSTRateService:
 
         await self.session.flush()
         await self.session.refresh(rate)
+        await self.session.commit()
         return rate
 
     async def get(self, id: UUID) -> GSTRate:
@@ -94,3 +96,4 @@ class GSTRateService:
             raise NotFoundException("GST rate not found")
         rate.soft_delete(deleted_by)
         await self.session.flush()
+        await self.session.commit()

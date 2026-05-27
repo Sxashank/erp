@@ -42,10 +42,8 @@ import {
   useUpdateSubventionScheme,
   useUtilizationCategories,
 } from '@/hooks/lending/useIif';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useToast } from '@/hooks/use-toast';
-import type { ClaimFrequency, EligibleLoanType } from '@/services/lending/iifApi';
-
-const ELIGIBLE_LOAN_TYPES: EligibleLoanType[] = ['TERM_LOAN_CAPEX', 'WORKING_CAPITAL'];
 
 const schemeSchema = z.object({
   schemeCode: z.string().trim().min(1, 'Code is required').max(64),
@@ -55,9 +53,7 @@ const schemeSchema = z.object({
   subventionRatePercent: z.coerce.number().min(0).max(100),
   maxSubventionPerBeneficiary: z.union([z.coerce.number().nonnegative(), z.literal('')]).optional(),
   schemeCorpus: z.union([z.coerce.number().nonnegative(), z.literal('')]).optional(),
-  eligibleLoanTypes: z
-    .array(z.enum(['TERM_LOAN_CAPEX', 'WORKING_CAPITAL']))
-    .min(1, 'Select at least one eligible loan type'),
+  eligibleLoanTypes: z.array(z.string().min(1)).min(1, 'Select at least one eligible loan type'),
   maxTenureTermLoanMonths: z.union([z.coerce.number().int().positive(), z.literal('')]).optional(),
   maxTenureWorkingCapitalMonths: z
     .union([z.coerce.number().int().positive(), z.literal('')])
@@ -65,7 +61,7 @@ const schemeSchema = z.object({
   schemeStartDate: z.string().min(1, 'Start date is required'),
   schemeEndDate: z.string().min(1, 'End date is required'),
   eligibilityWindowMonths: z.union([z.coerce.number().int().positive(), z.literal('')]).optional(),
-  claimFrequency: z.enum(['QUARTERLY', 'HALF_YEARLY', 'YEARLY']),
+  claimFrequency: z.string().min(1, 'Claim frequency is required'),
   npaDisqualificationDpdDays: z.coerce.number().int().nonnegative(),
   description: z.string().trim().optional(),
   isActive: z.boolean(),
@@ -90,6 +86,15 @@ function fieldInputValue(value: unknown): string | number {
   return String(value);
 }
 
+function toOptionRows(rows: { data: Record<string, unknown> }[] | undefined) {
+  return (
+    rows?.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.name ?? row.data.code ?? ''),
+    })) ?? []
+  );
+}
+
 export default function SchemeForm(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -100,6 +105,10 @@ export default function SchemeForm(): JSX.Element {
   const { data: categoriesData } = useUtilizationCategories(
     isEdit && id ? { schemeId: id } : undefined,
   );
+  const eligibleLoanTypesQuery = useLendingOptionRows('IIF_ELIGIBLE_LOAN_TYPE');
+  const claimFrequenciesQuery = useLendingOptionRows('IIF_CLAIM_FREQUENCY');
+  const eligibleLoanTypeOptions = toOptionRows(eligibleLoanTypesQuery.data?.items);
+  const claimFrequencyOptions = toOptionRows(claimFrequenciesQuery.data?.items);
   const linkedCategories = categoriesData?.items ?? [];
 
   const form = useForm<SchemeFormInput, unknown, SchemeFormValues>({
@@ -112,13 +121,13 @@ export default function SchemeForm(): JSX.Element {
       subventionRatePercent: 3,
       maxSubventionPerBeneficiary: 10000000000,
       schemeCorpus: 50000000000,
-      eligibleLoanTypes: ['TERM_LOAN_CAPEX', 'WORKING_CAPITAL'],
+      eligibleLoanTypes: [],
       maxTenureTermLoanMonths: 180,
       maxTenureWorkingCapitalMonths: 60,
       schemeStartDate: '2025-09-24',
       schemeEndDate: '2036-03-31',
       eligibilityWindowMonths: 36,
-      claimFrequency: 'QUARTERLY',
+      claimFrequency: '',
       npaDisqualificationDpdDays: 30,
       description: '',
       isActive: true,
@@ -150,6 +159,23 @@ export default function SchemeForm(): JSX.Element {
       isActive: s.isActive,
     });
   }, [schemeQuery.data, form]);
+
+  useEffect(() => {
+    if (isEdit) return;
+    const currentTypes = form.getValues('eligibleLoanTypes') ?? [];
+    if (currentTypes.length === 0 && eligibleLoanTypeOptions.length > 0) {
+      form.setValue(
+        'eligibleLoanTypes',
+        eligibleLoanTypeOptions.slice(0, 2).map((option) => option.value),
+        { shouldValidate: true },
+      );
+    }
+    if (!form.getValues('claimFrequency') && claimFrequencyOptions[0]) {
+      form.setValue('claimFrequency', claimFrequencyOptions[0].value, {
+        shouldValidate: true,
+      });
+    }
+  }, [claimFrequencyOptions, eligibleLoanTypeOptions, form, isEdit]);
 
   const createMut = useCreateSubventionScheme({
     onSuccess: () => {
@@ -422,28 +448,28 @@ export default function SchemeForm(): JSX.Element {
                   <FormItem className="md:col-span-2">
                     <FormLabel>Eligible Loan Types *</FormLabel>
                     <div className="flex flex-wrap gap-4">
-                      {ELIGIBLE_LOAN_TYPES.map((lt) => (
+                      {eligibleLoanTypeOptions.map((option) => (
                         <FormField
-                          key={lt}
+                          key={option.value}
                           control={form.control}
                           name="eligibleLoanTypes"
                           render={({ field }) => (
                             <FormItem className="flex items-center gap-2 space-y-0">
                               <FormControl>
                                 <Checkbox
-                                  checked={field.value?.includes(lt)}
+                                  checked={field.value?.includes(option.value)}
                                   onCheckedChange={(checked) => {
                                     if (checked) {
-                                      field.onChange([...(field.value ?? []), lt]);
+                                      field.onChange([...(field.value ?? []), option.value]);
                                     } else {
-                                      field.onChange((field.value ?? []).filter((v) => v !== lt));
+                                      field.onChange(
+                                        (field.value ?? []).filter((v) => v !== option.value),
+                                      );
                                     }
                                   }}
                                 />
                               </FormControl>
-                              <FormLabel className="font-normal">
-                                {lt === 'TERM_LOAN_CAPEX' ? 'Term Loan / CapEx' : 'Working Capital'}
-                              </FormLabel>
+                              <FormLabel className="font-normal">{option.label}</FormLabel>
                             </FormItem>
                           )}
                         />
@@ -558,9 +584,11 @@ export default function SchemeForm(): JSX.Element {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="QUARTERLY">Quarterly</SelectItem>
-                        <SelectItem value="HALF_YEARLY">Half-yearly</SelectItem>
-                        <SelectItem value="YEARLY">Yearly</SelectItem>
+                        {claimFrequencyOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />

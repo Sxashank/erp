@@ -1,11 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  Plus,
-  Trash2,
-  Save,
-  ArrowUp,
-  ArrowDown,
-} from 'lucide-react';
+import { Plus, Trash2, Save, ArrowUp, ArrowDown } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -48,16 +42,7 @@ import {
 } from '@/services/api';
 import { useActiveOrganizationId } from '@/stores/organizationStore';
 
-
-import { logger } from "@/lib/logger";
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
+import { logger } from '@/lib/logger';
 const levelSchema = z.object({
   level: z.number(),
   roleId: z.string().min(1, 'Role is required'),
@@ -71,7 +56,10 @@ const matrixSchema = z.object({
   description: z.string().optional(),
   transactionType: z.string().min(1, 'Transaction type is required'),
   isActive: z.boolean(),
-  levels: z.array(levelSchema).min(1, 'At least one level is required').max(3, 'Maximum three levels are supported'),
+  levels: z
+    .array(levelSchema)
+    .min(1, 'At least one level is required')
+    .max(3, 'Maximum three levels are supported'),
 });
 
 type MatrixFormData = z.infer<typeof matrixSchema>;
@@ -112,9 +100,7 @@ export default function ApprovalMatrixCreate() {
       description: '',
       transactionType: '',
       isActive: true,
-      levels: [
-        { level: 1, roleId: '', minAmount: 0, maxAmount: 100000, isOptional: false },
-      ],
+      levels: [{ level: 1, roleId: '', minAmount: 0, maxAmount: 100000, isOptional: false }],
     },
   });
 
@@ -155,9 +141,7 @@ export default function ApprovalMatrixCreate() {
       .getWorkflow(id)
       .then((response) => {
         const workflow = response.data;
-        const sortedLevels = [...workflow.levels].sort(
-          (a, b) => a.levelNumber - b.levelNumber,
-        );
+        const sortedLevels = [...workflow.levels].sort((a, b) => a.levelNumber - b.levelNumber);
         form.reset({
           name: workflow.workflowName,
           description: workflow.description || '',
@@ -235,7 +219,8 @@ export default function ApprovalMatrixCreate() {
       logger.error('Failed to save approval matrix:', error);
       form.setError('root', {
         type: 'manual',
-        message: 'Unable to save approval matrix. Check for duplicate transaction type or permission issues.',
+        message:
+          'Unable to save approval matrix. Check for duplicate transaction type or permission issues.',
       });
     } finally {
       setIsSubmitting(false);
@@ -268,7 +253,7 @@ export default function ApprovalMatrixCreate() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={isEditMode ? 'Edit Approval Matrix' : 'Create Approval Matrix'}
         subtitle={
@@ -310,7 +295,7 @@ export default function ApprovalMatrixCreate() {
               <CardDescription>Configure the approval matrix details</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="name"
@@ -342,7 +327,7 @@ export default function ApprovalMatrixCreate() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {transactionTypes.map(type => (
+                          {transactionTypes.map((type) => (
                             <SelectItem key={type.id} value={type.id}>
                               {type.name}
                             </SelectItem>
@@ -395,7 +380,7 @@ export default function ApprovalMatrixCreate() {
               <CardTitle className="flex items-center justify-between">
                 <span>Approval Levels</span>
                 <Button type="button" variant="outline" size="sm" onClick={addLevel}>
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Level
                 </Button>
               </CardTitle>
@@ -430,7 +415,7 @@ export default function ApprovalMatrixCreate() {
                           >
                             <ArrowUp className="h-3 w-3" />
                           </Button>
-                          <span className="font-bold w-6 text-center">{index + 1}</span>
+                          <span className="w-6 text-center font-bold">{index + 1}</span>
                           <Button
                             type="button"
                             variant="ghost"
@@ -453,7 +438,7 @@ export default function ApprovalMatrixCreate() {
                                 <SelectValue placeholder="Select role" />
                               </SelectTrigger>
                               <SelectContent>
-                                {roles.map(role => (
+                                {roles.map((role) => (
                                   <SelectItem key={role.id} value={role.id}>
                                     {role.name}
                                   </SelectItem>
@@ -518,21 +503,22 @@ export default function ApprovalMatrixCreate() {
               </Table>
 
               {/* Preview */}
-              <div className="mt-6 p-4 bg-muted rounded-lg">
-                <h4 className="font-medium mb-3">Approval Flow Preview</h4>
-                <div className="flex items-center flex-wrap gap-2">
+              <div className="mt-6 rounded-lg bg-muted p-4">
+                <h4 className="mb-3 font-medium">Approval Flow Preview</h4>
+                <div className="flex flex-wrap items-center gap-2">
                   {fields.map((field, index) => {
                     const roleId = form.watch(`levels.${index}.roleId`);
-                    const role = roles.find(r => r.id === roleId);
+                    const role = roles.find((r) => r.id === roleId);
                     const minAmount = form.watch(`levels.${index}.minAmount`);
                     const maxAmount = form.watch(`levels.${index}.maxAmount`);
                     return (
                       <div key={field.id} className="flex items-center gap-2">
-                        <div className="bg-background border rounded-lg p-3 text-center">
+                        <div className="rounded-lg border bg-background p-3 text-center">
                           <div className="text-xs text-muted-foreground">Level {index + 1}</div>
                           <div className="font-medium">{role?.name || 'Not set'}</div>
                           <div className="text-xs text-muted-foreground">
-                            {formatCurrency(minAmount)} - {formatCurrency(maxAmount)}
+                            {formatIndianCompactCurrency(minAmount)} -{' '}
+                            {formatIndianCompactCurrency(maxAmount)}
                           </div>
                         </div>
                         {index < fields.length - 1 && (
@@ -549,7 +535,7 @@ export default function ApprovalMatrixCreate() {
           {/* Actions */}
           <div className="flex gap-2">
             <Button type="submit" disabled={isSubmitting}>
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               {isSubmitting ? 'Saving...' : isEditMode ? 'Update Matrix' : 'Create Matrix'}
             </Button>
             <Button type="button" variant="ghost" onClick={() => navigate(-1)}>

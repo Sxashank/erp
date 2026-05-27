@@ -14,6 +14,8 @@ from app.models.dms.folder import (
     DMSFolderAccess,
 )
 
+from app.models.dms.filing import DocumentFilingRule
+
 from app.models.dms.tag import (
     DMSTag,
     DMSDocumentTag,
@@ -31,6 +33,7 @@ __all__ = [
     # Folder Models
     "DMSFolder",
     "DMSFolderAccess",
+    "DocumentFilingRule",
     # Tag Models
     "DMSTag",
     "DMSDocumentTag",

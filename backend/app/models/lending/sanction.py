@@ -24,19 +24,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.lending.enums import (
-    ChargeType,
     ConditionCategory,
     ConditionComplianceStatus,
     ConditionType,
     DayCountConvention,
-    InterestType,
-    RateResetFrequency,
-    RepaymentFrequency,
-    RepaymentMode,
     SanctionStatus,
-    SecurityCategory,
     SecurityStatus,
-    SecurityType,
 )
 
 if TYPE_CHECKING:
@@ -150,10 +143,10 @@ class LoanSanction(BaseModel):
     )
 
     # Interest terms
-    interest_type: Mapped[InterestType] = mapped_column(
-        Enum(InterestType),
+    interest_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="FIXED or FLOATING",
+        comment="Interest type code from mst_lending_option(RATE_TYPE)",
     )
     base_rate_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -177,10 +170,10 @@ class LoanSanction(BaseModel):
         nullable=False,
         comment="Effective interest rate at sanction",
     )
-    rate_reset_frequency: Mapped[RateResetFrequency | None] = mapped_column(
-        Enum(RateResetFrequency),
+    rate_reset_frequency: Mapped[str | None] = mapped_column(
+        String(80),
         nullable=True,
-        comment="Rate reset frequency for floating",
+        comment="Rate reset frequency code from mst_lending_option(RATE_RESET_FREQUENCY)",
     )
     first_rate_reset_date: Mapped[date | None] = mapped_column(
         Date,
@@ -197,15 +190,15 @@ class LoanSanction(BaseModel):
     )
 
     # Repayment terms
-    repayment_frequency: Mapped[RepaymentFrequency] = mapped_column(
-        Enum(RepaymentFrequency),
+    repayment_frequency: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="Repayment frequency",
+        comment="Repayment frequency code from mst_lending_option(REPAYMENT_FREQUENCY)",
     )
-    repayment_mode: Mapped[RepaymentMode] = mapped_column(
-        Enum(RepaymentMode),
+    repayment_mode: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        comment="Repayment mode - EMI, STRUCTURED, BULLET, etc.",
+        comment="Repayment mode code from mst_lending_option(REPAYMENT_MODE)",
     )
     repayment_start_date: Mapped[date | None] = mapped_column(
         Date,
@@ -679,23 +672,23 @@ class LoanSecurity(BaseModel):
     )
 
     # Classification
-    security_category: Mapped[SecurityCategory] = mapped_column(
-        Enum(SecurityCategory),
+    security_category: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
         index=True,
-        comment="PRIMARY, COLLATERAL, GUARANTEE",
+        comment="Security nature code from mst_lending_option(SECURITY_NATURE)",
     )
-    security_type: Mapped[SecurityType] = mapped_column(
-        Enum(SecurityType),
+    security_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
         index=True,
-        comment="Type of security - IMMOVABLE_PROPERTY, SHARES, etc.",
+        comment="Security category/type code from mst_lending_option(SECURITY_CATEGORY)",
     )
-    charge_type: Mapped[ChargeType] = mapped_column(
-        Enum(ChargeType),
+    charge_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=ChargeType.FIRST,
-        comment="FIRST, SECOND, PARI_PASSU, SUBSERVIENT",
+        default="FIRST",
+        comment="Charge type code from mst_lending_option(CHARGE_TYPE)",
     )
 
     # Security description

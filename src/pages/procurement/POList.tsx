@@ -33,15 +33,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock PO data
 const purchaseOrders = [
   {
@@ -121,7 +112,8 @@ export default function POList() {
   const [statusFilter, setStatusFilter] = useState('all');
 
   const filteredPOs = purchaseOrders.filter((po) => {
-    const matchesSearch = po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch =
+      po.poNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       po.vendor.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -132,13 +124,33 @@ export default function POList() {
       case 'DRAFT':
         return <Badge variant="outline">Draft</Badge>;
       case 'PENDING_APPROVAL':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pending Approval</Badge>;
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Pending Approval
+          </Badge>
+        );
       case 'APPROVED':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Approved</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <CheckCircle className="mr-1 h-3 w-3" />
+            Approved
+          </Badge>
+        );
       case 'COMPLETED':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800"><Truck className="h-3 w-3 mr-1" />Completed</Badge>;
+        return (
+          <Badge variant="default" className="bg-blue-100 text-blue-800">
+            <Truck className="mr-1 h-3 w-3" />
+            Completed
+          </Badge>
+        );
       case 'CANCELLED':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Cancelled
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -151,7 +163,11 @@ export default function POList() {
       case 'PARTIAL':
         return <Badge variant="secondary">Partial</Badge>;
       case 'COMPLETE':
-        return <Badge variant="default" className="bg-green-100 text-green-800">Complete</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            Complete
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -160,50 +176,54 @@ export default function POList() {
   // Statistics
   const stats = {
     total: purchaseOrders.length,
-    pending: purchaseOrders.filter(p => p.status === 'PENDING_APPROVAL').length,
-    approved: purchaseOrders.filter(p => p.status === 'APPROVED').length,
-    totalValue: purchaseOrders.filter(p => p.status !== 'CANCELLED').reduce((sum, p) => sum + p.totalAmount, 0),
+    pending: purchaseOrders.filter((p) => p.status === 'PENDING_APPROVAL').length,
+    approved: purchaseOrders.filter((p) => p.status === 'APPROVED').length,
+    totalValue: purchaseOrders
+      .filter((p) => p.status !== 'CANCELLED')
+      .reduce((sum, p) => sum + p.totalAmount, 0),
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Purchase Orders"
         subtitle="Manage purchase orders"
         actions={
           <Link to="/admin/procurement/po/new">
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Create PO
+              <Plus className="mr-2 h-4 w-4" />
+              Create Purchase Order
             </Button>
           </Link>
         }
       />
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total POs</div>
-            <div className="text-2xl font-bold mt-1">{stats.total}</div>
+            <div className="mt-1 text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Pending Approval</div>
-            <div className="text-2xl font-bold mt-1 text-yellow-600">{stats.pending}</div>
+            <div className="mt-1 text-2xl font-bold text-yellow-600">{stats.pending}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Approved</div>
-            <div className="text-2xl font-bold mt-1 text-green-600">{stats.approved}</div>
+            <div className="mt-1 text-2xl font-bold text-green-600">{stats.approved}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total Value</div>
-            <div className="text-2xl font-bold mt-1">{formatCurrency(stats.totalValue)}</div>
+            <div className="mt-1 text-2xl font-bold">
+              {formatIndianCompactCurrency(stats.totalValue)}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -212,7 +232,7 @@ export default function POList() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <div className="flex min-w-[200px] flex-1 items-center gap-2">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by PO number or vendor..."
@@ -238,7 +258,7 @@ export default function POList() {
               </Select>
             </div>
             <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Export
             </Button>
           </div>
@@ -279,7 +299,10 @@ export default function POList() {
                   </TableCell>
                   <TableCell>
                     {po.rfqNumber ? (
-                      <Link to={`/admin/procurement/rfq/${po.rfqNumber}`} className="text-primary hover:underline">
+                      <Link
+                        to={`/admin/procurement/rfq/${po.rfqNumber}`}
+                        className="text-primary hover:underline"
+                      >
                         {po.rfqNumber}
                       </Link>
                     ) : (
@@ -287,7 +310,7 @@ export default function POList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(po.totalAmount)}
+                    {formatIndianCompactCurrency(po.totalAmount)}
                   </TableCell>
                   <TableCell className="text-center">{po.items}</TableCell>
                   <TableCell>{po.poDate}</TableCell>

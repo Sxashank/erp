@@ -2,9 +2,10 @@
 
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.exceptions import ConflictException, NotFoundException
+from app.core.exceptions import ConflictException, NotFoundException, ValidationException
 from app.models.lending.entity import (
     Entity,
     EntityAddress,
@@ -13,7 +14,8 @@ from app.models.lending.entity import (
     EntityFinancial,
     EntityRelation,
 )
-from app.models.lending.enums import EntityStatus, EntityType, RiskCategory
+from app.models.lending.enums import EntityStatus
+from app.models.lending.masters import LendingOption
 from app.repositories.lending.entity_repo import (
     EntityAddressRepository,
     EntityBankAccountRepository,
@@ -50,34 +52,91 @@ class EntityService:
         self.relation_repo = EntityRelationRepository(session)
         self.financial_repo = EntityFinancialRepository(session)
 
+    async def _validate_option_code(
+        self,
+        organization_id: UUID,
+        option_group: str,
+        code: str | None,
+        label: str,
+    ) -> str | None:
+        """Validate a tenant-controlled lending option and return its normalised code."""
+        if code is None:
+            return None
+        normalised = code.strip().upper()
+        if not normalised:
+            raise ValidationException(f"{label} is required")
+        result = await self.session.execute(
+            select(LendingOption.id).where(
+                LendingOption.organization_id == organization_id,
+                LendingOption.option_group == option_group,
+                LendingOption.code == normalised,
+                LendingOption.is_active == True,
+                LendingOption.deleted_at.is_(None),
+            )
+        )
+        if result.scalar_one_or_none() is None:
+            raise ValidationException(
+                f"{label} '{normalised}' is not configured in lending masters"
+            )
+        return normalised
+
+    async def _validate_entity_policy(self, organization_id: UUID, data: dict) -> None:
+        if "entity_type" in data:
+            data["entity_type"] = await self._validate_option_code(
+                organization_id,
+                "ENTITY_TYPE_CORPORATE",
+                data.get("entity_type"),
+                "Entity type",
+            )
+        if "industry_sector" in data and data.get("industry_sector") is not None:
+            data["industry_sector"] = await self._validate_option_code(
+                organization_id,
+                "INDUSTRY_SECTOR",
+                data.get("industry_sector"),
+                "Industry sector",
+            )
+        if "risk_category" in data:
+            data["risk_category"] = await self._validate_option_code(
+                organization_id,
+                "RISK_GRADE",
+                data.get("risk_category"),
+                "Risk category",
+            )
+
     # =========================================================================
     # Entity CRUD
     # =========================================================================
 
     async def create_entity(self, data: EntityCreate, created_by: UUID) -> Entity:
         """Create a new entity/borrower."""
+        create_data = data.model_dump()
+        if create_data.get("organization_id") is None:
+            raise ValidationException("Entity organization is required")
+        organization_id = create_data["organization_id"]
+        await self._validate_entity_policy(organization_id, create_data)
+
         # Validate PAN uniqueness
-        existing_pan = await self.repo.get_by_pan(data.pan, data.organization_id)
+        existing_pan = await self.repo.get_by_pan(data.pan, organization_id)
         if existing_pan:
             raise ConflictException(f"Entity with PAN '{data.pan}' already exists")
 
         # Validate CIN uniqueness for corporates
         if data.cin:
-            existing_cin = await self.repo.get_by_cin(data.cin, data.organization_id)
+            existing_cin = await self.repo.get_by_cin(data.cin, organization_id)
             if existing_cin:
                 raise ConflictException(f"Entity with CIN '{data.cin}' already exists")
 
         # Validate GSTIN uniqueness
         if data.gstin:
-            existing_gstin = await self.repo.get_by_gstin(data.gstin, data.organization_id)
+            existing_gstin = await self.repo.get_by_gstin(data.gstin, organization_id)
             if existing_gstin:
                 raise ConflictException(f"Entity with GSTIN '{data.gstin}' already exists")
 
         # Generate entity code
-        entity_code = await self.repo.generate_entity_code(data.organization_id)
+        entity_code = await self.repo.generate_entity_code(organization_id)
 
         entity = Entity(
-            **data.model_dump(),
+            **create_data,
             entity_code=entity_code,
             created_by=created_by,
         )
@@ -105,6 +164,7 @@ class EntityService:
                 raise ConflictException(f"Entity with CIN '{data.cin}' already exists")
 
         update_data = data.model_dump(exclude_unset=True)
+        await self._validate_entity_policy(entity.organization_id, update_data)
         for field, value in update_data.items():
             setattr(entity, field, value)
         entity.updated_by = updated_by
@@ -141,9 +201,9 @@ class EntityService:
         limit: int = 100,
         include_inactive: bool = False,
         search: str | None = None,
-        entity_type: EntityType | None = None,
+        entity_type: str | None = None,
         status: EntityStatus | None = None,
-        risk_category: RiskCategory | None = None,
+        risk_category: str | None = None,
         relationship_manager_id: UUID | None = None,
     ) -> tuple[list[Entity], int]:
         """Get all entities for an organization."""
@@ -162,7 +222,7 @@ class EntityService:
     async def get_active_entities(
         self,
         organization_id: UUID,
-        entity_type: EntityType | None = None,
+        entity_type: str | None = None,
     ) -> list[Entity]:
         """Get active entities for dropdowns."""
         return await self.repo.get_active_entities(organization_id, entity_type)
@@ -187,6 +247,12 @@ class EntityService:
             raise NotFoundException("Entity not found")
 
         create_data = data.model_dump()
+        create_data["contact_type"] = await self._validate_option_code(
+            entity.organization_id,
+            "CONTACT_TYPE",
+            create_data.get("contact_type"),
+            "Contact type",
+        )
         name = create_data.pop("name")
         name_parts = name.split()
         create_data["first_name"] = name_parts[0]
@@ -210,6 +276,16 @@ class EntityService:
             raise NotFoundException("Contact not found")
 
         update_data = data.model_dump(exclude_unset=True)
+        if "contact_type" in update_data:
+            entity = await self.repo.get(contact.entity_id)
+            if not entity:
+                raise NotFoundException("Entity not found")
+            update_data["contact_type"] = await self._validate_option_code(
+                entity.organization_id,
+                "CONTACT_TYPE",
+                update_data.get("contact_type"),
+                "Contact type",
+            )
         if "name" in update_data:
             name = update_data.pop("name")
             name_parts = name.split()
@@ -247,8 +323,16 @@ class EntityService:
         if not entity:
             raise NotFoundException("Entity not found")
 
+        create_data = data.model_dump()
+        create_data["address_type"] = await self._validate_option_code(
+            entity.organization_id,
+            "ADDRESS_TYPE",
+            create_data.get("address_type"),
+            "Address type",
+        )
+
         address = EntityAddress(
-            **data.model_dump(),
+            **create_data,
             created_by=created_by,
         )
         self.session.add(address)
@@ -265,6 +349,16 @@ class EntityService:
             raise NotFoundException("Address not found")
 
         update_data = data.model_dump(exclude_unset=True)
+        if "address_type" in update_data:
+            entity = await self.repo.get(address.entity_id)
+            if not entity:
+                raise NotFoundException("Entity not found")
+            update_data["address_type"] = await self._validate_option_code(
+                entity.organization_id,
+                "ADDRESS_TYPE",
+                update_data.get("address_type"),
+                "Address type",
+            )
         for field, value in update_data.items():
             setattr(address, field, value)
         address.updated_by = updated_by
@@ -299,6 +393,14 @@ class EntityService:
         if not entity:
             raise NotFoundException("Entity not found")
 
+        create_data = data.model_dump()
+        create_data["account_type"] = await self._validate_option_code(
+            entity.organization_id,
+            "BANK_ACCOUNT_TYPE",
+            create_data.get("account_type"),
+            "Bank account type",
+        )
+
         # If setting as primary, unset other primary accounts
         if data.is_primary:
             existing_accounts = await self.bank_account_repo.get_by_entity(data.entity_id)
@@ -307,7 +409,7 @@ class EntityService:
                     account.is_primary = False
 
         bank_account = EntityBankAccount(
-            **data.model_dump(),
+            **create_data,
             created_by=created_by,
         )
         self.session.add(bank_account)
@@ -331,6 +433,16 @@ class EntityService:
                     account.is_primary = False
 
         update_data = data.model_dump(exclude_unset=True)
+        if "account_type" in update_data:
+            entity = await self.repo.get(bank_account.entity_id)
+            if not entity:
+                raise NotFoundException("Entity not found")
+            update_data["account_type"] = await self._validate_option_code(
+                entity.organization_id,
+                "BANK_ACCOUNT_TYPE",
+                update_data.get("account_type"),
+                "Bank account type",
+            )
         for field, value in update_data.items():
             setattr(bank_account, field, value)
         bank_account.updated_by = updated_by

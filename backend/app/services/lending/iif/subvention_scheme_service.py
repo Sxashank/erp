@@ -23,6 +23,7 @@ from app.core.exceptions import (
 )
 from app.models.auth.user import User
 from app.models.lending.iif.subvention_scheme import SubventionScheme
+from app.models.lending.masters import LendingOption
 from app.schemas.lending.iif import (
     SubventionSchemeCreate,
     SubventionSchemeUpdate,
@@ -41,6 +42,32 @@ class SubventionSchemeService:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+
+    async def _validate_option_codes(
+        self,
+        organization_id: UUID,
+        option_group: str,
+        codes: list[str],
+        label: str,
+    ) -> None:
+        if not codes:
+            return
+        result = await self.session.execute(
+            select(LendingOption.code).where(
+                LendingOption.organization_id == organization_id,
+                LendingOption.option_group == option_group,
+                LendingOption.code.in_(codes),
+                LendingOption.is_active.is_(True),
+                LendingOption.deleted_at.is_(None),
+            )
+        )
+        configured = set(result.scalars().all())
+        missing = sorted(set(codes) - configured)
+        if missing:
+            raise BadRequestException(
+                f"{label} option(s) are not configured: {', '.join(missing)}",
+                error_code="LENDING_MASTER_OPTION_NOT_CONFIGURED",
+            )
 
     # =========================================================================
     # Create
@@ -63,6 +90,19 @@ class SubventionSchemeService:
                 "scheme_end_date must be on or after scheme_start_date",
                 error_code="INVALID_SCHEME_DATES",
             )
+
+        await self._validate_option_codes(
+            current_user.organization_id,
+            "IIF_ELIGIBLE_LOAN_TYPE",
+            list(data.eligible_loan_types),
+            "Eligible loan type",
+        )
+        await self._validate_option_codes(
+            current_user.organization_id,
+            "IIF_CLAIM_FREQUENCY",
+            [data.claim_frequency],
+            "Claim frequency",
+        )
 
         # Per-org uniqueness on scheme_code (matches the DB unique index).
         existing = await self.session.execute(
@@ -203,6 +243,21 @@ class SubventionSchemeService:
             raise BadRequestException(
                 "scheme_end_date must be on or after scheme_start_date",
                 error_code="INVALID_SCHEME_DATES",
+            )
+
+        if data.eligible_loan_types is not None:
+            await self._validate_option_codes(
+                organization_id,
+                "IIF_ELIGIBLE_LOAN_TYPE",
+                list(data.eligible_loan_types),
+                "Eligible loan type",
+            )
+        if data.claim_frequency is not None:
+            await self._validate_option_codes(
+                organization_id,
+                "IIF_CLAIM_FREQUENCY",
+                [data.claim_frequency],
+                "Claim frequency",
             )
 
         scheme.updated_by = current_user.id

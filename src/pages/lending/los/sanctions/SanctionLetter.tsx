@@ -7,7 +7,7 @@
  * is extended to include them via the EntityDetailResponse join.
  */
 
-import { Download, ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Download, FolderCheck } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 
 import { ErrorState } from '@/components/common/ErrorState';
@@ -19,12 +19,17 @@ import { PrintButton } from '@/components/lending/common/PrintButton';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useGenerateDocument } from '@/hooks/useDocumentStudio';
 import { useSanction } from '@/hooks/lending/useSanction';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 
 export default function SanctionLetter() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { data: sanction, isLoading, isError, error, refetch } = useSanction(id);
+  const generateDocument = useGenerateDocument();
 
   if (isLoading) {
     return (
@@ -60,9 +65,54 @@ export default function SanctionLetter() {
               Back
             </Button>
             <PrintButton />
-            <Button variant="outline">
+            <Button
+              variant="outline"
+              disabled={generateDocument.isPending}
+              onClick={() =>
+                generateDocument.mutate(
+                  {
+                    module: 'LENDING',
+                    documentType: 'SANCTION_LETTER',
+                    documentSubtype: 'APPROVAL',
+                    entityType: 'sanction',
+                    entityId: sanction.id,
+                    generatedFrom: 'LOS_SANCTION',
+                    businessNumber: sanction.sanctionNumber,
+                    fileName: `SANCTION_${sanction.sanctionNumber.replace(/\//g, '_')}.pdf`,
+                    context: {
+                      organization: { name: 'SMFC ERP' },
+                      entity: {
+                        entityCode: sanction.entityId.slice(0, 8),
+                        legalName: sanction.entityName ?? 'Borrower',
+                      },
+                      sanction: {
+                        sanctionNumber: sanction.sanctionNumber,
+                        sanctionedAmount: sanction.sanctionedAmount,
+                        validityDate: sanction.validityDate,
+                      },
+                      loanAccount: {
+                        accountNumber: sanction.sanctionNumber,
+                        interestRate: sanction.effectiveRate,
+                      },
+                    },
+                  },
+                  {
+                    onSuccess: (document) =>
+                      toast({
+                        title: 'Sanction letter filed',
+                        description: `DMS document ${document.dmsDocumentId.slice(0, 8)} created.`,
+                      }),
+                    onError: (mutationError) => showErrorToast(mutationError, toast),
+                  },
+                )
+              }
+            >
+              <FolderCheck className="mr-2 h-4 w-4" />
+              Generate & File
+            </Button>
+            <Button variant="outline" onClick={() => window.print()}>
               <Download className="mr-2 h-4 w-4" />
-              Download PDF
+              Print PDF
             </Button>
           </div>
         }

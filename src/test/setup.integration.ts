@@ -34,9 +34,8 @@ if (
 ) {
   Element.prototype.hasPointerCapture = (() => false) as Element['hasPointerCapture'];
   Element.prototype.releasePointerCapture = (() => undefined) as Element['releasePointerCapture'];
-  (
-    Element.prototype as unknown as { setPointerCapture: (id: number) => void }
-  ).setPointerCapture = () => undefined;
+  (Element.prototype as unknown as { setPointerCapture: (id: number) => void }).setPointerCapture =
+    () => undefined;
 }
 if (!('matchMedia' in window)) {
   Object.defineProperty(window, 'matchMedia', {
@@ -85,10 +84,10 @@ beforeEach(() => {
       id: TEST_USER.id,
       username: TEST_USER.username,
       email: TEST_USER.email,
-      fullName: TEST_USER.full_name,
-      organizationId: TEST_USER.organization_id,
-      defaultUnitId: TEST_USER.default_unit_id,
-      mfaEnabled: TEST_USER.mfa_enabled,
+      fullName: TEST_USER.fullName,
+      organizationId: TEST_USER.organizationId,
+      defaultUnitId: TEST_USER.defaultUnitId,
+      mfaEnabled: TEST_USER.mfaEnabled,
       roles: TEST_USER.roles.map((r) => r.code),
     },
     permissions: new Set(TEST_USER.permissions),

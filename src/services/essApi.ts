@@ -50,7 +50,11 @@ api.interceptors.response.use(
           });
           useEssAuthStore
             .getState()
-            .setSession(response.data.access_token, response.data.refresh_token, response.data.user);
+            .setSession(
+              response.data.access_token,
+              response.data.refresh_token,
+              response.data.user,
+            );
           originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
           return api(originalRequest);
         } catch (_refreshError) {
@@ -152,13 +156,15 @@ function normalizeDashboard(raw: RawPayload): ESSDashboard {
       pending_regularizations: 0,
       pending_declarations: raw.pending_requests ?? 0,
     },
-    recent_payslip: raw.recent_payslip ?? (Object.keys(latestPayslip).length
-      ? {
-          month: latestPayslip.period ?? '',
-          net_salary: latestPayslip.net ?? 0,
-          payslip_id: latestPayslip.id ?? '',
-        }
-      : undefined),
+    recent_payslip:
+      raw.recent_payslip ??
+      (Object.keys(latestPayslip).length
+        ? {
+            month: latestPayslip.period ?? '',
+            net_salary: latestPayslip.net ?? 0,
+            payslip_id: latestPayslip.id ?? '',
+          }
+        : undefined),
     announcements: raw.announcements ?? [],
   } as unknown as ESSDashboard;
 }
@@ -167,7 +173,7 @@ function listResponse<T extends { data: unknown }>(response: T) {
   const data = response.data;
   const items = Array.isArray(data)
     ? data
-    : (data as { items?: unknown[] } | null | undefined)?.items ?? [];
+    : ((data as { items?: unknown[] } | null | undefined)?.items ?? []);
   return {
     ...response,
     data: { items },
@@ -202,14 +208,234 @@ function normalizeTaxCalculation(raw: RawPayload): TaxCalculation {
   } as unknown as TaxCalculation;
 }
 
+export interface ESSAssignedAsset {
+  id: string;
+  assetCode: string;
+  assetName: string;
+  category: string;
+  status: string;
+  serialNumber?: string | null;
+  assignedDate: string;
+  location?: string | null;
+  department?: string | null;
+  totalCost: number;
+  warrantyExpiryDate?: string | null;
+  insuranceExpiryDate?: string | null;
+  returnRequired: boolean;
+}
+
+export interface ESSAssignedAssetsResponse {
+  items: ESSAssignedAsset[];
+  totalAssets: number;
+  totalAssetValue: number;
+}
+
+export interface ESSTrainingSummary {
+  completedPrograms: number;
+  upcomingPrograms: number;
+  mandatoryPrograms: number;
+  feedbackPending: number;
+  totalHoursCompleted: number;
+}
+
+export interface ESSTrainingProgram {
+  programId: string;
+  programCode: string;
+  title: string;
+  category: string;
+  mode: string;
+  trainerName: string;
+  startDate: string;
+  endDate: string;
+  durationHours: number;
+  location: string;
+  status: string;
+  nominationStatus: string;
+  attendanceMarked: boolean;
+  feedbackSubmitted: boolean;
+  certificateProvided: boolean;
+}
+
+export interface ESSTrainingListResponse {
+  summary: ESSTrainingSummary;
+  items: ESSTrainingProgram[];
+}
+
+export interface ESSTrainingFeedbackDetail {
+  id: string;
+  overallRating: number;
+  contentRating: number;
+  trainerRating: number;
+  facilitiesRating: number;
+  relevanceRating: number;
+  wouldRecommend: boolean;
+  strengths?: string | null;
+  improvements?: string | null;
+  comments?: string | null;
+  submittedOn: string;
+}
+
+export interface ESSTrainingDetailResponse {
+  programId: string;
+  programCode: string;
+  title: string;
+  description: string;
+  category: string;
+  mode: string;
+  trainerType: string;
+  trainerName: string;
+  trainerContact?: string | null;
+  startDate: string;
+  endDate: string;
+  durationHours: number;
+  location: string;
+  isMandatory: boolean;
+  certificateProvided: boolean;
+  nominationStatus: string;
+  attendanceMarked: boolean;
+  feedback?: ESSTrainingFeedbackDetail | null;
+}
+
+export interface ESSPerformanceGoal {
+  id: string;
+  employeeId: string;
+  goalNumber: number;
+  title: string;
+  description?: string | null;
+  category?: string | null;
+  weightage: number;
+  targetValue?: string | null;
+  measurementCriteria?: string | null;
+  startDate?: string | null;
+  dueDate?: string | null;
+  status: string;
+  progressPercent: number;
+  achievementValue?: string | null;
+  selfRating?: number | null;
+  selfComments?: string | null;
+  managerRating?: number | null;
+  managerComments?: string | null;
+  finalRating?: number | null;
+}
+
+export interface ESSPerformancePacket {
+  appraisal?: {
+    cycle: {
+      id: string;
+      code: string;
+      name: string;
+      cycleType: string;
+      startDate: string;
+      endDate: string;
+      goalSettingEnd?: string | null;
+      selfAppraisalEnd?: string | null;
+      managerReviewEnd?: string | null;
+      status: string;
+      eligibleEmployees: number;
+      completedAppraisals: number;
+      pendingSelfAppraisal: number;
+      pendingManagerReview: number;
+      ratingScale: number;
+      weightageGoals: number;
+      weightageCompetencies: number;
+      allowSelfRating: boolean;
+      allowPeerFeedback: boolean;
+    };
+    employee: {
+      employeeId: string;
+      employeeCode: string;
+      employeeName: string;
+      department?: string | null;
+      designation?: string | null;
+      reviewerName?: string | null;
+      status: string;
+      goalCount: number;
+      submittedGoals: number;
+      completedGoals: number;
+      overallRating?: number | null;
+      finalGrade?: string | null;
+    };
+    appraisal: {
+      id: string;
+      status: string;
+      goalRating?: number | null;
+      competencyRating?: number | null;
+      overallRating?: number | null;
+      finalGrade?: string | null;
+      selfSummary?: string | null;
+      selfAchievements?: string | null;
+      selfChallenges?: string | null;
+      selfDevelopmentAreas?: string | null;
+      employeeComments?: string | null;
+      managerSummary?: string | null;
+      managerImprovements?: string | null;
+      managerRecommendations?: string | null;
+      calibrationNotes?: string | null;
+    };
+    goals: ESSPerformanceGoal[];
+  } | null;
+}
+
+export interface ESSPerformanceSelfAssessmentPayload {
+  goalId: string;
+  selfRating: number;
+  selfProgress: number;
+  selfComments: string;
+  achievementValue?: string;
+}
+
+export interface ESSPerformanceSelfAppraisalPayload {
+  goals: ESSPerformanceSelfAssessmentPayload[];
+  competencyRating: number;
+  selfSummary: string;
+  selfAchievements: string;
+  selfChallenges?: string;
+  selfDevelopmentAreas: string;
+  employeeComments?: string;
+}
+
+export interface AttendanceSummaryResponse {
+  month: string;
+  workingDays: number;
+  present: number;
+  absent: number;
+  leave: number;
+  holiday: number;
+  halfDay: number;
+  workFromHome: number;
+}
+
+export interface AttendanceRecordRow {
+  date: string;
+  status: string;
+  inTime?: string | null;
+  outTime?: string | null;
+  workingHours: number;
+  shift?: string | null;
+}
+
+export type AttendanceRecordsResponse = AttendanceRecordRow[];
+
+export interface AttendanceRegularizationRow {
+  id: string;
+  requestNumber: string;
+  attendanceDate: string;
+  regularizationType: string;
+  reason: string;
+  status: string;
+  approvedBy?: string | null;
+  approvedDate?: string | null;
+  approverRemarks?: string | null;
+  createdAt: string;
+}
+
 // ==================== Auth APIs ====================
 
 export const essAuthApi = {
   /**
    * Send OTP to mobile number
    */
-  sendOtp: (data: { mobile: string; purpose?: string }) =>
-    api.post('/ess/auth/send-otp', data),
+  sendOtp: (data: { mobile: string; purpose?: string }) => api.post('/ess/auth/send-otp', data),
 
   /**
    * Verify OTP and login
@@ -220,32 +446,32 @@ export const essAuthApi = {
   /**
    * Refresh access token
    */
-  refresh: (data: { refresh_token: string }) =>
-    api.post('/ess/auth/refresh', data),
+  refresh: (data: { refresh_token: string }) => api.post('/ess/auth/refresh', data),
 
   /**
    * Logout current session
    */
-  logout: () =>
-    api.post('/ess/auth/logout'),
+  logout: () => api.post('/ess/auth/logout'),
 
   /**
    * Get active sessions
    */
-  getSessions: () =>
-    api.get('/ess/auth/sessions'),
+  getSessions: () => api.get('/ess/auth/sessions'),
 
   /**
    * Revoke a specific session
    */
-  revokeSession: (sessionId: string) =>
-    api.delete(`/ess/auth/sessions/${sessionId}`),
+  revokeSession: (sessionId: string) => api.delete(`/ess/auth/sessions/${sessionId}`),
 
   /**
    * Register device for push notifications
    */
-  registerDevice: (data: { device_uuid: string; device_name: string; device_type?: string; fcm_token?: string }) =>
-    api.post('/ess/auth/devices', { device_type: 'web', ...data }),
+  registerDevice: (data: {
+    device_uuid: string;
+    device_name: string;
+    device_type?: string;
+    fcm_token?: string;
+  }) => api.post('/ess/auth/devices', { device_type: 'web', ...data }),
 };
 
 // ==================== Profile APIs ====================
@@ -255,14 +481,14 @@ export const essProfileApi = {
    * Get employee dashboard summary
    */
   getDashboard: () =>
-    api.get('/ess/profile/dashboard')
+    api
+      .get('/ess/profile/dashboard')
       .then((response) => ({ ...response, data: normalizeDashboard(response.data) })),
 
   /**
    * Get employee profile
    */
-  getProfile: () =>
-    api.get('/ess/profile/me'),
+  getProfile: () => api.get('/ess/profile/me'),
 
   /**
    * Request profile update
@@ -272,8 +498,7 @@ export const essProfileApi = {
     requested_values: Record<string, unknown>;
     change_reason?: string;
     attachments?: unknown;
-  }) =>
-    api.post('/ess/profile/update-requests', data),
+  }) => api.post('/ess/profile/update-requests', data),
 
   /**
    * Get profile update requests
@@ -285,19 +510,21 @@ export const essProfileApi = {
    * Get payslips
    */
   getPayslips: (params?: { year?: number; limit?: number }) =>
-    api.get('/ess/profile/payslips', {
-      params: {
-        financial_year: params?.year ? `${params.year}-${params.year + 1}` : undefined,
-        limit: params?.limit,
-      },
-    }).then((response) => ({
-      ...response,
-      data: {
-        items: Array.isArray(response.data)
-          ? (response.data as RawPayload[]).map(normalizePayslip)
-          : [],
-      },
-    })),
+    api
+      .get('/ess/profile/payslips', {
+        params: {
+          financial_year: params?.year ? `${params.year}-${params.year + 1}` : undefined,
+          limit: params?.limit,
+        },
+      })
+      .then((response) => ({
+        ...response,
+        data: {
+          items: Array.isArray(response.data)
+            ? (response.data as RawPayload[]).map(normalizePayslip)
+            : [],
+        },
+      })),
 
   /**
    * Download payslip PDF
@@ -309,20 +536,30 @@ export const essProfileApi = {
    * Get YTD salary summary
    */
   getYtdSummary: (financialYear?: string) =>
-    api.get('/ess/profile/ytd-summary', { params: { financial_year: financialYear } })
+    api
+      .get('/ess/profile/ytd-summary', { params: { financial_year: financialYear } })
       .then((response) => ({ ...response, data: normalizeYtdSummary(response.data) })),
 
   /**
    * Get leave balance
    */
-  getLeaveBalance: () =>
-    api.get('/ess/profile/leave-balance'),
+  getLeaveBalance: () => api.get('/ess/profile/leave-balance'),
 
   /**
    * Get attendance summary
    */
-  getAttendance: (params?: { month?: string; year?: number }) =>
-    api.get('/ess/profile/attendance', { params }),
+  getAttendanceRecords: (params: { fromDate: string; toDate: string }) =>
+    api.get<AttendanceRecordsResponse>('/ess/profile/attendance', {
+      params: {
+        from_date: params.fromDate,
+        to_date: params.toDate,
+      },
+    }),
+
+  getAttendanceSummary: (month: string) =>
+    api.get<AttendanceSummaryResponse>('/ess/profile/attendance/summary', {
+      params: { month },
+    }),
 };
 
 // ==================== Reimbursement APIs ====================
@@ -331,8 +568,7 @@ export const essReimbursementApi = {
   /**
    * Get reimbursement categories
    */
-  getCategories: () =>
-    api.get('/ess/reimbursements/categories'),
+  getCategories: () => api.get('/ess/reimbursements/categories'),
 
   /**
    * Get reimbursement claims
@@ -344,14 +580,12 @@ export const essReimbursementApi = {
     to_date?: string;
     limit?: number;
     offset?: number;
-  }) =>
-    api.get('/ess/reimbursements', { params }).then(listResponse),
+  }) => api.get('/ess/reimbursements', { params }).then(listResponse),
 
   /**
    * Get claim details
    */
-  getClaim: (claimId: string) =>
-    api.get(`/ess/reimbursements/${claimId}`),
+  getClaim: (claimId: string) => api.get(`/ess/reimbursements/${claimId}`),
 
   /**
    * Create new claim
@@ -364,8 +598,7 @@ export const essReimbursementApi = {
     description: string;
     claimed_amount: number;
     purpose?: string;
-  }) =>
-    api.post('/ess/reimbursements', data),
+  }) => api.post('/ess/reimbursements', data),
 
   /**
    * Update claim
@@ -376,21 +609,22 @@ export const essReimbursementApi = {
   /**
    * Delete draft claim
    */
-  deleteClaim: (claimId: string) =>
-    api.delete(`/ess/reimbursements/${claimId}`),
+  deleteClaim: (claimId: string) => api.delete(`/ess/reimbursements/${claimId}`),
 
   /**
    * Add line item to claim
    */
-  addLineItem: (claimId: string, data: {
-    expense_date: string;
-    description: string;
-    amount: number;
-    bill_number?: string;
-    bill_date?: string;
-    vendor_name?: string;
-  }) =>
-    api.post(`/ess/reimbursements/${claimId}/items`, data),
+  addLineItem: (
+    claimId: string,
+    data: {
+      expense_date: string;
+      description: string;
+      amount: number;
+      bill_number?: string;
+      bill_date?: string;
+      vendor_name?: string;
+    },
+  ) => api.post(`/ess/reimbursements/${claimId}/items`, data),
 
   /**
    * Update line item
@@ -407,14 +641,14 @@ export const essReimbursementApi = {
   /**
    * Submit claim for approval
    */
-  submitClaim: (claimId: string) =>
-    api.post(`/ess/reimbursements/${claimId}/submit`),
+  submitClaim: (claimId: string) => api.post(`/ess/reimbursements/${claimId}/submit`),
 
   /**
    * Get claim summary
    */
   getSummary: () =>
-    api.get('/ess/reimbursements/summary')
+    api
+      .get('/ess/reimbursements/summary')
       .then((response) => ({ ...response, data: normalizeReimbursementSummary(response.data) })),
 };
 
@@ -437,14 +671,12 @@ export const essHelpdeskApi = {
     to_date?: string;
     limit?: number;
     offset?: number;
-  }) =>
-    api.get('/ess/helpdesk', { params }).then(listResponse),
+  }) => api.get('/ess/helpdesk', { params }).then(listResponse),
 
   /**
    * Get ticket details
    */
-  getTicket: (ticketId: string) =>
-    api.get(`/ess/helpdesk/${ticketId}`),
+  getTicket: (ticketId: string) => api.get(`/ess/helpdesk/${ticketId}`),
 
   /**
    * Create new ticket
@@ -456,8 +688,7 @@ export const essHelpdeskApi = {
     category_id?: string;
     priority?: string;
     attachments?: unknown;
-  }) =>
-    api.post('/ess/helpdesk', data),
+  }) => api.post('/ess/helpdesk', data),
 
   /**
    * Add comment to ticket
@@ -486,8 +717,7 @@ export const essHelpdeskApi = {
   /**
    * Get ticket summary
    */
-  getSummary: () =>
-    api.get('/ess/helpdesk/summary'),
+  getSummary: () => api.get('/ess/helpdesk/summary'),
 };
 
 // ==================== IT Declaration APIs ====================
@@ -526,15 +756,17 @@ export const essITDeclarationApi = {
   /**
    * Add declaration item
    */
-  addItem: (declarationId: string, data: {
-    section_code: string;
-    particular: string;
-    declared_amount: number;
-    investment_date?: string;
-    policy_number?: string;
-    institution_name?: string;
-  }) =>
-    api.post(`/ess/it-declaration/${declarationId}/items`, data),
+  addItem: (
+    declarationId: string,
+    data: {
+      section_code: string;
+      particular: string;
+      declared_amount: number;
+      investment_date?: string;
+      policy_number?: string;
+      institution_name?: string;
+    },
+  ) => api.post(`/ess/it-declaration/${declarationId}/items`, data),
 
   /**
    * Update declaration item
@@ -551,12 +783,14 @@ export const essITDeclarationApi = {
   /**
    * Add HRA receipt
    */
-  addHRAReceipt: (declarationId: string, data: {
-    month: string;
-    rent_amount: number;
-    receipt_number?: string;
-  }) =>
-    api.post(`/ess/it-declaration/${declarationId}/hra-receipts`, data),
+  addHRAReceipt: (
+    declarationId: string,
+    data: {
+      month: string;
+      rent_amount: number;
+      receipt_number?: string;
+    },
+  ) => api.post(`/ess/it-declaration/${declarationId}/hra-receipts`, data),
 
   /**
    * Submit declaration
@@ -577,10 +811,12 @@ export const essITDeclarationApi = {
     declarationId: string,
     data: { gross_salary?: number; other_income?: number } = {},
   ) =>
-    api.post(`/ess/it-declaration/${declarationId}/calculate-tax`, {
-      gross_salary: data.gross_salary ?? 0,
-      other_income: data.other_income ?? 0,
-    }).then((response) => ({ ...response, data: normalizeTaxCalculation(response.data) })),
+    api
+      .post(`/ess/it-declaration/${declarationId}/calculate-tax`, {
+        gross_salary: data.gross_salary ?? 0,
+        other_income: data.other_income ?? 0,
+      })
+      .then((response) => ({ ...response, data: normalizeTaxCalculation(response.data) })),
 };
 
 // ==================== Attendance Regularization APIs ====================
@@ -591,30 +827,73 @@ export const essAttendanceApi = {
    */
   getRegularizations: (params?: {
     status?: string;
-    from_date?: string;
-    to_date?: string;
+    fromDate?: string;
+    toDate?: string;
     limit?: number;
     offset?: number;
   }) =>
-    api.get('/ess/it-declaration/regularizations', { params }),
+    api
+      .get<AttendanceRegularizationRow[]>('/ess/it-declaration/regularization', {
+        params: {
+          status: params?.status,
+          from_date: params?.fromDate,
+          to_date: params?.toDate,
+          limit: params?.limit,
+          offset: params?.offset,
+        },
+      })
+      .then((response) => response.data),
 
   /**
    * Create regularization request
    */
   createRegularization: (data: {
-    attendance_date: string;
-    regularization_type: string;
-    requested_in_time?: string;
-    requested_out_time?: string;
+    attendanceDate: string;
+    regularizationType: string;
+    requestedInTime?: string;
+    requestedOutTime?: string;
     reason: string;
   }) =>
-    api.post('/ess/it-declaration/regularizations', data),
+    api
+      .post<AttendanceRegularizationRow>('/ess/it-declaration/regularization', {
+        attendance_date: data.attendanceDate,
+        regularization_type: data.regularizationType,
+        requested_in_time: data.requestedInTime,
+        requested_out_time: data.requestedOutTime,
+        reason: data.reason,
+      })
+      .then((response) => response.data),
 
-  /**
-   * Cancel regularization request
-   */
-  cancelRegularization: (requestId: string) =>
-    api.delete(`/ess/it-declaration/regularizations/${requestId}`),
+  getAttendanceSummary: (month: string) =>
+    essProfileApi.getAttendanceSummary(month).then((response) => response.data),
+  getAttendanceRecords: (params: { fromDate: string; toDate: string }) =>
+    essProfileApi.getAttendanceRecords(params).then((response) => response.data),
+};
+
+export const essOperationsApi = {
+  getAssets: () =>
+    api.get<ESSAssignedAssetsResponse>('/ess/assets').then((response) => response.data),
+
+  getTrainingList: () =>
+    api.get<ESSTrainingListResponse>('/ess/training').then((response) => response.data),
+
+  getTrainingDetail: (programId: string) =>
+    api
+      .get<ESSTrainingDetailResponse>(`/ess/training/${programId}`)
+      .then((response) => response.data),
+
+  getPerformanceGoals: () =>
+    api.get<ESSPerformancePacket>('/ess/performance/goals').then((response) => response.data),
+
+  getSelfAppraisal: () =>
+    api
+      .get<ESSPerformancePacket>('/ess/performance/self-appraisal')
+      .then((response) => response.data),
+
+  submitSelfAppraisal: (payload: ESSPerformanceSelfAppraisalPayload) =>
+    api
+      .post<ESSPerformancePacket>('/ess/performance/self-appraisal', payload)
+      .then((response) => response.data),
 };
 
 export default {
@@ -624,4 +903,5 @@ export default {
   helpdesk: essHelpdeskApi,
   itDeclaration: essITDeclarationApi,
   attendance: essAttendanceApi,
+  operations: essOperationsApi,
 };

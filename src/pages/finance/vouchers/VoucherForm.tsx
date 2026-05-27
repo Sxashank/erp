@@ -24,7 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 import {
   vouchersApi,
   voucherTypesApi,
@@ -309,11 +309,7 @@ export function VoucherForm() {
   };
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   if (loading) {

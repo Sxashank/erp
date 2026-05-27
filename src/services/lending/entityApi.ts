@@ -61,13 +61,13 @@ export async function getEntities(filters?: EntityFilters): Promise<PaginatedRes
   const params = new URLSearchParams();
 
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.entityType) params.append('entity_type', filters.entityType);
+  if (filters?.entityType) params.append('entityType', filters.entityType);
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.riskCategory) params.append('risk_category', filters.riskCategory);
+  if (filters?.riskCategory) params.append('riskCategory', filters.riskCategory);
   if (filters?.relationshipManagerId)
-    params.append('relationship_manager_id', filters.relationshipManagerId);
+    params.append('relationshipManagerId', filters.relationshipManagerId);
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+  if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
   const response = await api.get<PaginatedResponse<Entity>>(`${BASE_URL}?${params.toString()}`);
   return response.data;
@@ -93,6 +93,22 @@ export async function updateEntity(
 
 export async function deleteEntity(entityId: string): Promise<void> {
   await api.delete(`${BASE_URL}/${entityId}`);
+}
+
+export interface EntityKycDocumentTypeOption {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  isMandatory: boolean;
+  hasExpiry: boolean;
+  allowedFileTypes: string[];
+  maxFileSizeMb: number;
+}
+
+export async function getEntityKYCDocumentTypes(): Promise<EntityKycDocumentTypeOption[]> {
+  const response = await api.get<EntityKycDocumentTypeOption[]>(`${BASE_URL}/kyc-document-types`);
+  return response.data;
 }
 
 // ============== Entity Contacts ==============
@@ -262,6 +278,7 @@ export const entityApi = {
   createEntity,
   updateEntity,
   deleteEntity,
+  getEntityKYCDocumentTypes,
 
   // Contacts
   getEntityContacts,

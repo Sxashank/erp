@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.core.constants import Permissions
 from app.models.auth.user import User
 from app.schemas.hris.employee import (
@@ -42,12 +42,22 @@ from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter()
 
 
+def _require_organization_id(current_user: User) -> UUID:
+    if not current_user.organization_id:
+        raise BadRequestException(
+            detail="Current user is not assigned to an organization",
+            error_code="ORGANIZATION_CONTEXT_REQUIRED",
+        )
+    return current_user.organization_id
+
+
 # ============================================
 # Employee CRUD
 # ============================================
-@router.get("", response_model=PaginatedResponse[EmployeeListResponse], response_model_by_alias=True)
+@router.get(
+    "", response_model=PaginatedResponse[EmployeeListResponse], response_model_by_alias=True
+)
 async def list_employees(
-    organization_id: Optional[UUID] = None,
     department_id: Optional[UUID] = None,
     designation_id: Optional[UUID] = None,
     unit_id: Optional[UUID] = None,
@@ -55,14 +65,14 @@ async def list_employees(
     employment_status: Optional[str] = None,
     search: Optional[str] = None,
     skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(RequirePermissions(Permissions.HRIS_EMPLOYEE_VIEW)),
 ):
     """List employees with filters."""
     service = EmployeeService(db)
     filters = EmployeeFilters(
-        organization_id=organization_id,
+        organization_id=_require_organization_id(current_user),
         department_id=department_id,
         designation_id=designation_id,
         unit_id=unit_id,
@@ -97,7 +107,12 @@ async def list_employees(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-@router.post("", response_model=EmployeeResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=EmployeeResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_employee(
     data: EmployeeCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -105,18 +120,26 @@ async def create_employee(
 ):
     """Create a new employee."""
     service = EmployeeService(db)
+    organization_id = _require_organization_id(current_user)
+    payload = data.model_copy(update={"organization_id": organization_id})
 
     # Check if employee code already exists
-    if data.employee_code:
-        existing = await service.get_by_code(data.organization_id, data.employee_code)
+    if payload.employee_code:
+        existing = await service.get_by_code(organization_id, payload.employee_code)
         if existing:
             raise BadRequestException(
                 detail="Employee code already exists",
                 error_code="EMPLOYEE_CODE_ALREADY_EXISTS",
             )
 
-    employee = await service.create(data, current_user.id)
-    return await _build_employee_response(service, employee)
+    employee = await service.create(payload, current_user.id)
+    hydrated_employee = await service.get(employee.id, include_related=True)
+    if not hydrated_employee:
+        raise NotFoundException(
+            detail="Employee not found after creation",
+            error_code="EMPLOYEE_NOT_FOUND",
+        )
+    return await _build_employee_response(service, hydrated_employee)
 
 
 @router.get("/{employee_id}", response_model=EmployeeResponse, response_model_by_alias=True)
@@ -145,7 +168,10 @@ async def update_employee(
     employee = await service.update(employee_id, data, current_user.id)
     if not employee:
         raise NotFoundException(detail="Employee not found", error_code="EMPLOYEE_NOT_FOUND")
-    return await _build_employee_response(service, employee)
+    hydrated_employee = await service.get(employee.id, include_related=True)
+    if not hydrated_employee:
+        raise NotFoundException(detail="Employee not found", error_code="EMPLOYEE_NOT_FOUND")
+    return await _build_employee_response(service, hydrated_employee)
 
 
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -164,7 +190,11 @@ async def delete_employee(
 # ============================================
 # Documents
 # ============================================
-@router.post("/{employee_id}/documents", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
+@router.post(
+    "/{employee_id}/documents",
+    response_model=EmployeeDocumentResponse,
+    response_model_by_alias=True,
+)
 async def add_document(
     employee_id: UUID,
     data: EmployeeDocumentCreate,
@@ -177,7 +207,11 @@ async def add_document(
     return doc
 
 
-@router.put("/documents/{document_id}", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
+@router.put(
+    "/documents/{document_id}",
+    response_model=EmployeeDocumentResponse,
+    response_model_by_alias=True,
+)
 async def update_document(
     document_id: UUID,
     data: EmployeeDocumentUpdate,
@@ -205,7 +239,11 @@ async def delete_document(
         raise NotFoundException(detail="Document not found", error_code="DOCUMENT_NOT_FOUND")
 
 
-@router.post("/documents/{document_id}/verify", response_model=EmployeeDocumentResponse, response_model_by_alias=True)
+@router.post(
+    "/documents/{document_id}/verify",
+    response_model=EmployeeDocumentResponse,
+    response_model_by_alias=True,
+)
 async def verify_document(
     document_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -222,7 +260,9 @@ async def verify_document(
 # ============================================
 # Family Members
 # ============================================
-@router.post("/{employee_id}/family", response_model=EmployeeFamilyResponse, response_model_by_alias=True)
+@router.post(
+    "/{employee_id}/family", response_model=EmployeeFamilyResponse, response_model_by_alias=True
+)
 async def add_family_member(
     employee_id: UUID,
     data: EmployeeFamilyCreate,
@@ -235,7 +275,9 @@ async def add_family_member(
     return family
 
 
-@router.put("/family/{family_id}", response_model=EmployeeFamilyResponse, response_model_by_alias=True)
+@router.put(
+    "/family/{family_id}", response_model=EmployeeFamilyResponse, response_model_by_alias=True
+)
 async def update_family_member(
     family_id: UUID,
     data: EmployeeFamilyUpdate,
@@ -246,7 +288,9 @@ async def update_family_member(
     service = EmployeeService(db)
     family = await service.update_family_member(family_id, data, current_user.id)
     if not family:
-        raise NotFoundException(detail="Family member not found", error_code="FAMILY_MEMBER_NOT_FOUND")
+        raise NotFoundException(
+            detail="Family member not found", error_code="FAMILY_MEMBER_NOT_FOUND"
+        )
     return family
 
 
@@ -260,13 +304,19 @@ async def delete_family_member(
     service = EmployeeService(db)
     success = await service.delete_family_member(family_id)
     if not success:
-        raise NotFoundException(detail="Family member not found", error_code="FAMILY_MEMBER_NOT_FOUND")
+        raise NotFoundException(
+            detail="Family member not found", error_code="FAMILY_MEMBER_NOT_FOUND"
+        )
 
 
 # ============================================
 # Bank Accounts
 # ============================================
-@router.post("/{employee_id}/bank-accounts", response_model=EmployeeBankAccountResponse, response_model_by_alias=True)
+@router.post(
+    "/{employee_id}/bank-accounts",
+    response_model=EmployeeBankAccountResponse,
+    response_model_by_alias=True,
+)
 async def add_bank_account(
     employee_id: UUID,
     data: EmployeeBankAccountCreate,
@@ -279,7 +329,11 @@ async def add_bank_account(
     return bank
 
 
-@router.put("/bank-accounts/{bank_id}", response_model=EmployeeBankAccountResponse, response_model_by_alias=True)
+@router.put(
+    "/bank-accounts/{bank_id}",
+    response_model=EmployeeBankAccountResponse,
+    response_model_by_alias=True,
+)
 async def update_bank_account(
     bank_id: UUID,
     data: EmployeeBankAccountUpdate,
@@ -290,7 +344,9 @@ async def update_bank_account(
     service = EmployeeService(db)
     bank = await service.update_bank_account(bank_id, data, current_user.id)
     if not bank:
-        raise NotFoundException(detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND")
+        raise NotFoundException(
+            detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND"
+        )
     return bank
 
 
@@ -304,13 +360,19 @@ async def delete_bank_account(
     service = EmployeeService(db)
     success = await service.delete_bank_account(bank_id)
     if not success:
-        raise NotFoundException(detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND")
+        raise NotFoundException(
+            detail="Bank account not found", error_code="BANK_ACCOUNT_NOT_FOUND"
+        )
 
 
 # ============================================
 # Education
 # ============================================
-@router.post("/{employee_id}/education", response_model=EmployeeEducationResponse, response_model_by_alias=True)
+@router.post(
+    "/{employee_id}/education",
+    response_model=EmployeeEducationResponse,
+    response_model_by_alias=True,
+)
 async def add_education(
     employee_id: UUID,
     data: EmployeeEducationCreate,
@@ -323,7 +385,11 @@ async def add_education(
     return edu
 
 
-@router.put("/education/{education_id}", response_model=EmployeeEducationResponse, response_model_by_alias=True)
+@router.put(
+    "/education/{education_id}",
+    response_model=EmployeeEducationResponse,
+    response_model_by_alias=True,
+)
 async def update_education(
     education_id: UUID,
     data: EmployeeEducationUpdate,
@@ -354,7 +420,11 @@ async def delete_education(
 # ============================================
 # Experience
 # ============================================
-@router.post("/{employee_id}/experience", response_model=EmployeeExperienceResponse, response_model_by_alias=True)
+@router.post(
+    "/{employee_id}/experience",
+    response_model=EmployeeExperienceResponse,
+    response_model_by_alias=True,
+)
 async def add_experience(
     employee_id: UUID,
     data: EmployeeExperienceCreate,
@@ -367,7 +437,11 @@ async def add_experience(
     return exp
 
 
-@router.put("/experience/{experience_id}", response_model=EmployeeExperienceResponse, response_model_by_alias=True)
+@router.put(
+    "/experience/{experience_id}",
+    response_model=EmployeeExperienceResponse,
+    response_model_by_alias=True,
+)
 async def update_experience(
     experience_id: UUID,
     data: EmployeeExperienceUpdate,
@@ -398,7 +472,11 @@ async def delete_experience(
 # ============================================
 # Statutory Info
 # ============================================
-@router.get("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse, response_model_by_alias=True)
+@router.get(
+    "/{employee_id}/statutory",
+    response_model=EmployeeStatutoryResponse,
+    response_model_by_alias=True,
+)
 async def get_statutory(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -408,11 +486,17 @@ async def get_statutory(
     service = EmployeeService(db)
     statutory = await service.get_statutory(employee_id)
     if not statutory:
-        raise NotFoundException(detail="Statutory info not found", error_code="STATUTORY_INFO_NOT_FOUND")
+        raise NotFoundException(
+            detail="Statutory info not found", error_code="STATUTORY_INFO_NOT_FOUND"
+        )
     return statutory
 
 
-@router.put("/{employee_id}/statutory", response_model=EmployeeStatutoryResponse, response_model_by_alias=True)
+@router.put(
+    "/{employee_id}/statutory",
+    response_model=EmployeeStatutoryResponse,
+    response_model_by_alias=True,
+)
 async def upsert_statutory(
     employee_id: UUID,
     data: EmployeeStatutoryCreate,
@@ -428,7 +512,11 @@ async def upsert_statutory(
 # ============================================
 # Lifecycle Events
 # ============================================
-@router.get("/{employee_id}/lifecycle", response_model=list[EmployeeLifecycleEventResponse], response_model_by_alias=True)
+@router.get(
+    "/{employee_id}/lifecycle",
+    response_model=list[EmployeeLifecycleEventResponse],
+    response_model_by_alias=True,
+)
 async def get_lifecycle_events(
     employee_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -440,7 +528,11 @@ async def get_lifecycle_events(
     return events
 
 
-@router.post("/{employee_id}/lifecycle", response_model=EmployeeLifecycleEventResponse, response_model_by_alias=True)
+@router.post(
+    "/{employee_id}/lifecycle",
+    response_model=EmployeeLifecycleEventResponse,
+    response_model_by_alias=True,
+)
 async def add_lifecycle_event(
     employee_id: UUID,
     data: EmployeeLifecycleEventCreate,
@@ -504,16 +596,52 @@ async def _build_employee_response(service: EmployeeService, employee) -> Employ
         esic_number=employee.esic_number,
         full_name=employee.full_name,
         age=employee.age,
-        department_name=employee.department.name if employee.department else None,
-        designation_name=employee.designation.name if employee.designation else None,
-        unit_name=employee.unit.name if employee.unit else None,
-        reporting_manager_name=employee.reporting_manager.full_name if employee.reporting_manager else None,
-        shift_name=employee.shift.shift_name if employee.shift else None,
-        documents=[EmployeeDocumentResponse.model_validate(d) for d in employee.documents] if employee.documents else None,
-        family_members=[EmployeeFamilyResponse.model_validate(f) for f in employee.family_members] if employee.family_members else None,
-        bank_accounts=[EmployeeBankAccountResponse.model_validate(b) for b in employee.bank_accounts] if employee.bank_accounts else None,
-        education=[EmployeeEducationResponse.model_validate(e) for e in employee.education] if employee.education else None,
-        experience=[EmployeeExperienceResponse.model_validate(e) for e in employee.experience] if employee.experience else None,
-        statutory_info=EmployeeStatutoryResponse.model_validate(employee.statutory_info) if employee.statutory_info else None,
-        lifecycle_events=[EmployeeLifecycleEventResponse.model_validate(e) for e in employee.lifecycle_events] if employee.lifecycle_events else None,
+        department_name=(
+            employee.department.name if employee.department_id and employee.department else None
+        ),
+        designation_name=(
+            employee.designation.name if employee.designation_id and employee.designation else None
+        ),
+        unit_name=employee.unit.name if employee.unit_id and employee.unit else None,
+        reporting_manager_name=(
+            employee.reporting_manager.full_name
+            if employee.reporting_manager_id and employee.reporting_manager
+            else None
+        ),
+        shift_name=employee.shift.shift_name if employee.shift_id and employee.shift else None,
+        documents=(
+            [EmployeeDocumentResponse.model_validate(d) for d in employee.documents]
+            if employee.documents
+            else None
+        ),
+        family_members=(
+            [EmployeeFamilyResponse.model_validate(f) for f in employee.family_members]
+            if employee.family_members
+            else None
+        ),
+        bank_accounts=(
+            [EmployeeBankAccountResponse.model_validate(b) for b in employee.bank_accounts]
+            if employee.bank_accounts
+            else None
+        ),
+        education=(
+            [EmployeeEducationResponse.model_validate(e) for e in employee.education]
+            if employee.education
+            else None
+        ),
+        experience=(
+            [EmployeeExperienceResponse.model_validate(e) for e in employee.experience]
+            if employee.experience
+            else None
+        ),
+        statutory_info=(
+            EmployeeStatutoryResponse.model_validate(employee.statutory_info)
+            if employee.statutory_info
+            else None
+        ),
+        lifecycle_events=(
+            [EmployeeLifecycleEventResponse.model_validate(e) for e in employee.lifecycle_events]
+            if employee.lifecycle_events
+            else None
+        ),
     )

@@ -1,5 +1,5 @@
 import { CheckCircle, AlertCircle } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import { AmountDisplay } from '@/components/lending/common/AmountDisplay';
 import { useWizard } from '@/components/lending/wizard/WizardContext';
@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { useEntities } from '@/hooks/lending/useEntities';
+import { useLoanProducts } from '@/hooks/lending/useLoanProducts';
 
 interface Step6Props {
   applicationId?: string;
@@ -36,10 +38,23 @@ interface ProjectDetailsData {
 
 export default function Step6Review({ applicationId }: Step6Props) {
   const { data, validation, setValidation } = useWizard();
+  const entitiesQuery = useEntities({ includeInactive: true, pageSize: 200 });
+  const productsQuery = useLoanProducts({ includeInactive: true, pageSize: 200 });
+  const [confirmations, setConfirmations] = useState({
+    terms1: false,
+    terms2: false,
+    terms3: false,
+  });
 
   const entityProductData = (data['entity-product'] || {}) as EntityProductData;
   const loanDetailsData = (data['loan-details'] || {}) as LoanDetailsData;
   const projectDetailsData = (data['project-details'] || {}) as ProjectDetailsData;
+  const selectedEntity = entitiesQuery.data?.items.find(
+    (entity) => entity.id === entityProductData.entityId,
+  );
+  const selectedProduct = productsQuery.data?.items.find(
+    (product) => product.id === entityProductData.productId,
+  );
 
   // All previous steps must be valid
   const allStepsValid =
@@ -48,11 +63,11 @@ export default function Step6Review({ applicationId }: Step6Props) {
     validation['project-details'] &&
     validation['security'] &&
     validation['documents'];
+  const confirmationsReady = Object.values(confirmations).every(Boolean);
 
   useEffect(() => {
-    // Review step is valid if all previous steps are valid
-    setValidation('review', allStepsValid);
-  }, [allStepsValid, setValidation]);
+    setValidation('review', allStepsValid && confirmationsReady);
+  }, [allStepsValid, confirmationsReady, setValidation]);
 
   const StepStatus = ({ stepId, label }: { stepId: string; label: string }) => (
     <div className="flex items-center justify-between py-2">
@@ -70,7 +85,9 @@ export default function Step6Review({ applicationId }: Step6Props) {
       <div>
         <h3 className="text-lg font-medium">Review & Submit</h3>
         <p className="text-sm text-muted-foreground">
-          Review your application details before submission
+          {applicationId
+            ? 'Review the updated application details before submission'
+            : 'Review the new application details before submission'}
         </p>
       </div>
 
@@ -105,13 +122,15 @@ export default function Step6Review({ applicationId }: Step6Props) {
               <div>
                 <p className="text-sm text-muted-foreground">Entity</p>
                 <p className="font-medium">
-                  {entityProductData.entityId ? 'Selected' : 'Not Selected'}
+                  {selectedEntity?.legalName ??
+                    (entityProductData.entityId ? entityProductData.entityId : 'Not selected')}
                 </p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Loan Product</p>
                 <p className="font-medium">
-                  {entityProductData.productId ? 'Selected' : 'Not Selected'}
+                  {selectedProduct?.name ??
+                    (entityProductData.productId ? entityProductData.productId : 'Not selected')}
                 </p>
               </div>
             </div>
@@ -207,21 +226,39 @@ export default function Step6Review({ applicationId }: Step6Props) {
         <CardContent className="pt-6">
           <div className="space-y-4">
             <div className="flex items-start space-x-3">
-              <Checkbox id="terms1" />
+              <Checkbox
+                id="terms1"
+                checked={confirmations.terms1}
+                onCheckedChange={(checked) =>
+                  setConfirmations((current) => ({ ...current, terms1: checked === true }))
+                }
+              />
               <Label htmlFor="terms1" className="text-sm leading-relaxed">
                 I confirm that all information provided in this application is true and accurate to
                 the best of my knowledge.
               </Label>
             </div>
             <div className="flex items-start space-x-3">
-              <Checkbox id="terms2" />
+              <Checkbox
+                id="terms2"
+                checked={confirmations.terms2}
+                onCheckedChange={(checked) =>
+                  setConfirmations((current) => ({ ...current, terms2: checked === true }))
+                }
+              />
               <Label htmlFor="terms2" className="text-sm leading-relaxed">
-                I authorize SMFC to verify the information provided and conduct necessary due
+                I authorize SFC to verify the information provided and conduct necessary due
                 diligence including credit bureau checks.
               </Label>
             </div>
             <div className="flex items-start space-x-3">
-              <Checkbox id="terms3" />
+              <Checkbox
+                id="terms3"
+                checked={confirmations.terms3}
+                onCheckedChange={(checked) =>
+                  setConfirmations((current) => ({ ...current, terms3: checked === true }))
+                }
+              />
               <Label htmlFor="terms3" className="text-sm leading-relaxed">
                 I understand that this application is subject to approval and does not constitute a
                 commitment to lend.
@@ -241,6 +278,17 @@ export default function Step6Review({ applicationId }: Step6Props) {
           </CardContent>
         </Card>
       )}
+
+      {allStepsValid && !confirmationsReady ? (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-2 text-amber-700">
+              <AlertCircle className="h-5 w-5" />
+              <p className="font-medium">Confirm all declarations before submitting.</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

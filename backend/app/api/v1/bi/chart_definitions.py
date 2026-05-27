@@ -74,6 +74,7 @@ def _to_list_response(chart) -> ChartDefinitionListResponse:
         module=chart.module,
         chart_type=chart.chart_type,
         is_system=chart.is_system,
+        has_data_source=bool(chart.default_data_source_id),
         is_active=chart.is_active,
     )
 
@@ -97,7 +98,9 @@ async def list_chart_definitions(
     return [_to_list_response(c) for c in charts]
 
 
-@router.get("/accessible", response_model=List[ChartDefinitionListResponse], response_model_by_alias=True)
+@router.get(
+    "/accessible", response_model=List[ChartDefinitionListResponse], response_model_by_alias=True
+)
 async def list_accessible_charts(
     module: Optional[BIModule] = None,
     current_user: User = Depends(get_current_user),
@@ -166,7 +169,9 @@ async def delete_chart_definition(
     return MessageResponse(message="Chart definition deleted successfully", success=True)
 
 
-@router.put("/{chart_id}/role-access", response_model=ChartDefinitionResponse, response_model_by_alias=True)
+@router.put(
+    "/{chart_id}/role-access", response_model=ChartDefinitionResponse, response_model_by_alias=True
+)
 async def set_chart_role_access(
     chart_id: UUID,
     data: SetChartRoleAccessRequest,

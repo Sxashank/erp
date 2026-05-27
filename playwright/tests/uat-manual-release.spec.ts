@@ -62,8 +62,8 @@ const ADMIN_RELEASE_ROUTES = [
   '/admin/lending/reports/portfolio/aum',
   '/admin/lending/reports/collections/efficiency',
   '/admin/lending/reports/npa/movement',
-  '/admin/lending/checklist/templates',
-  '/admin/lending/checklist/templates/new',
+  '/admin/lending/masters/approval-checklist-templates',
+  '/admin/lending/masters/approval-checklist-templates/new',
   '/admin/lending/iif/schemes',
   '/admin/lending/iif/schemes/new',
   '/admin/lending/iif/categories',
@@ -97,7 +97,6 @@ const ADMIN_RELEASE_ROUTES = [
   '/admin/treasury/alm',
   '/admin/treasury/alm/gap',
   '/admin/treasury/alm/irs',
-  '/admin/treasury/risk-dashboard',
   '/admin/treasury/investments',
   '/admin/treasury/investments/new',
   '/admin/regulatory/crar',
@@ -148,7 +147,7 @@ const ADMIN_RELEASE_DETAIL_ROUTES = [
   { path: '/admin/lending/iif/categories/:iifCategoryId', resource: 'iifCategory' },
   { path: '/admin/lending/iif/claims/:iifClaimId', resource: 'iifClaim' },
   {
-    path: '/admin/lending/checklist/templates/:checklistTemplateId',
+    path: '/admin/lending/masters/approval-checklist-templates/:checklistTemplateId',
     resource: 'checklistTemplate',
   },
   { path: '/admin/dms/documents/:documentId', resource: 'document' },
@@ -238,6 +237,12 @@ interface PortalApplicationDetailResponse {
 interface PortalProductResponse {
   id: string;
   name: string;
+  documentRequirements?: {
+    code: string;
+    name: string;
+    isMandatory: boolean;
+    missing?: boolean;
+  }[];
 }
 
 interface PortalUtilizationCategoryResponse {
@@ -254,6 +259,33 @@ interface PortalApplicationDocumentResponse {
 type AdminResourceKey = (typeof ADMIN_RELEASE_DETAIL_ROUTES)[number]['resource'];
 
 type AdminResourceIds = Partial<Record<AdminResourceKey, string>>;
+
+function portalApplicationStatusLabel(status: string): string {
+  switch (status) {
+    case 'LENDER_REVIEW':
+      return 'SFC Review';
+    case 'LENDER_VALIDATED':
+      return 'Lender Validated';
+    case 'SMFCL_PRELIM_REVIEW':
+      return 'Preliminary Review';
+    case 'SMFCL_APPRAISAL':
+      return 'Appraisal';
+    case 'QUERY_PENDING':
+      return 'Query Pending';
+    case 'SANCTION_ISSUED':
+      return 'Sanction Issued';
+    case 'CLAIM_OPEN':
+      return 'Claim Open';
+    case 'RELEASE_IN_PROGRESS':
+      return 'Release in Progress';
+    default:
+      return status
+        .toLowerCase()
+        .split('_')
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+  }
+}
 
 function uploadBuffer(contents: string): NodeBuffer {
   if (!nodeBuffer) {
@@ -402,7 +434,9 @@ async function discoverAdminResourceIds(session: AdminSession): Promise<AdminRes
     iifScheme: await firstId('/lending/iif/schemes?page=1&pageSize=1'),
     iifCategory: await firstId('/lending/iif/categories?page=1&pageSize=1'),
     iifClaim: await firstId('/lending/iif/claims?page=1&pageSize=1'),
-    checklistTemplate: await firstId('/lending/checklist/templates?page=1&pageSize=1'),
+    checklistTemplate: await firstId(
+      '/lending/masters/approval-checklist-templates/rows?page=1&pageSize=1',
+    ),
     document: await firstId('/dms/documents/recent?limit=1'),
     lender: await firstId('/lending/treasury/lenders?page=1&pageSize=1'),
     borrowing: await firstId('/lending/treasury/borrowings?page=1&pageSize=1'),
@@ -559,6 +593,13 @@ test.describe('manual release UAT readiness', () => {
     expect(productsResponse.ok()).toBeTruthy();
     const products = (await productsResponse.json()) as PortalProductResponse[];
     expect(products.length).toBeGreaterThan(0);
+    const productWithDocuments = products.find((product) =>
+      (product.documentRequirements ?? []).some((requirement) => requirement.isMandatory),
+    );
+    expect(
+      productWithDocuments,
+      'portal products must expose product-driven mandatory borrower documents',
+    ).toBeTruthy();
 
     const categoriesResponse = await ctx.get(`${API_BASE}/portal/utilization-categories`);
     expect(categoriesResponse.ok()).toBeTruthy();
@@ -570,7 +611,7 @@ test.describe('manual release UAT readiness', () => {
       headers: { 'Idempotency-Key': crypto.randomUUID() },
       data: {
         entityId,
-        productId: products[0]!.id,
+        productId: productWithDocuments!.id,
         requestedAmount,
         tenureMonths: 36,
         purposeDescription: 'UAT borrower self-service application',
@@ -579,9 +620,6 @@ test.describe('manual release UAT readiness', () => {
         projectCost: requestedAmount,
         shipyardName: 'UAT Shipyard',
         maritimeSegment: 'Port infrastructure',
-        lenderName: 'State Bank of India',
-        lenderBranch: 'Mumbai Corporate Branch',
-        sanctionReference: `UAT-${Date.now()}`,
         declarationAccepted: true,
         fundUtilization: [
           {
@@ -611,8 +649,8 @@ test.describe('manual release UAT readiness', () => {
         {
           headers: { 'Idempotency-Key': crypto.randomUUID() },
           multipart: {
-            document_code: documentCode,
-            document_name: `UAT ${documentCode}`,
+            documentCode,
+            documentName: `UAT ${documentCode}`,
             file: {
               name: `${documentCode.toLowerCase()}-uat.pdf`,
               mimeType: 'application/pdf',
@@ -652,7 +690,9 @@ test.describe('manual release UAT readiness', () => {
 
     await assertRouteClean(page, `/portal/applications/${submitted.id}`);
     await expect(page.getByRole('heading', { name: submitted.applicationNumber })).toBeVisible();
-    await expect(page.getByText('LENDER REVIEW', { exact: false })).toHaveCount(2);
+    await expect(
+      page.getByText(portalApplicationStatusLabel(submitted.schemeStatus), { exact: false }),
+    ).toHaveCount(2);
 
     await page.goto('/portal/reports', { waitUntil: 'domcontentloaded' });
     await page.waitForLoadState('networkidle');

@@ -8,8 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.api.deps import RequirePermissions, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_active_organization_id, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.tds.tds_entry_service import TDSEntryService
 from app.schemas.tds.tds_entry import (
@@ -85,6 +84,7 @@ async def list_tds_entries(
     challan_status: Optional[TDSChallanStatus] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -92,43 +92,56 @@ async def list_tds_entries(
     service = TDSEntryService(db)
     skip = (page - 1) * page_size
     entries, total = await service.get_by_organization(
-        current_user.organization_id, from_date, to_date, challan_status, skip, page_size
+        active_organization_id, from_date, to_date, challan_status, skip, page_size
     )
     items = [_to_response(e) for e in entries]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/pending-challans", response_model=PaginatedResponse[TDSEntryResponse], response_model_by_alias=True)
+@router.get(
+    "/pending-challans",
+    response_model=PaginatedResponse[TDSEntryResponse],
+    response_model_by_alias=True,
+)
 async def list_pending_challans(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS entries with pending challan payments."""
     service = TDSEntryService(db)
     skip = (page - 1) * page_size
-    entries, total = await service.get_pending_challans(current_user.organization_id, skip, page_size)
+    entries, total = await service.get_pending_challans(active_organization_id, skip, page_size)
     items = [_to_response(e) for e in entries]
     return PaginatedResponse.create(items, total, page, page_size)
 
 
-@router.get("/quarter/{financial_year}/{quarter}", response_model=List[TDSEntryResponse], response_model_by_alias=True)
+@router.get(
+    "/quarter/{financial_year}/{quarter}",
+    response_model=List[TDSEntryResponse],
+    response_model_by_alias=True,
+)
 async def list_by_quarter(
     financial_year: str = "2024-25",
     quarter: str = "Q1",
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get TDS entries for a specific quarter (for return filing)."""
     service = TDSEntryService(db)
-    entries = await service.get_by_quarter(current_user.organization_id, financial_year, quarter)
+    entries = await service.get_by_quarter(active_organization_id, financial_year, quarter)
     return [_to_response(e) for e in entries]
 
 
-@router.post("/validate-threshold", response_model=ThresholdValidationResponse, response_model_by_alias=True)
+@router.post(
+    "/validate-threshold", response_model=ThresholdValidationResponse, response_model_by_alias=True
+)
 async def validate_threshold(
     data: ThresholdValidationRequest,
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -142,7 +155,7 @@ async def validate_threshold(
     """
     service = TDSEntryService(db)
     result = await service.validate_threshold(
-        organization_id=data.organization_id,
+        organization_id=active_organization_id,
         vendor_id=data.vendor_id,
         tds_section_id=data.tds_section_id,
         base_amount=data.base_amount,
@@ -168,7 +181,10 @@ async def validate_threshold(
 @router.post("", response_model=TDSEntryResponse, response_model_by_alias=True)
 async def create_tds_entry(
     data: TDSEntryCreate,
-    skip_threshold_check: bool = Query(False, description="Skip threshold validation for manual entries"),
+    skip_threshold_check: bool = Query(
+        False, description="Skip threshold validation for manual entries"
+    ),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -178,7 +194,11 @@ async def create_tds_entry(
     Set skip_threshold_check=true to bypass validation for manual entries.
     """
     service = TDSEntryService(db)
-    entry = await service.create(data, current_user.id, skip_threshold_check=skip_threshold_check)
+    entry = await service.create(
+        data.model_copy(update={"organization_id": active_organization_id}),
+        current_user.id,
+        skip_threshold_check=skip_threshold_check,
+    )
     return _to_response(entry)
 
 

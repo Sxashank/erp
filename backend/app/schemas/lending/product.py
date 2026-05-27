@@ -8,17 +8,10 @@ from uuid import UUID
 from pydantic import Field, model_validator
 
 from app.models.lending.enums import (
-    DayCountConvention,
     DocumentCategory,
     DocumentStage,
-    EntityType,
     FeeCalculationType,
     FeeType,
-    InterestType,
-    ProductCategory,
-    RateResetFrequency,
-    RepaymentFrequency,
-    RepaymentMode,
 )
 from app.schemas.base import CamelSchema
 
@@ -191,14 +184,10 @@ class ProductFeeResponse(ProductFeeBase):
 class DocumentChecklistBase(CamelSchema):
     """Base schema for document checklist."""
 
-    code: str = Field(..., min_length=1, max_length=50)
-    name: str = Field(..., min_length=1, max_length=200)
-    description: str | None = None
-    category: DocumentCategory
-    required_at_stage: DocumentStage
+    catalog_item_id: UUID
     is_mandatory: bool = True
     is_mandatory_for_disbursement: bool = False
-    applicable_entity_types: list[EntityType] | None = None
+    applicable_entity_types: list[str] | None = None
     applicable_conditions: dict[str, Any] | None = None
     has_expiry: bool = False
     validity_months: int | None = Field(None, ge=0)
@@ -223,13 +212,10 @@ class DocumentChecklistCreate(DocumentChecklistBase):
 class DocumentChecklistUpdate(CamelSchema):
     """Schema for updating document checklist."""
 
-    name: str | None = Field(None, min_length=1, max_length=200)
-    description: str | None = None
-    category: DocumentCategory | None = None
-    required_at_stage: DocumentStage | None = None
+    catalog_item_id: UUID | None = None
     is_mandatory: bool | None = None
     is_mandatory_for_disbursement: bool | None = None
-    applicable_entity_types: list[EntityType] | None = None
+    applicable_entity_types: list[str] | None = None
     applicable_conditions: dict[str, Any] | None = None
     has_expiry: bool | None = None
     validity_months: int | None = Field(None, ge=0)
@@ -251,6 +237,11 @@ class DocumentChecklistResponse(DocumentChecklistBase):
 
     id: UUID
     product_id: UUID
+    code: str
+    name: str
+    description: str | None = None
+    category: DocumentCategory
+    required_at_stage: DocumentStage
     created_at: datetime
     updated_at: datetime | None = None
     is_active: bool = True
@@ -267,7 +258,7 @@ class LoanProductBase(CamelSchema):
     code: str = Field(..., min_length=1, max_length=50)
     name: str = Field(..., min_length=1, max_length=200)
     description: str | None = None
-    category: ProductCategory
+    category: str = Field(..., min_length=1, max_length=80)
     sub_category: str | None = Field(None, max_length=100)
 
     # Amount Limits
@@ -282,20 +273,21 @@ class LoanProductBase(CamelSchema):
     max_moratorium_months: int | None = Field(None, ge=0)
 
     # Interest
-    interest_type: InterestType
+    interest_type: str = Field(..., min_length=1, max_length=80)
     base_rate_id: UUID | None = None
     min_spread_bps: int = Field(default=0, ge=0)
     max_spread_bps: int = Field(default=500, ge=0)
     default_spread_bps: int = Field(default=200, ge=0)
     min_effective_rate: Decimal | None = Field(None, ge=0, le=100)
     max_effective_rate: Decimal | None = Field(None, ge=0, le=100)
-    rate_reset_frequency: RateResetFrequency | None = None
-    day_count_convention: DayCountConvention = DayCountConvention.ACT_365
+    rate_reset_frequency: str | None = Field(None, max_length=80)
+    day_count_convention: str = Field(default="ACT_365", min_length=1, max_length=50)
 
     # Repayment
-    default_repayment_frequency: RepaymentFrequency = RepaymentFrequency.MONTHLY
-    allowed_repayment_modes: list[RepaymentMode] = [RepaymentMode.EMI]
-    default_repayment_mode: RepaymentMode = RepaymentMode.EMI
+    allowed_repayment_frequencies: list[str] = Field(default_factory=lambda: ["MONTHLY"])
+    default_repayment_frequency: str = Field(default="MONTHLY", min_length=1, max_length=80)
+    allowed_repayment_modes: list[str] = Field(default_factory=lambda: ["EMI"])
+    default_repayment_mode: str = Field(default="EMI", min_length=1, max_length=80)
 
     # Prepayment
     allows_prepayment: bool = True
@@ -304,7 +296,7 @@ class LoanProductBase(CamelSchema):
     foreclosure_lock_in_months: int | None = Field(None, ge=0)
 
     # Eligibility
-    eligible_entity_types: list[EntityType] = []
+    eligible_entity_types: list[str] = Field(default_factory=list)
     min_vintage_months: int | None = Field(None, ge=0)
     min_turnover: Decimal | None = Field(None, ge=0)
     min_rating_grade: str | None = Field(None, max_length=10)
@@ -331,6 +323,7 @@ class LoanProductCreate(LoanProductBase):
     """Schema for creating loan product."""
 
     organization_id: UUID | None = None
+    is_active: bool = True
 
 
 class LoanProductUpdate(CamelSchema):
@@ -338,7 +331,7 @@ class LoanProductUpdate(CamelSchema):
 
     name: str | None = Field(None, min_length=1, max_length=200)
     description: str | None = None
-    category: ProductCategory | None = None
+    category: str | None = Field(None, min_length=1, max_length=80)
     sub_category: str | None = Field(None, max_length=100)
 
     # Amount Limits
@@ -353,20 +346,21 @@ class LoanProductUpdate(CamelSchema):
     max_moratorium_months: int | None = Field(None, ge=0)
 
     # Interest
-    interest_type: InterestType | None = None
+    interest_type: str | None = Field(None, min_length=1, max_length=80)
     base_rate_id: UUID | None = None
     min_spread_bps: int | None = Field(None, ge=0)
     max_spread_bps: int | None = Field(None, ge=0)
     default_spread_bps: int | None = Field(None, ge=0)
     min_effective_rate: Decimal | None = Field(None, ge=0, le=100)
     max_effective_rate: Decimal | None = Field(None, ge=0, le=100)
-    rate_reset_frequency: RateResetFrequency | None = None
-    day_count_convention: DayCountConvention | None = None
+    rate_reset_frequency: str | None = Field(None, max_length=80)
+    day_count_convention: str | None = Field(None, min_length=1, max_length=50)
 
     # Repayment
-    default_repayment_frequency: RepaymentFrequency | None = None
-    allowed_repayment_modes: list[RepaymentMode] | None = None
-    default_repayment_mode: RepaymentMode | None = None
+    allowed_repayment_frequencies: list[str] | None = None
+    default_repayment_frequency: str | None = Field(None, min_length=1, max_length=80)
+    allowed_repayment_modes: list[str] | None = None
+    default_repayment_mode: str | None = Field(None, min_length=1, max_length=80)
 
     # Prepayment
     allows_prepayment: bool | None = None
@@ -375,7 +369,7 @@ class LoanProductUpdate(CamelSchema):
     foreclosure_lock_in_months: int | None = Field(None, ge=0)
 
     # Eligibility
-    eligible_entity_types: list[EntityType] | None = None
+    eligible_entity_types: list[str] | None = None
     min_vintage_months: int | None = Field(None, ge=0)
     min_turnover: Decimal | None = Field(None, ge=0)
     min_rating_grade: str | None = Field(None, max_length=10)
@@ -408,8 +402,8 @@ class LoanProductListResponse(CamelSchema):
     id: UUID
     code: str
     name: str
-    category: ProductCategory
-    interest_type: InterestType
+    category: str
+    interest_type: str
     min_amount: Decimal
     max_amount: Decimal
     min_tenure_months: int
@@ -452,3 +446,24 @@ class LoanProductDetailResponse(LoanProductResponse):
     fees: list[ProductFeeResponse] = []
     document_checklist: list[DocumentChecklistResponse] = []
     base_rate: InterestRateResponse | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _from_orm(cls, obj: Any) -> Any:
+        if isinstance(obj, dict):
+            return obj
+        data = {
+            key: getattr(obj, key) for key in LoanProductResponse.model_fields if hasattr(obj, key)
+        }
+        data["fees"] = [
+            ProductFeeResponse.model_validate(item)
+            for item in getattr(obj, "fee_configurations", []) or []
+            if getattr(item, "deleted_at", None) is None
+        ]
+        data["document_checklist"] = [
+            DocumentChecklistResponse.model_validate(item)
+            for item in getattr(obj, "document_checklist", []) or []
+            if getattr(item, "deleted_at", None) is None
+        ]
+        data["base_rate"] = getattr(obj, "base_rate", None)
+        return data

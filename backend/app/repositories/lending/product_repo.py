@@ -9,11 +9,8 @@ from sqlalchemy.orm import selectinload
 
 from app.models.lending.enums import (
     DocumentStage,
-    EntityType,
     FeeCollectionStage,
     FeeType,
-    InterestType,
-    ProductCategory,
 )
 from app.models.lending.product import (
     DocumentChecklist,
@@ -219,7 +216,7 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
         """Get document checklist by code within a product."""
         query = select(DocumentChecklist).where(
             and_(
-                DocumentChecklist.document_code == document_code,
+                DocumentChecklist.code == document_code,
                 DocumentChecklist.product_id == product_id,
                 DocumentChecklist.is_active == True,
             )
@@ -234,7 +231,7 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
         query = select(DocumentChecklist).where(DocumentChecklist.product_id == product_id)
         if not include_inactive:
             query = query.where(DocumentChecklist.is_active == True)
-        query = query.order_by(DocumentChecklist.stage, DocumentChecklist.display_order)
+        query = query.order_by(DocumentChecklist.required_at_stage, DocumentChecklist.display_order)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
@@ -242,21 +239,19 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
         self,
         product_id: UUID,
         stage: DocumentStage,
-        entity_type: EntityType | None = None,
+        entity_type: str | None = None,
     ) -> list[DocumentChecklist]:
         """Get document checklist for a specific stage."""
         query = select(DocumentChecklist).where(
             and_(
                 DocumentChecklist.product_id == product_id,
-                DocumentChecklist.stage == stage,
+                DocumentChecklist.required_at_stage == stage,
                 DocumentChecklist.is_active == True,
             )
         )
 
         if entity_type:
-            query = query.where(
-                DocumentChecklist.applicable_entity_types.contains([entity_type.value])
-            )
+            query = query.where(DocumentChecklist.applicable_entity_types.contains([entity_type]))
 
         query = query.order_by(DocumentChecklist.display_order)
         result = await self.session.execute(query)
@@ -266,7 +261,7 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
         self,
         product_id: UUID,
         stage: DocumentStage | None = None,
-        entity_type: EntityType | None = None,
+        entity_type: str | None = None,
     ) -> list[DocumentChecklist]:
         """Get mandatory documents for a product."""
         query = select(DocumentChecklist).where(
@@ -278,12 +273,10 @@ class DocumentChecklistRepository(BaseRepository[DocumentChecklist]):
         )
 
         if stage:
-            query = query.where(DocumentChecklist.stage == stage)
+            query = query.where(DocumentChecklist.required_at_stage == stage)
 
         if entity_type:
-            query = query.where(
-                DocumentChecklist.applicable_entity_types.contains([entity_type.value])
-            )
+            query = query.where(DocumentChecklist.applicable_entity_types.contains([entity_type]))
 
         result = await self.session.execute(query)
         return list(result.scalars().all())
@@ -307,18 +300,54 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         result = await self.session.execute(query)
         return result.scalar_one_or_none()
 
+    async def get_for_organization(
+        self, product_id: UUID, organization_id: UUID
+    ) -> LoanProduct | None:
+        """Get loan product by ID within one tenant."""
+        query = select(LoanProduct).where(
+            and_(
+                LoanProduct.id == product_id,
+                LoanProduct.organization_id == organization_id,
+                LoanProduct.is_active == True,
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
     async def get_with_details(self, product_id: UUID) -> LoanProduct | None:
         """Get loan product with fees and document checklist."""
         query = (
             select(LoanProduct)
             .options(
-                selectinload(LoanProduct.fees),
+                selectinload(LoanProduct.fee_configurations),
                 selectinload(LoanProduct.document_checklist),
                 selectinload(LoanProduct.base_rate),
             )
             .where(
                 and_(
                     LoanProduct.id == product_id,
+                    LoanProduct.is_active == True,
+                )
+            )
+        )
+        result = await self.session.execute(query)
+        return result.scalar_one_or_none()
+
+    async def get_with_details_for_organization(
+        self, product_id: UUID, organization_id: UUID
+    ) -> LoanProduct | None:
+        """Get loan product with details within one tenant."""
+        query = (
+            select(LoanProduct)
+            .options(
+                selectinload(LoanProduct.fee_configurations),
+                selectinload(LoanProduct.document_checklist),
+                selectinload(LoanProduct.base_rate),
+            )
+            .where(
+                and_(
+                    LoanProduct.id == product_id,
+                    LoanProduct.organization_id == organization_id,
                     LoanProduct.is_active == True,
                 )
             )
@@ -333,8 +362,8 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         limit: int = 100,
         include_inactive: bool = False,
         search: str | None = None,
-        category: ProductCategory | None = None,
-        interest_type: InterestType | None = None,
+        category: str | None = None,
+        interest_type: str | None = None,
     ) -> tuple[list[LoanProduct], int]:
         """Get all loan products for an organization with filters."""
         base_query = select(LoanProduct).where(LoanProduct.organization_id == organization_id)
@@ -378,7 +407,7 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
     async def get_active_products(
         self,
         organization_id: UUID,
-        category: ProductCategory | None = None,
+        category: str | None = None,
     ) -> list[LoanProduct]:
         """Get all active loan products for dropdown lists."""
         query = select(LoanProduct).where(
@@ -398,7 +427,7 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
     async def get_eligible_products(
         self,
         organization_id: UUID,
-        entity_type: EntityType,
+        entity_type: str,
         amount: float | None = None,
         tenure_months: int | None = None,
     ) -> list[LoanProduct]:
@@ -406,7 +435,7 @@ class LoanProductRepository(BaseRepository[LoanProduct]):
         query = select(LoanProduct).where(
             and_(
                 LoanProduct.organization_id == organization_id,
-                LoanProduct.applicable_entity_types.contains([entity_type.value]),
+                LoanProduct.eligible_entity_types.contains([entity_type]),
                 LoanProduct.is_active == True,
             )
         )

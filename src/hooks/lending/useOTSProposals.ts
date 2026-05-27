@@ -58,7 +58,7 @@ async function fetchOTS(filters?: OTSFilters) {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<PaginatedResponse<OTSProposalListItem>>(
     `/lending/collections/ots-proposals?${params.toString()}`,
   );

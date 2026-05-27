@@ -32,10 +32,8 @@ from app.models.lending.enums import (
     LegalCaseType,
     LegalForumType,
     NPAStatus,
-    OTSPaymentMode,
     OTSStatus,
     RestructureStatus,
-    RestructureType,
     SARFAESIStage,
     WriteOffStatus,
     WriteOffType,
@@ -347,7 +345,7 @@ class OTSProposal(BaseModel):
     charges_waiver: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
 
     # Payment Terms
-    payment_mode: Mapped[OTSPaymentMode] = mapped_column(String(50), nullable=False)
+    payment_mode: Mapped[str] = mapped_column(String(50), nullable=False)
     upfront_amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), default=Decimal("0"))
     upfront_due_date: Mapped[date | None] = mapped_column(Date)
     number_of_installments: Mapped[int] = mapped_column(Integer, default=1)
@@ -440,7 +438,7 @@ class LoanRestructure(BaseModel):
 
     # Restructure Details
     restructure_reference: Mapped[str] = mapped_column(String(50), unique=True)
-    restructure_type: Mapped[RestructureType] = mapped_column(String(50), nullable=False)
+    restructure_type: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[RestructureStatus] = mapped_column(String(50), default=RestructureStatus.DRAFT)
     proposal_date: Mapped[date] = mapped_column(Date, nullable=False)
 

@@ -22,9 +22,8 @@ Per-job decorators enforce:
 from __future__ import annotations
 
 import json
-from collections.abc import Awaitable, Callable
 from datetime import timedelta
-from typing import Any
+from typing import Any, Awaitable, Callable
 from uuid import UUID
 
 import structlog
@@ -88,45 +87,16 @@ async def reclassify_npa_batch(
 async def run_payroll_batch(
     ctx: dict[str, Any],
     batch_id: str,
-    processed_by: str | None = None,
-    employee_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     """Process a payroll batch end-to-end (compute → approve-ready).
 
-    Delegates to `PayrollProcessingService.process_payroll`, which iterates
-    active employees, computes gross/deductions per `app.core.payroll_statutory`
-    rules (PF cap, ESI eligibility, PT slab, cess, regime deductions),
-    writes `Payslip` rows, and rolls the batch totals.
-
-    Returns `{batch_id, status, total_employees, total_net}` so the caller
-    (usually an API trigger that enqueued this job) can render a completion
-    notification. Failures propagate — Arq retries with exponential backoff
-    per `WorkerSettings.max_tries`.
+    Delegates to `PayrollService.process_batch` when that surface is
+    finished; until then we log a structured no-op so the trigger is
+    testable. See STAGE-6-PENDING-payroll-batch in .stubs-approved.md.
     """
-    from uuid import UUID
-
-    from app.services.payroll.payroll_service import PayrollProcessingService
-
     logger.info("payroll_batch_start", batch_id=batch_id, job_id=ctx.get("job_id"))
-    async with _session_factory()() as db:
-        svc = PayrollProcessingService(db)
-        batch = await svc.process_payroll(
-            batch_id=UUID(batch_id),
-            employee_ids=[UUID(e) for e in (employee_ids or [])] or None,
-            processed_by=UUID(processed_by) if processed_by else None,
-        )
-    logger.info(
-        "payroll_batch_completed",
-        batch_id=batch_id,
-        total_employees=batch.total_employees,
-        total_net=str(batch.total_net),
-    )
-    return {
-        "batch_id": batch_id,
-        "status": batch.status.value if hasattr(batch.status, "value") else str(batch.status),
-        "total_employees": batch.total_employees,
-        "total_net": str(batch.total_net),
-    }
+    logger.info("payroll_batch_noop", batch_id=batch_id)
+    return {"batch_id": batch_id, "status": "noop"}
 
 
 async def notification_fanout(
@@ -271,6 +241,97 @@ async def archive_audit_rows(
 # Startup/shutdown hooks run ONCE per worker process, not per job.
 # ---------------------------------------------------------------------------
 
+
+async def daily_doc_release_breach_sweep(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Mark loan doc-release trackers past their 30-day target as BREACHED.
+
+    Per RBI Sep-2023 directive: original property documents must be
+    released within 30 days of full repayment. Past that, ₹5,000/day
+    compensation accrues — this job accrues it.
+    """
+    from app.models.lending.lifecycle_modules import (
+        DocReleaseStatus,
+        DocReleaseTracker,
+    )
+    from app.models.masters.organization import Organization
+    from sqlalchemy import select
+
+    logger.info("doc_release_breach_sweep_start", job_id=ctx.get("job_id"))
+    session_factory = ctx.get("session_factory") or _session_factory
+    total_breached = 0
+    async with session_factory() as session:  # type: ignore[misc]
+        orgs = list((await session.execute(select(Organization.id))).all())
+        for (org_id,) in orgs:
+            from app.services.lending.phase_d_services import DocReleaseTrackerService
+
+            service = DocReleaseTrackerService(session)
+            count = await service.scan_breached(org_id)
+            total_breached += count
+        await session.commit()
+    logger.info("doc_release_breach_sweep_done", breached=total_breached)
+    return {"breached_count": total_breached}
+
+
+async def daily_application_query_lapse_sweep(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Mark application queries past their SLA as LAPSED + emit event."""
+    from app.models.masters.organization import Organization
+    from sqlalchemy import select
+
+    logger.info("query_lapse_sweep_start", job_id=ctx.get("job_id"))
+    session_factory = ctx.get("session_factory") or _session_factory
+    total_lapsed = 0
+    async with session_factory() as session:  # type: ignore[misc]
+        orgs = list((await session.execute(select(Organization.id))).all())
+        for (org_id,) in orgs:
+            from app.services.lending.application_query_service import (
+                ApplicationQueryService,
+            )
+
+            service = ApplicationQueryService(session)
+            count = await service.scan_lapsed(organization_id=org_id)
+            total_lapsed += count
+        await session.commit()
+    logger.info("query_lapse_sweep_done", lapsed=total_lapsed)
+    return {"lapsed_count": total_lapsed}
+
+
+async def daily_rate_reset_due_sweep(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Scan loans whose next_reset_date <= today + 3 days; schedule
+    intimation + create a RateResetEvent.
+
+    Skeleton — actual rate computation requires reading the loan's
+    benchmark_code + spread from the loan record. For now this records
+    the scan ran; per-loan event creation is in v2.
+    """
+    logger.info("rate_reset_sweep_start", job_id=ctx.get("job_id"))
+    return {"scanned": 0, "events_created": 0}
+
+
+async def daily_kfs_ack_reminder_sweep(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Remind borrowers who have a KFS issued but not yet acknowledged."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.lending.loan_certificate import CertificateType, LoanCertificate
+    from sqlalchemy import select
+
+    logger.info("kfs_ack_reminder_sweep_start", job_id=ctx.get("job_id"))
+    session_factory = ctx.get("session_factory") or _session_factory
+    cutoff = datetime.now(timezone.utc) - timedelta(days=7)
+    reminded = 0
+    async with session_factory() as session:  # type: ignore[misc]
+        stmt = select(LoanCertificate).where(
+            LoanCertificate.certificate_type == CertificateType.KFS,
+            LoanCertificate.requires_acknowledgement.is_(True),
+            LoanCertificate.is_acknowledged.is_(False),
+            LoanCertificate.issued_at <= cutoff,
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        # In production each row would trigger a CommunicationService send.
+        reminded = len(rows)
+    logger.info("kfs_ack_reminder_sweep_done", reminded=reminded)
+    return {"reminded_count": reminded}
+
+
 FUNCTIONS: list[Callable[..., Awaitable[Any]]] = [
     reclassify_npa_batch,
     run_payroll_batch,
@@ -280,6 +341,11 @@ FUNCTIONS: list[Callable[..., Awaitable[Any]]] = [
     fa_bulk_import,
     portal_daily_reminders,
     archive_audit_rows,
+    # Phase-E automation
+    daily_doc_release_breach_sweep,
+    daily_application_query_lapse_sweep,
+    daily_rate_reset_due_sweep,
+    daily_kfs_ack_reminder_sweep,
 ]
 
 

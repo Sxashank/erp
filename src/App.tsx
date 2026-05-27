@@ -17,6 +17,15 @@ function LegacyTreasuryRedirect() {
   return <Navigate to={target} replace />;
 }
 
+function LegacyChecklistTemplateRedirect() {
+  const location = useLocation();
+  const targetPath = location.pathname.replace(
+    '/admin/lending/checklist/templates',
+    '/admin/lending/masters/approval-checklist-templates',
+  );
+  return <Navigate to={`${targetPath}${location.search}${location.hash}`} replace />;
+}
+
 const Dashboard = lazy(() => import('./pages/Dashboard').then((m) => ({ default: m.Dashboard })));
 const Login = lazy(() => import('./pages/auth/Login').then((m) => ({ default: m.Login })));
 const ForgotPassword = lazy(() =>
@@ -269,6 +278,7 @@ import SanctionLetter from './pages/lending/los/sanctions/SanctionLetter';
 // Lending imports - LMS (Loan Management)
 import LoanAccountList from './pages/lending/lms/accounts/LoanAccountList';
 import LoanAccountView from './pages/lending/lms/accounts/LoanAccountView';
+import HistoricalLoanImport from './pages/lending/lms/accounts/HistoricalLoanImport';
 import DisbursementList from './pages/lending/lms/disbursements/DisbursementList';
 import DisbursementWizard from './pages/lending/lms/disbursements/DisbursementWizard';
 import DisbursementReadinessCockpit from './pages/lending/disbursement-readiness';
@@ -626,7 +636,7 @@ const ESSExpenseForm = lazy(() =>
 const ESSExpenseDetail = lazy(() =>
   import('./pages/ess').then((m) => ({ default: m.ESSExpenseDetail })),
 );
-const ESSTimesheet = lazy(() => import('./pages/ess').then((m) => ({ default: m.ESSTimesheet })));
+const ESSAttendance = lazy(() => import('./pages/ess').then((m) => ({ default: m.ESSAttendance })));
 const ESSAssetList = lazy(() => import('./pages/ess').then((m) => ({ default: m.ESSAssetList })));
 const ESSTrainingList = lazy(() =>
   import('./pages/ess').then((m) => ({ default: m.ESSTrainingList })),
@@ -681,6 +691,30 @@ const AdminPortalRegistrations = lazy(
   () => import('./pages/admin/portal/AdminPortalRegistrations'),
 );
 const AdminPortalUsers = lazy(() => import('./pages/admin/portal/AdminPortalUsers'));
+// Phase A-E pages
+const PortalLoanTimeline = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalLoanTimeline })),
+);
+const PortalApplicationQueries = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalApplicationQueries })),
+);
+const PortalKFSAcknowledge = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalKFSAcknowledge })),
+);
+const PortalForeclosureQuote = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalForeclosureQuote })),
+);
+const PortalTransferOut = lazy(() =>
+  import('./pages/portal').then((m) => ({ default: m.PortalTransferOut })),
+);
+const LendingPipelineDashboard = lazy(
+  () => import('./pages/lending/dashboards/LendingPipelineDashboard'),
+);
+const MastersHub = lazy(() => import('./pages/admin/lending/masters/MastersHub'));
+const MasterEditor = lazy(() => import('./pages/admin/lending/masters/MasterEditor'));
+const ProductChecklistEditor = lazy(
+  () => import('./pages/lending/los/products/ProductChecklistEditor'),
+);
 // Vendor Portal imports
 const VendorLogin = lazy(() => import('./pages/vendor').then((m) => ({ default: m.VendorLogin })));
 const VendorLayout = lazy(() =>
@@ -770,6 +804,29 @@ const DocumentVersions = lazy(() =>
   import('./pages/dms').then((m) => ({ default: m.DocumentVersions })),
 );
 const TagManagement = lazy(() => import('./pages/dms').then((m) => ({ default: m.TagManagement })));
+const DocumentStudioPage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({ default: m.DocumentStudioPage })),
+);
+const DocumentTemplateCreatePage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({ default: m.DocumentTemplateCreatePage })),
+);
+const DocumentTemplateDetailPage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({ default: m.DocumentTemplateDetailPage })),
+);
+const DocumentTemplateVersionCreatePage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({
+    default: m.DocumentTemplateVersionCreatePage,
+  })),
+);
+const DocumentFilingRulesPage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({ default: m.DocumentFilingRulesPage })),
+);
+const DocumentPackagesPage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({ default: m.DocumentPackagesPage })),
+);
+const DocumentPackageCreatePage = lazy(() =>
+  import('./pages/document-studio').then((m) => ({ default: m.DocumentPackageCreatePage })),
+);
 // Accounting Module imports
 const GLPostingList = lazy(() =>
   import('./pages/accounting').then((m) => ({ default: m.GLPostingList })),
@@ -862,10 +919,6 @@ const InventoryValuation = lazy(() =>
   import('./pages/inventory').then((m) => ({ default: m.InventoryValuation })),
 );
 // Treasury Module imports
-const RiskDashboard = lazy(() =>
-  import('./pages/treasury').then((m) => ({ default: m.RiskDashboard })),
-);
-const VaRReport = lazy(() => import('./pages/treasury').then((m) => ({ default: m.VaRReport })));
 const LiquidityRisk = lazy(() =>
   import('./pages/treasury').then((m) => ({ default: m.LiquidityRisk })),
 );
@@ -1172,6 +1225,21 @@ export default function App() {
 
             {/* Lending - Dashboard */}
             <Route path="lending" element={<LendingDashboard />} />
+            <Route path="lending/dashboards/pipeline" element={<LendingPipelineDashboard />} />
+            <Route path="lending/masters" element={<MastersHub />} />
+            <Route
+              path="lending/masters/approval-checklist-templates"
+              element={<ChecklistTemplateList />}
+            />
+            <Route
+              path="lending/masters/approval-checklist-templates/new"
+              element={<ChecklistTemplateForm />}
+            />
+            <Route
+              path="lending/masters/approval-checklist-templates/:id"
+              element={<ChecklistTemplateForm />}
+            />
+            <Route path="lending/masters/:masterKey" element={<MasterEditor />} />
 
             {/* Lending - LOS - Entities */}
             <Route path="lending/entities" element={<EntityList />} />
@@ -1184,7 +1252,7 @@ export default function App() {
             <Route path="lending/products" element={<ProductList />} />
             <Route path="lending/products/new" element={<ProductForm />} />
             <Route path="lending/products/:id" element={<ProductView />} />
-            <Route path="lending/products/:id/checklist" element={<ChecklistTemplateList />} />
+            <Route path="lending/products/:id/checklist" element={<ProductChecklistEditor />} />
             <Route path="lending/products/:id/edit" element={<ProductForm />} />
 
             {/* Lending - LOS - Applications */}
@@ -1202,9 +1270,14 @@ export default function App() {
 
             {/* Lending - LMS - Loan Accounts */}
             <Route path="lending/accounts" element={<LoanAccountList />} />
+            <Route path="lending/accounts/historical-import" element={<HistoricalLoanImport />} />
             <Route path="lending/accounts/:id" element={<LoanAccountView />} />
             <Route path="lending/accounts/:id/statement" element={<LoanAccountView />} />
             <Route path="lending/loan-accounts" element={<LoanAccountList />} />
+            <Route
+              path="lending/loan-accounts/historical-import"
+              element={<HistoricalLoanImport />}
+            />
             <Route path="lending/loan-accounts/:id" element={<LoanAccountView />} />
 
             {/* Lending - LMS - Disbursements */}
@@ -1291,6 +1364,25 @@ export default function App() {
             <Route path="dms/documents/:id/versions" element={<DocumentVersions />} />
             <Route path="dms/search" element={<DocumentSearch />} />
             <Route path="dms/tags" element={<TagManagement />} />
+            <Route path="dms/document-studio" element={<DocumentStudioPage />} />
+            <Route
+              path="dms/document-studio/templates/new"
+              element={<DocumentTemplateCreatePage />}
+            />
+            <Route
+              path="dms/document-studio/templates/:templateId"
+              element={<DocumentTemplateDetailPage />}
+            />
+            <Route
+              path="dms/document-studio/templates/:templateId/versions/new"
+              element={<DocumentTemplateVersionCreatePage />}
+            />
+            <Route path="dms/document-studio/filing-rules" element={<DocumentFilingRulesPage />} />
+            <Route path="dms/document-studio/packages" element={<DocumentPackagesPage />} />
+            <Route
+              path="dms/document-studio/packages/new"
+              element={<DocumentPackageCreatePage />}
+            />
 
             {/* Lending - Treasury (legacy aliases → canonical /admin/treasury/*) */}
             <Route path="lending/treasury/*" element={<LegacyTreasuryRedirect />} />
@@ -1363,6 +1455,10 @@ export default function App() {
             <Route path="lending/aa/consents/new" element={<RequestConsent />} />
             <Route path="lending/aa/consents/:consentId" element={<ConsentDetail />} />
             <Route path="lending/aa/consents/:consentId/fetch" element={<ConsentDetail />} />
+            <Route
+              path="lending/aa/sessions"
+              element={<Navigate to="/admin/lending/aa/consents" replace />}
+            />
             <Route path="lending/aa/sessions/:sessionId" element={<SessionDetail />} />
             <Route path="lending/aa/fetched-data" element={<FetchedData />} />
 
@@ -1384,9 +1480,18 @@ export default function App() {
             <Route path="lending/iif/claims/:id" element={<IifClaimDetail />} />
 
             {/* Lending - Approval Checklist Templates */}
-            <Route path="lending/checklist/templates" element={<ChecklistTemplateList />} />
-            <Route path="lending/checklist/templates/new" element={<ChecklistTemplateForm />} />
-            <Route path="lending/checklist/templates/:id" element={<ChecklistTemplateForm />} />
+            <Route
+              path="lending/checklist/templates"
+              element={<LegacyChecklistTemplateRedirect />}
+            />
+            <Route
+              path="lending/checklist/templates/new"
+              element={<LegacyChecklistTemplateRedirect />}
+            />
+            <Route
+              path="lending/checklist/templates/:id"
+              element={<LegacyChecklistTemplateRedirect />}
+            />
 
             {/* Lending - Enhanced NPA Management */}
             <Route path="lending/npa" element={<NPADashboard />} />
@@ -1521,8 +1626,11 @@ export default function App() {
             />
 
             {/* Treasury - Risk Management */}
-            <Route path="treasury/risk-dashboard" element={<RiskDashboard />} />
-            <Route path="treasury/var-report" element={<VaRReport />} />
+            <Route
+              path="treasury/risk-dashboard"
+              element={<Navigate to="/admin/treasury" replace />}
+            />
+            <Route path="treasury/var-report" element={<Navigate to="/admin/treasury" replace />} />
             <Route path="treasury/liquidity-risk" element={<LiquidityRisk />} />
             <Route path="treasury/counterparty-risk" element={<CounterpartyRisk />} />
             <Route path="treasury/stress-test" element={<StressTest />} />
@@ -1782,7 +1890,7 @@ export default function App() {
             <Route path="dashboard" element={<ESSDashboard />} />
             <Route path="profile" element={<ESSProfile />} />
             <Route path="settings" element={<ESSProfile />} />
-            <Route path="attendance" element={<ESSTimesheet />} />
+            <Route path="attendance" element={<ESSAttendance />} />
             <Route path="payslips" element={<ESSPayslips />} />
             <Route path="reimbursements" element={<ESSReimbursements />} />
             <Route path="helpdesk" element={<ESSHelpdesk />} />
@@ -1792,7 +1900,7 @@ export default function App() {
             <Route path="expenses/new" element={<ESSExpenseForm />} />
             <Route path="expenses/:id" element={<ESSExpenseDetail />} />
             <Route path="expenses/:id/edit" element={<ESSExpenseForm />} />
-            <Route path="timesheet" element={<ESSTimesheet />} />
+            <Route path="timesheet" element={<Navigate to="/ess/attendance" replace />} />
             <Route path="assets" element={<ESSAssetList />} />
             <Route path="training" element={<ESSTrainingList />} />
             <Route path="goals" element={<ESSGoals />} />
@@ -1811,9 +1919,15 @@ export default function App() {
             <Route path="dashboard" element={<Navigate to="/portal/workbench" replace />} />
             <Route path="loans" element={<PortalLoans />} />
             <Route path="loans/:loanId" element={<PortalLoanDetail />} />
+            {/* Phase A-E borrower pages — :id alias matches the page's useParams */}
+            <Route path="loans/:id/timeline" element={<PortalLoanTimeline />} />
+            <Route path="loans/:id/transfer-out" element={<PortalTransferOut />} />
+            <Route path="loans/:id/foreclosure-quote" element={<PortalForeclosureQuote />} />
             <Route path="applications" element={<PortalApplications />} />
             <Route path="applications/new" element={<PortalApplicationNew />} />
             <Route path="applications/:id" element={<PortalApplicationDetail />} />
+            <Route path="applications/:id/queries" element={<PortalApplicationQueries />} />
+            <Route path="applications/:id/kfs" element={<PortalKFSAcknowledge />} />
             <Route path="registrations" element={<AdminPortalRegistrations />} />
             <Route path="reports" element={<PortalReports />} />
             <Route path="payments" element={<Navigate to="/portal/workbench" replace />} />

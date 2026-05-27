@@ -45,9 +45,9 @@ import {
   useRestructures,
   type RestructureListItem,
   type RestructureStatusValue,
-  type RestructureTypeValue,
   type RestructureFilters,
 } from '@/hooks/lending/useRestructures';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 
 const statusConfig: Record<
   RestructureStatusValue,
@@ -66,16 +66,6 @@ const statusConfig: Record<
   CANCELLED: { label: 'Cancelled', color: 'bg-gray-200 text-gray-700', icon: Clock },
 };
 
-const restructureTypeLabels: Record<RestructureTypeValue, string> = {
-  TENURE_EXTENSION: 'Tenure Extension',
-  RATE_REDUCTION: 'Rate Reduction',
-  EMI_REDUCTION: 'EMI Reduction',
-  MORATORIUM: 'Moratorium',
-  FITL: 'FITL',
-  COMPREHENSIVE: 'Comprehensive',
-  OTHER: 'Other',
-};
-
 export default function RestructureList() {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
@@ -87,6 +77,10 @@ export default function RestructureList() {
     ...(statusFilter !== 'ALL' && { status: statusFilter as RestructureStatusValue }),
   };
   const { data, isLoading, isError, error, refetch } = useRestructures(filters);
+  const restructureTypeRows = useLendingOptionRows('RESTRUCTURE_TYPE');
+  const restructureTypeOptions = masterRowsToOptions(restructureTypeRows.data?.items);
+  const restructureTypeLabel = (value: string) =>
+    restructureTypeOptions.find((option) => option.value === value)?.label ?? value;
 
   const all: RestructureListItem[] = data?.items ?? [];
   const restructures = all.filter((r) => {
@@ -200,9 +194,9 @@ export default function RestructureList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Types</SelectItem>
-                  {Object.entries(restructureTypeLabels).map(([v, l]) => (
-                    <SelectItem key={v} value={v}>
-                      {l}
+                  {restructureTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -278,8 +272,7 @@ export default function RestructureList() {
                       <TableCell>{restructure.entityName ?? '—'}</TableCell>
                       <TableCell>
                         <Badge variant="outline">
-                          {restructureTypeLabels[restructure.restructureType] ??
-                            restructure.restructureType}
+                          {restructureTypeLabel(restructure.restructureType)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

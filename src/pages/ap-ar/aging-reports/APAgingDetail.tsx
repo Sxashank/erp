@@ -93,11 +93,7 @@ export function APAgingDetail() {
   }, [vendorId, asOfDate, organizationId, toast]);
 
   const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return formatIndianCompactCurrency(amount);
   };
 
   const getAgingBadge = (bucket: string) => {

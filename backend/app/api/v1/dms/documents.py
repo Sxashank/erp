@@ -1,5 +1,6 @@
 """DMS Documents API endpoints."""
 
+import json
 import logging
 from uuid import UUID
 
@@ -7,7 +8,8 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import get_current_user, get_db_with_tenant
+from app.core.exceptions import BadRequestException, InternalServerException, NotFoundException
 from app.models.auth.user import User
 from app.models.dms import DocumentAccessLevel, DocumentStatus
 from app.schemas.dms.document import (
@@ -18,14 +20,19 @@ from app.schemas.dms.document import (
     DocumentVersionResponse,
 )
 from app.services.dms import DocumentService, SearchService
-from app.core.exceptions import InternalServerException, NotFoundException
+from app.services.dms.filing_service import DocumentFilingService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["DMS Documents"])
 
 
-@router.post("", response_model=DocumentResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=DocumentResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def upload_document(
     file: UploadFile = File(...),
     folder_id: UUID | None = Form(None),
@@ -35,6 +42,8 @@ async def upload_document(
     document_subtype: str | None = Form(None),
     entity_type: str | None = Form(None),
     entity_id: UUID | None = Form(None),
+    module: str | None = Form(None),
+    filing_context: str | None = Form(None, alias="filingContext"),
     access_level: str = Form("organization"),
     keywords: str | None = Form(None),  # Comma-separated
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -55,6 +64,41 @@ async def upload_document(
         except ValueError:
             access_level_enum = DocumentAccessLevel.ORGANIZATION
 
+        if module and document_type and entity_type and entity_id:
+            context = {}
+            if filing_context:
+                try:
+                    context = json.loads(filing_context)
+                except json.JSONDecodeError as exc:
+                    raise BadRequestException(
+                        detail="filingContext must be valid JSON",
+                        error_code="DMS_FILING_CONTEXT_INVALID",
+                    ) from exc
+                if not isinstance(context, dict):
+                    raise BadRequestException(
+                        detail="filingContext must be a JSON object",
+                        error_code="DMS_FILING_CONTEXT_INVALID",
+                    )
+            content = await file.read()
+            filing = DocumentFilingService(db)
+            document, _, _ = await filing.file_bytes(
+                organization_id=current_user.organization_id,
+                content=content,
+                file_name=file.filename or "document",
+                mime_type=file.content_type or "application/octet-stream",
+                module=module,
+                document_type=document_type,
+                document_subtype=document_subtype,
+                entity_type=entity_type,
+                entity_id=entity_id,
+                context=context,
+                name=name or file.filename or "Document",
+                description=description,
+                keywords=keyword_list,
+                created_by=current_user.id,
+            )
+            return document
+
         document = await service.upload_document(
             organization_id=current_user.organization_id,
             file=file.file,
@@ -74,6 +118,8 @@ async def upload_document(
         )
 
         return document
+    except BadRequestException:
+        raise
     except Exception as e:
         logger.error(f"Error uploading document: {e}")
         raise InternalServerException(
@@ -313,7 +359,9 @@ async def download_document(
     )
 
 
-@router.post("/{document_id}/versions", response_model=DocumentVersionResponse, response_model_by_alias=True)
+@router.post(
+    "/{document_id}/versions", response_model=DocumentVersionResponse, response_model_by_alias=True
+)
 async def upload_new_version(
     document_id: UUID,
     file: UploadFile = File(...),

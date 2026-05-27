@@ -35,9 +35,14 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { legalAnalyticsApi } from '@/services/legalApi';
-import type { LegalDashboard as LegalDashboardType, LegalHearing, PropertyAuction, PeriodTracking } from '@/types/legal';
+import type {
+  LegalDashboard as LegalDashboardType,
+  LegalHearing,
+  PropertyAuction,
+  PeriodTracking,
+} from '@/types/legal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 const forumColors: Record<string, string> = {
   DRT: 'bg-blue-100 text-blue-700',
   DRAT: 'bg-indigo-100 text-indigo-700',
@@ -77,18 +82,9 @@ export default function LegalDashboard() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -106,7 +102,7 @@ export default function LegalDashboard() {
         actions={
           <Link to="/admin/legal/cases/new">
             <Button>
-              <Briefcase className="h-4 w-4 mr-2" />
+              <Briefcase className="mr-2 h-4 w-4" />
               New Case
             </Button>
           </Link>
@@ -114,65 +110,65 @@ export default function LegalDashboard() {
       />
 
       {/* Quick Links */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <Link to="/admin/legal/cases">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="p-4 text-center">
-              <div className="p-3 bg-blue-100 rounded-lg inline-flex mb-2">
+              <div className="mb-2 inline-flex rounded-lg bg-blue-100 p-3">
                 <Briefcase className="h-5 w-5 text-blue-600" />
               </div>
-              <p className="font-medium text-sm">Legal Cases</p>
+              <p className="text-sm font-medium">Legal Cases</p>
             </CardContent>
           </Card>
         </Link>
         <Link to="/admin/legal/notices">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="p-4 text-center">
-              <div className="p-3 bg-yellow-100 rounded-lg inline-flex mb-2">
+              <div className="mb-2 inline-flex rounded-lg bg-yellow-100 p-3">
                 <FileText className="h-5 w-5 text-yellow-600" />
               </div>
-              <p className="font-medium text-sm">Notices</p>
+              <p className="text-sm font-medium">Notices</p>
             </CardContent>
           </Card>
         </Link>
         <Link to="/admin/legal/sarfaesi">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="p-4 text-center">
-              <div className="p-3 bg-purple-100 rounded-lg inline-flex mb-2">
+              <div className="mb-2 inline-flex rounded-lg bg-purple-100 p-3">
                 <Home className="h-5 w-5 text-purple-600" />
               </div>
-              <p className="font-medium text-sm">SARFAESI</p>
+              <p className="text-sm font-medium">SARFAESI</p>
             </CardContent>
           </Card>
         </Link>
         <Link to="/admin/legal/advocates">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="p-4 text-center">
-              <div className="p-3 bg-green-100 rounded-lg inline-flex mb-2">
+              <div className="mb-2 inline-flex rounded-lg bg-green-100 p-3">
                 <Users className="h-5 w-5 text-green-600" />
               </div>
-              <p className="font-medium text-sm">Advocates</p>
+              <p className="text-sm font-medium">Advocates</p>
             </CardContent>
           </Card>
         </Link>
         <Link to="/admin/legal/expenses">
-          <Card className="hover:shadow-md transition-shadow cursor-pointer">
+          <Card className="cursor-pointer transition-shadow hover:shadow-md">
             <CardContent className="p-4 text-center">
-              <div className="p-3 bg-red-100 rounded-lg inline-flex mb-2">
+              <div className="mb-2 inline-flex rounded-lg bg-red-100 p-3">
                 <IndianRupee className="h-5 w-5 text-red-600" />
               </div>
-              <p className="font-medium text-sm">Expenses</p>
+              <p className="text-sm font-medium">Expenses</p>
             </CardContent>
           </Card>
         </Link>
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-lg">
+              <div className="rounded-lg bg-blue-100 p-2">
                 <Briefcase className="h-5 w-5 text-blue-600" />
               </div>
               <div>
@@ -188,13 +184,13 @@ export default function LegalDashboard() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-purple-100 rounded-lg">
+              <div className="rounded-lg bg-purple-100 p-2">
                 <IndianRupee className="h-5 w-5 text-purple-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Total Claims</p>
                 <p className="text-xl font-bold">
-                  {formatCurrency(dashboard?.summary?.total_claim_amount || 0)}
+                  {formatIndianCompactCurrency(dashboard?.summary?.total_claim_amount || 0)}
                 </p>
               </div>
             </div>
@@ -203,13 +199,13 @@ export default function LegalDashboard() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-green-100 rounded-lg">
+              <div className="rounded-lg bg-green-100 p-2">
                 <TrendingUp className="h-5 w-5 text-green-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Recovered</p>
                 <p className="text-xl font-bold text-green-600">
-                  {formatCurrency(dashboard?.summary?.total_recovered || 0)}
+                  {formatIndianCompactCurrency(dashboard?.summary?.total_recovered || 0)}
                 </p>
                 <p className="text-xs text-gray-500">{recoveryRate}% recovery rate</p>
               </div>
@@ -219,13 +215,13 @@ export default function LegalDashboard() {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-100 rounded-lg">
+              <div className="rounded-lg bg-red-100 p-2">
                 <AlertTriangle className="h-5 w-5 text-red-600" />
               </div>
               <div>
                 <p className="text-sm text-gray-500">Pending Expenses</p>
                 <p className="text-xl font-bold text-red-600">
-                  {formatCurrency(dashboard?.expense_summary?.pending_approval || 0)}
+                  {formatIndianCompactCurrency(dashboard?.expense_summary?.pending_approval || 0)}
                 </p>
               </div>
             </div>
@@ -233,11 +229,11 @@ export default function LegalDashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Cases by Forum */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Scale className="h-4 w-4" />
               Cases by Forum
             </CardTitle>
@@ -260,7 +256,7 @@ export default function LegalDashboard() {
         {/* SARFAESI by Stage */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Home className="h-4 w-4" />
               SARFAESI by Stage
             </CardTitle>
@@ -283,7 +279,7 @@ export default function LegalDashboard() {
         {/* Expense Summary */}
         <Card>
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <IndianRupee className="h-4 w-4" />
               Expense Summary
             </CardTitle>
@@ -293,25 +289,25 @@ export default function LegalDashboard() {
               <div className="flex justify-between">
                 <span className="text-gray-500">Total Expenses</span>
                 <span className="font-medium">
-                  {formatCurrency(dashboard?.expense_summary?.total_expenses || 0)}
+                  {formatIndianCompactCurrency(dashboard?.expense_summary?.total_expenses || 0)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Pending Approval</span>
                 <span className="font-medium text-yellow-600">
-                  {formatCurrency(dashboard?.expense_summary?.pending_approval || 0)}
+                  {formatIndianCompactCurrency(dashboard?.expense_summary?.pending_approval || 0)}
                 </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-500">Pending Recovery</span>
                 <span className="font-medium text-orange-600">
-                  {formatCurrency(dashboard?.expense_summary?.pending_recovery || 0)}
+                  {formatIndianCompactCurrency(dashboard?.expense_summary?.pending_recovery || 0)}
                 </span>
               </div>
-              <div className="flex justify-between pt-2 border-t">
+              <div className="flex justify-between border-t pt-2">
                 <span className="text-gray-500">Recovered</span>
                 <span className="font-medium text-green-600">
-                  {formatCurrency(dashboard?.expense_summary?.recovered || 0)}
+                  {formatIndianCompactCurrency(dashboard?.expense_summary?.recovered || 0)}
                 </span>
               </div>
             </div>
@@ -319,17 +315,17 @@ export default function LegalDashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Upcoming Hearings */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Gavel className="h-4 w-4" />
               Upcoming Hearings
             </CardTitle>
             <Link
               to="/admin/legal/hearings"
-              className="text-sm text-blue-600 hover:underline flex items-center"
+              className="flex items-center text-sm text-blue-600 hover:underline"
             >
               View All <ChevronRight className="h-4 w-4" />
             </Link>
@@ -340,7 +336,7 @@ export default function LegalDashboard() {
                 {dashboard.upcoming_hearings.slice(0, 5).map((hearing) => (
                   <div
                     key={hearing.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3"
                   >
                     <div>
                       <p className="font-medium">{hearing.case_number}</p>
@@ -359,7 +355,7 @@ export default function LegalDashboard() {
                 ))}
               </div>
             ) : (
-              <p className="text-center py-4 text-gray-500">No upcoming hearings</p>
+              <p className="py-4 text-center text-gray-500">No upcoming hearings</p>
             )}
           </CardContent>
         </Card>
@@ -367,13 +363,13 @@ export default function LegalDashboard() {
         {/* Upcoming Auctions */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-base">
               <Home className="h-4 w-4" />
               Upcoming Auctions
             </CardTitle>
             <Link
               to="/admin/legal/auctions"
-              className="text-sm text-blue-600 hover:underline flex items-center"
+              className="flex items-center text-sm text-blue-600 hover:underline"
             >
               View All <ChevronRight className="h-4 w-4" />
             </Link>
@@ -384,11 +380,11 @@ export default function LegalDashboard() {
                 {dashboard.upcoming_auctions.slice(0, 5).map((auction) => (
                   <div
                     key={auction.id}
-                    className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                    className="flex items-center justify-between rounded-lg bg-gray-50 p-3"
                   >
                     <div>
                       <p className="font-medium">{auction.case_number}</p>
-                      <p className="text-sm text-gray-500 truncate max-w-[200px]">
+                      <p className="max-w-[200px] truncate text-sm text-gray-500">
                         {auction.property_description}
                       </p>
                     </div>
@@ -397,14 +393,14 @@ export default function LegalDashboard() {
                         <DateDisplay date={auction.auction_date} />
                       </p>
                       <p className="text-sm text-green-600">
-                        {formatCurrency(auction.reserve_price)}
+                        {formatIndianCompactCurrency(auction.reserve_price)}
                       </p>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-center py-4 text-gray-500">No upcoming auctions</p>
+              <p className="py-4 text-center text-gray-500">No upcoming auctions</p>
             )}
           </CardContent>
         </Card>
@@ -414,7 +410,7 @@ export default function LegalDashboard() {
       {dashboard?.expiring_periods && dashboard.expiring_periods.length > 0 && (
         <Card className="border-yellow-200 bg-yellow-50">
           <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2 text-yellow-800">
+            <CardTitle className="flex items-center gap-2 text-base text-yellow-800">
               <Clock className="h-4 w-4" />
               Expiring Statutory Periods
             </CardTitle>
@@ -435,11 +431,13 @@ export default function LegalDashboard() {
                   <TableRow key={period.id}>
                     <TableCell className="font-medium">{period.loan_account_number}</TableCell>
                     <TableCell>{period.provision_name}</TableCell>
-                    <TableCell><DateDisplay date={period.end_date} /></TableCell>
+                    <TableCell>
+                      <DateDisplay date={period.end_date} />
+                    </TableCell>
                     <TableCell>
                       <span
                         className={
-                          period.days_remaining <= 7 ? 'text-red-600 font-bold' : 'text-yellow-600'
+                          period.days_remaining <= 7 ? 'font-bold text-red-600' : 'text-yellow-600'
                         }
                       >
                         {period.days_remaining} days
@@ -451,8 +449,8 @@ export default function LegalDashboard() {
                           period.status === 'EXPIRING_SOON'
                             ? 'bg-yellow-100 text-yellow-700'
                             : period.status === 'EXPIRED'
-                            ? 'bg-red-100 text-red-700'
-                            : 'bg-gray-100 text-gray-700'
+                              ? 'bg-red-100 text-red-700'
+                              : 'bg-gray-100 text-gray-700'
                         }
                       >
                         {period.status.replace('_', ' ')}
@@ -472,7 +470,7 @@ export default function LegalDashboard() {
           <CardTitle className="text-base">Recent Cases</CardTitle>
           <Link
             to="/admin/legal/cases"
-            className="text-sm text-blue-600 hover:underline flex items-center"
+            className="flex items-center text-sm text-blue-600 hover:underline"
           >
             View All <ChevronRight className="h-4 w-4" />
           </Link>
@@ -509,7 +507,7 @@ export default function LegalDashboard() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(legalCase.claim_amount)}
+                      {formatIndianCompactCurrency(legalCase.claim_amount)}
                     </TableCell>
                     <TableCell>
                       <Badge variant="secondary">{legalCase.current_status}</Badge>
@@ -519,7 +517,7 @@ export default function LegalDashboard() {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-center py-4 text-gray-500">No cases found</p>
+            <p className="py-4 text-center text-gray-500">No cases found</p>
           )}
         </CardContent>
       </Card>

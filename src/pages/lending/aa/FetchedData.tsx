@@ -46,21 +46,10 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  useAAAccountTransactions,
-  useAABankAccounts,
-} from '@/hooks/lending/useAABankAccounts';
+import { useAAAccountTransactions, useAABankAccounts } from '@/hooks/lending/useAABankAccounts';
 import type { BankAccount } from '@/services/lending/aaApi';
 
 // Format currency
-const formatCurrency = (amount: number, currency = 'INR') => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: currency,
-    maximumFractionDigits: 2,
-  }).format(amount);
-};
-
 // Account type icons
 const getAccountTypeIcon = (type: string) => {
   switch (type?.toUpperCase()) {
@@ -121,10 +110,10 @@ export default function FetchedDataPage() {
     page,
     pageSize,
   });
-  const transactionsQuery = useAAAccountTransactions(
-    selectedAccount?.id,
-    { page: txnPage, pageSize: txnPageSize },
-  );
+  const transactionsQuery = useAAAccountTransactions(selectedAccount?.id, {
+    page: txnPage,
+    pageSize: txnPageSize,
+  });
 
   const accounts = accountsQuery.data?.items ?? [];
   const transactions = transactionsQuery.data?.items ?? [];
@@ -242,7 +231,9 @@ export default function FetchedDataPage() {
           <CardContent>
             <div className="flex items-center gap-2">
               <DollarSign className="h-5 w-5 text-muted-foreground" />
-              <span className="text-2xl font-bold">{formatCurrency(stats.totalBalance)}</span>
+              <span className="text-2xl font-bold">
+                {formatIndianCompactCurrency(stats.totalBalance)}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -368,7 +359,7 @@ export default function FetchedDataPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-semibold">
-                          {formatCurrency(account.currentBalance, account.currency)}
+                          {formatIndianCompactCurrency(account.currentBalance, account.currency)}
                         </p>
                         {getFiTypeBadge(account.fiType)}
                       </div>
@@ -422,7 +413,10 @@ export default function FetchedDataPage() {
                   </div>
                   <div className="text-right">
                     <p className="text-2xl font-bold">
-                      {formatCurrency(selectedAccount.currentBalance, selectedAccount.currency)}
+                      {formatIndianCompactCurrency(
+                        selectedAccount.currentBalance,
+                        selectedAccount.currency,
+                      )}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       as on {format(new Date(selectedAccount.balanceAsOn), 'dd MMM yyyy')}
@@ -498,12 +492,12 @@ export default function FetchedDataPage() {
                                     ) : (
                                       <ArrowUpRight className="h-3 w-3" />
                                     )}
-                                    {formatCurrency(txn.amount)}
+                                    {formatIndianCompactCurrency(txn.amount)}
                                   </span>
                                 </TableCell>
                                 <TableCell className="text-right text-sm">
                                   {txn.currentBalance != null
-                                    ? formatCurrency(txn.currentBalance)
+                                    ? formatIndianCompactCurrency(txn.currentBalance)
                                     : '-'}
                                 </TableCell>
                               </TableRow>
@@ -571,7 +565,7 @@ export default function FetchedDataPage() {
                         <p className="text-sm text-muted-foreground">Available Balance</p>
                         <p className="font-medium">
                           {selectedAccount.availableBalance != null
-                            ? formatCurrency(
+                            ? formatIndianCompactCurrency(
                                 selectedAccount.availableBalance,
                                 selectedAccount.currency,
                               )

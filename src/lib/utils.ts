@@ -1,5 +1,7 @@
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { clsx, type ClassValue } from 'clsx';
+import { twMerge } from 'tailwind-merge';
+
+import { formatIndianCompactCurrency } from '@/lib/currency';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -8,7 +10,10 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * Format a date to a readable string
  */
-export function formatDate(date: string | Date | null | undefined, options?: Intl.DateTimeFormatOptions): string {
+export function formatDate(
+  date: string | Date | null | undefined,
+  options?: Intl.DateTimeFormatOptions,
+): string {
   if (!date) return '-';
 
   const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -26,21 +31,22 @@ export function formatDate(date: string | Date | null | undefined, options?: Int
 }
 
 /**
- * Format a number as currency (INR)
+ * Format a number as currency (INR).
+ *
+ * Per CLAUDE.md §5.8, the canonical render is `<AmountDisplay />`. This
+ * helper exists for non-JSX call sites (PDF export, CSV download, logging)
+ * and now delegates to the Indian-compact formatter so everything
+ * normalises to "1 L", "1.02 Cr", etc. JSX call sites should be migrated
+ * to <AmountDisplay /> over time.
  */
-export function formatCurrency(amount: number | string | null | undefined, currency = 'INR'): string {
+export function formatCurrency(
+  amount: number | string | null | undefined,
+  currency = 'INR',
+): string {
   if (amount === null || amount === undefined || amount === '') return '-';
-
   const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-
   if (isNaN(num)) return '-';
-
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(num);
+  return formatIndianCompactCurrency(num, currency);
 }
 
 /**

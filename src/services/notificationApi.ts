@@ -53,7 +53,17 @@ export const notificationApi = {
     page?: number;
     pageSize?: number;
   }): Promise<NotificationLogListResponse> => {
-    const response = await api.get<NotificationLogListResponse>(`${BASE_URL}/logs`, { params });
+    const response = await api.get<NotificationLogListResponse>(`${BASE_URL}/logs`, {
+      params: params
+        ? {
+            notificationId: params.notificationId,
+            channel: params.channel,
+            status: params.status,
+            page: params.page,
+            page_size: params.pageSize,
+          }
+        : undefined,
+    });
     return response.data;
   },
 
@@ -76,13 +86,18 @@ export const notificationApi = {
   },
 
   // Send bulk notifications
-  sendBulkNotifications: async (data: BulkNotificationRequest): Promise<{ status: string; message: string }> => {
+  sendBulkNotifications: async (
+    data: BulkNotificationRequest,
+  ): Promise<{ status: string; message: string }> => {
     const response = await api.post<{ status: string; message: string }>(`${BASE_URL}/bulk`, data);
     return response.data;
   },
 
   // Mark notifications as read
-  markAsRead: async (data: { notification_ids?: string[]; mark_all?: boolean }): Promise<{ marked_read: number }> => {
+  markAsRead: async (data: {
+    notification_ids?: string[];
+    mark_all?: boolean;
+  }): Promise<{ marked_read: number }> => {
     const response = await api.post<{ marked_read: number }>(`${BASE_URL}/mark-read`, data);
     return response.data;
   },
@@ -107,9 +122,12 @@ export const notificationApi = {
   // Create or update preference
   updatePreference: async (
     category: NotificationCategory,
-    data: NotificationPreferenceUpdate
+    data: NotificationPreferenceUpdate,
   ): Promise<NotificationPreference> => {
-    const response = await api.put<NotificationPreference>(`${BASE_URL}/preferences/${category}`, data);
+    const response = await api.put<NotificationPreference>(
+      `${BASE_URL}/preferences/${category}`,
+      data,
+    );
     return response.data;
   },
 };
@@ -125,7 +143,9 @@ export const templateApi = {
     page?: number;
     page_size?: number;
   }): Promise<NotificationTemplateListResponse> => {
-    const response = await api.get<NotificationTemplateListResponse>(`${BASE_URL}/templates`, { params });
+    const response = await api.get<NotificationTemplateListResponse>(`${BASE_URL}/templates`, {
+      params,
+    });
     return response.data;
   },
 
@@ -148,7 +168,10 @@ export const templateApi = {
   },
 
   // Update template
-  updateTemplate: async (id: string, data: NotificationTemplateUpdate): Promise<NotificationTemplate> => {
+  updateTemplate: async (
+    id: string,
+    data: NotificationTemplateUpdate,
+  ): Promise<NotificationTemplate> => {
     const response = await api.put<NotificationTemplate>(`${BASE_URL}/templates/${id}`, data);
     return response.data;
   },
@@ -165,13 +188,16 @@ export const templateApi = {
   },
 
   // Get template variables
-  getTemplateVariables: async (templateId: string): Promise<any[]> => {
-    const response = await api.get<any[]>(`${BASE_URL}/templates/${templateId}/variables`);
+  getTemplateVariables: async (templateId: string): Promise<unknown[]> => {
+    const response = await api.get<unknown[]>(`${BASE_URL}/templates/${templateId}/variables`);
     return response.data;
   },
 
   // Add template variable
-  addTemplateVariable: async (templateId: string, data: Record<string, unknown>): Promise<unknown> => {
+  addTemplateVariable: async (
+    templateId: string,
+    data: Record<string, unknown>,
+  ): Promise<unknown> => {
     const response = await api.post<unknown>(`${BASE_URL}/templates/${templateId}/variables`, data);
     return response.data;
   },

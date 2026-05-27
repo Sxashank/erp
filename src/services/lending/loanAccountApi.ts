@@ -17,6 +17,10 @@ import type {
 
 const BASE_URL = '/lending/loan-accounts';
 
+function idempotencyHeaders(): { 'Idempotency-Key': string } {
+  return { 'Idempotency-Key': crypto.randomUUID() };
+}
+
 // ============== List item (matches LoanAccountListResponse) ==============
 
 export type LoanAccountStatus =
@@ -64,6 +68,92 @@ export interface LoanAccountListItem {
   maturityDate: string | null;
 }
 
+export interface HistoricalLoanOnboardingResult {
+  loanAccountId: string | null;
+  loanAccountNumber: string | null;
+  applicationId: string | null;
+  sanctionId: string | null;
+  scheduleId: string | null;
+  importedInstallments: number;
+  importedReceipts: number;
+  dryRun: boolean;
+  warnings: string[];
+  errors: string[];
+}
+
+export interface HistoricalLoanOnboardingBatchResponse {
+  dryRun: boolean;
+  totalLoans: number;
+  importedLoans: number;
+  totalInstallments: number;
+  importedReceipts: number;
+  results: HistoricalLoanOnboardingResult[];
+}
+
+export interface HistoricalInstallmentPayload {
+  installmentNumber: number;
+  dueDate: string;
+  openingBalance: string;
+  principalAmount?: string;
+  interestAmount?: string;
+  emiAmount: string;
+  closingBalance: string;
+  principalPaid?: string;
+  interestPaid?: string;
+  penalInterestDue?: string;
+  penalInterestPaid?: string;
+  status?: string;
+  paidDate?: string;
+  receiptReference?: string;
+  receiptMode?: string;
+  remarks?: string;
+}
+
+export interface HistoricalLoanOnboardingPayload {
+  entityId?: string;
+  entityCode?: string;
+  productId?: string;
+  productCode?: string;
+  legacyLoanNumber?: string;
+  loanAccountNumber?: string;
+  loanReferenceNumber?: string;
+  applicationDate: string;
+  sanctionDate: string;
+  accountOpenDate: string;
+  firstDisbursementDate?: string;
+  lastDisbursementDate?: string;
+  repaymentStartDate?: string;
+  maturityDate?: string;
+  cutoverDate: string;
+  sanctionedAmount: string;
+  totalDisbursedAmount: string;
+  principalOutstanding: string;
+  interestOutstanding?: string;
+  interestOverdue?: string;
+  principalOverdue?: string;
+  penalInterestOutstanding?: string;
+  chargesOutstanding?: string;
+  totalOutstanding?: string;
+  tenureMonths: number;
+  moratoriumMonths?: number;
+  interestType: string;
+  currentInterestRate: string;
+  penalInterestRate?: string;
+  repaymentFrequency: string;
+  repaymentMode: string;
+  dayCountConvention: string;
+  currentEmiAmount?: string;
+  daysPastDue?: number;
+  assetClassification?: string;
+  npaDate?: string;
+  purpose?: string;
+  projectName?: string;
+  remarks?: string;
+  createHistoricalReceipts?: boolean;
+  postHistoricalAccounting?: boolean;
+  installments?: HistoricalInstallmentPayload[];
+}
+
 // ============== Loan Account CRUD ==============
 
 export async function getLoanAccounts(
@@ -72,16 +162,16 @@ export async function getLoanAccounts(
   const params = new URLSearchParams();
 
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.entityId) params.append('entity_id', filters.entityId);
-  if (filters?.productId) params.append('product_id', filters.productId);
+  if (filters?.entityId) params.append('entityId', filters.entityId);
+  if (filters?.productId) params.append('productId', filters.productId);
   if (filters?.status) params.append('status', filters.status);
   if (filters?.assetClassification) {
-    params.append('asset_classification', filters.assetClassification);
+    params.append('assetClassification', filters.assetClassification);
   }
-  if (filters?.dpdFrom !== undefined) params.append('min_dpd', filters.dpdFrom.toString());
-  if (filters?.dpdTo !== undefined) params.append('max_dpd', filters.dpdTo.toString());
+  if (filters?.dpdFrom !== undefined) params.append('minDpd', filters.dpdFrom.toString());
+  if (filters?.dpdTo !== undefined) params.append('maxDpd', filters.dpdTo.toString());
   if (filters?.page) params.append('page', filters.page.toString());
-  if (filters?.pageSize) params.append('page_size', filters.pageSize.toString());
+  if (filters?.pageSize) params.append('pageSize', filters.pageSize.toString());
 
   const response = await api.get<PaginatedResponse<LoanAccountListItem>>(
     `${BASE_URL}?${params.toString()}`,
@@ -104,6 +194,44 @@ export async function updateLoanAccount(
   data: Partial<LoanAccount>,
 ): Promise<LoanAccount> {
   const response = await api.put<LoanAccount>(`${BASE_URL}/${accountId}`, data);
+  return response.data;
+}
+
+export async function downloadHistoricalLoanTemplate(): Promise<Blob> {
+  const response = await api.get<Blob>(`${BASE_URL}/historical-onboarding/template.csv`, {
+    responseType: 'blob',
+  });
+  return response.data;
+}
+
+export async function importHistoricalLoans(
+  file: File,
+  dryRun = true,
+): Promise<HistoricalLoanOnboardingBatchResponse> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await api.post<HistoricalLoanOnboardingBatchResponse>(
+    `${BASE_URL}/historical-onboarding/import?dryRun=${dryRun ? 'true' : 'false'}`,
+    formData,
+    {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...idempotencyHeaders(),
+      },
+    },
+  );
+  return response.data;
+}
+
+export async function onboardHistoricalLoan(
+  payload: HistoricalLoanOnboardingPayload,
+  dryRun = true,
+): Promise<HistoricalLoanOnboardingResult> {
+  const response = await api.post<HistoricalLoanOnboardingResult>(
+    `${BASE_URL}/historical-onboarding?dryRun=${dryRun ? 'true' : 'false'}`,
+    payload,
+    { headers: idempotencyHeaders() },
+  );
   return response.data;
 }
 
@@ -323,6 +451,9 @@ export const loanAccountApi = {
   getLoanAccount,
   createLoanAccount,
   updateLoanAccount,
+  downloadHistoricalLoanTemplate,
+  importHistoricalLoans,
+  onboardHistoricalLoan,
 
   // Schedule
   getRepaymentSchedule,

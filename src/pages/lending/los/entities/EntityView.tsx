@@ -182,7 +182,7 @@ export default function EntityView() {
                   Initiate Rating
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  onClick={() => navigate(`/admin/lending/applications/new?entity_id=${id}`)}
+                  onClick={() => navigate(`/admin/lending/applications/new?entityId=${id}`)}
                 >
                   <FileText className="mr-2 h-4 w-4" />
                   New Application

@@ -29,25 +29,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { entityApi } from '@/services/lending';
 import type { EntityContact } from '@/types/lending';
 
-const CONTACT_TYPES = [
-  { value: 'DIRECTOR', label: 'Director' },
-  { value: 'PROMOTER', label: 'Promoter' },
-  { value: 'KEY_MANAGERIAL_PERSON', label: 'Key Management Person' },
-  { value: 'AUTHORIZED_SIGNATORY', label: 'Authorized Signatory' },
-  { value: 'GUARANTOR', label: 'Guarantor' },
-];
-
 const contactSchema = z.object({
-  contactType: z.enum([
-    'DIRECTOR',
-    'PROMOTER',
-    'KEY_MANAGERIAL_PERSON',
-    'AUTHORIZED_SIGNATORY',
-    'GUARANTOR',
-  ]),
+  contactType: z.string().min(1, 'Contact type is required'),
   name: z.string().min(2, 'Name must be at least 2 characters'),
   designation: z.string().optional(),
   email: z.string().email('Invalid email').optional().or(z.literal('')),
@@ -76,11 +63,13 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const contactTypesQuery = useLendingOptionRows('CONTACT_TYPE');
+  const contactTypes = masterRowsToOptions(contactTypesQuery.data?.items);
 
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
-      contactType: 'KEY_MANAGERIAL_PERSON',
+      contactType: 'AUTHORIZED_SIGNATORY',
       name: '',
       designation: '',
       email: '',
@@ -109,7 +98,7 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
   // Start adding new contact
   const handleAddNew = () => {
     form.reset({
-      contactType: 'KEY_MANAGERIAL_PERSON',
+      contactType: contactTypes[0]?.value ?? 'AUTHORIZED_SIGNATORY',
       name: '',
       designation: '',
       email: '',
@@ -124,7 +113,7 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
   // Start editing existing contact
   const handleEdit = (contact: EntityContact) => {
     form.reset({
-      contactType: contact.contactType as ContactFormData['contactType'],
+      contactType: contact.contactType,
       name: contact.name,
       designation: contact.designation || '',
       email: contact.email || '',
@@ -214,7 +203,7 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {CONTACT_TYPES.map((type) => (
+                            {contactTypes.map((type) => (
                               <SelectItem key={type.value} value={type.value}>
                                 {type.label}
                               </SelectItem>
@@ -344,7 +333,7 @@ export default function EntityContactsTab({ entityId }: EntityContactsTabProps) 
                   <div className="flex items-center gap-2">
                     <p className="font-medium">{contact.name}</p>
                     <Badge variant="outline">
-                      {CONTACT_TYPES.find((t) => t.value === contact.contactType)?.label ||
+                      {contactTypes.find((t) => t.value === contact.contactType)?.label ||
                         contact.contactType}
                     </Badge>
                     {contact.isPrimary && <Badge>Primary</Badge>}

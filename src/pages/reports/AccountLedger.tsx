@@ -1,4 +1,12 @@
-import { BookOpen, ExternalLink, FileSpreadsheet, FileText, Filter, Printer, Search } from 'lucide-react';
+import {
+  BookOpen,
+  ExternalLink,
+  FileSpreadsheet,
+  FileText,
+  Filter,
+  Printer,
+  Search,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 
@@ -27,7 +35,7 @@ import { reportsApi, organizationsApi, accountsApi, financialYearsApi } from '@/
 import type { Account, Organization, FinancialYear } from '@/types';
 import { exportAccountLedgerToExcel, exportAccountLedgerToPDF } from '@/utils/exportUtils';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface LedgerEntry {
   voucher_id: string;
   voucher_number: string;
@@ -82,10 +90,10 @@ export function AccountLedger() {
 
   useEffect(() => {
     if (selectedFYId) {
-      const fy = financialYears.find(f => f.id === selectedFYId);
+      const fy = financialYears.find((f) => f.id === selectedFYId);
       if (fy) {
-        setFromDate(fy.start_date);
-        setToDate(fy.end_date);
+        setFromDate(fy.start_date ?? '');
+        setToDate(fy.end_date ?? '');
       }
     }
   }, [selectedFYId, financialYears]);
@@ -93,7 +101,7 @@ export function AccountLedger() {
   useEffect(() => {
     // If account ID is passed via URL, set it after accounts are loaded
     if (accountIdFromUrl && accounts.length > 0) {
-      const account = accounts.find(a => a.id === accountIdFromUrl);
+      const account = accounts.find((a) => a.id === accountIdFromUrl);
       if (account) {
         setSelectedAccountId(accountIdFromUrl);
         // Use dates from URL if provided
@@ -187,23 +195,15 @@ export function AccountLedger() {
       generateReport();
     }
   }, [accountIdFromUrl, fromDate, generateReport, reportData, selectedAccountId, toDate]);
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
-
   const handlePrint = () => {
     window.print();
   };
 
   const filteredAccounts = searchQuery
     ? accounts.filter(
-        a =>
+        (a) =>
           a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          a.code.toLowerCase().includes(searchQuery.toLowerCase())
+          a.code.toLowerCase().includes(searchQuery.toLowerCase()),
       )
     : accounts;
 
@@ -306,7 +306,7 @@ export function AccountLedger() {
                       </SelectItem>
                     ))}
                     {filteredAccounts.length === 0 && (
-                      <div className="py-2 px-4 text-sm text-slate-500">No accounts found</div>
+                      <div className="px-4 py-2 text-sm text-slate-500">No accounts found</div>
                     )}
                   </SelectContent>
                 </Select>
@@ -314,11 +314,15 @@ export function AccountLedger() {
             </div>
             <div>
               <Label>From Date</Label>
-              <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              <Input
+                type="date"
+                value={fromDate ?? ''}
+                onChange={(e) => setFromDate(e.target.value)}
+              />
             </div>
             <div>
               <Label>To Date</Label>
-              <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+              <Input type="date" value={toDate ?? ''} onChange={(e) => setToDate(e.target.value)} />
             </div>
           </div>
           <div className="mt-4 flex justify-end">
@@ -341,7 +345,8 @@ export function AccountLedger() {
                 {reportData.account_code} | {reportData.account_group_name}
               </p>
               <p className="text-sm text-slate-500">
-                Ledger for the period <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
+                Ledger for the period <DateDisplay date={reportData.from_date} /> to{' '}
+                <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>
@@ -351,8 +356,12 @@ export function AccountLedger() {
               <div>
                 <span className="text-sm font-medium text-slate-600">Opening Balance</span>
                 <p className="text-lg font-semibold">
-                  {formatCurrency(reportData.opening_balance)}{' '}
-                  <span className={reportData.opening_balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'}>
+                  {formatIndianCompactCurrency(reportData.opening_balance)}{' '}
+                  <span
+                    className={
+                      reportData.opening_balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'
+                    }
+                  >
                     {reportData.opening_balance_type}
                   </span>
                 </p>
@@ -360,8 +369,12 @@ export function AccountLedger() {
               <div className="text-right">
                 <span className="text-sm font-medium text-slate-600">Closing Balance</span>
                 <p className="text-lg font-semibold">
-                  {formatCurrency(reportData.closing_balance)}{' '}
-                  <span className={reportData.closing_balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'}>
+                  {formatIndianCompactCurrency(reportData.closing_balance)}{' '}
+                  <span
+                    className={
+                      reportData.closing_balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'
+                    }
+                  >
                     {reportData.closing_balance_type}
                   </span>
                 </p>
@@ -371,7 +384,9 @@ export function AccountLedger() {
             {reportData.entries.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-8">
                 <BookOpen className="mb-4 h-12 w-12 text-slate-300" />
-                <p className="text-sm text-slate-500">No transactions found for the selected period</p>
+                <p className="text-sm text-slate-500">
+                  No transactions found for the selected period
+                </p>
               </div>
             ) : (
               <Table>
@@ -381,23 +396,31 @@ export function AccountLedger() {
                     <TableHead className="w-[120px]">Voucher No.</TableHead>
                     <TableHead className="w-[100px]">Type</TableHead>
                     <TableHead>Narration</TableHead>
-                    <TableHead className="text-right w-[130px]">Debit</TableHead>
-                    <TableHead className="text-right w-[130px]">Credit</TableHead>
-                    <TableHead className="text-right w-[150px]">Balance</TableHead>
+                    <TableHead className="w-[130px] text-right">Debit</TableHead>
+                    <TableHead className="w-[130px] text-right">Credit</TableHead>
+                    <TableHead className="w-[150px] text-right">Balance</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {/* Opening Balance Row */}
                   <TableRow className="bg-slate-50 font-medium">
-                    <TableCell><DateDisplay date={reportData.from_date} /></TableCell>
+                    <TableCell>
+                      <DateDisplay date={reportData.from_date} />
+                    </TableCell>
                     <TableCell>-</TableCell>
                     <TableCell>-</TableCell>
                     <TableCell>Opening Balance</TableCell>
                     <TableCell className="text-right font-mono">-</TableCell>
                     <TableCell className="text-right font-mono">-</TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.opening_balance)}{' '}
-                      <span className={reportData.opening_balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'}>
+                      {formatIndianCompactCurrency(reportData.opening_balance)}{' '}
+                      <span
+                        className={
+                          reportData.opening_balance_type === 'DR'
+                            ? 'text-blue-600'
+                            : 'text-red-600'
+                        }
+                      >
                         {reportData.opening_balance_type}
                       </span>
                     </TableCell>
@@ -408,7 +431,7 @@ export function AccountLedger() {
                         <DateDisplay date={entry.voucher_date} />
                       </TableCell>
                       <TableCell
-                        className="font-medium text-blue-600 cursor-pointer hover:underline"
+                        className="cursor-pointer font-medium text-blue-600 hover:underline"
                         onClick={() => handleVoucherDrillDown(entry.voucher_id)}
                       >
                         <span className="flex items-center gap-1">
@@ -417,27 +440,33 @@ export function AccountLedger() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-medium bg-slate-100 text-slate-700">
+                        <span className="inline-flex items-center rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                           {entry.voucher_type}
                         </span>
                       </TableCell>
                       <TableCell className="max-w-[300px] truncate" title={entry.narration}>
                         {entry.narration || '-'}
                         {entry.reference_number && (
-                          <span className="ml-1 text-slate-400 text-xs">
+                          <span className="ml-1 text-xs text-slate-400">
                             (Ref: {entry.reference_number})
                           </span>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {entry.debit_amount > 0 ? formatCurrency(entry.debit_amount) : '-'}
+                        {entry.debit_amount > 0
+                          ? formatIndianCompactCurrency(entry.debit_amount)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {entry.credit_amount > 0 ? formatCurrency(entry.credit_amount) : '-'}
+                        {entry.credit_amount > 0
+                          ? formatIndianCompactCurrency(entry.credit_amount)
+                          : '-'}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {formatCurrency(entry.running_balance)}{' '}
-                        <span className={entry.balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'}>
+                        {formatIndianCompactCurrency(entry.running_balance)}{' '}
+                        <span
+                          className={entry.balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'}
+                        >
                           {entry.balance_type}
                         </span>
                       </TableCell>
@@ -447,14 +476,20 @@ export function AccountLedger() {
                   <TableRow className="bg-slate-100 font-bold">
                     <TableCell colSpan={4}>TOTAL / Closing Balance</TableCell>
                     <TableCell className="text-right font-mono text-blue-600">
-                      {formatCurrency(reportData.total_debit)}
+                      {formatIndianCompactCurrency(reportData.total_debit)}
                     </TableCell>
                     <TableCell className="text-right font-mono text-red-600">
-                      {formatCurrency(reportData.total_credit)}
+                      {formatIndianCompactCurrency(reportData.total_credit)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.closing_balance)}{' '}
-                      <span className={reportData.closing_balance_type === 'DR' ? 'text-blue-600' : 'text-red-600'}>
+                      {formatIndianCompactCurrency(reportData.closing_balance)}{' '}
+                      <span
+                        className={
+                          reportData.closing_balance_type === 'DR'
+                            ? 'text-blue-600'
+                            : 'text-red-600'
+                        }
+                      >
                         {reportData.closing_balance_type}
                       </span>
                     </TableCell>
@@ -465,7 +500,9 @@ export function AccountLedger() {
 
             <div className="mt-4 flex justify-between text-xs text-slate-500 print:mt-8">
               <span>
-                Transactions: {reportData.entries.length} | Total Debit: {formatCurrency(reportData.total_debit)} | Total Credit: {formatCurrency(reportData.total_credit)}
+                Transactions: {reportData.entries.length} | Total Debit:{' '}
+                {formatIndianCompactCurrency(reportData.total_debit)} | Total Credit:{' '}
+                {formatIndianCompactCurrency(reportData.total_credit)}
               </span>
               <span>Generated on: {new Date(reportData.generated_at).toLocaleString('en-IN')}</span>
             </div>

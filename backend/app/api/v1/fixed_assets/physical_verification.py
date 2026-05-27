@@ -7,7 +7,8 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import get_current_user, get_db_with_tenant
+from app.schemas.fixed_assets.common import OffsetPaginatedResponse
 from app.models.auth.user import User
 from app.core.constants import Permissions
 from app.core.permissions import PermissionChecker
@@ -30,6 +31,10 @@ from app.services.fixed_assets.physical_verification_service import PhysicalVeri
 from app.core.exceptions import BadRequestException, NotFoundException
 
 router = APIRouter()
+
+
+def _schedule_status_to_response(status_value: str) -> str:
+    return "SCHEDULED" if status_value == "DRAFT" else status_value
 
 
 def _schedule_to_response(schedule) -> VerificationScheduleResponse:
@@ -56,7 +61,7 @@ def _schedule_to_response(schedule) -> VerificationScheduleResponse:
         discrepancy_count=schedule.discrepancy_count,
         total_value_verified=schedule.total_value_verified,
         total_value_missing=schedule.total_value_missing,
-        status=schedule.status,
+        status=_schedule_status_to_response(schedule.status),
         remarks=schedule.remarks,
         approved_by=schedule.approved_by,
         approved_at=schedule.approved_at,
@@ -76,7 +81,9 @@ def _entry_to_response(entry) -> VerificationEntryResponse:
         asset_id=entry.asset_id,
         asset_code=entry.asset.asset_code if entry.asset else None,
         asset_name=entry.asset.asset_name if entry.asset else None,
-        category_name=entry.asset.category.category_name if entry.asset and entry.asset.category else None,
+        category_name=(
+            entry.asset.category.category_name if entry.asset and entry.asset.category else None
+        ),
         expected_location_id=entry.expected_location_id,
         expected_department_id=entry.expected_department_id,
         verification_date=entry.verification_date,
@@ -104,8 +111,16 @@ def _discrepancy_to_response(discrepancy) -> DiscrepancyResponse:
         id=discrepancy.id,
         entry_id=discrepancy.entry_id,
         asset_id=discrepancy.entry.asset_id if discrepancy.entry else None,
-        asset_code=discrepancy.entry.asset.asset_code if discrepancy.entry and discrepancy.entry.asset else None,
-        asset_name=discrepancy.entry.asset.asset_name if discrepancy.entry and discrepancy.entry.asset else None,
+        asset_code=(
+            discrepancy.entry.asset.asset_code
+            if discrepancy.entry and discrepancy.entry.asset
+            else None
+        ),
+        asset_name=(
+            discrepancy.entry.asset.asset_name
+            if discrepancy.entry and discrepancy.entry.asset
+            else None
+        ),
         discrepancy_type=discrepancy.discrepancy_type,
         description=discrepancy.description,
         value_impact=discrepancy.value_impact,
@@ -128,10 +143,14 @@ def _discrepancy_to_response(discrepancy) -> DiscrepancyResponse:
 # Schedule Endpoints
 # ============================================
 
-@router.get("/schedules", response_model=dict, response_model_by_alias=True)
+
+@router.get(
+    "/schedules",
+    response_model=OffsetPaginatedResponse[VerificationScheduleResponse],
+    response_model_by_alias=True,
+)
 async def list_schedules(
     request: Request,
-    organization_id: UUID,
     financial_year: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
@@ -143,18 +162,22 @@ async def list_schedules(
     """List physical verification schedules."""
     service = PhysicalVerificationService(db)
     schedules, total = await service.list_schedules(
-        organization_id, financial_year, status, skip, limit
+        current_user.organization_id, financial_year, status, skip, limit
     )
 
-    return {
-        "items": [_schedule_to_response(s) for s in schedules],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    return OffsetPaginatedResponse(
+        items=[_schedule_to_response(s) for s in schedules],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
-@router.get("/schedules/{schedule_id}", response_model=VerificationScheduleResponse, response_model_by_alias=True)
+@router.get(
+    "/schedules/{schedule_id}",
+    response_model=VerificationScheduleResponse,
+    response_model_by_alias=True,
+)
 async def get_schedule(
     request: Request,
     schedule_id: UUID,
@@ -170,7 +193,12 @@ async def get_schedule(
     return _schedule_to_response(schedule)
 
 
-@router.post("/schedules", response_model=VerificationScheduleResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/schedules",
+    response_model=VerificationScheduleResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_schedule(
     request: Request,
     data: VerificationScheduleCreate,
@@ -187,7 +215,11 @@ async def create_schedule(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.put("/schedules/{schedule_id}", response_model=VerificationScheduleResponse, response_model_by_alias=True)
+@router.put(
+    "/schedules/{schedule_id}",
+    response_model=VerificationScheduleResponse,
+    response_model_by_alias=True,
+)
 async def update_schedule(
     request: Request,
     schedule_id: UUID,
@@ -199,9 +231,7 @@ async def update_schedule(
     """Update a physical verification schedule."""
     service = PhysicalVerificationService(db)
     try:
-        schedule = await service.update_schedule(
-            schedule_id, data, updated_by=current_user.id
-        )
+        schedule = await service.update_schedule(schedule_id, data, updated_by=current_user.id)
         if not schedule:
             raise NotFoundException(detail="Schedule not found", error_code="SCHEDULE_NOT_FOUND")
         return _schedule_to_response(schedule)
@@ -209,7 +239,11 @@ async def update_schedule(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/start", response_model=VerificationScheduleResponse, response_model_by_alias=True)
+@router.post(
+    "/schedules/{schedule_id}/start",
+    response_model=VerificationScheduleResponse,
+    response_model_by_alias=True,
+)
 async def start_schedule(
     request: Request,
     schedule_id: UUID,
@@ -221,15 +255,17 @@ async def start_schedule(
     """Start a physical verification schedule."""
     service = PhysicalVerificationService(db)
     try:
-        schedule = await service.start_verification(
-            schedule_id, started_by=current_user.id
-        )
+        schedule = await service.start_verification(schedule_id, started_by=current_user.id)
         return _schedule_to_response(schedule)
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/complete", response_model=VerificationScheduleResponse, response_model_by_alias=True)
+@router.post(
+    "/schedules/{schedule_id}/complete",
+    response_model=VerificationScheduleResponse,
+    response_model_by_alias=True,
+)
 async def complete_schedule(
     request: Request,
     schedule_id: UUID,
@@ -241,15 +277,17 @@ async def complete_schedule(
     """Complete a physical verification schedule."""
     service = PhysicalVerificationService(db)
     try:
-        schedule = await service.complete_verification(
-            schedule_id, completed_by=current_user.id
-        )
+        schedule = await service.complete_verification(schedule_id, completed_by=current_user.id)
         return _schedule_to_response(schedule)
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/approve", response_model=VerificationScheduleResponse, response_model_by_alias=True)
+@router.post(
+    "/schedules/{schedule_id}/approve",
+    response_model=VerificationScheduleResponse,
+    response_model_by_alias=True,
+)
 async def approve_schedule(
     request: Request,
     schedule_id: UUID,
@@ -260,9 +298,7 @@ async def approve_schedule(
     """Approve a completed verification schedule."""
     service = PhysicalVerificationService(db)
     try:
-        schedule = await service.approve_verification(
-            schedule_id, approved_by=current_user.id
-        )
+        schedule = await service.approve_verification(schedule_id, approved_by=current_user.id)
         return _schedule_to_response(schedule)
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
@@ -272,7 +308,12 @@ async def approve_schedule(
 # Entry Endpoints
 # ============================================
 
-@router.get("/schedules/{schedule_id}/entries", response_model=dict, response_model_by_alias=True)
+
+@router.get(
+    "/schedules/{schedule_id}/entries",
+    response_model=OffsetPaginatedResponse[VerificationEntryResponse],
+    response_model_by_alias=True,
+)
 async def list_entries(
     request: Request,
     schedule_id: UUID,
@@ -285,19 +326,19 @@ async def list_entries(
 ):
     """List verification entries for a schedule."""
     service = PhysicalVerificationService(db)
-    entries, total = await service.list_entries(
-        schedule_id, verification_result, skip, limit
+    entries, total = await service.list_entries(schedule_id, verification_result, skip, limit)
+
+    return OffsetPaginatedResponse(
+        items=[_entry_to_response(e) for e in entries],
+        total=total,
+        skip=skip,
+        limit=limit,
     )
 
-    return {
-        "items": [_entry_to_response(e) for e in entries],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
 
-
-@router.get("/entries/{entry_id}", response_model=VerificationEntryResponse, response_model_by_alias=True)
+@router.get(
+    "/entries/{entry_id}", response_model=VerificationEntryResponse, response_model_by_alias=True
+)
 async def get_entry(
     request: Request,
     entry_id: UUID,
@@ -313,7 +354,11 @@ async def get_entry(
     return _entry_to_response(entry)
 
 
-@router.put("/entries/{entry_id}/verify", response_model=VerificationEntryResponse, response_model_by_alias=True)
+@router.put(
+    "/entries/{entry_id}/verify",
+    response_model=VerificationEntryResponse,
+    response_model_by_alias=True,
+)
 async def verify_entry(
     request: Request,
     entry_id: UUID,
@@ -325,15 +370,15 @@ async def verify_entry(
     """Record verification result for an entry."""
     service = PhysicalVerificationService(db)
     try:
-        entry = await service.verify_entry(
-            entry_id, data, verified_by=current_user.id
-        )
+        entry = await service.verify_entry(entry_id, data, verified_by=current_user.id)
         return _entry_to_response(entry)
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/schedules/{schedule_id}/bulk-verify", response_model=dict, response_model_by_alias=True)
+@router.post(
+    "/schedules/{schedule_id}/bulk-verify", response_model=dict, response_model_by_alias=True
+)
 async def bulk_verify(
     request: Request,
     schedule_id: UUID,
@@ -363,10 +408,14 @@ async def bulk_verify(
 # Discrepancy Endpoints
 # ============================================
 
-@router.get("/discrepancies", response_model=dict, response_model_by_alias=True)
+
+@router.get(
+    "/discrepancies",
+    response_model=OffsetPaginatedResponse[DiscrepancyResponse],
+    response_model_by_alias=True,
+)
 async def list_discrepancies(
     request: Request,
-    organization_id: UUID,
     status: Optional[str] = None,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
@@ -377,18 +426,22 @@ async def list_discrepancies(
     """List verification discrepancies."""
     service = PhysicalVerificationService(db)
     discrepancies, total = await service.list_discrepancies(
-        organization_id, status, skip, limit
+        current_user.organization_id, status, skip, limit
     )
 
-    return {
-        "items": [_discrepancy_to_response(d) for d in discrepancies],
-        "total": total,
-        "skip": skip,
-        "limit": limit,
-    }
+    return OffsetPaginatedResponse(
+        items=[_discrepancy_to_response(d) for d in discrepancies],
+        total=total,
+        skip=skip,
+        limit=limit,
+    )
 
 
-@router.get("/discrepancies/{discrepancy_id}", response_model=DiscrepancyResponse, response_model_by_alias=True)
+@router.get(
+    "/discrepancies/{discrepancy_id}",
+    response_model=DiscrepancyResponse,
+    response_model_by_alias=True,
+)
 async def get_discrepancy(
     request: Request,
     discrepancy_id: UUID,
@@ -404,7 +457,11 @@ async def get_discrepancy(
     return _discrepancy_to_response(discrepancy)
 
 
-@router.put("/discrepancies/{discrepancy_id}", response_model=DiscrepancyResponse, response_model_by_alias=True)
+@router.put(
+    "/discrepancies/{discrepancy_id}",
+    response_model=DiscrepancyResponse,
+    response_model_by_alias=True,
+)
 async def update_discrepancy(
     request: Request,
     discrepancy_id: UUID,
@@ -415,9 +472,7 @@ async def update_discrepancy(
 ):
     """Update a discrepancy (investigate, resolve, write-off)."""
     service = PhysicalVerificationService(db)
-    discrepancy = await service.update_discrepancy(
-        discrepancy_id, data, updated_by=current_user.id
-    )
+    discrepancy = await service.update_discrepancy(discrepancy_id, data, updated_by=current_user.id)
     if not discrepancy:
         raise NotFoundException(detail="Discrepancy not found", error_code="DISCREPANCY_NOT_FOUND")
     return _discrepancy_to_response(discrepancy)
@@ -427,10 +482,10 @@ async def update_discrepancy(
 # Reports
 # ============================================
 
+
 @router.get("/summary", response_model=VerificationSummaryResponse, response_model_by_alias=True)
 async def get_verification_summary(
     request: Request,
-    organization_id: UUID,
     financial_year: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
@@ -438,4 +493,4 @@ async def get_verification_summary(
 ):
     """Get physical verification summary for a financial year."""
     service = PhysicalVerificationService(db)
-    return await service.get_verification_summary(organization_id, financial_year)
+    return await service.get_verification_summary(current_user.organization_id, financial_year)

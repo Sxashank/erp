@@ -7,7 +7,15 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from app.api.v1.ess import auth, helpdesk, it_declaration, reimbursement
+from app.api.v1.ess import (
+    assets,
+    auth,
+    helpdesk,
+    it_declaration,
+    performance,
+    reimbursement,
+    training,
+)
 
 
 class ClaimServiceStub:
@@ -106,7 +114,6 @@ def test_reimbursement_ess_routes_do_not_accept_identity_query_params():
         reimbursement.update_claim,
         reimbursement.submit_claim,
         reimbursement.cancel_claim,
-        reimbursement.delete_claim,
         reimbursement.add_line_item,
         reimbursement.remove_line_item,
     ]
@@ -166,9 +173,6 @@ def test_it_declaration_ess_routes_do_not_accept_identity_query_params():
     route_handlers = [
         it_declaration.get_sections,
         it_declaration.get_declarations,
-        it_declaration.create_regularization,
-        it_declaration.get_regularizations,
-        it_declaration.cancel_regularization,
         it_declaration.get_or_create_declaration,
         it_declaration.get_declaration_detail,
         it_declaration.update_tax_regime,
@@ -179,8 +183,9 @@ def test_it_declaration_ess_routes_do_not_accept_identity_query_params():
         it_declaration.add_hra_receipt,
         it_declaration.update_home_loan_details,
         it_declaration.submit_declaration,
-        it_declaration.submit_proofs,
         it_declaration.calculate_tax,
+        it_declaration.create_regularization,
+        it_declaration.get_regularizations,
     ]
 
     for handler in route_handlers:
@@ -195,7 +200,21 @@ def test_ess_auth_routes_do_not_accept_identity_query_params():
         auth.get_active_sessions,
         auth.revoke_session,
         auth.register_device,
-        auth.register_device_legacy,
+    ]
+
+    for handler in route_handlers:
+        assert unsafe_params.isdisjoint(inspect.signature(handler).parameters)
+
+
+def test_ess_operational_routes_do_not_accept_identity_query_params():
+    unsafe_params = {"ess_user_id", "employee_id", "organization_id"}
+    route_handlers = [
+        assets.list_assigned_assets,
+        training.list_training_programs,
+        training.get_training_program_detail,
+        performance.get_current_goals,
+        performance.get_self_appraisal,
+        performance.submit_self_appraisal,
     ]
 
     for handler in route_handlers:

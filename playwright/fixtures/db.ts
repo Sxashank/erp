@@ -25,10 +25,15 @@ import { Client, type QueryResultRow } from 'pg';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..', '..');
+const LIVE_BACKEND_ENABLED = process.env.PLAYWRIGHT_LIVE_BACKEND === '1';
+const LIVE_ADMIN_USERNAME = process.env.UAT_ADMIN_USERNAME ?? 'krishna';
+const LIVE_ORG_CODE = process.env.PLAYWRIGHT_LIVE_ORG_CODE ?? 'SMFC_UAT';
 
 export const E2E_DATABASE_URL =
-  process.env.DATABASE_URL_E2E ??
-  'postgres://smfc:smfc_secret@localhost:5432/smfc_erp_e2e';
+  process.env.DATABASE_URL_E2E ?? 'postgres://smfc:smfc_secret@localhost:5432/smfc_erp_e2e';
+export const LIVE_DATABASE_URL =
+  process.env.DATABASE_URL_LIVE ?? 'postgres://smfc:smfc_secret@localhost:5432/smfc_erp';
+export const PLAYWRIGHT_DATABASE_URL = LIVE_BACKEND_ENABLED ? LIVE_DATABASE_URL : E2E_DATABASE_URL;
 
 /**
  * Resolve the E2E organization UUID written by `backend/scripts/seed_e2e.sh`
@@ -47,14 +52,51 @@ export function readE2EOrgId(): string {
   }
 }
 
+async function resolveDefaultOrgId(client: Client): Promise<string> {
+  if (!LIVE_BACKEND_ENABLED) {
+    return readE2EOrgId();
+  }
+
+  if (process.env.PLAYWRIGHT_ORG_ID) {
+    return process.env.PLAYWRIGHT_ORG_ID;
+  }
+
+  const byUser = await client.query<{ organization_id: string }>(
+    `SELECT organization_id::text AS organization_id
+     FROM mst_user
+     WHERE username = $1
+       AND organization_id IS NOT NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [LIVE_ADMIN_USERNAME],
+  );
+  if (byUser.rowCount && byUser.rows[0]?.organization_id) {
+    return byUser.rows[0].organization_id;
+  }
+
+  const byCode = await client.query<{ id: string }>(
+    `SELECT id::text AS id
+     FROM mst_organization
+     WHERE code = $1
+     LIMIT 1`,
+    [LIVE_ORG_CODE],
+  );
+  if (byCode.rowCount && byCode.rows[0]?.id) {
+    return byCode.rows[0].id;
+  }
+
+  throw new Error(
+    `Could not resolve Playwright org context for live backend mode. ` +
+      `Checked PLAYWRIGHT_ORG_ID, admin user ${JSON.stringify(LIVE_ADMIN_USERNAME)}, ` +
+      `and org code ${JSON.stringify(LIVE_ORG_CODE)} in ${PLAYWRIGHT_DATABASE_URL}.`,
+  );
+}
+
 export interface DbHelper {
   client: Client;
   orgId: string;
   /** Execute an ad-hoc query with positional params. */
-  query<T extends QueryResultRow = QueryResultRow>(
-    sql: string,
-    params?: unknown[],
-  ): Promise<T[]>;
+  query<T extends QueryResultRow = QueryResultRow>(sql: string, params?: unknown[]): Promise<T[]>;
   /** Assert a row exists; optionally check a subset of columns. */
   assertRowExists<T extends QueryResultRow = QueryResultRow>(
     table: string,
@@ -69,11 +111,7 @@ export interface DbHelper {
   ): Promise<T>;
   /** Delete every row in `table` whose `code` (or supplied column) begins with
    *  the test prefix, scoped to the E2E org. Safe to call from teardown. */
-  cleanupByPrefix(
-    table: string,
-    prefix: string,
-    column?: string,
-  ): Promise<number>;
+  cleanupByPrefix(table: string, prefix: string, column?: string): Promise<number>;
   end(): Promise<void>;
 }
 
@@ -101,9 +139,9 @@ function quoteIdent(ident: string): string {
 }
 
 export async function dbConnect(orgId?: string): Promise<DbHelper> {
-  const resolvedOrg = orgId ?? readE2EOrgId();
-  const client = new Client({ connectionString: E2E_DATABASE_URL });
+  const client = new Client({ connectionString: PLAYWRIGHT_DATABASE_URL });
   await client.connect();
+  const resolvedOrg = orgId ?? (await resolveDefaultOrgId(client));
   // RLS GUC — CLAUDE.md §3.4. Without this, every SELECT against an
   // org-scoped table returns zero rows even when the data is there.
   await client.query("SELECT set_config('app.current_org_id', $1, false)", [resolvedOrg]);
@@ -143,7 +181,9 @@ export async function dbConnect(orgId?: string): Promise<DbHelper> {
       const sql = `SELECT * FROM ${quoteIdent(table)} WHERE ${w.sql} LIMIT 1`;
       const res = await client.query(sql, w.params);
       if (res.rows.length === 0) {
-        throw new Error(`assertRowMatches: row not found in ${table} where ${JSON.stringify(where)}`);
+        throw new Error(
+          `assertRowMatches: row not found in ${table} where ${JSON.stringify(where)}`,
+        );
       }
       const row = res.rows[0];
       const drift: string[] = [];
@@ -154,7 +194,9 @@ export async function dbConnect(orgId?: string): Promise<DbHelper> {
         }
       }
       if (drift.length > 0) {
-        throw new Error(`DB row drift in ${table} (${JSON.stringify(where)}):\n${drift.join('\n')}`);
+        throw new Error(
+          `DB row drift in ${table} (${JSON.stringify(where)}):\n${drift.join('\n')}`,
+        );
       }
       return row as never;
     },

@@ -28,7 +28,8 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -37,7 +38,15 @@ from app.core.exceptions import (
     ConflictException,
     NotFoundException,
 )
+from app.core.iif_rules import (
+    CALCULATION_PERCENT_OF_INTEREST_PAID,
+    calculation_rules,
+    eligibility_rules,
+    fund_rules,
+    missing_required_documents,
+)
 from app.models.auth.user import User
+from app.models.document_studio import DocumentModule, GeneratedDocument
 from app.models.lending.enums import (
     AllocationComponent,
     ClaimFrequency,
@@ -56,9 +65,10 @@ from app.models.lending.loan_account import (
     LoanAccount,
     LoanReceipt,
     ReceiptAllocation,
+    RepaymentSchedule,
+    ScheduleInstallment,
 )
 from app.models.lending.sanction import LoanSanction
-from app.services.audit import record_financial_action
 from app.schemas.lending.iif import (
     ClaimAccountStatus,
     ClaimReportFooter,
@@ -70,13 +80,8 @@ from app.schemas.lending.iif import (
     RepaymentRecordLine,
     SubventionClaimDocumentInput,
 )
-from app.core.iif_rules import (
-    CALCULATION_PERCENT_OF_INTEREST_PAID,
-    calculation_rules,
-    eligibility_rules,
-    fund_rules,
-    missing_required_documents,
-)
+from app.services.audit import record_financial_action
+from app.services.document_studio_service import DocumentStudioService
 
 # ---------------------------------------------------------------------------
 # Indian fiscal year helpers (Apr 1 → Mar 31)
@@ -385,6 +390,117 @@ class SubventionClaimService:
 
         return interest_paid, rate, applicable, method, eligible_base
 
+    def _calculation_snapshot(
+        self,
+        *,
+        interest_paid: Decimal,
+        rate: Decimal,
+        applicable: Decimal,
+        method: str,
+        eligible_base: Decimal,
+        refreshed_at: datetime,
+        refresh_reason: str,
+    ) -> dict[str, Any]:
+        return {
+            "interestPaidInPeriod": str(interest_paid),
+            "subventionRatePercent": str(rate),
+            "eligibleBaseAmount": str(eligible_base),
+            "applicableSubventionAmount": str(applicable),
+            "calculationMethod": method,
+            "refreshedAt": refreshed_at.isoformat(),
+            "refreshReason": refresh_reason,
+        }
+
+    async def _apply_scheme_caps(
+        self,
+        *,
+        enrollment: LoanSubventionEnrollment,
+        claim: SubventionClaim | None,
+        computed_amount: Decimal,
+        reserve: bool,
+    ) -> Decimal:
+        """Apply beneficiary and corpus caps without hiding the calculation basis."""
+        scheme = enrollment.scheme
+        amount = computed_amount
+
+        if scheme.max_subvention_per_beneficiary is not None:
+            claimed_to_date = Decimal(enrollment.total_claimed_to_date or 0)
+            if claim is not None and claim.status in {
+                SubventionClaimStatus.SUBMITTED.value,
+                SubventionClaimStatus.VERIFIED.value,
+                SubventionClaimStatus.RELEASE_IN_PROGRESS.value,
+                SubventionClaimStatus.RELEASED.value,
+            }:
+                claimed_to_date -= Decimal(claim.applicable_subvention_amount or 0)
+            remaining = Decimal(scheme.max_subvention_per_beneficiary) - claimed_to_date
+            amount = min(amount, max(remaining, Decimal("0")))
+
+        if reserve and scheme.scheme_corpus is not None:
+            reserved_statuses = (
+                SubventionClaimStatus.SUBMITTED.value,
+                SubventionClaimStatus.VERIFIED.value,
+                SubventionClaimStatus.RELEASE_IN_PROGRESS.value,
+                SubventionClaimStatus.RELEASED.value,
+            )
+            stmt = (
+                select(func.coalesce(func.sum(SubventionClaim.applicable_subvention_amount), 0))
+                .select_from(SubventionClaim)
+                .join(
+                    LoanSubventionEnrollment,
+                    LoanSubventionEnrollment.id == SubventionClaim.enrollment_id,
+                )
+                .where(
+                    SubventionClaim.organization_id == enrollment.organization_id,
+                    LoanSubventionEnrollment.scheme_id == enrollment.scheme_id,
+                    SubventionClaim.deleted_at.is_(None),
+                    SubventionClaim.status.in_(reserved_statuses),
+                )
+            )
+            if claim is not None:
+                stmt = stmt.where(SubventionClaim.id != claim.id)
+            reserved = Decimal((await self.session.execute(stmt)).scalar_one() or 0)
+            remaining = Decimal(scheme.scheme_corpus) - reserved
+            amount = min(amount, max(remaining, Decimal("0")))
+
+        return Decimal(amount).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    async def _refresh_claim_calculation(
+        self,
+        *,
+        claim: SubventionClaim,
+        enrollment: LoanSubventionEnrollment,
+        current_user: User,
+        refresh_reason: str,
+        reserve: bool,
+    ) -> Decimal:
+        """Recompute the claim immediately before lifecycle decisions."""
+        interest_paid, rate, applicable, method, eligible_base = await self.compute_claim(
+            enrollment.organization_id,
+            enrollment.id,
+            claim.period_start,
+            claim.period_end,
+        )
+        applicable = await self._apply_scheme_caps(
+            enrollment=enrollment,
+            claim=claim,
+            computed_amount=applicable,
+            reserve=reserve,
+        )
+        old_amount = Decimal(claim.applicable_subvention_amount or 0)
+        claim.interest_paid_in_period = interest_paid
+        claim.applicable_subvention_amount = applicable
+        claim.calculation_snapshot = self._calculation_snapshot(
+            interest_paid=interest_paid,
+            rate=rate,
+            applicable=applicable,
+            method=method,
+            eligible_base=eligible_base,
+            refreshed_at=datetime.now(UTC),
+            refresh_reason=refresh_reason,
+        )
+        claim.updated_by = current_user.id
+        return applicable - old_amount
+
     # =========================================================================
     # Lifecycle
     # =========================================================================
@@ -434,8 +550,14 @@ class SubventionClaimService:
 
         await self._validate_claim_account_eligibility(enrollment, stage="claim creation")
 
-        interest_paid, _rate, applicable, _method, _base = await self.compute_claim(
+        interest_paid, rate, applicable, method, eligible_base = await self.compute_claim(
             organization_id, enrollment_id, period_start, period_end
+        )
+        applicable = await self._apply_scheme_caps(
+            enrollment=enrollment,
+            claim=None,
+            computed_amount=applicable,
+            reserve=False,
         )
 
         reference = await self._next_claim_reference(
@@ -466,12 +588,27 @@ class SubventionClaimService:
             claim_frequency=scheme.claim_frequency,
             interest_paid_in_period=interest_paid,
             applicable_subvention_amount=applicable,
+            calculation_snapshot=self._calculation_snapshot(
+                interest_paid=interest_paid,
+                rate=rate,
+                applicable=applicable,
+                method=method,
+                eligible_base=eligible_base,
+                refreshed_at=datetime.now(UTC),
+                refresh_reason="CREATE_DRAFT",
+            ),
             status=SubventionClaimStatus.DRAFT.value,
             documents=documents_payload,
             created_by=current_user.id,
         )
         self.session.add(claim)
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            raise ConflictException(
+                "A non-cancelled claim already exists for this period",
+                error_code="CLAIM_EXISTS",
+            ) from exc
         await self.session.refresh(claim)
         return claim
 
@@ -530,6 +667,18 @@ class SubventionClaimService:
                 "Required IIF claim documents are missing: " + "; ".join(missing_docs),
                 error_code="IIF_REQUIRED_DOCUMENTS_MISSING",
             )
+        await self._refresh_claim_calculation(
+            claim=claim,
+            enrollment=enrollment,
+            current_user=current_user,
+            refresh_reason="SUBMIT",
+            reserve=True,
+        )
+        if Decimal(claim.applicable_subvention_amount or 0) <= Decimal("0"):
+            raise BadRequestException(
+                "Applicable subvention amount is zero for this period",
+                error_code="IIF_ZERO_CLAIM_AMOUNT",
+            )
         claim.status = SubventionClaimStatus.SUBMITTED.value
         claim.submitted_date = date.today()
         claim.declaration_signed_by = current_user.id
@@ -564,11 +713,36 @@ class SubventionClaimService:
         if decision == "APPROVE":
             enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
             await self._validate_claim_account_eligibility(enrollment, stage="claim verification")
+            delta = await self._refresh_claim_calculation(
+                claim=claim,
+                enrollment=enrollment,
+                current_user=current_user,
+                refresh_reason="VERIFY_APPROVE",
+                reserve=True,
+            )
+            if delta:
+                enrollment.total_claimed_to_date = (
+                    enrollment.total_claimed_to_date or Decimal("0")
+                ) + delta
+                if enrollment.total_claimed_to_date < Decimal("0"):
+                    enrollment.total_claimed_to_date = Decimal("0")
+                enrollment.updated_by = current_user.id
+                enrollment.version = (enrollment.version or 1) + 1
+            if Decimal(claim.applicable_subvention_amount or 0) <= Decimal("0"):
+                raise BadRequestException(
+                    "Applicable subvention amount is zero for this period",
+                    error_code="IIF_ZERO_CLAIM_AMOUNT",
+                )
             claim.status = SubventionClaimStatus.VERIFIED.value
             claim.verified_date = date.today()
         elif decision == "REJECT":
+            if not reason or not reason.strip():
+                raise BadRequestException(
+                    "Rejection reason is required",
+                    error_code="IIF_REJECTION_REASON_REQUIRED",
+                )
             claim.status = SubventionClaimStatus.REJECTED.value
-            claim.rejection_reason = reason
+            claim.rejection_reason = reason.strip()
             # Undo the claimed-to-date contribution.
             enrollment = await self._get_enrollment(organization_id, claim.enrollment_id)
             enrollment.total_claimed_to_date = (
@@ -783,24 +957,6 @@ class SubventionClaimService:
                 f"IIF {stage} is not allowed: " + "; ".join(reasons),
                 error_code="IIF_CONTINUOUS_ASSISTANCE_BLOCKED",
             )
-
-    async def mark_paid(
-        self,
-        organization_id: UUID,
-        claim_id: UUID,
-        utr_reference: str,
-        paid_date: date | None,
-        current_user: User,
-    ) -> SubventionClaim:
-        """Backward-compatible alias for the older mark-paid API."""
-
-        return await self.mark_released(
-            organization_id,
-            claim_id,
-            utr_reference,
-            paid_date,
-            current_user,
-        )
 
     async def cancel_claim(
         self,
@@ -1111,9 +1267,72 @@ class SubventionClaimService:
                 )
             )
 
-        # ---- Repayment record (installment-wise) ----
+        # ---- Repayment record (installment-wise, backed by receipt allocations) ----
+        money_zero = Decimal("0")
         rec_stmt = (
-            select(LoanReceipt)
+            select(
+                LoanReceipt,
+                ScheduleInstallment,
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ReceiptAllocation.allocation_component
+                                == AllocationComponent.INTEREST,
+                                ReceiptAllocation.allocated_amount,
+                            ),
+                            else_=money_zero,
+                        )
+                    ),
+                    money_zero,
+                ).label("interest_allocated"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ReceiptAllocation.allocation_component
+                                == AllocationComponent.PRINCIPAL,
+                                ReceiptAllocation.allocated_amount,
+                            ),
+                            else_=money_zero,
+                        )
+                    ),
+                    money_zero,
+                ).label("principal_allocated"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ReceiptAllocation.allocation_component
+                                == AllocationComponent.PENAL_INTEREST,
+                                ReceiptAllocation.allocated_amount,
+                            ),
+                            else_=money_zero,
+                        )
+                    ),
+                    money_zero,
+                ).label("penal_allocated"),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (
+                                ReceiptAllocation.allocation_component
+                                == AllocationComponent.CHARGES,
+                                ReceiptAllocation.allocated_amount,
+                            ),
+                            else_=money_zero,
+                        )
+                    ),
+                    money_zero,
+                ).label("charges_allocated"),
+            )
+            .select_from(ReceiptAllocation)
+            .join(LoanReceipt, LoanReceipt.id == ReceiptAllocation.receipt_id)
+            .outerjoin(
+                ScheduleInstallment,
+                ScheduleInstallment.id == ReceiptAllocation.installment_id,
+            )
+            .outerjoin(RepaymentSchedule, RepaymentSchedule.id == ScheduleInstallment.schedule_id)
             .where(
                 LoanReceipt.loan_account_id == loan.id,
                 LoanReceipt.organization_id == organization_id,
@@ -1122,26 +1341,63 @@ class SubventionClaimService:
                 LoanReceipt.deleted_at.is_(None),
                 LoanReceipt.bounced.is_(False),
                 LoanReceipt.status != ReceiptStatus.REVERSED,
+                ReceiptAllocation.deleted_at.is_(None),
+                (ScheduleInstallment.id.is_(None) | (RepaymentSchedule.loan_account_id == loan.id)),
             )
-            .order_by(LoanReceipt.value_date.asc())
+            .group_by(LoanReceipt.id, ScheduleInstallment.id)
+            .order_by(
+                ScheduleInstallment.due_date.asc().nullslast(),
+                LoanReceipt.value_date.asc(),
+                LoanReceipt.receipt_number.asc(),
+            )
         )
-        receipts = list((await self.session.execute(rec_stmt)).scalars().all())
-
+        receipt_rows = list((await self.session.execute(rec_stmt)).all())
         repayment_lines: list[RepaymentRecordLine] = []
-        for r in receipts:
+        for r, installment, interest, principal, penal, charges in receipt_rows:
             repayment_lines.append(
                 RepaymentRecordLine(
                     receipt_number=r.receipt_number,
                     value_date=r.value_date,
                     receipt_amount=r.receipt_amount,
-                    allocated_to_interest=r.interest_allocated or Decimal("0"),
-                    allocated_to_principal=r.principal_allocated or Decimal("0"),
-                    allocated_to_penal=r.penal_interest_allocated or Decimal("0"),
-                    allocated_to_charges=r.charges_allocated or Decimal("0"),
+                    installment_number=(
+                        installment.installment_number if installment is not None else None
+                    ),
+                    due_date=installment.due_date if installment is not None else None,
+                    installment_status=(
+                        installment.status.value
+                        if installment is not None and hasattr(installment.status, "value")
+                        else (str(installment.status) if installment is not None else None)
+                    ),
+                    emi_amount=installment.emi_amount if installment is not None else None,
+                    principal_due=(
+                        installment.principal_amount if installment is not None else None
+                    ),
+                    interest_due=installment.interest_amount if installment is not None else None,
+                    penal_due=installment.penal_interest_due if installment is not None else None,
+                    allocated_to_interest=Decimal(interest or 0),
+                    allocated_to_principal=Decimal(principal or 0),
+                    allocated_to_penal=Decimal(penal or 0),
+                    allocated_to_charges=Decimal(charges or 0),
+                    instrument_number=r.instrument_number,
                 )
             )
 
         # ---- Account status ----
+        last_installment_stmt = (
+            select(ScheduleInstallment)
+            .join(RepaymentSchedule, RepaymentSchedule.id == ScheduleInstallment.schedule_id)
+            .where(
+                RepaymentSchedule.loan_account_id == loan.id,
+                RepaymentSchedule.is_current.is_(True),
+                ScheduleInstallment.due_date <= claim.period_end,
+            )
+            .order_by(
+                ScheduleInstallment.due_date.desc(),
+                ScheduleInstallment.installment_number.desc(),
+            )
+            .limit(1)
+        )
+        last_installment = (await self.session.execute(last_installment_stmt)).scalar_one_or_none()
         account_status = ClaimAccountStatus(
             asset_classification=(
                 loan.asset_classification.value
@@ -1149,7 +1405,11 @@ class SubventionClaimService:
                 else (loan.asset_classification if loan else None)
             ),
             days_past_due=loan.days_past_due if loan else None,
-            last_emi_status=None,  # Filled in once installment status is rolled up.
+            last_emi_status=(
+                last_installment.status.value
+                if last_installment is not None and hasattr(last_installment.status, "value")
+                else (str(last_installment.status) if last_installment is not None else None)
+            ),
         )
 
         # ---- Summary (auto-generated tail) ----
@@ -1196,6 +1456,138 @@ class SubventionClaimService:
             summary=summary,
             footer=footer,
         )
+
+    async def generate_claim_certificate(
+        self,
+        organization_id: UUID,
+        claim_id: UUID,
+        current_user: User,
+    ) -> GeneratedDocument:
+        claim = await self.get(organization_id, claim_id)
+        if claim.status not in {
+            SubventionClaimStatus.VERIFIED.value,
+            SubventionClaimStatus.RELEASE_IN_PROGRESS.value,
+            SubventionClaimStatus.RELEASED.value,
+        }:
+            raise BadRequestException(
+                "IIF claim certificate can be generated only after SFC verification",
+                error_code="IIF_CLAIM_CERTIFICATE_NOT_READY",
+            )
+        context = await self._claim_document_context(organization_id, claim_id)
+        service = DocumentStudioService(self.session)
+        generated = await service.generate(
+            organization_id=organization_id,
+            data={
+                "module": DocumentModule.LENDING,
+                "document_type": "IIF_CLAIM_CERTIFICATE",
+                "document_subtype": claim.status,
+                "entity_type": "subvention_claim",
+                "entity_id": claim.id,
+                "context": context,
+                "generated_from": "IIF_CLAIM_WORKFLOW",
+                "business_number": claim.claim_reference,
+                "file_name": f"IIF-Claim-Certificate-{claim.claim_reference.replace('/', '_')}.pdf",
+                "portal_visible": True,
+            },
+            user_id=current_user.id,
+        )
+        return generated
+
+    async def latest_claim_certificate(
+        self,
+        organization_id: UUID,
+        claim_id: UUID,
+        *,
+        portal_visible_only: bool = False,
+    ) -> GeneratedDocument:
+        claim = await self.get(organization_id, claim_id)
+        stmt = (
+            select(GeneratedDocument)
+            .where(
+                GeneratedDocument.organization_id == organization_id,
+                GeneratedDocument.entity_type == "subvention_claim",
+                GeneratedDocument.entity_id == claim.id,
+                GeneratedDocument.document_type == "IIF_CLAIM_CERTIFICATE",
+                GeneratedDocument.is_active.is_(True),
+            )
+            .order_by(GeneratedDocument.finalized_at.desc())
+            .limit(1)
+        )
+        if portal_visible_only:
+            stmt = stmt.where(GeneratedDocument.portal_visible.is_(True))
+        generated = (await self.session.execute(stmt)).scalar_one_or_none()
+        if generated is None:
+            raise NotFoundException(
+                "IIF claim certificate has not been generated",
+                error_code="IIF_CLAIM_CERTIFICATE_NOT_FOUND",
+            )
+        return generated
+
+    async def _claim_document_context(
+        self,
+        organization_id: UUID,
+        claim_id: UUID,
+    ) -> dict[str, Any]:
+        claim = await self.get(organization_id, claim_id)
+        report = await self.generate_claim_report(organization_id, claim_id)
+        loan = claim.enrollment.loan_account
+        scheme = claim.enrollment.scheme
+
+        from app.models.lending.entity import Entity
+        from app.models.masters.organization import Organization
+
+        entity = await self.session.get(Entity, loan.entity_id)
+        organization = await self.session.get(Organization, organization_id)
+
+        repayment_text = (
+            "; ".join(
+                (
+                    f"Instalment {line.installment_number or 'N/A'} "
+                    f"due {line.due_date or 'N/A'} "
+                    f"status {line.installment_status or 'N/A'} "
+                    f"receipt {line.receipt_number} "
+                    f"value date {line.value_date} "
+                    f"interest {line.allocated_to_interest} "
+                    f"principal {line.allocated_to_principal}"
+                )
+                for line in report.repayment_record
+            )
+            or "No paid EMI/EPI receipts were recorded for this claim period."
+        )
+
+        return {
+            "organization": {
+                "name": getattr(organization, "name", None) or "Sagarmala Finance Corporation",
+                "registeredAddress": getattr(organization, "registered_address", None),
+            },
+            "entity": {
+                "entityCode": getattr(entity, "entity_code", None),
+                "legalName": getattr(entity, "legal_name", None),
+                "pan": getattr(entity, "pan", None),
+            },
+            "loanAccount": {
+                "accountNumber": loan.loan_account_number,
+                "interestRate": loan.current_interest_rate,
+            },
+            "scheme": {
+                "schemeCode": scheme.scheme_code,
+                "schemeName": scheme.scheme_name,
+            },
+            "claim": {
+                "claimReference": claim.claim_reference,
+                "periodStart": claim.period_start,
+                "periodEnd": claim.period_end,
+                "interestPaidInPeriod": claim.interest_paid_in_period,
+                "applicableSubventionAmount": claim.applicable_subvention_amount,
+                "status": claim.status,
+                "repaymentRecordText": repayment_text,
+            },
+            "account": {
+                "lastEmiStatus": report.account_status.last_emi_status,
+                "assetClassification": report.account_status.asset_classification,
+                "daysPastDue": report.account_status.days_past_due,
+            },
+        }
 
     # =========================================================================
     # Helpers

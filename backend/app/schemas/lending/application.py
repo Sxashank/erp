@@ -12,10 +12,7 @@ from app.models.lending.enums import (
     ApplicationStatus,
     AppraisalRecommendation,
     AppraisalType,
-    InterestType,
     MilestoneStatus,
-    RepaymentFrequency,
-    RepaymentMode,
     TechnicalFeasibility,
 )
 from app.schemas.base import CamelSchema
@@ -465,9 +462,9 @@ class LoanApplicationBase(CamelSchema):
     project_completion_date: date | None = None
 
     # Preferred Terms
-    preferred_interest_type: InterestType = InterestType.FLOATING
-    preferred_repayment_frequency: RepaymentFrequency = RepaymentFrequency.MONTHLY
-    preferred_repayment_mode: RepaymentMode = RepaymentMode.EMI
+    preferred_interest_type: str = Field(default="FLOATING", min_length=1, max_length=80)
+    preferred_repayment_frequency: str = Field(default="MONTHLY", min_length=1, max_length=80)
+    preferred_repayment_mode: str = Field(default="EMI", min_length=1, max_length=80)
     requested_moratorium_months: int = Field(default=0, ge=0)
 
     # Source
@@ -506,9 +503,9 @@ class LoanApplicationUpdate(CamelSchema):
     project_completion_date: date | None = None
 
     # Preferred Terms
-    preferred_interest_type: InterestType | None = None
-    preferred_repayment_frequency: RepaymentFrequency | None = None
-    preferred_repayment_mode: RepaymentMode | None = None
+    preferred_interest_type: str | None = Field(None, min_length=1, max_length=80)
+    preferred_repayment_frequency: str | None = Field(None, min_length=1, max_length=80)
+    preferred_repayment_mode: str | None = Field(None, min_length=1, max_length=80)
     requested_moratorium_months: int | None = Field(None, ge=0)
 
     # Source

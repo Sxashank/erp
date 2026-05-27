@@ -29,17 +29,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { masterRowsToOptions, useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { entityApi } from '@/services/lending';
 import type { EntityAddress } from '@/types/lending';
-
-const ADDRESS_TYPES = [
-  { value: 'REGISTERED', label: 'Registered Office' },
-  { value: 'CORRESPONDENCE', label: 'Correspondence' },
-  { value: 'BRANCH', label: 'Branch Office' },
-  { value: 'PLANT', label: 'Plant/Factory' },
-  { value: 'WAREHOUSE', label: 'Warehouse' },
-  { value: 'PROJECT_SITE', label: 'Project Site' },
-];
 
 const INDIAN_STATES = [
   { code: '27', name: 'Maharashtra' },
@@ -53,14 +45,7 @@ const INDIAN_STATES = [
 ];
 
 const addressSchema = z.object({
-  addressType: z.enum([
-    'REGISTERED',
-    'CORRESPONDENCE',
-    'BRANCH',
-    'PLANT',
-    'WAREHOUSE',
-    'PROJECT_SITE',
-  ]),
+  addressType: z.string().min(1, 'Address type is required'),
   addressLine1: z.string().min(5, 'Address must be at least 5 characters'),
   addressLine2: z.string().optional(),
   city: z.string().min(2, 'City is required'),
@@ -83,11 +68,13 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [saving, setSaving] = useState(false);
+  const addressTypesQuery = useLendingOptionRows('ADDRESS_TYPE');
+  const addressTypes = masterRowsToOptions(addressTypesQuery.data?.items);
 
   const form = useForm<AddressFormData>({
     resolver: zodResolver(addressSchema),
     defaultValues: {
-      addressType: 'REGISTERED',
+      addressType: 'REGISTERED_OFFICE',
       addressLine1: '',
       addressLine2: '',
       city: '',
@@ -117,7 +104,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
   const handleAddNew = () => {
     form.reset({
-      addressType: 'REGISTERED',
+      addressType: addressTypes[0]?.value ?? 'REGISTERED_OFFICE',
       addressLine1: '',
       addressLine2: '',
       city: '',
@@ -133,7 +120,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
 
   const handleEdit = (address: EntityAddress) => {
     form.reset({
-      addressType: address.addressType as AddressFormData['addressType'],
+      addressType: address.addressType,
       addressLine1: address.addressLine1,
       addressLine2: address.addressLine2 || '',
       city: address.city,
@@ -220,7 +207,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {ADDRESS_TYPES.map((type) => (
+                            {addressTypes.map((type) => (
                               <SelectItem key={type.value} value={type.value}>
                                 {type.label}
                               </SelectItem>
@@ -368,7 +355,7 @@ export default function EntityAddressesTab({ entityId }: EntityAddressesTabProps
                   <div>
                     <div className="mb-2 flex items-center gap-2">
                       <Badge variant="outline">
-                        {ADDRESS_TYPES.find((t) => t.value === address.addressType)?.label ||
+                        {addressTypes.find((t) => t.value === address.addressType)?.label ||
                           address.addressType}
                       </Badge>
                       {address.isPrimary && <Badge>Primary</Badge>}

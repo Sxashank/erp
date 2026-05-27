@@ -33,15 +33,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock RFQ data
 const rfqs = [
   {
@@ -116,7 +107,8 @@ export default function RFQList() {
   const [statusFilter, setStatusFilter] = useState('all');
 
   const filteredRFQs = rfqs.filter((rfq) => {
-    const matchesSearch = rfq.rfqNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch =
+      rfq.rfqNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rfq.title.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || rfq.status === statusFilter;
     return matchesSearch && matchesStatus;
@@ -125,15 +117,40 @@ export default function RFQList() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'OPEN':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><Send className="h-3 w-3 mr-1" />Open</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <Send className="mr-1 h-3 w-3" />
+            Open
+          </Badge>
+        );
       case 'CLOSED':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Closed</Badge>;
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Closed
+          </Badge>
+        );
       case 'AWARDED':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800"><CheckCircle className="h-3 w-3 mr-1" />Awarded</Badge>;
+        return (
+          <Badge variant="default" className="bg-blue-100 text-blue-800">
+            <CheckCircle className="mr-1 h-3 w-3" />
+            Awarded
+          </Badge>
+        );
       case 'CANCELLED':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Cancelled
+          </Badge>
+        );
       case 'DRAFT':
-        return <Badge variant="outline"><Edit className="h-3 w-3 mr-1" />Draft</Badge>;
+        return (
+          <Badge variant="outline">
+            <Edit className="mr-1 h-3 w-3" />
+            Draft
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -142,20 +159,20 @@ export default function RFQList() {
   // Statistics
   const stats = {
     total: rfqs.length,
-    open: rfqs.filter(r => r.status === 'OPEN').length,
-    closed: rfqs.filter(r => r.status === 'CLOSED').length,
-    awarded: rfqs.filter(r => r.status === 'AWARDED').length,
+    open: rfqs.filter((r) => r.status === 'OPEN').length,
+    closed: rfqs.filter((r) => r.status === 'CLOSED').length,
+    awarded: rfqs.filter((r) => r.status === 'AWARDED').length,
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Request for Quotation (RFQ)"
         subtitle="Manage vendor quotation requests"
         actions={
           <Link to="/admin/procurement/rfq/new">
             <Button>
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               Create RFQ
             </Button>
           </Link>
@@ -163,29 +180,29 @@ export default function RFQList() {
       />
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total RFQs</div>
-            <div className="text-2xl font-bold mt-1">{stats.total}</div>
+            <div className="mt-1 text-2xl font-bold">{stats.total}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Open</div>
-            <div className="text-2xl font-bold mt-1 text-green-600">{stats.open}</div>
+            <div className="mt-1 text-2xl font-bold text-green-600">{stats.open}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Awaiting Decision</div>
-            <div className="text-2xl font-bold mt-1 text-yellow-600">{stats.closed}</div>
+            <div className="mt-1 text-2xl font-bold text-yellow-600">{stats.closed}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Awarded</div>
-            <div className="text-2xl font-bold mt-1 text-blue-600">{stats.awarded}</div>
+            <div className="mt-1 text-2xl font-bold text-blue-600">{stats.awarded}</div>
           </CardContent>
         </Card>
       </div>
@@ -194,7 +211,7 @@ export default function RFQList() {
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-wrap items-center gap-4">
-            <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+            <div className="flex min-w-[200px] flex-1 items-center gap-2">
               <Search className="h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Search by RFQ number or title..."
@@ -258,11 +275,13 @@ export default function RFQList() {
                     <Badge variant="outline">{rfq.category}</Badge>
                   </TableCell>
                   <TableCell className="text-right font-medium">
-                    {formatCurrency(rfq.estimatedValue)}
+                    {formatIndianCompactCurrency(rfq.estimatedValue)}
                   </TableCell>
                   <TableCell className="text-center">{rfq.vendors}</TableCell>
                   <TableCell className="text-center">
-                    <span className={rfq.quotationsReceived === rfq.vendors ? 'text-green-600' : ''}>
+                    <span
+                      className={rfq.quotationsReceived === rfq.vendors ? 'text-green-600' : ''}
+                    >
                       {rfq.quotationsReceived}/{rfq.vendors}
                     </span>
                   </TableCell>

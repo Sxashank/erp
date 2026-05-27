@@ -152,16 +152,18 @@ class Form16AService:
         deductees = []
         for row in rows:
             section = await self.section_repo.get(row.tds_section_id)
-            deductees.append({
-                "deductee_pan": row.deductee_pan,
-                "deductee_name": row.deductee_name,
-                "tds_section_id": row.tds_section_id,
-                "tds_section_code": section.section_code if section else None,
-                "tds_section_name": section.section_name if section else None,
-                "total_amount_paid": row.total_amount_paid,
-                "total_tds_deducted": row.total_tds_deducted,
-                "transaction_count": row.transaction_count,
-            })
+            deductees.append(
+                {
+                    "deductee_pan": row.deductee_pan,
+                    "deductee_name": row.deductee_name,
+                    "tds_section_id": row.tds_section_id,
+                    "tds_section_code": section.section_code if section else None,
+                    "tds_section_name": section.section_name if section else None,
+                    "total_amount_paid": row.total_amount_paid,
+                    "total_tds_deducted": row.total_tds_deducted,
+                    "transaction_count": row.transaction_count,
+                }
+            )
 
         return deductees
 
@@ -214,15 +216,17 @@ class Form16AService:
         # Build transactions list
         transactions = []
         for entry in entries:
-            transactions.append({
-                "date": entry.deduction_date,
-                "amount_paid": float(entry.base_amount),
-                "tds_deducted": float(entry.tds_amount),
-                "surcharge": float(entry.surcharge),
-                "cess": float(entry.cess),
-                "total_tds": float(entry.total_tds),
-                "rate": float(entry.tds_rate),
-            })
+            transactions.append(
+                {
+                    "date": entry.deduction_date,
+                    "amount_paid": float(entry.base_amount),
+                    "tds_deducted": float(entry.tds_amount),
+                    "surcharge": float(entry.surcharge),
+                    "cess": float(entry.cess),
+                    "total_tds": float(entry.total_tds),
+                    "rate": float(entry.tds_rate),
+                }
+            )
 
         # Build challans list (unique challans)
         challans = {}
@@ -257,9 +261,9 @@ class Form16AService:
 
         return Form16ACertificate(
             certificate_number=certificate_number,
-            deductor_tan=org.tan_number if hasattr(org, 'tan_number') else "",
+            deductor_tan=getattr(org, "tan", "") or "",
             deductor_name=org.name,
-            deductor_address=org.address if hasattr(org, 'address') else "",
+            deductor_address=getattr(org, "reg_address_line1", "") or "",
             deductee_pan=deductee_pan,
             deductee_name=first_entry.deductee_name,
             deductee_address=first_entry.deductee_address or "",
@@ -526,10 +530,12 @@ class Form16AService:
         ]
 
         if period_from and period_to:
-            conditions.extend([
-                TDSEntry.deduction_date >= period_from,
-                TDSEntry.deduction_date <= period_to,
-            ])
+            conditions.extend(
+                [
+                    TDSEntry.deduction_date >= period_from,
+                    TDSEntry.deduction_date <= period_to,
+                ]
+            )
 
         query = (
             select(
@@ -559,20 +565,22 @@ class Form16AService:
         certificates = []
         for row in rows:
             section = await self.section_repo.get(row.tds_section_id)
-            certificates.append({
-                "certificate_number": row.certificate_number,
-                "certificate_date": row.certificate_date,
-                "deductee_pan": row.deductee_pan,
-                "deductee_name": row.deductee_name,
-                "tds_section_code": section.section_code if section else None,
-                "tds_section_name": section.section_name if section else None,
-                "total_amount_paid": row.total_amount_paid,
-                "total_tds_deducted": row.total_tds_deducted,
-                "entry_count": row.entry_count,
-                "artifact_status": self.WORKING_SUMMARY_STATUS,
-                "legal_status": self.LEGAL_STATUS,
-                "source": self.SOURCE,
-                "compliance_note": self.COMPLIANCE_NOTE,
-            })
+            certificates.append(
+                {
+                    "certificate_number": row.certificate_number,
+                    "certificate_date": row.certificate_date,
+                    "deductee_pan": row.deductee_pan,
+                    "deductee_name": row.deductee_name,
+                    "tds_section_code": section.section_code if section else None,
+                    "tds_section_name": section.section_name if section else None,
+                    "total_amount_paid": row.total_amount_paid,
+                    "total_tds_deducted": row.total_tds_deducted,
+                    "entry_count": row.entry_count,
+                    "artifact_status": self.WORKING_SUMMARY_STATUS,
+                    "legal_status": self.LEGAL_STATUS,
+                    "source": self.SOURCE,
+                    "compliance_note": self.COMPLIANCE_NOTE,
+                }
+            )
 
         return certificates

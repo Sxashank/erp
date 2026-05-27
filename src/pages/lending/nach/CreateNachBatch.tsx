@@ -63,7 +63,7 @@ interface DueEMI {
 // is wired — it should return EMIs falling due in the next N days with
 // the borrower's NACH mandate joined in. Until then, the list starts
 // empty so the wizard doesn't surface fabricated due dates.
-const mockDueEMIs: DueEMI[] = [];
+const initialDueEMIs: DueEMI[] = [];
 
 const mandateStatusConfig: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: 'Active', color: 'bg-green-100 text-green-700' },
@@ -79,7 +79,7 @@ export default function CreateNachBatch() {
   const [searchQuery, setSearchQuery] = useState('');
   const [provider, setProvider] = useState('RAZORPAY');
   const [debitDate, setDebitDate] = useState('');
-  const [dueEMIs, setDueEMIs] = useState<DueEMI[]>(mockDueEMIs);
+  const [dueEMIs, setDueEMIs] = useState<DueEMI[]>(initialDueEMIs);
 
   // Filter EMIs with active mandates
   const eligibleEMIs = dueEMIs.filter((emi) => emi.mandateStatus === 'ACTIVE');

@@ -32,6 +32,7 @@ class HSNSACService:
         self.session.add(hsn_sac)
         await self.session.flush()
         await self.session.refresh(hsn_sac)
+        await self.session.commit()
         return hsn_sac
 
     async def update(
@@ -52,6 +53,7 @@ class HSNSACService:
 
         await self.session.flush()
         await self.session.refresh(hsn_sac)
+        await self.session.commit()
         return hsn_sac
 
     async def get(self, id: UUID) -> HSNSAC:
@@ -85,3 +87,4 @@ class HSNSACService:
             raise NotFoundException("HSN/SAC code not found")
         hsn_sac.soft_delete(deleted_by)
         await self.session.flush()
+        await self.session.commit()

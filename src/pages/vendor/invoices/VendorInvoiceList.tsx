@@ -42,7 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorInvoiceApi } from '@/services/vendorApi';
 import type { VendorInvoice, VendorInvoiceStatus } from '@/types/vendor';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function VendorInvoiceList() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -81,15 +81,6 @@ export default function VendorInvoiceList() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const getStatusBadge = (invoice: VendorInvoice) => {
     const statusColors: Record<VendorInvoiceStatus, string> = {
       DRAFT: 'bg-gray-100 text-gray-800',
@@ -118,7 +109,7 @@ export default function VendorInvoiceList() {
         actions={
           <Link to="/vendor/invoices/new">
             <Button className="bg-purple-600 hover:bg-purple-700">
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="mr-2 h-4 w-4" />
               Create Invoice
             </Button>
           </Link>
@@ -128,7 +119,7 @@ export default function VendorInvoiceList() {
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
               <Input placeholder="Search by invoice number..." className="pl-10" />
@@ -165,12 +156,12 @@ export default function VendorInvoiceList() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center h-64">
+            <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
             </div>
           ) : invoices.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <FileText className="h-12 w-12 text-gray-300 mb-2" />
+            <div className="flex h-64 flex-col items-center justify-center text-gray-500">
+              <FileText className="mb-2 h-12 w-12 text-gray-300" />
               <p>No invoices found</p>
               <Link to="/vendor/invoices/new" className="mt-4">
                 <Button variant="outline">Create your first invoice</Button>
@@ -193,9 +184,13 @@ export default function VendorInvoiceList() {
                 {invoices.map((invoice) => (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                    <TableCell><DateDisplay date={invoice.invoice_date} /></TableCell>
+                    <TableCell>
+                      <DateDisplay date={invoice.invoice_date} />
+                    </TableCell>
                     <TableCell>{invoice.purchase_order_id ? 'Yes' : '-'}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(invoice.total_amount)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(invoice.total_amount)}
+                    </TableCell>
                     <TableCell>
                       {invoice.matching_status === 'MATCHED' ? (
                         <CheckCircle className="h-4 w-4 text-green-500" />
@@ -209,7 +204,7 @@ export default function VendorInvoiceList() {
                     <TableCell className="text-right">
                       <Link to={`/vendor/invoices/${invoice.id}`}>
                         <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4 mr-1" />
+                          <Eye className="mr-1 h-4 w-4" />
                           View
                         </Button>
                       </Link>
@@ -221,15 +216,25 @@ export default function VendorInvoiceList() {
           )}
 
           {total > limit && (
-            <div className="flex items-center justify-between mt-4">
+            <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-gray-500">
                 Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}
               </p>
               <div className="flex space-x-2">
-                <Button variant="outline" size="sm" onClick={() => setPage(page - 1)} disabled={page === 1}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page - 1)}
+                  disabled={page === 1}
+                >
                   Previous
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setPage(page + 1)} disabled={page * limit >= total}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setPage(page + 1)}
+                  disabled={page * limit >= total}
+                >
                   Next
                 </Button>
               </div>

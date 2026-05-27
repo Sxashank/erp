@@ -42,7 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { organizationsApi } from '@/services/api';
 import type { Organization, PaginatedResponse } from '@/types';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface MaintenanceRecord {
   id: string;
   asset_id: string;
@@ -211,25 +211,18 @@ export function MaintenanceList() {
       logger.error('Failed to fetch AMC contracts:', error);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
-
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'SCHEDULED':
         return <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Scheduled</Badge>;
       case 'IN_PROGRESS':
-        return <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">In Progress</Badge>;
+        return (
+          <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">In Progress</Badge>
+        );
       case 'COMPLETED':
-        return <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">Completed</Badge>;
+        return (
+          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50">Completed</Badge>
+        );
       case 'OVERDUE':
         return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Overdue</Badge>;
       case 'CANCELLED':
@@ -239,7 +232,9 @@ export function MaintenanceList() {
       case 'EXPIRED':
         return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Expired</Badge>;
       case 'EXPIRING_SOON':
-        return <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Expiring Soon</Badge>;
+        return (
+          <Badge className="bg-orange-50 text-orange-700 hover:bg-orange-50">Expiring Soon</Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -265,7 +260,9 @@ export function MaintenanceList() {
       case 'PREVENTIVE':
         return <Badge variant="outline">Preventive</Badge>;
       case 'CORRECTIVE':
-        return <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">Corrective</Badge>;
+        return (
+          <Badge className="bg-yellow-50 text-yellow-700 hover:bg-yellow-50">Corrective</Badge>
+        );
       case 'EMERGENCY':
         return <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Emergency</Badge>;
       case 'INSPECTION':
@@ -275,9 +272,9 @@ export function MaintenanceList() {
     }
   };
 
-  const overdueCount = maintenanceRecords.filter(r => r.status === 'OVERDUE').length;
-  const scheduledCount = maintenanceRecords.filter(r => r.status === 'SCHEDULED').length;
-  const completedCount = maintenanceRecords.filter(r => r.status === 'COMPLETED').length;
+  const overdueCount = maintenanceRecords.filter((r) => r.status === 'OVERDUE').length;
+  const scheduledCount = maintenanceRecords.filter((r) => r.status === 'SCHEDULED').length;
+  const completedCount = maintenanceRecords.filter((r) => r.status === 'COMPLETED').length;
 
   return (
     <div className="space-y-6">
@@ -331,7 +328,10 @@ export function MaintenanceList() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {amcContracts.filter(c => c.status === 'ACTIVE' || c.status === 'EXPIRING_SOON').length}
+              {
+                amcContracts.filter((c) => c.status === 'ACTIVE' || c.status === 'EXPIRING_SOON')
+                  .length
+              }
             </div>
             <p className="text-xs text-slate-500">Contracts in force</p>
           </CardContent>
@@ -354,7 +354,7 @@ export function MaintenanceList() {
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-slate-400" />
                     <Input
                       placeholder="Search..."
-                      className="pl-8 w-[180px]"
+                      className="w-[180px] pl-8"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -429,7 +429,7 @@ export function MaintenanceList() {
                         <TableCell>{getPriorityBadge(record.priority)}</TableCell>
                         <TableCell>{record.vendor_name || '-'}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(record.estimated_cost)}
+                          {formatIndianCompactCurrency(record.estimated_cost)}
                         </TableCell>
                         <TableCell>{getStatusBadge(record.status)}</TableCell>
                         <TableCell>
@@ -496,13 +496,17 @@ export function MaintenanceList() {
                         <TableCell>{contract.coverage_type}</TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <p><DateDisplay date={contract.start_date} /></p>
-                            <p className="text-slate-500">to <DateDisplay date={contract.end_date} /></p>
+                            <p>
+                              <DateDisplay date={contract.start_date} />
+                            </p>
+                            <p className="text-slate-500">
+                              to <DateDisplay date={contract.end_date} />
+                            </p>
                           </div>
                         </TableCell>
                         <TableCell>{contract.asset_count} assets</TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(contract.annual_cost)}
+                          {formatIndianCompactCurrency(contract.annual_cost)}
                         </TableCell>
                         <TableCell>{getStatusBadge(contract.status)}</TableCell>
                         <TableCell>

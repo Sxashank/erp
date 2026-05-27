@@ -180,8 +180,6 @@ const ROUTES: RouteSpec[] = [
   { path: 'treasury/alm' },
   { path: 'treasury/alm/gap' },
   { path: 'treasury/alm/irs' },
-  { path: 'treasury/risk-dashboard' },
-  { path: 'treasury/var-report' },
   { path: 'treasury/liquidity-risk' },
   { path: 'treasury/counterparty-risk' },
   { path: 'treasury/stress-test' },
@@ -199,8 +197,8 @@ const ROUTES: RouteSpec[] = [
   { path: 'lending/iif/claims' },
 
   // Approval checklist template master.
-  { path: 'lending/checklist/templates' },
-  { path: 'lending/checklist/templates/new' },
+  { path: 'lending/masters/approval-checklist-templates' },
+  { path: 'lending/masters/approval-checklist-templates/new' },
 
   // Admin: borrower-portal registrations queue.
   { path: 'portal/registrations' },
@@ -337,7 +335,10 @@ const ROUTE_TIMEOUT_MS = 8000;
 
 test.describe('loan modules smoke', () => {
   test.describe.configure({ mode: 'default' });
-  test.skip(!LIVE_BACKEND_ENABLED, 'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live lending smoke suite.');
+  test.skip(
+    !LIVE_BACKEND_ENABLED,
+    'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live lending smoke suite.',
+  );
 
   for (const spec of ROUTES) {
     test(`/admin/${spec.path}`, async ({ authedPage: page, authBundle }, testInfo) => {

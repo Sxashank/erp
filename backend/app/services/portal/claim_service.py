@@ -44,8 +44,8 @@ from app.services.lending.iif.subvention_claim_service import (
     SubventionClaimService,
 )
 from app.services.portal.actor_roles import (
-    CLAIM_SUBMITTER_ROLES,
     CLAIM_RELEASE_ROLES,
+    CLAIM_SUBMITTER_ROLES,
     CLAIM_VERIFY_ROLES,
     is_borrower_role,
     portal_actor_role,
@@ -287,8 +287,8 @@ class PortalClaimService:
         claim = await self.claim_service.get(claim.organization_id, claim.id)
         await self._notify_claim_transition(
             claim=claim,
-            title="Scheme claim submitted",
-            body=(f"Claim {claim.claim_reference} has been submitted for SMFCL verification."),
+            title="SFC claim submitted",
+            body=(f"Claim {claim.claim_reference} has been submitted for SFC verification."),
             notification_type="SCHEME_CLAIM_SUBMITTED",
             target_roles=list(CLAIM_VERIFY_ROLES),
         )

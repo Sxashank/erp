@@ -107,11 +107,9 @@ class TestGratuityCalculation:
         basic_salary = Decimal("50000")
         years_of_service = Decimal("10")
 
-        gratuity = (
-            Decimal("15") / Decimal("26") *
-            basic_salary *
-            years_of_service
-        ).quantize(Decimal("0.01"))
+        gratuity = (Decimal("15") / Decimal("26") * basic_salary * years_of_service).quantize(
+            Decimal("0.01")
+        )
 
         # Expected: (15/26) × 50000 × 10 = 288461.54
         assert gratuity == Decimal("288461.54")
@@ -141,11 +139,7 @@ class TestGratuityCalculation:
         years_of_service = Decimal("25")
         max_gratuity = Decimal("2000000")
 
-        calculated_gratuity = (
-            Decimal("15") / Decimal("26") *
-            basic_salary *
-            years_of_service
-        )
+        calculated_gratuity = Decimal("15") / Decimal("26") * basic_salary * years_of_service
 
         # Should exceed cap
         assert calculated_gratuity > max_gratuity
@@ -163,11 +157,7 @@ class TestGratuityCalculation:
         if years_of_service < required_years:
             gratuity = Decimal("0")
         else:
-            gratuity = (
-                Decimal("15") / Decimal("26") *
-                basic_salary *
-                years_of_service
-            )
+            gratuity = Decimal("15") / Decimal("26") * basic_salary * years_of_service
 
         assert gratuity == Decimal("0")
 
@@ -224,12 +214,7 @@ class TestFnFCalculation:
         other_earnings = Decimal("2000")
 
         total_earnings = (
-            pending_salary +
-            leave_encashment +
-            gratuity +
-            bonus +
-            reimbursements +
-            other_earnings
+            pending_salary + leave_encashment + gratuity + bonus + reimbursements + other_earnings
         )
 
         assert total_earnings == Decimal("393153.85")
@@ -245,13 +230,13 @@ class TestFnFCalculation:
         tds = Decimal("15000")
 
         total_deductions = (
-            notice_recovery +
-            advance_recovery +
-            loan_recovery +
-            asset_recovery +
-            clearance_recovery +
-            other_deductions +
-            tds
+            notice_recovery
+            + advance_recovery
+            + loan_recovery
+            + asset_recovery
+            + clearance_recovery
+            + other_deductions
+            + tds
         )
 
         assert total_deductions == Decimal("104000")
@@ -330,7 +315,9 @@ class TestClearanceStatus:
         ]
 
         pending = sum(1 for c in clearances if c["status"] == ClearanceStatus.PENDING)
-        recovery_pending = sum(1 for c in clearances if c["status"] == ClearanceStatus.RECOVERY_PENDING)
+        recovery_pending = sum(
+            1 for c in clearances if c["status"] == ClearanceStatus.RECOVERY_PENDING
+        )
         is_complete = pending == 0 and recovery_pending == 0
 
         assert is_complete == True
@@ -384,9 +371,11 @@ class TestPendingSalaryCalculation:
         days_in_month = 30
         days_worked = 30
 
-        pending = (monthly_gross / Decimal(str(days_in_month))) * Decimal(str(days_worked))
+        pending = (
+            (monthly_gross / Decimal(str(days_in_month))) * Decimal(str(days_worked))
+        ).quantize(Decimal("0.01"))
 
-        assert pending == Decimal("100000")
+        assert pending == Decimal("100000.00")
 
     def test_pending_salary_partial_month(self):
         """Test pending salary for partial month."""
@@ -394,9 +383,11 @@ class TestPendingSalaryCalculation:
         days_in_month = 30
         days_worked = 15
 
-        pending = (monthly_gross / Decimal(str(days_in_month))) * Decimal(str(days_worked))
+        pending = (
+            (monthly_gross / Decimal(str(days_in_month))) * Decimal(str(days_worked))
+        ).quantize(Decimal("0.01"))
 
-        assert pending == Decimal("50000")
+        assert pending == Decimal("50000.00")
 
     def test_pending_salary_last_day(self):
         """Test pending salary when leaving on last day."""

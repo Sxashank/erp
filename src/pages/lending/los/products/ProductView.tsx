@@ -11,14 +11,25 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useLoanProduct } from '@/hooks/lending/useLoanProduct';
 
 export default function ProductView() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { data: product, isLoading, isError, error, refetch } = useLoanProduct(id);
+  const productCategoriesQuery = useLendingOptionRows('PRODUCT_CATEGORY');
+  const productCategoryOptions =
+    productCategoriesQuery.data?.items.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.code ?? ''),
+    })) ?? [];
+  const categoryLabel = product
+    ? (productCategoryOptions.find((option) => option.value === product.category)?.label ??
+      product.category.replace(/_/g, ' '))
+    : '';
 
-  if (isLoading) {
+  if (isLoading || productCategoriesQuery.isLoading) {
     return (
       <div className="space-y-6">
         <PageHeader title="Loan Product" subtitle="Loading..." />
@@ -27,11 +38,18 @@ export default function ProductView() {
     );
   }
 
-  if (isError || !product) {
+  if (isError || productCategoriesQuery.isError || !product) {
     return (
       <div className="space-y-6">
         <PageHeader title="Loan Product" />
-        <ErrorState title="Could not load product" error={error} onRetry={() => refetch()} />
+        <ErrorState
+          title="Could not load product"
+          error={error ?? productCategoriesQuery.error}
+          onRetry={() => {
+            refetch();
+            productCategoriesQuery.refetch();
+          }}
+        />
       </div>
     );
   }
@@ -40,7 +58,7 @@ export default function ProductView() {
     <div className="space-y-6">
       <PageHeader
         title={product.name}
-        subtitle={`${product.code} · ${product.category}`}
+        subtitle={`${product.code} · ${categoryLabel}`}
         breadcrumbs={[
           { label: 'Lending', to: '/admin/lending' },
           { label: 'Products', to: '/admin/lending/products' },
@@ -140,7 +158,7 @@ export default function ProductView() {
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Category</dt>
-                  <dd>{product.category}</dd>
+                  <dd>{categoryLabel}</dd>
                 </div>
                 <div>
                   <dt className="text-muted-foreground">Sub-category</dt>
@@ -159,7 +177,7 @@ export default function ProductView() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Processing Fee</dt>
+                  <dt className="text-muted-foreground">Default Spread</dt>
                   <dd>{product.defaultSpreadBps} bps default spread</dd>
                 </div>
               </dl>

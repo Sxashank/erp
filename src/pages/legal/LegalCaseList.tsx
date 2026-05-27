@@ -42,7 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { legalCaseApi } from '@/services/legalApi';
 import type { LegalCase } from '@/types/legal';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 const forumTypes = [
   { value: 'DRT', label: 'DRT' },
   { value: 'DRAT', label: 'DRAT' },
@@ -99,15 +99,6 @@ export default function LegalCaseList() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const filteredCases = cases.filter((c) => {
     const matchesSearch =
       !searchQuery ||
@@ -306,7 +297,7 @@ export default function LegalCaseList() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatCurrency(legalCase.claim_amount)}
+                    {formatIndianCompactCurrency(legalCase.claim_amount)}
                   </TableCell>
                   <TableCell>
                     {legalCase.next_hearing_date ? (

@@ -34,15 +34,6 @@ import {
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock pending POs for approval
 const pendingApprovals = [
   {
@@ -82,7 +73,12 @@ const pendingApprovals = [
     category: 'Office Supplies',
     urgency: 'NORMAL',
     lineItems: [
-      { description: 'A4 Paper (500 sheets) x 50 reams', quantity: 50, unitPrice: 350, total: 17500 },
+      {
+        description: 'A4 Paper (500 sheets) x 50 reams',
+        quantity: 50,
+        unitPrice: 350,
+        total: 17500,
+      },
       { description: 'Printer Cartridges - HP 78A', quantity: 10, unitPrice: 1500, total: 15000 },
       { description: 'Stapler Set', quantity: 25, unitPrice: 250, total: 6250 },
       { description: 'Pen Boxes (50 pens)', quantity: 10, unitPrice: 350, total: 3500 },
@@ -136,7 +132,7 @@ const approvalHistory = [
 
 export default function POApproval() {
   const navigate = useNavigate();
-  const [selectedPO, setSelectedPO] = useState<typeof pendingApprovals[0] | null>(null);
+  const [selectedPO, setSelectedPO] = useState<(typeof pendingApprovals)[0] | null>(null);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [remarks, setRemarks] = useState('');
@@ -144,7 +140,7 @@ export default function POApproval() {
 
   const handleApprove = async () => {
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     setIsProcessing(false);
     setShowApproveDialog(false);
     setSelectedPO(null);
@@ -153,7 +149,7 @@ export default function POApproval() {
 
   const handleReject = async () => {
     setIsProcessing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
     setIsProcessing(false);
     setShowRejectDialog(false);
     setSelectedPO(null);
@@ -177,11 +173,11 @@ export default function POApproval() {
   const stats = {
     pending: pendingApprovals.length,
     totalValue: pendingApprovals.reduce((sum, po) => sum + po.totalAmount, 0),
-    highPriority: pendingApprovals.filter(p => p.urgency === 'HIGH').length,
+    highPriority: pendingApprovals.filter((p) => p.urgency === 'HIGH').length,
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="PO Approval"
         subtitle="Review and approve purchase orders"
@@ -192,23 +188,25 @@ export default function POApproval() {
       />
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Pending Approval</div>
-            <div className="text-2xl font-bold mt-1 text-yellow-600">{stats.pending}</div>
+            <div className="mt-1 text-2xl font-bold text-yellow-600">{stats.pending}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Total Value Pending</div>
-            <div className="text-2xl font-bold mt-1">{formatCurrency(stats.totalValue)}</div>
+            <div className="mt-1 text-2xl font-bold">
+              {formatIndianCompactCurrency(stats.totalValue)}
+            </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">High Priority</div>
-            <div className="text-2xl font-bold mt-1 text-red-600">{stats.highPriority}</div>
+            <div className="mt-1 text-2xl font-bold text-red-600">{stats.highPriority}</div>
           </CardContent>
         </Card>
       </div>
@@ -236,13 +234,15 @@ export default function POApproval() {
                     </CardDescription>
                   </div>
                   <div className="text-right">
-                    <div className="text-2xl font-bold">{formatCurrency(po.totalAmount)}</div>
+                    <div className="text-2xl font-bold">
+                      {formatIndianCompactCurrency(po.totalAmount)}
+                    </div>
                     <Badge variant="outline">{po.category}</Badge>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="mb-4 grid grid-cols-2 gap-4 md:grid-cols-4">
                   <div className="flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-muted-foreground" />
                     <div>
@@ -287,17 +287,21 @@ export default function POApproval() {
                       <TableRow key={index}>
                         <TableCell>{item.description}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(item.total)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(item.unitPrice)}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatIndianCompactCurrency(item.total)}
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
 
-                <div className="flex justify-end gap-2 mt-4">
+                <div className="mt-4 flex justify-end gap-2">
                   <Link to={`/admin/procurement/po/${po.id}`}>
                     <Button variant="outline" size="sm">
-                      <Eye className="h-4 w-4 mr-2" />
+                      <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </Button>
                   </Link>
@@ -310,7 +314,7 @@ export default function POApproval() {
                       setShowRejectDialog(true);
                     }}
                   >
-                    <XCircle className="h-4 w-4 mr-2" />
+                    <XCircle className="mr-2 h-4 w-4" />
                     Reject
                   </Button>
                   <Button
@@ -321,7 +325,7 @@ export default function POApproval() {
                       setShowApproveDialog(true);
                     }}
                   >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    <CheckCircle2 className="mr-2 h-4 w-4" />
                     Approve
                   </Button>
                 </div>
@@ -354,16 +358,18 @@ export default function POApproval() {
                     <TableRow key={index}>
                       <TableCell className="font-mono">{item.poNumber}</TableCell>
                       <TableCell>{item.vendor}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(item.amount)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(item.amount)}
+                      </TableCell>
                       <TableCell>
                         {item.action === 'APPROVED' ? (
                           <Badge className="bg-green-100 text-green-800">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            <CheckCircle2 className="mr-1 h-3 w-3" />
                             Approved
                           </Badge>
                         ) : (
                           <Badge variant="destructive">
-                            <XCircle className="h-3 w-3 mr-1" />
+                            <XCircle className="mr-1 h-3 w-3" />
                             Rejected
                           </Badge>
                         )}
@@ -390,7 +396,7 @@ export default function POApproval() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg">
+            <div className="rounded-lg bg-muted p-4">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-muted-foreground">PO Number:</span>
@@ -402,7 +408,9 @@ export default function POApproval() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Amount:</span>
-                  <p className="font-medium">{selectedPO && formatCurrency(selectedPO.totalAmount)}</p>
+                  <p className="font-medium">
+                    {selectedPO && formatIndianCompactCurrency(selectedPO.totalAmount)}
+                  </p>
                 </div>
                 <div>
                   <span className="text-muted-foreground">Items:</span>
@@ -430,7 +438,7 @@ export default function POApproval() {
               onClick={handleApprove}
               disabled={isProcessing}
             >
-              <CheckCircle2 className="h-4 w-4 mr-2" />
+              <CheckCircle2 className="mr-2 h-4 w-4" />
               Confirm Approval
             </Button>
           </DialogFooter>
@@ -447,7 +455,7 @@ export default function POApproval() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="p-4 bg-muted rounded-lg">
+            <div className="rounded-lg bg-muted p-4">
               <div className="grid grid-cols-2 gap-2 text-sm">
                 <div>
                   <span className="text-muted-foreground">PO Number:</span>
@@ -459,7 +467,9 @@ export default function POApproval() {
                 </div>
                 <div>
                   <span className="text-muted-foreground">Amount:</span>
-                  <p className="font-medium">{selectedPO && formatCurrency(selectedPO.totalAmount)}</p>
+                  <p className="font-medium">
+                    {selectedPO && formatIndianCompactCurrency(selectedPO.totalAmount)}
+                  </p>
                 </div>
               </div>
             </div>
@@ -484,7 +494,7 @@ export default function POApproval() {
               onClick={handleReject}
               disabled={isProcessing || !remarks.trim()}
             >
-              <XCircle className="h-4 w-4 mr-2" />
+              <XCircle className="mr-2 h-4 w-4" />
               Confirm Rejection
             </Button>
           </DialogFooter>

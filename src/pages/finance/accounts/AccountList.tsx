@@ -31,7 +31,7 @@ import { accountsApi, organizationsApi } from '@/services/api';
 import type { Account, Organization, PaginatedResponse } from '@/types';
 import { ACCOUNT_TYPES } from '@/types';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export function AccountList() {
   const navigate = useNavigate();
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -54,28 +54,31 @@ export function AccountList() {
     }
   }, []);
 
-  const fetchAccounts = useCallback(async (page = 1) => {
-    if (!selectedOrgId) return;
-    try {
-      setLoading(true);
-      const params: Parameters<typeof accountsApi.list>[0] = {
-        page,
-        pageSize: 20,
-        includeInactive: true,
-      };
-      if (selectedType && selectedType !== 'all') {
-        params.accountType = selectedType;
+  const fetchAccounts = useCallback(
+    async (page = 1) => {
+      if (!selectedOrgId) return;
+      try {
+        setLoading(true);
+        const params: Parameters<typeof accountsApi.list>[0] = {
+          page,
+          pageSize: 20,
+          includeInactive: true,
+        };
+        if (selectedType && selectedType !== 'all') {
+          params.accountType = selectedType;
+        }
+        const response = await accountsApi.list(params);
+        const data: PaginatedResponse<Account> = response.data;
+        setAccounts(data.items);
+        setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
+      } catch (error) {
+        logger.error('Failed to fetch accounts:', error);
+      } finally {
+        setLoading(false);
       }
-      const response = await accountsApi.list(params);
-      const data: PaginatedResponse<Account> = response.data;
-      setAccounts(data.items);
-      setPagination({ page: data.page, total: data.total, totalPages: data.total_pages });
-    } catch (error) {
-      logger.error('Failed to fetch accounts:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedOrgId, selectedType]);
+    },
+    [selectedOrgId, selectedType],
+  );
 
   useEffect(() => {
     fetchOrganizations();
@@ -113,11 +116,7 @@ export function AccountList() {
   };
 
   const formatAmount = (amount: number, type: string) => {
-    const formatted = new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(Math.abs(amount));
+    const formatted = formatIndianCompactCurrency(Math.abs(amount));
     return `${formatted} ${type}`;
   };
 
@@ -202,7 +201,9 @@ export function AccountList() {
                       <TableCell>{account.name}</TableCell>
                       <TableCell>{account.account_group_name || '-'}</TableCell>
                       <TableCell>
-                        <Badge className={`${getTypeBadgeClass(account.account_type)} hover:${getTypeBadgeClass(account.account_type)}`}>
+                        <Badge
+                          className={`${getTypeBadgeClass(account.account_type)} hover:${getTypeBadgeClass(account.account_type)}`}
+                        >
                           {account.account_type}
                         </Badge>
                       </TableCell>
@@ -232,7 +233,9 @@ export function AccountList() {
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem
-                              onClick={() => navigate(`/admin/reports/account-ledger?accountId=${account.id}`)}
+                              onClick={() =>
+                                navigate(`/admin/reports/account-ledger?accountId=${account.id}`)
+                              }
                             >
                               <FileText className="mr-2 h-4 w-4" />
                               View Ledger

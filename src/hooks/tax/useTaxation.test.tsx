@@ -27,9 +27,21 @@ vi.mock('@/services/api', () => ({
   unitsApi: { list: vi.fn() },
   financialYearsApi: { list: vi.fn() },
   gstRatesApi: { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-  gstRegistrationsApi: { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  gstRegistrationsApi: {
+    list: vi.fn(),
+    get: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
   hsnSacApi: { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
-  tdsSectionsApi: { list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+  tdsSectionsApi: {
+    list: vi.fn(),
+    get: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+  },
   tdsEntriesApi: {
     list: vi.fn(),
     get: vi.fn(),
@@ -205,7 +217,9 @@ describe('tax hooks', () => {
     const { result } = renderHook(() => useTDSSections({ returnForm: '26Q' }), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(tdsSectionsApi.list).toHaveBeenCalledWith(expect.objectContaining({ return_form: '26Q' }));
+    expect(tdsSectionsApi.list).toHaveBeenCalledWith(
+      expect.objectContaining({ returnForm: '26Q' }),
+    );
     expect(result.current.data?.items[0]).toMatchObject({
       sectionCode: '194A',
       thresholdAnnual: 40000,

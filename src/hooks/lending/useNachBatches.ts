@@ -65,10 +65,10 @@ export const nachBatchesQueryKey = (filters?: NachBatchFilters) =>
 async function fetchNachBatches(filters?: NachBatchFilters) {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.startDate) params.append('start_date', filters.startDate);
-  if (filters?.endDate) params.append('end_date', filters.endDate);
+  if (filters?.startDate) params.append('startDate', filters.startDate);
+  if (filters?.endDate) params.append('endDate', filters.endDate);
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<PaginatedResponse<NachBatchListItem>>(
     `/lending/nach/batches?${params.toString()}`,
   );

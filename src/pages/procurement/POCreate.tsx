@@ -1,13 +1,5 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  ArrowLeft,
-  ShoppingCart,
-  Plus,
-  Trash2,
-  Save,
-  Send,
-  Calculator,
-} from 'lucide-react';
+import { ArrowLeft, ShoppingCart, Plus, Trash2, Save, Send, Calculator } from 'lucide-react';
 import { useState } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -41,16 +33,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 const lineItemSchema = z.object({
   description: z.string().min(1, 'Description is required'),
   quantity: z.number().min(1, 'Quantity must be at least 1'),
@@ -106,7 +88,14 @@ export default function POCreate() {
       deliveryLocation: 'Head Office',
       paymentTerms: '30_DAYS',
       lineItems: [
-        { description: '', quantity: 1, uom: 'PCS', unitPrice: 0, taxPercent: 18, specifications: '' },
+        {
+          description: '',
+          quantity: 1,
+          uom: 'PCS',
+          unitPrice: 0,
+          taxPercent: 18,
+          specifications: '',
+        },
       ],
       remarks: '',
       termsConditions: '',
@@ -120,20 +109,20 @@ export default function POCreate() {
 
   const watchLineItems = form.watch('lineItems');
 
-  const calculateItemTotal = (item: typeof watchLineItems[0]) => {
+  const calculateItemTotal = (item: (typeof watchLineItems)[0]) => {
     const subtotal = item.quantity * item.unitPrice;
     const tax = subtotal * (item.taxPercent / 100);
     return subtotal + tax;
   };
 
   const calculateSubtotal = () => {
-    return watchLineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+    return watchLineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   };
 
   const calculateTotalTax = () => {
     return watchLineItems.reduce((sum, item) => {
       const subtotal = item.quantity * item.unitPrice;
-      return sum + (subtotal * (item.taxPercent / 100));
+      return sum + subtotal * (item.taxPercent / 100);
     }, 0);
   };
 
@@ -143,22 +132,19 @@ export default function POCreate() {
 
   const onSubmit = async (data: POFormData, action: 'draft' | 'submit') => {
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
     setIsSubmitting(false);
     navigate('/admin/procurement/po');
   };
 
-  const selectedVendor = vendors.find(v => v.id === form.watch('vendorId'));
+  const selectedVendor = vendors.find((v) => v.id === form.watch('vendorId'));
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Create Purchase Order"
         subtitle="Create a new purchase order"
-        breadcrumbs={[
-          { label: 'Purchase Orders', to: '/admin/procurement/po' },
-          { label: 'New' },
-        ]}
+        breadcrumbs={[{ label: 'Purchase Orders', to: '/admin/procurement/po' }, { label: 'New' }]}
       />
 
       <Form {...form}>
@@ -169,7 +155,7 @@ export default function POCreate() {
               <CardTitle>Vendor Information</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <FormField
                   control={form.control}
                   name="vendorId"
@@ -183,7 +169,7 @@ export default function POCreate() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {vendors.map(vendor => (
+                          {vendors.map((vendor) => (
                             <SelectItem key={vendor.id} value={vendor.id}>
                               {vendor.name} ({vendor.id})
                             </SelectItem>
@@ -211,7 +197,7 @@ export default function POCreate() {
               </div>
 
               {selectedVendor && (
-                <div className="p-4 bg-muted rounded-lg">
+                <div className="rounded-lg bg-muted p-4">
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Vendor Name:</span>
@@ -233,7 +219,7 @@ export default function POCreate() {
               <CardTitle>Delivery & Payment</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <FormField
                   control={form.control}
                   name="deliveryDate"
@@ -299,9 +285,18 @@ export default function POCreate() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => append({ description: '', quantity: 1, uom: 'PCS', unitPrice: 0, taxPercent: 18, specifications: '' })}
+                  onClick={() =>
+                    append({
+                      description: '',
+                      quantity: 1,
+                      uom: 'PCS',
+                      unitPrice: 0,
+                      taxPercent: 18,
+                      specifications: '',
+                    })
+                  }
                 >
-                  <Plus className="h-4 w-4 mr-2" />
+                  <Plus className="mr-2 h-4 w-4" />
                   Add Item
                 </Button>
               </CardTitle>
@@ -354,8 +349,10 @@ export default function POCreate() {
                                 <SelectValue />
                               </SelectTrigger>
                               <SelectContent>
-                                {uomOptions.map(uom => (
-                                  <SelectItem key={uom.id} value={uom.id}>{uom.name}</SelectItem>
+                                {uomOptions.map((uom) => (
+                                  <SelectItem key={uom.id} value={uom.id}>
+                                    {uom.name}
+                                  </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -389,7 +386,7 @@ export default function POCreate() {
                         />
                       </TableCell>
                       <TableCell className="text-right font-medium">
-                        {formatCurrency(calculateItemTotal(watchLineItems[index]))}
+                        {formatIndianCompactCurrency(calculateItemTotal(watchLineItems[index]))}
                       </TableCell>
                       <TableCell>
                         {fields.length > 1 && (
@@ -413,15 +410,15 @@ export default function POCreate() {
                 <div className="w-72 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal:</span>
-                    <span>{formatCurrency(calculateSubtotal())}</span>
+                    <span>{formatIndianCompactCurrency(calculateSubtotal())}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total Tax:</span>
-                    <span>{formatCurrency(calculateTotalTax())}</span>
+                    <span>{formatIndianCompactCurrency(calculateTotalTax())}</span>
                   </div>
-                  <div className="flex justify-between text-lg font-bold border-t pt-2">
+                  <div className="flex justify-between border-t pt-2 text-lg font-bold">
                     <span>Grand Total:</span>
-                    <span>{formatCurrency(calculateGrandTotal())}</span>
+                    <span>{formatIndianCompactCurrency(calculateGrandTotal())}</span>
                   </div>
                 </div>
               </div>
@@ -472,7 +469,7 @@ export default function POCreate() {
               onClick={() => onSubmit(form.getValues(), 'draft')}
               disabled={isSubmitting}
             >
-              <Save className="h-4 w-4 mr-2" />
+              <Save className="mr-2 h-4 w-4" />
               Save as Draft
             </Button>
             <Button
@@ -480,7 +477,7 @@ export default function POCreate() {
               onClick={() => onSubmit(form.getValues(), 'submit')}
               disabled={isSubmitting}
             >
-              <Send className="h-4 w-4 mr-2" />
+              <Send className="mr-2 h-4 w-4" />
               Submit for Approval
             </Button>
             <Button type="button" variant="ghost" onClick={() => navigate(-1)}>

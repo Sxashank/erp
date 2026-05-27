@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.core.constants import Permissions, LeaveApplicationStatus
 from app.models.auth.user import User
 from app.schemas.hris.leave import (
@@ -36,23 +36,39 @@ from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter()
 
 
+def _require_organization_id(current_user: User) -> UUID:
+    if not current_user.organization_id:
+        raise BadRequestException(
+            detail="Current user is not assigned to an organization",
+            error_code="ORGANIZATION_CONTEXT_REQUIRED",
+        )
+    return current_user.organization_id
+
+
 # ============================================
 # Leave Types
 # ============================================
 @router.get("/types", response_model=List[LeaveTypeResponse], response_model_by_alias=True)
 async def list_leave_types(
-    organization_id: UUID,
     active_only: bool = True,
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_VIEW)),
 ):
     """List leave types for organization."""
     service = LeaveTypeService(db)
-    leave_types = await service.list(organization_id, active_only)
+    leave_types = await service.list(
+        _require_organization_id(current_user),
+        active_only,
+    )
     return leave_types
 
 
-@router.post("/types", response_model=LeaveTypeResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/types",
+    response_model=LeaveTypeResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_leave_type(
     data: LeaveTypeCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -60,20 +76,24 @@ async def create_leave_type(
 ):
     """Create a new leave type."""
     service = LeaveTypeService(db)
+    organization_id = _require_organization_id(current_user)
+    payload = data.model_copy(update={"organization_id": organization_id})
 
     # Check if leave code already exists
-    existing = await service.get_by_code(data.organization_id, data.leave_code)
+    existing = await service.get_by_code(organization_id, payload.leave_code)
     if existing:
         raise BadRequestException(
             detail="Leave code already exists",
             error_code="LEAVE_CODE_ALREADY_EXISTS",
         )
 
-    leave_type = await service.create(data, current_user.id)
+    leave_type = await service.create(payload, current_user.id)
     return leave_type
 
 
-@router.get("/types/{leave_type_id}", response_model=LeaveTypeResponse, response_model_by_alias=True)
+@router.get(
+    "/types/{leave_type_id}", response_model=LeaveTypeResponse, response_model_by_alias=True
+)
 async def get_leave_type(
     leave_type_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -87,7 +107,9 @@ async def get_leave_type(
     return leave_type
 
 
-@router.put("/types/{leave_type_id}", response_model=LeaveTypeResponse, response_model_by_alias=True)
+@router.put(
+    "/types/{leave_type_id}", response_model=LeaveTypeResponse, response_model_by_alias=True
+)
 async def update_leave_type(
     leave_type_id: UUID,
     data: LeaveTypeUpdate,
@@ -118,7 +140,9 @@ async def delete_leave_type(
 # ============================================
 # Leave Balances
 # ============================================
-@router.get("/balances/{employee_id}", response_model=LeaveBalanceSummary, response_model_by_alias=True)
+@router.get(
+    "/balances/{employee_id}", response_model=LeaveBalanceSummary, response_model_by_alias=True
+)
 async def get_leave_balances(
     employee_id: UUID,
     year: int,
@@ -131,22 +155,24 @@ async def get_leave_balances(
 
     items = []
     for bal in balances:
-        items.append(LeaveBalanceResponse(
-            id=bal.id,
-            employee_id=bal.employee_id,
-            leave_type_id=bal.leave_type_id,
-            year=bal.year,
-            opening_balance=bal.opening_balance,
-            accrued=bal.accrued,
-            carry_forward=bal.carry_forward,
-            adjustment=bal.adjustment,
-            used=bal.used,
-            encashed=bal.encashed,
-            lapsed=bal.lapsed,
-            available_balance=bal.available_balance,
-            leave_type_name=bal.leave_type.leave_name if bal.leave_type else None,
-            leave_type_code=bal.leave_type.leave_code if bal.leave_type else None,
-        ))
+        items.append(
+            LeaveBalanceResponse(
+                id=bal.id,
+                employee_id=bal.employee_id,
+                leave_type_id=bal.leave_type_id,
+                year=bal.year,
+                opening_balance=bal.opening_balance,
+                accrued=bal.accrued,
+                carry_forward=bal.carry_forward,
+                adjustment=bal.adjustment,
+                used=bal.used,
+                encashed=bal.encashed,
+                lapsed=bal.lapsed,
+                available_balance=bal.available_balance,
+                leave_type_name=bal.leave_type.leave_name if bal.leave_type else None,
+                leave_type_code=bal.leave_type.leave_code if bal.leave_type else None,
+            )
+        )
 
     return LeaveBalanceSummary(
         employee_id=employee_id,
@@ -180,26 +206,37 @@ async def create_or_update_balance(
     )
 
 
-@router.post("/balances/initialize/{employee_id}", response_model=List[LeaveBalanceResponse], response_model_by_alias=True)
+@router.post(
+    "/balances/initialize/{employee_id}",
+    response_model=List[LeaveBalanceResponse],
+    response_model_by_alias=True,
+)
 async def initialize_balances(
     employee_id: UUID,
-    organization_id: UUID,
     year: int,
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(RequirePermissions(Permissions.HRIS_LEAVE_TYPE_UPDATE)),
 ):
     """Initialize leave balances for a new year."""
     service = LeaveBalanceService(db)
-    balances = await service.initialize_balances(employee_id, organization_id, year, current_user.id)
+    balances = await service.initialize_balances(
+        employee_id,
+        _require_organization_id(current_user),
+        year,
+        current_user.id,
+    )
     return balances
 
 
 # ============================================
 # Leave Applications
 # ============================================
-@router.get("/applications", response_model=PaginatedResponse[LeaveApplicationResponse], response_model_by_alias=True)
+@router.get(
+    "/applications",
+    response_model=PaginatedResponse[LeaveApplicationResponse],
+    response_model_by_alias=True,
+)
 async def list_leave_applications(
-    organization_id: Optional[UUID] = None,
     employee_id: Optional[UUID] = None,
     leave_type_id: Optional[UUID] = None,
     status: Optional[LeaveApplicationStatus] = None,
@@ -214,7 +251,7 @@ async def list_leave_applications(
     """List leave applications."""
     service = LeaveApplicationService(db)
     filters = LeaveApplicationFilters(
-        organization_id=organization_id,
+        organization_id=_require_organization_id(current_user),
         employee_id=employee_id,
         leave_type_id=leave_type_id,
         status=status,
@@ -231,7 +268,11 @@ async def list_leave_applications(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-@router.get("/applications/pending-approval", response_model=PaginatedResponse[LeaveApplicationResponse], response_model_by_alias=True)
+@router.get(
+    "/applications/pending-approval",
+    response_model=PaginatedResponse[LeaveApplicationResponse],
+    response_model_by_alias=True,
+)
 async def get_pending_approvals(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -249,7 +290,12 @@ async def get_pending_approvals(
     return PaginatedResponse(items=items, total=total, skip=skip, limit=limit)
 
 
-@router.post("/applications", response_model=LeaveApplicationResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/applications",
+    response_model=LeaveApplicationResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_leave_application(
     data: LeaveApplicationCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -264,7 +310,11 @@ async def create_leave_application(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.get("/applications/{application_id}", response_model=LeaveApplicationResponse, response_model_by_alias=True)
+@router.get(
+    "/applications/{application_id}",
+    response_model=LeaveApplicationResponse,
+    response_model_by_alias=True,
+)
 async def get_leave_application(
     application_id: UUID,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -281,7 +331,11 @@ async def get_leave_application(
     return _build_application_response(application)
 
 
-@router.put("/applications/{application_id}", response_model=LeaveApplicationResponse, response_model_by_alias=True)
+@router.put(
+    "/applications/{application_id}",
+    response_model=LeaveApplicationResponse,
+    response_model_by_alias=True,
+)
 async def update_leave_application(
     application_id: UUID,
     data: LeaveApplicationUpdate,
@@ -302,7 +356,11 @@ async def update_leave_application(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/applications/{application_id}/approve", response_model=LeaveApplicationResponse, response_model_by_alias=True)
+@router.post(
+    "/applications/{application_id}/approve",
+    response_model=LeaveApplicationResponse,
+    response_model_by_alias=True,
+)
 async def approve_leave_application(
     application_id: UUID,
     data: LeaveApplicationApprove,
@@ -323,7 +381,11 @@ async def approve_leave_application(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/applications/{application_id}/reject", response_model=LeaveApplicationResponse, response_model_by_alias=True)
+@router.post(
+    "/applications/{application_id}/reject",
+    response_model=LeaveApplicationResponse,
+    response_model_by_alias=True,
+)
 async def reject_leave_application(
     application_id: UUID,
     data: LeaveApplicationReject,
@@ -344,7 +406,11 @@ async def reject_leave_application(
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
 
 
-@router.post("/applications/{application_id}/cancel", response_model=LeaveApplicationResponse, response_model_by_alias=True)
+@router.post(
+    "/applications/{application_id}/cancel",
+    response_model=LeaveApplicationResponse,
+    response_model_by_alias=True,
+)
 async def cancel_leave_application(
     application_id: UUID,
     data: LeaveApplicationCancel,

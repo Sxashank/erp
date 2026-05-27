@@ -3,13 +3,13 @@ import { z } from 'zod';
 export const sanctionSchema = z.object({
   applicationId: z.string().min(1, 'Application is required'),
   sanctionedAmount: z.number().positive('Sanctioned amount is required'),
-  interestType: z.enum(['FIXED', 'FLOATING']),
+  interestType: z.string().min(1, 'Interest type is required'),
   spreadBps: z.number().min(0),
   effectiveRate: z.number().min(0).max(100),
   tenureMonths: z.number().int().min(1, 'Tenure is required'),
   moratoriumMonths: z.number().int().min(0),
-  repaymentFrequency: z.enum(['MONTHLY', 'QUARTERLY', 'HALF_YEARLY', 'YEARLY', 'BULLET']),
-  repaymentMode: z.enum(['EMI', 'STRUCTURED', 'BULLET']),
+  repaymentFrequency: z.string().min(1, 'Repayment frequency is required'),
+  repaymentMode: z.string().min(1, 'Repayment mode is required'),
   validityDays: z.number().int().min(1),
   conditions: z.array(
     z.object({
@@ -20,7 +20,7 @@ export const sanctionSchema = z.object({
   ),
   securities: z.array(
     z.object({
-      securityCategory: z.enum(['PRIMARY', 'COLLATERAL']),
+      securityCategory: z.string().min(1, 'Security nature is required'),
       securityType: z.string().min(1, 'Security type is required'),
       description: z.string().min(1, 'Description is required'),
       acceptableValue: z.number().min(0),
@@ -29,9 +29,9 @@ export const sanctionSchema = z.object({
   ),
   covenants: z.array(
     z.object({
-      covenantType: z.enum(['FINANCIAL', 'REPORTING', 'OPERATIONAL', 'NEGATIVE']),
+      covenantType: z.string().min(1, 'Covenant type is required'),
       description: z.string().min(1, 'Description is required'),
-      frequency: z.enum(['MONTHLY', 'QUARTERLY', 'YEARLY', 'ONE_TIME']),
+      frequency: z.string().min(1, 'Frequency is required'),
       threshold: z.string().optional(),
     }),
   ),

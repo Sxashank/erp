@@ -1,12 +1,4 @@
-import {
-  Calendar,
-  CalendarDays,
-  Edit,
-  Eye,
-  MoreHorizontal,
-  Plus,
-  Trash2,
-} from 'lucide-react';
+import { Calendar, CalendarDays, Edit, Eye, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -38,7 +30,7 @@ import {
 } from '@/components/ui/table';
 import { hrisApi, organizationsApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface HolidayCalendar {
   id: string;
   calendarName: string;
@@ -121,7 +113,7 @@ export function HolidayCalendarList() {
         actions={
           <Button onClick={() => navigate('/admin/hris/holidays/new')}>
             <Plus className="mr-2 h-4 w-4" />
-            Add Calendar
+            Add Holiday Calendar
           </Button>
         }
       />
@@ -168,8 +160,10 @@ export function HolidayCalendarList() {
             </div>
           ) : calendars.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8">
-              <Calendar className="h-12 w-12 text-slate-300 mb-4" />
-              <p className="text-sm text-slate-500">No holiday calendars found for {selectedYear}</p>
+              <Calendar className="mb-4 h-12 w-12 text-slate-300" />
+              <p className="text-sm text-slate-500">
+                No holiday calendars found for {selectedYear}
+              </p>
               <Button variant="link" onClick={() => navigate('/admin/hris/holidays/new')}>
                 Create a holiday calendar
               </Button>
@@ -210,11 +204,15 @@ export function HolidayCalendarList() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/admin/hris/holidays/${calendar.id}`)}>
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/admin/hris/holidays/${calendar.id}`)}
+                          >
                             <Eye className="mr-2 h-4 w-4" />
                             View Holidays
                           </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => navigate(`/admin/hris/holidays/${calendar.id}/edit`)}>
+                          <DropdownMenuItem
+                            onClick={() => navigate(`/admin/hris/holidays/${calendar.id}/edit`)}
+                          >
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>

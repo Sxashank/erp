@@ -17,7 +17,7 @@ import {
 import { reportsApi, organizationsApi, financialYearsApi } from '@/services/api';
 import { exportBalanceSheetToExcel, exportBalanceSheetToPDF } from '@/utils/exportUtils';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
@@ -73,9 +73,9 @@ export function BalanceSheet() {
 
   useEffect(() => {
     if (selectedFYId) {
-      const fy = financialYears.find(f => f.id === selectedFYId);
+      const fy = financialYears.find((f) => f.id === selectedFYId);
       if (fy) {
-        setAsOnDate(fy.end_date);
+        setAsOnDate(fy.end_date ?? '');
       }
     }
   }, [selectedFYId, financialYears]);
@@ -132,14 +132,6 @@ export function BalanceSheet() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
   const handlePrint = () => {
     window.print();
   };
@@ -158,12 +150,14 @@ export function BalanceSheet() {
               style={{ paddingLeft: `${item.level * 16}px` }}
             >
               <span className="text-slate-700">{item.account_group_name}</span>
-              <span className="font-mono font-medium">{formatCurrency(item.amount)}</span>
+              <span className="font-mono font-medium">
+                {formatIndianCompactCurrency(item.amount)}
+              </span>
             </div>
           ))}
           <div className="flex justify-between border-t-2 pt-3 font-bold">
             <span>Total {section.section_name}</span>
-            <span className="font-mono">{formatCurrency(section.total)}</span>
+            <span className="font-mono">{formatIndianCompactCurrency(section.total)}</span>
           </div>
         </div>
       )}
@@ -242,10 +236,17 @@ export function BalanceSheet() {
             </div>
             <div>
               <Label>As On Date</Label>
-              <Input type="date" value={asOnDate} onChange={(e) => setAsOnDate(e.target.value)} />
+              <Input
+                type="date"
+                value={asOnDate ?? ''}
+                onChange={(e) => setAsOnDate(e.target.value)}
+              />
             </div>
             <div className="flex items-end">
-              <Button onClick={generateReport} disabled={loading || !selectedOrgId || !selectedFYId}>
+              <Button
+                onClick={generateReport}
+                disabled={loading || !selectedOrgId || !selectedFYId}
+              >
                 {loading ? 'Generating...' : 'Generate'}
               </Button>
             </div>
@@ -273,8 +274,8 @@ export function BalanceSheet() {
                 {/* Assets Total */}
                 <div className="rounded-lg bg-blue-100 p-4 text-center">
                   <h4 className="font-semibold text-blue-800">Total Assets</h4>
-                  <p className="text-2xl font-bold font-mono text-blue-700">
-                    {formatCurrency(reportData.assets.total)}
+                  <p className="font-mono text-2xl font-bold text-blue-700">
+                    {formatIndianCompactCurrency(reportData.assets.total)}
                   </p>
                 </div>
               </div>
@@ -285,19 +286,23 @@ export function BalanceSheet() {
                 {renderSection(reportData.equity, 'border-purple-200 bg-purple-50/50')}
 
                 {/* Net Profit/Loss */}
-                <div className={`rounded-lg p-4 ${
-                  reportData.net_profit_loss >= 0
-                    ? 'border border-emerald-200 bg-emerald-50/50'
-                    : 'border border-rose-200 bg-rose-50/50'
-                }`}>
+                <div
+                  className={`rounded-lg p-4 ${
+                    reportData.net_profit_loss >= 0
+                      ? 'border border-emerald-200 bg-emerald-50/50'
+                      : 'border border-rose-200 bg-rose-50/50'
+                  }`}
+                >
                   <div className="flex justify-between">
                     <span className="font-semibold">
                       Net {reportData.net_profit_loss >= 0 ? 'Profit' : 'Loss'} (Current Year)
                     </span>
-                    <span className={`font-mono font-bold ${
-                      reportData.net_profit_loss >= 0 ? 'text-emerald-700' : 'text-rose-700'
-                    }`}>
-                      {formatCurrency(Math.abs(reportData.net_profit_loss))}
+                    <span
+                      className={`font-mono font-bold ${
+                        reportData.net_profit_loss >= 0 ? 'text-emerald-700' : 'text-rose-700'
+                      }`}
+                    >
+                      {formatIndianCompactCurrency(Math.abs(reportData.net_profit_loss))}
                     </span>
                   </div>
                 </div>
@@ -305,28 +310,39 @@ export function BalanceSheet() {
                 {/* Liabilities + Equity Total */}
                 <div className="rounded-lg bg-slate-100 p-4 text-center">
                   <h4 className="font-semibold text-slate-800">Total Liabilities + Equity</h4>
-                  <p className="text-2xl font-bold font-mono text-slate-700">
-                    {formatCurrency(reportData.total_liabilities_equity)}
+                  <p className="font-mono text-2xl font-bold text-slate-700">
+                    {formatIndianCompactCurrency(reportData.total_liabilities_equity)}
                   </p>
                 </div>
               </div>
             </div>
 
             {/* Balance Check */}
-            <div className={`mt-6 rounded-lg p-4 text-center ${
-              reportData.is_balanced
-                ? 'bg-emerald-100 border border-emerald-300'
-                : 'bg-rose-100 border border-rose-300'
-            }`}>
+            <div
+              className={`mt-6 rounded-lg p-4 text-center ${
+                reportData.is_balanced
+                  ? 'border border-emerald-300 bg-emerald-100'
+                  : 'border border-rose-300 bg-rose-100'
+              }`}
+            >
               <div className="flex items-center justify-center gap-2">
-                <Scale className={`h-5 w-5 ${reportData.is_balanced ? 'text-emerald-700' : 'text-rose-700'}`} />
-                <span className={`font-semibold ${reportData.is_balanced ? 'text-emerald-700' : 'text-rose-700'}`}>
-                  {reportData.is_balanced ? 'Balance Sheet is Balanced' : 'Balance Sheet is NOT Balanced'}
+                <Scale
+                  className={`h-5 w-5 ${reportData.is_balanced ? 'text-emerald-700' : 'text-rose-700'}`}
+                />
+                <span
+                  className={`font-semibold ${reportData.is_balanced ? 'text-emerald-700' : 'text-rose-700'}`}
+                >
+                  {reportData.is_balanced
+                    ? 'Balance Sheet is Balanced'
+                    : 'Balance Sheet is NOT Balanced'}
                 </span>
               </div>
               {!reportData.is_balanced && (
                 <p className="mt-1 text-sm text-rose-600">
-                  Difference: {formatCurrency(Math.abs(reportData.assets.total - reportData.total_liabilities_equity))}
+                  Difference:{' '}
+                  {formatIndianCompactCurrency(
+                    Math.abs(reportData.assets.total - reportData.total_liabilities_equity),
+                  )}
                 </p>
               )}
             </div>

@@ -26,7 +26,7 @@ router = APIRouter()
 )
 async def list_receipts(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     search: str | None = Query(None),
     status: ReceiptStatus | None = Query(None),
     current_user: User = Depends(RequirePermissions("LMS_ACCOUNT_VIEW")),

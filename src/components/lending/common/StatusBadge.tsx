@@ -36,13 +36,33 @@ const applicationStageColors: Record<ApplicationStage, string> = {
   CLOSED: 'bg-slate-100 text-slate-600 border-slate-300',
 };
 
-const applicationStatusColors: Record<ApplicationStatus, string> = {
+// Application + SFC workflow status colours. The portal workflow
+// uses more states than the canonical `ApplicationStatus` enum
+// (LENDER_REVIEW, SMFCL_*, QUERY_PENDING, APPROVED, CLAIM_OPEN, RELEASED,
+// etc.); each gets its own colour so the list page is glanceable instead
+// of a wall of gray pills.
+const applicationStatusColors: Record<string, string> = {
+  // Canonical ApplicationStatus enum
   DRAFT: 'bg-slate-100 text-slate-700 border-slate-300',
   SUBMITTED: 'bg-blue-100 text-blue-700 border-blue-300',
   UNDER_REVIEW: 'bg-amber-100 text-amber-700 border-amber-300',
+  ADDITIONAL_INFO_REQUIRED: 'bg-orange-100 text-orange-700 border-orange-300',
   SANCTIONED: 'bg-green-100 text-green-700 border-green-300',
   REJECTED: 'bg-red-100 text-red-700 border-red-300',
   WITHDRAWN: 'bg-slate-100 text-slate-600 border-slate-300',
+
+  // Scheme-workflow states (portal lifecycle)
+  LENDER_REVIEW: 'bg-cyan-100 text-cyan-700 border-cyan-300', // SFC Review
+  LENDER_VALIDATED: 'bg-teal-100 text-teal-700 border-teal-300', // SFC Validated
+  SMFCL_PRELIM_REVIEW: 'bg-indigo-100 text-indigo-700 border-indigo-300', // SFC Preliminary
+  SMFCL_APPRAISAL: 'bg-violet-100 text-violet-700 border-violet-300', // SFC Appraisal
+  QUERY_PENDING: 'bg-orange-100 text-orange-700 border-orange-300',
+  APPROVED: 'bg-emerald-100 text-emerald-700 border-emerald-300',
+  SANCTION_ISSUED: 'bg-green-100 text-green-700 border-green-300',
+  CLAIM_OPEN: 'bg-fuchsia-100 text-fuchsia-700 border-fuchsia-300',
+  CLAIM_SUBMITTED: 'bg-pink-100 text-pink-700 border-pink-300',
+  RELEASED: 'bg-lime-100 text-lime-700 border-lime-300',
+  CLOSED: 'bg-slate-200 text-slate-700 border-slate-400',
 };
 
 const assetClassificationColors: Record<AssetClassification, string> = {
@@ -152,9 +172,19 @@ const nachTransactionStatusColors: Record<NachTransactionStatus, string> = {
 
 const formatLabel = (status: string): string => {
   if (!status) return '';
+  const labelOverrides: Record<string, string> = {
+    LENDER_REVIEW: 'SFC Review',
+    LENDER_VALIDATED: 'SFC Validated',
+    SMFCL_PRELIM_REVIEW: 'SFC Preliminary Review',
+    SMFCL_APPRAISAL: 'SFC Appraisal',
+  };
+  if (labelOverrides[status]) {
+    return labelOverrides[status];
+  }
   return status
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase())
+    .replace(/Smfcl/g, 'SFC')
     .replace(/Sma/g, 'SMA')
     .replace(/Npa/g, 'NPA')
     .replace(/Ots/g, 'OTS');
@@ -226,8 +256,7 @@ export function ApplicationStageBadge({ status, className, size = 'md' }: Status
 
 export function ApplicationStatusBadge({ status, className, size = 'md' }: StatusBadgeProps) {
   if (!status) return null;
-  const colorClass =
-    applicationStatusColors[status as ApplicationStatus] || 'bg-gray-100 text-gray-700';
+  const colorClass = applicationStatusColors[status] || 'bg-gray-100 text-gray-700 border-gray-300';
 
   return (
     <Badge

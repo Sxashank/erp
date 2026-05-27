@@ -6,22 +6,32 @@ from typing import TYPE_CHECKING, Optional, List
 from uuid import UUID
 
 from sqlalchemy import (
-    Boolean, Date, Enum, ForeignKey, Integer,
-    Numeric, String, Text, Index, UniqueConstraint
+    Boolean,
+    Date,
+    Enum,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    Index,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import BaseModel
 from app.models.lending.enums import (
-    ProductCategory, InterestType, RateResetFrequency,
-    RepaymentFrequency, RepaymentMode, DayCountConvention,
-    FeeType, FeeCalculationType, FeeCollectionStage,
-    DocumentCategory, DocumentStage
+    RateResetFrequency,
+    FeeType,
+    FeeCalculationType,
+    FeeCollectionStage,
+    DocumentCategory,
+    DocumentStage,
 )
 
-
 if TYPE_CHECKING:
+    from app.models.lending.masters import ChecklistItemCatalog
     from app.models.masters.organization import Organization
 
 
@@ -56,11 +66,11 @@ class LoanProduct(BaseModel):
         nullable=True,
         comment="Product description",
     )
-    category: Mapped[ProductCategory] = mapped_column(
-        Enum(ProductCategory),
+    category: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
         index=True,
-        comment="Product category - TERM_LOAN, WORKING_CAPITAL, etc.",
+        comment="Product category code from mst_lending_option(PRODUCT_CATEGORY)",
     )
     sub_category: Mapped[Optional[str]] = mapped_column(
         String(100),
@@ -127,11 +137,11 @@ class LoanProduct(BaseModel):
     )
 
     # Interest configuration
-    interest_type: Mapped[InterestType] = mapped_column(
-        Enum(InterestType),
+    interest_type: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=InterestType.FLOATING,
-        comment="FIXED or FLOATING",
+        default="FLOATING",
+        comment="Rate type code from mst_lending_option(RATE_TYPE)",
     )
     base_rate_id: Mapped[Optional[UUID]] = mapped_column(
         PGUUID(as_uuid=True),
@@ -169,18 +179,18 @@ class LoanProduct(BaseModel):
         default=Decimal("24.00"),
         comment="Maximum effective interest rate %",
     )
-    rate_reset_frequency: Mapped[Optional[RateResetFrequency]] = mapped_column(
-        Enum(RateResetFrequency),
+    rate_reset_frequency: Mapped[Optional[str]] = mapped_column(
+        String(80),
         nullable=True,
-        comment="Rate reset frequency for floating loans",
+        comment="Rate reset frequency code from mst_lending_option(RATE_RESET_FREQUENCY)",
     )
 
     # Calculation conventions
-    day_count_convention: Mapped[DayCountConvention] = mapped_column(
-        Enum(DayCountConvention),
+    day_count_convention: Mapped[str] = mapped_column(
+        String(50),
         nullable=False,
-        default=DayCountConvention.ACT_365,
-        comment="Day count convention - ACT_365, ACT_360, 30_360",
+        default="ACT_365",
+        comment="Day count convention code from mst_day_count_convention",
     )
     interest_calculation_method: Mapped[str] = mapped_column(
         String(50),
@@ -202,11 +212,11 @@ class LoanProduct(BaseModel):
         default=["MONTHLY", "QUARTERLY"],
         comment="Allowed repayment frequencies",
     )
-    default_repayment_frequency: Mapped[RepaymentFrequency] = mapped_column(
-        Enum(RepaymentFrequency),
+    default_repayment_frequency: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=RepaymentFrequency.MONTHLY,
-        comment="Default repayment frequency",
+        default="MONTHLY",
+        comment="Default repayment frequency code from mst_lending_option(REPAYMENT_FREQUENCY)",
     )
     allowed_repayment_modes: Mapped[list] = mapped_column(
         JSONB,
@@ -214,11 +224,11 @@ class LoanProduct(BaseModel):
         default=["EMI", "STRUCTURED"],
         comment="Allowed repayment modes",
     )
-    default_repayment_mode: Mapped[RepaymentMode] = mapped_column(
-        Enum(RepaymentMode),
+    default_repayment_mode: Mapped[str] = mapped_column(
+        String(80),
         nullable=False,
-        default=RepaymentMode.EMI,
-        comment="Default repayment mode",
+        default="EMI",
+        comment="Default repayment mode code from mst_lending_option(REPAYMENT_MODE)",
     )
 
     # Prepayment/Foreclosure
@@ -566,9 +576,7 @@ class InterestRateHistory(BaseModel):
         back_populates="rate_history",
     )
 
-    __table_args__ = (
-        Index("ix_los_rate_history_rate_date", "interest_rate_id", "effective_from"),
-    )
+    __table_args__ = (Index("ix_los_rate_history_rate_date", "interest_rate_id", "effective_from"),)
 
     def __repr__(self) -> str:
         return f"<InterestRateHistory(rate={self.rate}%, from={self.effective_from})>"
@@ -823,6 +831,13 @@ class DocumentChecklist(BaseModel):
         index=True,
         comment="Parent product",
     )
+    catalog_item_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("mst_checklist_item_catalog.id", ondelete="RESTRICT"),
+        nullable=False,
+        index=True,
+        comment="SSOT checklist catalog item that defines this requirement",
+    )
 
     # Document identification
     code: Mapped[str] = mapped_column(
@@ -962,11 +977,17 @@ class DocumentChecklist(BaseModel):
         "LoanProduct",
         back_populates="document_checklist",
     )
+    catalog_item: Mapped["ChecklistItemCatalog"] = relationship(
+        "ChecklistItemCatalog",
+        foreign_keys=[catalog_item_id],
+        lazy="selectin",
+    )
 
     __table_args__ = (
         UniqueConstraint("product_id", "code", name="uq_doc_checklist_product_code"),
         Index("ix_los_doc_checklist_product_stage", "product_id", "required_at_stage"),
         Index("ix_los_doc_checklist_product_cat", "product_id", "category"),
+        Index("ix_los_doc_checklist_catalog", "catalog_item_id"),
     )
 
     def __repr__(self) -> str:

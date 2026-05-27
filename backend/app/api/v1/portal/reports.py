@@ -1,4 +1,4 @@
-"""Scheme-portal reporting endpoints."""
+"""SFC borrower-portal reporting endpoints."""
 
 from __future__ import annotations
 
@@ -9,19 +9,18 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
 from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.schemas.portal.reporting import PortalReportingResponse
 from app.services.portal.reporting_service import PortalReportingService
 
-router = APIRouter(prefix="/reports", tags=["Scheme Portal · Reports"])
+router = APIRouter(prefix="/reports", tags=["Borrower Portal · Reports"])
 
 
 @router.get(
     "/summary",
     response_model=PortalReportingResponse,
     response_model_by_alias=True,
-    summary="Get scheme-portal reporting summary",
+    summary="Get borrower-portal reporting summary",
 )
 async def get_reporting_summary(
     user=Depends(get_portal_user),
@@ -109,14 +108,14 @@ def _summary_to_csv(summary: PortalReportingResponse) -> str:
 
     writer.writerow([])
     writer.writerow(
-        ["Lender", "Applications", "Pending lender review", "Approved", "Requested amount"]
+        ["Review owner", "Applications", "Pending SFC review", "Approved", "Requested amount"]
     )
-    for item in summary.lender_breakdown:
+    for item in summary.review_breakdown:
         writer.writerow(
             [
-                item.lender_name,
+                item.review_owner,
                 item.application_count,
-                item.pending_lender_review,
+                item.pending_sfc_review,
                 item.approved_count,
                 item.requested_amount,
             ]

@@ -1,4 +1,4 @@
-"""Integrated scheme-portal workbench service."""
+"""Integrated SFC borrower-portal workbench service."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from app.services.portal.scheme_rules import derive_scheme_application_status
 
 
 class PortalWorkbenchService:
-    """Aggregate integrated scheme workbench data by actor role."""
+    """Aggregate integrated SFC portal workbench data by actor role."""
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
@@ -66,7 +66,7 @@ class PortalWorkbenchService:
                     WorkbenchAction(
                         title="Await approval",
                         description=(
-                            "Your registration is complete. SMFCL will link your "
+                            "Your registration is complete. SFC will link your "
                             "organisation before applications can be submitted."
                         ),
                         href="/portal/register",
@@ -105,8 +105,7 @@ class PortalWorkbenchService:
                 WorkbenchAction(
                     title="Complete draft applications",
                     description=(
-                        "Draft applications are not visible to lender or SMFCL "
-                        "reviewers until submitted."
+                        "Draft applications are not visible to SFC reviewers until submitted."
                     ),
                     href="/portal/applications",
                     status="attention",
@@ -133,9 +132,7 @@ class PortalWorkbenchService:
             actions.append(
                 WorkbenchAction(
                     title="Submit draft subsidy claims",
-                    description=(
-                        "Draft claims are ready to be submitted for SMFCL " "verification."
-                    ),
+                    description="Draft claims are ready to be submitted for SFC verification.",
                     href="/portal/claims",
                     status="attention",
                 )
@@ -155,7 +152,7 @@ class PortalWorkbenchService:
         if not actions:
             actions.append(
                 WorkbenchAction(
-                    title="Start a new scheme application",
+                    title="Start a new loan application",
                     description=(
                         "Create a new institutional loan request for maritime "
                         "or shipyard funding."
@@ -172,10 +169,10 @@ class PortalWorkbenchService:
             stats=[
                 WorkbenchStat(key="drafts", label="Draft applications", value=counts["drafts"]),
                 WorkbenchStat(
-                    key="lenderReview", label="Pending lender review", value=counts["lender_review"]
+                    key="lenderReview", label="Pending SFC review", value=counts["lender_review"]
                 ),
                 WorkbenchStat(
-                    key="smfclReview", label="Pending SMFCL review", value=counts["smfcl_review"]
+                    key="smfclReview", label="Pending SFC review", value=counts["smfcl_review"]
                 ),
                 WorkbenchStat(key="queries", label="Queries to answer", value=counts["queries"]),
                 WorkbenchStat(
@@ -206,8 +203,8 @@ class PortalWorkbenchService:
         if pending > 0:
             actions.append(
                 WorkbenchAction(
-                    title="Validate lender review applications",
-                    description="Submitted borrower applications are awaiting lender validation.",
+                    title="Validate SFC review applications",
+                    description="Submitted borrower applications are awaiting SFC validation.",
                     href="/portal/applications",
                     status="attention",
                 )
@@ -226,11 +223,9 @@ class PortalWorkbenchService:
             display_name=self._display_name(portal_user),
             active_entity_count=0,
             stats=[
-                WorkbenchStat(
-                    key="pendingLenderReview", label="Pending lender review", value=pending
-                ),
+                WorkbenchStat(key="pendingLenderReview", label="Pending SFC review", value=pending),
                 WorkbenchStat(key="queries", label="Applications queried", value=queries),
-                WorkbenchStat(key="validated", label="Lender validated", value=validated),
+                WorkbenchStat(key="validated", label="SFC validated", value=validated),
                 WorkbenchStat(key="approved", label="Approved / sanctioned", value=approved),
             ],
             priority_actions=actions,
@@ -270,7 +265,9 @@ class PortalWorkbenchService:
             actions.append(
                 WorkbenchAction(
                     title="Review borrower registrations",
-                    description="New organisation registrations are awaiting SMFCL linkage and approval.",
+                    description=(
+                        "New organisation registrations are awaiting SFC linkage and approval."
+                    ),
                     href="/portal/registrations",
                     status="attention",
                 )
@@ -288,7 +285,7 @@ class PortalWorkbenchService:
             actions.append(
                 WorkbenchAction(
                     title="Verify submitted subsidy claims",
-                    description="Borrower claims are waiting for SMFCL verification.",
+                    description="Borrower claims are waiting for SFC verification.",
                     href="/portal/claims",
                     status="attention",
                 )
@@ -353,7 +350,7 @@ class PortalWorkbenchService:
             actions.append(
                 WorkbenchAction(
                     title="Approve applications for sanction",
-                    description="Appraised cases are waiting for final SMFCL approval.",
+                    description="Appraised cases are waiting for final SFC approval.",
                     href="/portal/applications",
                     status="attention",
                 )

@@ -30,7 +30,6 @@ router = APIRouter()
 @router.get("", response_model=DisposalRegisterListResponse, response_model_by_alias=True)
 async def list_disposals(
     request: Request,
-    organization_id: UUID,
     status: str | None = Query(None),
     disposal_type: AssetDisposalType | None = Query(None),
     search: str | None = Query(None),
@@ -43,7 +42,7 @@ async def list_disposals(
     """List disposal register rows."""
     service = DisposalService(db)
     items, total = await service.list_register(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         status=status,
         disposal_type=disposal_type,
         search=search,

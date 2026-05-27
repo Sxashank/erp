@@ -38,8 +38,8 @@ import type {
 } from '@/services/fixedDepositService';
 import fixedDepositService from '@/services/fixedDepositService';
 
-import { logger } from "@/lib/logger";
-import { getErrorMessage } from "@/lib/errorMessage";
+import { logger } from '@/lib/logger';
+import { getErrorMessage } from '@/lib/errorMessage';
 const STATUS_COLORS: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   DRAFT: 'outline',
   PENDING_APPROVAL: 'secondary',
@@ -185,15 +185,6 @@ export default function FDView() {
       setActionLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 2,
-    }).format(amount);
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto py-6">
@@ -253,7 +244,9 @@ export default function FDView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(fd.deposit_amount)}</div>
+            <div className="text-2xl font-bold">
+              {formatIndianCompactCurrency(fd.deposit_amount)}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -274,7 +267,7 @@ export default function FDView() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {formatCurrency(fd.maturity_amount)}
+              {formatIndianCompactCurrency(fd.maturity_amount)}
             </div>
           </CardContent>
         </Card>
@@ -285,7 +278,9 @@ export default function FDView() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(fd.accrued_interest)}</div>
+            <div className="text-2xl font-bold">
+              {formatIndianCompactCurrency(fd.accrued_interest)}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -417,7 +412,9 @@ export default function FDView() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">TDS Deducted</span>
-                  <span className="font-medium">{formatCurrency(fd.tds_deducted)}</span>
+                  <span className="font-medium">
+                    {formatIndianCompactCurrency(fd.tds_deducted)}
+                  </span>
                 </div>
               </CardContent>
             </Card>
@@ -451,19 +448,25 @@ export default function FDView() {
                   ) : (
                     transactions.map((txn) => (
                       <TableRow key={txn.id}>
-                        <TableCell><DateDisplay date={txn.transaction_date} /></TableCell>
+                        <TableCell>
+                          <DateDisplay date={txn.transaction_date} />
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline">{txn.transaction_type}</Badge>
                         </TableCell>
                         <TableCell>{txn.description}</TableCell>
                         <TableCell className="text-right text-red-600">
-                          {txn.debit_amount > 0 ? formatCurrency(txn.debit_amount) : '-'}
+                          {txn.debit_amount > 0
+                            ? formatIndianCompactCurrency(txn.debit_amount)
+                            : '-'}
                         </TableCell>
                         <TableCell className="text-right text-green-600">
-                          {txn.credit_amount > 0 ? formatCurrency(txn.credit_amount) : '-'}
+                          {txn.credit_amount > 0
+                            ? formatIndianCompactCurrency(txn.credit_amount)
+                            : '-'}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(txn.balance)}
+                          {formatIndianCompactCurrency(txn.balance)}
                         </TableCell>
                       </TableRow>
                     ))
@@ -503,20 +506,23 @@ export default function FDView() {
                   ) : (
                     accruals.map((acc) => (
                       <TableRow key={acc.id}>
-                        <TableCell><DateDisplay date={acc.accrual_date} /></TableCell>
                         <TableCell>
-                          <DateDisplay date={acc.period_from} /> - <DateDisplay date={acc.period_to} />
+                          <DateDisplay date={acc.accrual_date} />
+                        </TableCell>
+                        <TableCell>
+                          <DateDisplay date={acc.period_from} /> -{' '}
+                          <DateDisplay date={acc.period_to} />
                         </TableCell>
                         <TableCell>{acc.days}</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(acc.principal_amount)}
+                          {formatIndianCompactCurrency(acc.principal_amount)}
                         </TableCell>
                         <TableCell>{acc.interest_rate.toFixed(2)}%</TableCell>
                         <TableCell className="text-right">
-                          {formatCurrency(acc.interest_amount)}
+                          {formatIndianCompactCurrency(acc.interest_amount)}
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(acc.cumulative_interest)}
+                          {formatIndianCompactCurrency(acc.cumulative_interest)}
                         </TableCell>
                         <TableCell>
                           <Badge variant={acc.is_paid ? 'default' : 'outline'}>
@@ -544,25 +550,25 @@ export default function FDView() {
                   <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">Projected Interest</p>
                     <p className="text-xl font-bold">
-                      {formatCurrency(projection.projected_interest)}
+                      {formatIndianCompactCurrency(projection.projected_interest)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">Maturity Amount</p>
                     <p className="text-xl font-bold text-blue-600">
-                      {formatCurrency(projection.projected_maturity_amount)}
+                      {formatIndianCompactCurrency(projection.projected_maturity_amount)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">TDS Estimate</p>
                     <p className="text-xl font-bold text-red-600">
-                      {formatCurrency(projection.tds_estimate)}
+                      {formatIndianCompactCurrency(projection.tds_estimate)}
                     </p>
                   </div>
                   <div className="rounded-lg bg-muted p-4">
                     <p className="text-sm text-muted-foreground">Net Maturity</p>
                     <p className="text-xl font-bold text-green-600">
-                      {formatCurrency(projection.net_maturity_amount)}
+                      {formatIndianCompactCurrency(projection.net_maturity_amount)}
                     </p>
                   </div>
                 </div>
@@ -581,14 +587,15 @@ export default function FDView() {
                       {projection.schedule.map((item, idx) => (
                         <TableRow key={idx}>
                           <TableCell>
-                            <DateDisplay date={item.period_from} /> - <DateDisplay date={item.period_to} />
+                            <DateDisplay date={item.period_from} /> -{' '}
+                            <DateDisplay date={item.period_to} />
                           </TableCell>
                           <TableCell>{item.days}</TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(item.principal)}
+                            {formatIndianCompactCurrency(item.principal)}
                           </TableCell>
                           <TableCell className="text-right">
-                            {formatCurrency(item.interest)}
+                            {formatIndianCompactCurrency(item.interest)}
                           </TableCell>
                         </TableRow>
                       ))}

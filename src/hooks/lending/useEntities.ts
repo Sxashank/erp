@@ -9,18 +9,11 @@ import { useQuery } from '@tanstack/react-query';
 import api from '@/services/api';
 import type { PaginatedResponse } from '@/types/lending';
 
-export type EntityTypeValue =
-  | 'CORPORATE'
-  | 'LLP'
-  | 'PARTNERSHIP'
-  | 'TRUST'
-  | 'PROPRIETORSHIP'
-  | 'SOCIETY'
-  | 'INDIVIDUAL';
+export type EntityTypeValue = string;
 
 export type EntityStatusValue = 'PROSPECT' | 'ACTIVE' | 'INACTIVE' | 'BLACKLISTED';
 
-export type RiskCategoryValue = 'LOW' | 'MEDIUM' | 'HIGH';
+export type RiskCategoryValue = string;
 
 export interface EntityListItem {
   id: string;
@@ -54,12 +47,12 @@ export const entitiesQueryKey = (filters?: EntityFilters) =>
 async function fetchEntities(filters?: EntityFilters) {
   const params = new URLSearchParams();
   if (filters?.search) params.append('search', filters.search);
-  if (filters?.entityType) params.append('entity_type', filters.entityType);
+  if (filters?.entityType) params.append('entityType', filters.entityType);
   if (filters?.status) params.append('status', filters.status);
-  if (filters?.riskCategory) params.append('risk_category', filters.riskCategory);
-  if (filters?.includeInactive) params.append('include_inactive', String(filters.includeInactive));
+  if (filters?.riskCategory) params.append('riskCategory', filters.riskCategory);
+  if (filters?.includeInactive) params.append('includeInactive', String(filters.includeInactive));
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<PaginatedResponse<EntityListItem>>(
     `/lending/entities?${params.toString()}`,
   );

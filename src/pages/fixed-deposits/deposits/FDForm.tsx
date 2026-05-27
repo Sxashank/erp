@@ -26,11 +26,10 @@ import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
 import type {
   FDProduct,
   FDCustomerCategory,
-  FDInterestPayoutFrequency} from '@/services/fixedDepositService';
-import fixedDepositService, {
-  FDCompoundingFrequency,
+  FDInterestPayoutFrequency,
 } from '@/services/fixedDepositService';
-import { getErrorMessage } from "@/lib/errorMessage";
+import fixedDepositService, { FDCompoundingFrequency } from '@/services/fixedDepositService';
+import { getErrorMessage } from '@/lib/errorMessage';
 
 const CUSTOMER_CATEGORIES: { value: FDCustomerCategory; label: string }[] = [
   { value: 'GENERAL', label: 'General' },
@@ -155,8 +154,7 @@ export default function FDForm() {
     } catch (error: unknown) {
       toast({
         title: 'Error',
-        description:
-          getErrorMessage(error, 'No applicable rate found for given parameters'),
+        description: getErrorMessage(error, 'No applicable rate found for given parameters'),
         variant: 'destructive',
       });
     }
@@ -199,7 +197,9 @@ export default function FDForm() {
 
     try {
       setSaving(true);
-      const fd = await fixedDepositService.createDeposit(submitData as Parameters<typeof fixedDepositService.createDeposit>[0]);
+      const fd = await fixedDepositService.createDeposit(
+        submitData as Parameters<typeof fixedDepositService.createDeposit>[0],
+      );
       toast({
         title: 'Success',
         description: `Fixed deposit ${fd.fd_number} created successfully`,
@@ -215,32 +215,20 @@ export default function FDForm() {
       setSaving(false);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   if (loading) {
     return (
       <div className="container mx-auto py-6">
-        <div className="text-center py-8">Loading...</div>
+        <div className="py-8 text-center">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="New Fixed Deposit"
         subtitle="Create a new fixed deposit account"
-        breadcrumbs={[
-          { label: 'Fixed Deposits', to: '/admin/fixed-deposits' },
-          { label: 'New' },
-        ]}
+        breadcrumbs={[{ label: 'Fixed Deposits', to: '/admin/fixed-deposits' }, { label: 'New' }]}
       />
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -249,7 +237,7 @@ export default function FDForm() {
           <CardHeader>
             <CardTitle>Product Selection</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="product_id">FD Product *</Label>
               <Select value={formData.product_id} onValueChange={handleProductChange}>
@@ -269,9 +257,7 @@ export default function FDForm() {
               <Label htmlFor="customer_id">Customer *</Label>
               <CustomerPicker
                 value={formData.customer_id || null}
-                onChange={(id) =>
-                  setFormData({ ...formData, customer_id: id ?? '' })
-                }
+                onChange={(id) => setFormData({ ...formData, customer_id: id ?? '' })}
                 placeholder="Search and select customer"
               />
             </div>
@@ -305,12 +291,12 @@ export default function FDForm() {
             {selectedProduct && (
               <CardDescription>
                 Amount: {selectedProduct.min_amount.toLocaleString()} -{' '}
-                {selectedProduct.max_amount?.toLocaleString() || 'No limit'} |
-                Tenure: {selectedProduct.min_tenure_days} - {selectedProduct.max_tenure_days} days
+                {selectedProduct.max_amount?.toLocaleString() || 'No limit'} | Tenure:{' '}
+                {selectedProduct.min_tenure_days} - {selectedProduct.max_tenure_days} days
               </CardDescription>
             )}
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="deposit_amount">Deposit Amount *</Label>
               <Input
@@ -352,9 +338,7 @@ export default function FDForm() {
                 id="deposit_date"
                 type="date"
                 value={formData.deposit_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, deposit_date: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, deposit_date: e.target.value })}
               />
             </div>
             <div className="space-y-2">
@@ -363,9 +347,7 @@ export default function FDForm() {
                 id="value_date"
                 type="date"
                 value={formData.value_date}
-                onChange={(e) =>
-                  setFormData({ ...formData, value_date: e.target.value })
-                }
+                onChange={(e) => setFormData({ ...formData, value_date: e.target.value })}
               />
             </div>
           </CardContent>
@@ -374,7 +356,7 @@ export default function FDForm() {
         {/* Interest Calculation */}
         <Card>
           <CardHeader>
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
               <div>
                 <CardTitle>Interest Calculation</CardTitle>
                 <CardDescription>Calculate applicable rate and maturity amount</CardDescription>
@@ -387,29 +369,29 @@ export default function FDForm() {
           </CardHeader>
           <CardContent>
             {calculatedRate !== null && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted rounded-lg">
+              <div className="grid grid-cols-1 gap-4 rounded-lg bg-muted p-4 md:grid-cols-3">
                 <div>
                   <p className="text-sm text-muted-foreground">Applicable Rate</p>
-                  <p className="text-2xl font-bold text-green-600">
-                    {calculatedRate.toFixed(2)}%
-                  </p>
+                  <p className="text-2xl font-bold text-green-600">{calculatedRate.toFixed(2)}%</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Estimated Maturity</p>
                   <p className="text-2xl font-bold text-blue-600">
-                    {formatCurrency(calculatedMaturity || 0)}
+                    {formatIndianCompactCurrency(calculatedMaturity || 0)}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Estimated Interest</p>
                   <p className="text-2xl font-bold">
-                    {formatCurrency((calculatedMaturity || 0) - formData.deposit_amount)}
+                    {formatIndianCompactCurrency(
+                      (calculatedMaturity || 0) - formData.deposit_amount,
+                    )}
                   </p>
                 </div>
               </div>
             )}
             {calculatedRate === null && (
-              <p className="text-center text-muted-foreground py-4">
+              <p className="py-4 text-center text-muted-foreground">
                 Click "Calculate" to see applicable rate and maturity amount
               </p>
             )}
@@ -421,7 +403,7 @@ export default function FDForm() {
           <CardHeader>
             <CardTitle>Interest Payout</CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <CardContent className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="interest_payout_frequency">Payout Frequency</Label>
               <Select
@@ -446,9 +428,7 @@ export default function FDForm() {
               <Label htmlFor="interest_payout_mode">Payout Mode</Label>
               <Select
                 value={formData.interest_payout_mode}
-                onValueChange={(value) =>
-                  setFormData({ ...formData, interest_payout_mode: value })
-                }
+                onValueChange={(value) => setFormData({ ...formData, interest_payout_mode: value })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -474,15 +454,11 @@ export default function FDForm() {
             <div className="flex items-center justify-between">
               <div>
                 <Label>Enable Auto Renewal</Label>
-                <p className="text-sm text-muted-foreground">
-                  Automatically renew FD on maturity
-                </p>
+                <p className="text-sm text-muted-foreground">Automatically renew FD on maturity</p>
               </div>
               <Switch
                 checked={formData.auto_renew}
-                onCheckedChange={(checked) =>
-                  setFormData({ ...formData, auto_renew: checked })
-                }
+                onCheckedChange={(checked) => setFormData({ ...formData, auto_renew: checked })}
               />
             </div>
             {formData.auto_renew && (
@@ -495,9 +471,7 @@ export default function FDForm() {
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      renewal_tenure_days: e.target.value
-                        ? parseInt(e.target.value)
-                        : null,
+                      renewal_tenure_days: e.target.value ? parseInt(e.target.value) : null,
                     })
                   }
                   placeholder="Same as original tenure"
@@ -528,11 +502,7 @@ export default function FDForm() {
 
         {/* Actions */}
         <div className="flex justify-end gap-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => navigate('/admin/fixed-deposits')}
-          >
+          <Button type="button" variant="outline" onClick={() => navigate('/admin/fixed-deposits')}>
             Cancel
           </Button>
           <Button type="submit" disabled={saving}>

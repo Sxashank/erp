@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { portalAuthApi } from '@/services/portalApi';
-import { getErrorMessage } from "@/lib/errorMessage";
+import { getErrorMessage } from '@/lib/errorMessage';
 
 export default function PortalResetPassword(): JSX.Element {
   const navigate = useNavigate();
@@ -61,9 +61,7 @@ export default function PortalResetPassword(): JSX.Element {
             <LockKeyhole className="h-7 w-7" />
           </div>
           <CardTitle className="text-2xl">Set a new password</CardTitle>
-          <CardDescription>
-            Finish the password reset for your internal scheme portal account.
-          </CardDescription>
+          <CardDescription>Finish the password reset for your SFC portal account.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {error ? (
@@ -110,7 +108,7 @@ export default function PortalResetPassword(): JSX.Element {
 
           <div className="text-sm text-slate-600">
             <Link to="/portal/login" className="font-medium text-emerald-700 hover:underline">
-              Back to scheme portal sign-in
+              Back to borrower portal sign-in
             </Link>
           </div>
         </CardContent>

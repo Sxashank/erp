@@ -11,14 +11,27 @@ import { PageHeader } from '@/components/common/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { essProfileApi } from '@/services/essApi';
 import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { Payslip, YTDSummary } from '@/types/ess';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function ESSPayslipsPage() {
   const navigate = useNavigate();
   const accessToken = useEssAuthStore((state) => state.accessToken);
@@ -72,18 +85,9 @@ export default function ESSPayslipsPage() {
       setDownloading(null);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -101,7 +105,9 @@ export default function ESSPayslipsPage() {
             </SelectTrigger>
             <SelectContent>
               {years.map((year) => (
-                <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                <SelectItem key={year} value={String(year)}>
+                  {year}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -116,16 +122,18 @@ export default function ESSPayslipsPage() {
 
         <TabsContent value="payslips">
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-green-100 rounded-lg">
+                  <div className="rounded-lg bg-green-100 p-2">
                     <TrendingUp className="h-5 w-5 text-green-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Total Earnings</p>
-                    <p className="text-lg font-bold">{formatCurrency(ytdSummary?.total_earnings || 0)}</p>
+                    <p className="text-lg font-bold">
+                      {formatIndianCompactCurrency(ytdSummary?.total_earnings || 0)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -133,12 +141,14 @@ export default function ESSPayslipsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-red-100 rounded-lg">
+                  <div className="rounded-lg bg-red-100 p-2">
                     <IndianRupee className="h-5 w-5 text-red-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Total Deductions</p>
-                    <p className="text-lg font-bold">{formatCurrency(ytdSummary?.total_deductions || 0)}</p>
+                    <p className="text-lg font-bold">
+                      {formatIndianCompactCurrency(ytdSummary?.total_deductions || 0)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -146,12 +156,14 @@ export default function ESSPayslipsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-blue-100 rounded-lg">
+                  <div className="rounded-lg bg-blue-100 p-2">
                     <IndianRupee className="h-5 w-5 text-blue-600" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Net Pay (YTD)</p>
-                    <p className="text-lg font-bold">{formatCurrency(ytdSummary?.total_net_pay || 0)}</p>
+                    <p className="text-lg font-bold">
+                      {formatIndianCompactCurrency(ytdSummary?.total_net_pay || 0)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -159,7 +171,7 @@ export default function ESSPayslipsPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-100 rounded-lg">
+                  <div className="rounded-lg bg-purple-100 p-2">
                     <Calendar className="h-5 w-5 text-purple-600" />
                   </div>
                   <div>
@@ -193,11 +205,24 @@ export default function ESSPayslipsPage() {
                     {payslips.map((payslip) => (
                       <TableRow key={payslip.id}>
                         <TableCell className="font-medium">{payslip.month}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(payslip.gross_salary)}</TableCell>
-                        <TableCell className="text-right text-red-600">-{formatCurrency(payslip.total_deductions)}</TableCell>
-                        <TableCell className="text-right font-bold text-green-600">{formatCurrency(payslip.net_salary)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(payslip.gross_salary)}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          -{formatIndianCompactCurrency(payslip.total_deductions)}
+                        </TableCell>
+                        <TableCell className="text-right font-bold text-green-600">
+                          {formatIndianCompactCurrency(payslip.net_salary)}
+                        </TableCell>
                         <TableCell>
-                          <Badge variant="secondary" className={payslip.payment_status === 'PAID' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+                          <Badge
+                            variant="secondary"
+                            className={
+                              payslip.payment_status === 'PAID'
+                                ? 'bg-green-100 text-green-700'
+                                : 'bg-yellow-100 text-yellow-700'
+                            }
+                          >
                             {payslip.payment_status}
                           </Badge>
                         </TableCell>
@@ -220,8 +245,8 @@ export default function ESSPayslipsPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <div className="py-8 text-center text-gray-500">
+                  <FileText className="mx-auto mb-2 h-8 w-8 opacity-50" />
                   <p>No payslips found for {selectedYear}</p>
                 </div>
               )}
@@ -230,7 +255,7 @@ export default function ESSPayslipsPage() {
         </TabsContent>
 
         <TabsContent value="ytd">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
             {/* Earnings Breakdown */}
             <Card>
               <CardHeader>
@@ -241,18 +266,25 @@ export default function ESSPayslipsPage() {
                 {ytdSummary?.breakdown?.earnings ? (
                   <div className="space-y-3">
                     {Object.entries(ytdSummary.breakdown.earnings).map(([key, value]) => (
-                      <div key={key} className="flex justify-between items-center p-2 bg-green-50 rounded">
+                      <div
+                        key={key}
+                        className="flex items-center justify-between rounded bg-green-50 p-2"
+                      >
                         <span className="text-sm">{key.replace(/_/g, ' ')}</span>
-                        <span className="font-medium text-green-700">{formatCurrency(value)}</span>
+                        <span className="font-medium text-green-700">
+                          {formatIndianCompactCurrency(value)}
+                        </span>
                       </div>
                     ))}
-                    <div className="flex justify-between items-center p-3 bg-green-100 rounded font-bold">
+                    <div className="flex items-center justify-between rounded bg-green-100 p-3 font-bold">
                       <span>Total Earnings</span>
-                      <span className="text-green-700">{formatCurrency(ytdSummary.total_earnings)}</span>
+                      <span className="text-green-700">
+                        {formatIndianCompactCurrency(ytdSummary.total_earnings)}
+                      </span>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-4">No data available</p>
+                  <p className="py-4 text-center text-gray-500">No data available</p>
                 )}
               </CardContent>
             </Card>
@@ -267,18 +299,25 @@ export default function ESSPayslipsPage() {
                 {ytdSummary?.breakdown?.deductions ? (
                   <div className="space-y-3">
                     {Object.entries(ytdSummary.breakdown.deductions).map(([key, value]) => (
-                      <div key={key} className="flex justify-between items-center p-2 bg-red-50 rounded">
+                      <div
+                        key={key}
+                        className="flex items-center justify-between rounded bg-red-50 p-2"
+                      >
                         <span className="text-sm">{key.replace(/_/g, ' ')}</span>
-                        <span className="font-medium text-red-700">{formatCurrency(value)}</span>
+                        <span className="font-medium text-red-700">
+                          {formatIndianCompactCurrency(value)}
+                        </span>
                       </div>
                     ))}
-                    <div className="flex justify-between items-center p-3 bg-red-100 rounded font-bold">
+                    <div className="flex items-center justify-between rounded bg-red-100 p-3 font-bold">
                       <span>Total Deductions</span>
-                      <span className="text-red-700">{formatCurrency(ytdSummary.total_deductions)}</span>
+                      <span className="text-red-700">
+                        {formatIndianCompactCurrency(ytdSummary.total_deductions)}
+                      </span>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-gray-500 text-center py-4">No data available</p>
+                  <p className="py-4 text-center text-gray-500">No data available</p>
                 )}
               </CardContent>
             </Card>
@@ -289,20 +328,26 @@ export default function ESSPayslipsPage() {
                 <CardTitle className="text-base">Tax Summary</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="p-4 bg-purple-50 rounded-lg text-center">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div className="rounded-lg bg-purple-50 p-4 text-center">
                     <p className="text-sm text-gray-500">TDS Deducted</p>
-                    <p className="text-xl font-bold text-purple-700">{formatCurrency(ytdSummary?.total_tax_deducted || 0)}</p>
+                    <p className="text-xl font-bold text-purple-700">
+                      {formatIndianCompactCurrency(ytdSummary?.total_tax_deducted || 0)}
+                    </p>
                   </div>
-                  <div className="p-4 bg-blue-50 rounded-lg text-center">
+                  <div className="rounded-lg bg-blue-50 p-4 text-center">
                     <p className="text-sm text-gray-500">PF Contribution</p>
-                    <p className="text-xl font-bold text-blue-700">{formatCurrency(ytdSummary?.total_pf_contribution || 0)}</p>
+                    <p className="text-xl font-bold text-blue-700">
+                      {formatIndianCompactCurrency(ytdSummary?.total_pf_contribution || 0)}
+                    </p>
                   </div>
-                  <div className="p-4 bg-green-50 rounded-lg text-center">
+                  <div className="rounded-lg bg-green-50 p-4 text-center">
                     <p className="text-sm text-gray-500">Net Pay (YTD)</p>
-                    <p className="text-xl font-bold text-green-700">{formatCurrency(ytdSummary?.total_net_pay || 0)}</p>
+                    <p className="text-xl font-bold text-green-700">
+                      {formatIndianCompactCurrency(ytdSummary?.total_net_pay || 0)}
+                    </p>
                   </div>
-                  <div className="p-4 bg-gray-50 rounded-lg text-center">
+                  <div className="rounded-lg bg-gray-50 p-4 text-center">
                     <p className="text-sm text-gray-500">Months Processed</p>
                     <p className="text-xl font-bold">{ytdSummary?.months_paid || 0}</p>
                   </div>

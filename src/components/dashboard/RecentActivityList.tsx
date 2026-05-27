@@ -1,18 +1,10 @@
 import { formatDistanceToNow } from 'date-fns';
-import {
-  Activity,
-  Receipt,
-  FileText,
-  CreditCard,
-  Banknote,
-  ArrowRight,
-} from 'lucide-react';
+import { Activity, Receipt, FileText, CreditCard, Banknote, ArrowRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
 
 interface ActivityItem {
   id: string;
@@ -29,16 +21,6 @@ interface ActivityItem {
 interface RecentActivityProps {
   activities: ActivityItem[];
 }
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
 const getActivityIcon = (type: string) => {
   switch (type) {
     case 'PAYMENT':
@@ -89,7 +71,7 @@ export function RecentActivityList({ activities }: RecentActivityProps) {
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold">
             <Activity className="h-5 w-5 text-indigo-500" />
             Recent Activity
           </CardTitle>
@@ -98,9 +80,7 @@ export function RecentActivityList({ activities }: RecentActivityProps) {
       <CardContent>
         <ScrollArea className="h-[400px] pr-4">
           {activities.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No recent activity
-            </div>
+            <div className="py-8 text-center text-muted-foreground">No recent activity</div>
           ) : (
             <div className="space-y-4">
               {activities.map((activity) => (
@@ -109,23 +89,19 @@ export function RecentActivityList({ activities }: RecentActivityProps) {
                   to={getActivityLink(activity.type, activity.id)}
                   className="block"
                 >
-                  <div className="flex items-start gap-3 p-3 rounded-lg border hover:bg-muted/50 transition-colors">
-                    <div className="mt-1">
-                      {getActivityIcon(activity.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
+                  <div className="flex items-start gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50">
+                    <div className="mt-1">{getActivityIcon(activity.type)}</div>
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-medium text-sm truncate">
-                          {activity.number}
-                        </span>
+                        <span className="truncate text-sm font-medium">{activity.number}</span>
                         {getStatusBadge(activity.status)}
                       </div>
-                      <p className="text-sm text-muted-foreground truncate">
+                      <p className="truncate text-sm text-muted-foreground">
                         {activity.partyName || activity.description}
                       </p>
-                      <div className="flex items-center justify-between mt-1">
+                      <div className="mt-1 flex items-center justify-between">
                         <span className="text-sm font-medium">
-                          {formatCurrency(activity.amount)}
+                          {formatIndianCompactCurrency(activity.amount)}
                         </span>
                         <span className="text-xs text-muted-foreground">
                           {formatDistanceToNow(new Date(activity.createdAt), {
@@ -134,7 +110,7 @@ export function RecentActivityList({ activities }: RecentActivityProps) {
                         </span>
                       </div>
                     </div>
-                    <ArrowRight className="h-4 w-4 text-muted-foreground mt-1" />
+                    <ArrowRight className="mt-1 h-4 w-4 text-muted-foreground" />
                   </div>
                 </Link>
               ))}

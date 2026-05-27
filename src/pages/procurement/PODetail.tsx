@@ -30,15 +30,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock PO detail data
 const poData = {
   id: '1',
@@ -65,22 +56,92 @@ const poData = {
   approvedAt: '2025-01-11 04:30 PM',
   remarks: 'Urgent requirement for new office setup.',
   lineItems: [
-    { id: 1, description: 'Ergonomic Office Chair', quantity: 50, uom: 'PCS', unitPrice: 1500, taxPercent: 18, total: 88500, receivedQty: 30 },
-    { id: 2, description: 'Standing Desk - Electric', quantity: 25, uom: 'PCS', unitPrice: 3000, taxPercent: 18, total: 88500, receivedQty: 20 },
-    { id: 3, description: 'Filing Cabinet - 4 Drawer', quantity: 30, uom: 'PCS', unitPrice: 2500, taxPercent: 18, total: 88500, receivedQty: 30 },
-    { id: 4, description: 'Conference Table', quantity: 5, uom: 'PCS', unitPrice: 15000, taxPercent: 18, total: 88500, receivedQty: 0 },
-    { id: 5, description: 'Visitor Chairs', quantity: 20, uom: 'PCS', unitPrice: 800, taxPercent: 18, total: 18880, receivedQty: 20 },
+    {
+      id: 1,
+      description: 'Ergonomic Office Chair',
+      quantity: 50,
+      uom: 'PCS',
+      unitPrice: 1500,
+      taxPercent: 18,
+      total: 88500,
+      receivedQty: 30,
+    },
+    {
+      id: 2,
+      description: 'Standing Desk - Electric',
+      quantity: 25,
+      uom: 'PCS',
+      unitPrice: 3000,
+      taxPercent: 18,
+      total: 88500,
+      receivedQty: 20,
+    },
+    {
+      id: 3,
+      description: 'Filing Cabinet - 4 Drawer',
+      quantity: 30,
+      uom: 'PCS',
+      unitPrice: 2500,
+      taxPercent: 18,
+      total: 88500,
+      receivedQty: 30,
+    },
+    {
+      id: 4,
+      description: 'Conference Table',
+      quantity: 5,
+      uom: 'PCS',
+      unitPrice: 15000,
+      taxPercent: 18,
+      total: 88500,
+      receivedQty: 0,
+    },
+    {
+      id: 5,
+      description: 'Visitor Chairs',
+      quantity: 20,
+      uom: 'PCS',
+      unitPrice: 800,
+      taxPercent: 18,
+      total: 18880,
+      receivedQty: 20,
+    },
   ],
   grnHistory: [
     { grnNumber: 'GRN2025010001', date: '2025-01-15', items: 3, value: 85000, status: 'APPROVED' },
     { grnNumber: 'GRN2025010003', date: '2025-01-18', items: 2, value: 60000, status: 'APPROVED' },
   ],
   activityLog: [
-    { action: 'PO Created', by: 'Procurement Team', at: '2025-01-10 10:30 AM', details: 'Purchase order created from RFQ2024120015' },
-    { action: 'Submitted for Approval', by: 'Procurement Team', at: '2025-01-10 10:35 AM', details: 'Submitted to Finance Head' },
-    { action: 'Approved', by: 'Finance Head', at: '2025-01-11 04:30 PM', details: 'Approved as per budget allocation.' },
-    { action: 'GRN Created', by: 'Warehouse Team', at: '2025-01-15 02:00 PM', details: 'GRN2025010001 - Partial receipt' },
-    { action: 'GRN Created', by: 'Warehouse Team', at: '2025-01-18 11:30 AM', details: 'GRN2025010003 - Partial receipt' },
+    {
+      action: 'PO Created',
+      by: 'Procurement Team',
+      at: '2025-01-10 10:30 AM',
+      details: 'Purchase order created from RFQ2024120015',
+    },
+    {
+      action: 'Submitted for Approval',
+      by: 'Procurement Team',
+      at: '2025-01-10 10:35 AM',
+      details: 'Submitted to Finance Head',
+    },
+    {
+      action: 'Approved',
+      by: 'Finance Head',
+      at: '2025-01-11 04:30 PM',
+      details: 'Approved as per budget allocation.',
+    },
+    {
+      action: 'GRN Created',
+      by: 'Warehouse Team',
+      at: '2025-01-15 02:00 PM',
+      details: 'GRN2025010001 - Partial receipt',
+    },
+    {
+      action: 'GRN Created',
+      by: 'Warehouse Team',
+      at: '2025-01-18 11:30 AM',
+      details: 'GRN2025010003 - Partial receipt',
+    },
   ],
 };
 
@@ -94,13 +155,33 @@ export default function PODetail() {
       case 'DRAFT':
         return <Badge variant="outline">Draft</Badge>;
       case 'PENDING_APPROVAL':
-        return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pending Approval</Badge>;
+        return (
+          <Badge variant="secondary">
+            <Clock className="mr-1 h-3 w-3" />
+            Pending Approval
+          </Badge>
+        );
       case 'APPROVED':
-        return <Badge variant="default" className="bg-green-100 text-green-800"><CheckCircle className="h-3 w-3 mr-1" />Approved</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            <CheckCircle className="mr-1 h-3 w-3" />
+            Approved
+          </Badge>
+        );
       case 'COMPLETED':
-        return <Badge variant="default" className="bg-blue-100 text-blue-800"><Truck className="h-3 w-3 mr-1" />Completed</Badge>;
+        return (
+          <Badge variant="default" className="bg-blue-100 text-blue-800">
+            <Truck className="mr-1 h-3 w-3" />
+            Completed
+          </Badge>
+        );
       case 'CANCELLED':
-        return <Badge variant="destructive"><XCircle className="h-3 w-3 mr-1" />Cancelled</Badge>;
+        return (
+          <Badge variant="destructive">
+            <XCircle className="mr-1 h-3 w-3" />
+            Cancelled
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -113,17 +194,21 @@ export default function PODetail() {
       case 'PARTIAL':
         return <Badge variant="secondary">Partial</Badge>;
       case 'COMPLETE':
-        return <Badge variant="default" className="bg-green-100 text-green-800">Complete</Badge>;
+        return (
+          <Badge variant="default" className="bg-green-100 text-green-800">
+            Complete
+          </Badge>
+        );
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
   };
 
   // Calculate totals
-  const subtotal = poData.lineItems.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+  const subtotal = poData.lineItems.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
   const totalTax = poData.lineItems.reduce((sum, item) => {
     const itemTotal = item.quantity * item.unitPrice;
-    return sum + (itemTotal * item.taxPercent / 100);
+    return sum + (itemTotal * item.taxPercent) / 100;
   }, 0);
   const grandTotal = subtotal + totalTax;
 
@@ -133,7 +218,7 @@ export default function PODetail() {
   const receiptProgress = (totalReceivedQty / totalOrderedQty) * 100;
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title={poData.poNumber}
         subtitle="Purchase Order Details"
@@ -146,17 +231,17 @@ export default function PODetail() {
             {getStatusBadge(poData.status)}
             {getGRNStatusBadge(poData.grnStatus)}
             <Button variant="outline">
-              <Printer className="h-4 w-4 mr-2" />
+              <Printer className="mr-2 h-4 w-4" />
               Print
             </Button>
             <Button variant="outline">
-              <Download className="h-4 w-4 mr-2" />
+              <Download className="mr-2 h-4 w-4" />
               Download PDF
             </Button>
             {poData.status === 'APPROVED' && poData.grnStatus !== 'COMPLETE' && (
               <Link to={`/admin/procurement/grn/new?po=${poData.id}`}>
                 <Button>
-                  <Package className="h-4 w-4 mr-2" />
+                  <Package className="mr-2 h-4 w-4" />
                   Create GRN
                 </Button>
               </Link>
@@ -166,30 +251,30 @@ export default function PODetail() {
       />
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">PO Value</div>
-            <div className="text-2xl font-bold mt-1">{formatCurrency(grandTotal)}</div>
+            <div className="mt-1 text-2xl font-bold">{formatIndianCompactCurrency(grandTotal)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Line Items</div>
-            <div className="text-2xl font-bold mt-1">{poData.lineItems.length}</div>
+            <div className="mt-1 text-2xl font-bold">{poData.lineItems.length}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Receipt Progress</div>
-            <div className="text-2xl font-bold mt-1">{receiptProgress.toFixed(0)}%</div>
+            <div className="mt-1 text-2xl font-bold">{receiptProgress.toFixed(0)}%</div>
             <Progress value={receiptProgress} className="mt-2" />
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-sm text-muted-foreground">Delivery Date</div>
-            <div className="text-2xl font-bold mt-1">{poData.deliveryDate}</div>
+            <div className="mt-1 text-2xl font-bold">{poData.deliveryDate}</div>
           </CardContent>
         </Card>
       </div>
@@ -204,7 +289,7 @@ export default function PODetail() {
         </TabsList>
 
         <TabsContent value="details" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {/* Vendor Information */}
             <Card>
               <CardHeader>
@@ -267,7 +352,10 @@ export default function PODetail() {
                     <label className="text-sm text-muted-foreground">RFQ Reference</label>
                     <p>
                       {poData.rfqNumber ? (
-                        <Link to={`/admin/procurement/rfq/${poData.rfqNumber}`} className="text-primary hover:underline">
+                        <Link
+                          to={`/admin/procurement/rfq/${poData.rfqNumber}`}
+                          className="text-primary hover:underline"
+                        >
                           {poData.rfqNumber}
                         </Link>
                       ) : (
@@ -291,11 +379,15 @@ export default function PODetail() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-sm text-muted-foreground">Created By</label>
-                    <p>{poData.createdBy} on {poData.createdAt}</p>
+                    <p>
+                      {poData.createdBy} on {poData.createdAt}
+                    </p>
                   </div>
                   <div>
                     <label className="text-sm text-muted-foreground">Approved By</label>
-                    <p>{poData.approvedBy} on {poData.approvedAt}</p>
+                    <p>
+                      {poData.approvedBy} on {poData.approvedAt}
+                    </p>
                   </div>
                 </div>
                 {poData.remarks && (
@@ -341,14 +433,26 @@ export default function PODetail() {
                         <TableCell className="font-medium">{item.description}</TableCell>
                         <TableCell className="text-center">{item.quantity}</TableCell>
                         <TableCell className="text-center">{item.uom}</TableCell>
-                        <TableCell className="text-right">{formatCurrency(item.unitPrice)}</TableCell>
+                        <TableCell className="text-right">
+                          {formatIndianCompactCurrency(item.unitPrice)}
+                        </TableCell>
                         <TableCell className="text-center">{item.taxPercent}%</TableCell>
                         <TableCell className="text-center">
-                          <span className={receiptPercent === 100 ? 'text-green-600' : receiptPercent > 0 ? 'text-yellow-600' : ''}>
+                          <span
+                            className={
+                              receiptPercent === 100
+                                ? 'text-green-600'
+                                : receiptPercent > 0
+                                  ? 'text-yellow-600'
+                                  : ''
+                            }
+                          >
                             {item.receivedQty}/{item.quantity}
                           </span>
                         </TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(itemTotal)}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatIndianCompactCurrency(itemTotal)}
+                        </TableCell>
                       </TableRow>
                     );
                   })}
@@ -360,15 +464,15 @@ export default function PODetail() {
                 <div className="w-72 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Subtotal:</span>
-                    <span>{formatCurrency(subtotal)}</span>
+                    <span>{formatIndianCompactCurrency(subtotal)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Total Tax:</span>
-                    <span>{formatCurrency(totalTax)}</span>
+                    <span>{formatIndianCompactCurrency(totalTax)}</span>
                   </div>
-                  <div className="flex justify-between text-lg font-bold border-t pt-2">
+                  <div className="flex justify-between border-t pt-2 text-lg font-bold">
                     <span>Grand Total:</span>
-                    <span>{formatCurrency(grandTotal)}</span>
+                    <span>{formatIndianCompactCurrency(grandTotal)}</span>
                   </div>
                 </div>
               </div>
@@ -403,7 +507,9 @@ export default function PODetail() {
                       <TableCell className="font-mono">{grn.grnNumber}</TableCell>
                       <TableCell>{grn.date}</TableCell>
                       <TableCell className="text-center">{grn.items}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(grn.value)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(grn.value)}
+                      </TableCell>
                       <TableCell>
                         <Badge variant="default" className="bg-green-100 text-green-800">
                           {grn.status}
@@ -411,7 +517,9 @@ export default function PODetail() {
                       </TableCell>
                       <TableCell className="text-right">
                         <Link to={`/admin/procurement/grn/${grn.grnNumber}`}>
-                          <Button variant="ghost" size="sm">View</Button>
+                          <Button variant="ghost" size="sm">
+                            View
+                          </Button>
                         </Link>
                       </TableCell>
                     </TableRow>
@@ -420,7 +528,7 @@ export default function PODetail() {
               </Table>
 
               {poData.grnHistory.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="py-8 text-center text-muted-foreground">
                   No goods receipts recorded yet.
                 </div>
               )}
@@ -440,17 +548,15 @@ export default function PODetail() {
             <CardContent>
               <div className="space-y-4">
                 {poData.activityLog.map((activity, index) => (
-                  <div key={index} className="flex gap-4 pb-4 border-b last:border-0">
-                    <div className="w-2 h-2 mt-2 rounded-full bg-primary"></div>
+                  <div key={index} className="flex gap-4 border-b pb-4 last:border-0">
+                    <div className="mt-2 h-2 w-2 rounded-full bg-primary"></div>
                     <div className="flex-1">
                       <div className="flex items-center justify-between">
                         <p className="font-medium">{activity.action}</p>
                         <span className="text-sm text-muted-foreground">{activity.at}</span>
                       </div>
                       <p className="text-sm text-muted-foreground">by {activity.by}</p>
-                      {activity.details && (
-                        <p className="text-sm mt-1">{activity.details}</p>
-                      )}
+                      {activity.details && <p className="mt-1 text-sm">{activity.details}</p>}
                     </div>
                   </div>
                 ))}

@@ -19,6 +19,8 @@ If a rule here conflicts with a prompt, habit, or external style guide, this fil
 
 **What this is.** SMFC ERP is a **multi-tenant SaaS** serving Indian NBFCs under RBI Scale-Based Regulation. One deployment runs many NBFCs; each NBFC is one `Organization` row and its data is isolated by PostgreSQL Row-Level Security keyed on `app.current_org_id`. It covers the full NBFC back office and front office: general ledger, loan origination (LOS), loan management (LMS), collections, NPA and legal, treasury and ALM, HRIS and payroll, fixed assets, TDS, GST, bank reconciliation, fixed deposits, compliance, document management, notifications, BI, and portals for borrowers, employees, and vendors.
 
+**NBFC-first lending invariant — not an aggregator.** The lending platform represents the tenant NBFC, such as SFC, as the lender of record. Borrowers apply to the NBFC, receive sanction/KFS/loan documents from the NBFC, repay the NBFC, and raise servicing requests with the NBFC. Borrower-facing flows must never expose source lenders, SFC borrowing facilities, lender loans, cost of funds, funding-source mappings, internal loan account generation, treasury repayment obligations, spread/NIM, or ALM data. Treasury lenders/funding sources, borrowings, drawdowns, lender repayment schedules, ALM, spread analytics, and source-of-funds deployments are internal admin/treasury workflows only. Customer-facing loan application language must use "SFC review", "SFC sanction", "SFC loan account", and "SFC certificate"; terms such as "aggregator", "marketplace lender", "scheme lender review", or "source lender" are forbidden in borrower application paths unless the feature is an explicit post-loan transfer-out flow.
+
 **SaaS mental model — load-bearing for many rules below.** Assume every architectural decision is stress-tested by "what happens when we add the 100th tenant." Specifically:
 
 - **Tenant isolation is primary.** No query, no cache, no queue job, no log line, no exported report may cross org boundaries without an explicit admin audit trail. RLS handles the default case; service code must preserve it on every new code path.
@@ -152,12 +154,12 @@ Violations (e.g. an endpoint calling a repository directly, a service issuing an
 
 ### 3.5 Environments
 
-| Env         | Frontend URL           | Backend URL              | DB                    | Notes                            |
-|-------------|------------------------|--------------------------|-----------------------|----------------------------------|
-| local       | http://localhost:5176  | http://localhost:8001    | Docker postgres:15    | Set by `start.sh`                |
-| docker-compose | http://localhost:3000 | http://localhost:8000   | container `db`        | `docker compose up`              |
-| staging     | TBD                    | TBD                      | managed Postgres      | per-branch previews encouraged   |
-| production  | TBD                    | TBD                      | managed Postgres + PITR | blue/green; locked migrations  |
+| Env            | Frontend URL          | Backend URL           | DB                      | Notes                          |
+| -------------- | --------------------- | --------------------- | ----------------------- | ------------------------------ |
+| local          | http://localhost:5176 | http://localhost:8001 | Docker postgres:15      | Set by `start.sh`              |
+| docker-compose | http://localhost:3000 | http://localhost:8000 | container `db`          | `docker compose up`            |
+| staging        | TBD                   | TBD                   | managed Postgres        | per-branch previews encouraged |
+| production     | TBD                   | TBD                   | managed Postgres + PITR | blue/green; locked migrations  |
 
 Frontend dev port is **5176** (set in `vite.config.ts`). Backend dev port is **8001** (set in `start.sh`). `VITE_API_URL` defaults to `http://localhost:8001/api/v1` (see `src/services/api.ts`).
 
@@ -168,6 +170,7 @@ Frontend dev port is **5176** (set in `vite.config.ts`). Backend dev port is **8
 For each module: frontend pages folder, backend API prefix, key models/services, external integrations, and refdoc reference. This is the canonical inventory; keep it up to date.
 
 ### 4.1 Auth · Users · Roles · Permissions
+
 - Frontend: `src/pages/auth/`, `src/pages/users/`, `src/pages/roles/`.
 - Backend: `/api/v1/auth`, `/users`, `/roles`.
 - Models: `User`, `Role`, `Permission`, `user_role`, `role_permission` in `app/models/auth/`.
@@ -176,12 +179,14 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase1_TechSpec_Part1_Masters.md` (§Users & Roles).
 
 ### 4.2 Masters & Organization
+
 - Frontend: `src/pages/masters/{organizations,units,departments,designations}/`.
 - Backend: `/organizations`, `/units`, `/departments`, `/designations`.
 - Models: `Organization`, `Unit`, `Department`, `Designation`, `FinancialYear`, `Period`, `CostCenter`.
 - Spec: `refdocs/Phase1_TechSpec_Part1_Masters.md`.
 
 ### 4.3 Finance · GL · Vouchers · Periods
+
 - Frontend: `src/pages/finance/`, `src/pages/accounting/`.
 - Backend: `/financial-years`, `/account-groups`, `/accounts`, `/voucher-types`, `/vouchers`, `/gl-entries`, `/cost-centers`, `/accounting/approval-matrix`.
 - Models: `Account`, `AccountGroup`, `Voucher`, `VoucherLine`, `GLEntry`, `CostCenter`, `Period`, `ApprovalMatrix`.
@@ -190,6 +195,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase1_TechSpec_Part2_GL_Flows.md`.
 
 ### 4.4 AP / AR · Vendors · Customers · Payments · BRS
+
 - Frontend: `src/pages/ap-ar/`.
 - Backend: `/payment-terms`, `/vendors`, `/customers`, `/purchase-bills`, `/sales-invoices`, `/payments`, `/bank-reconciliation`.
 - Models: `Vendor`, `Customer`, `PurchaseBill`, `SalesInvoice`, `Payment`, `PaymentTerm`, `BankStatement`, `BRSMatch`.
@@ -198,6 +204,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase6_TechSpec_FA_TDS_GST_BRS_FD.md`.
 
 ### 4.5 GST
+
 - Frontend: `src/pages/gst/`.
 - Backend: `/gst/rates`, `/gst/hsn-sac`, `/gst/registrations`, `/gst/gstn`.
 - Models: `GSTRate`, `HSNSAC`, `GSTRegistration`, `GSTRTxn`, `GSTRFiling`.
@@ -206,6 +213,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase6_*`.
 
 ### 4.6 TDS
+
 - Frontend: `src/pages/tds/`.
 - Backend: `/tds/sections`, `/tds/entries`, `/tds/challans`, `/tds/returns`, `/tds/form16a`.
 - Models: `TDSSection`, `TDSEntry`, `TDSChallan`, `TDSReturn`, `Form16A`.
@@ -215,6 +223,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Rates: **never hardcoded**; read from `mst_tds_section` by effective date. PAN-absent rate = 20%.
 
 ### 4.7 Lending — LOS
+
 - Frontend: `src/pages/lending/los/` (entities, products, applications, sanctions).
 - Backend: `/api/v1/lending/entities`, `/applications`, `/products`, `/sanctions`, `/kyc`, `/aa`, `/credit`.
 - Models: `Entity`, `LoanApplication`, `LoanProduct`, `TechnicalAppraisal`, `FinancialAnalysis`, `LoanSanction`, `DocChecklist`, `KYCRecord`.
@@ -222,7 +231,28 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Integrations: CKYC, AA, CIBIL/Experian/Crif, CERSAI (charge registration at sanction acceptance).
 - Spec: `refdocs/Phase2_*`.
 
+#### Lending/Treasury setup SSOT rules
+
+- `/admin/lending/masters` is the canonical setup command center for lending, checklist, treasury option sets, borrowing option sets, rate/day-count masters, provisions, fees, lifecycle events, templates, and workflow controls. Settings links may point here, but must not create a parallel setup surface.
+- Backend master APIs have one typed family only: `GET /lending/masters/catalog` and `GET/POST/PUT/DELETE /lending/masters/{masterKey}/rows`. Do not reintroduce parallel generic/rich master routers or frontend calls to `/lending/masters/generic`.
+- SSOT ownership is explicit:
+  - **Code-owned:** workflow states, audit state transitions, permission constants, accounting event types, immutable RBI/state-machine semantics, and internal lifecycle event codes.
+  - **Tenant-owned masters:** option sets, policy thresholds, DPD/SMA/NPA/provision buckets, ALM buckets, templates, document catalogs, sector/rating/security lists, IIF categories, and treasury/borrowing option sets.
+  - **Product-owned policy:** borrower applicant fields, eligibility rules, amount/tenure/rate bounds, repayment choices, moratorium/prepayment/security rules, required borrower documents, sanction checklist templates, and disbursement gates.
+- Every finite enum/option in loan modules must declare one SSOT. Code-owned enums live in backend state-machine/permission/event modules and frontend types must be derived from the API/shared type, not hand-written page arrays. Business-policy enums live in tenant masters or product policy rows; seed values are editable defaults, not source code. Frontend `z.enum([...])`, Python `Literal[...]`, page constants, or silent fallback labels are forbidden for business-policy choices such as rate type, repayment mode, document type, security type, covenant type, DPD/provision/ALM buckets, and IIF scheme/claim choices.
+- Master dropdown values come from DB/catalog rows, never page-level constants. Loan product category, entity type, maritime/industry sector, loan rate type, rate reset frequency, repayment frequency, repayment mode, moratorium type, day-count convention, security category/type/nature, charge type, valuation method, treasury lender type, borrowing type, rating agency, rate benchmark, condition/covenant type, waiver/approval authority, OTS payment mode, restructure type, collection/legal type, and IIF scheme/claim/document type dropdowns are governed master data when exposed to users.
+- Policy-changing validation must read product policy and tenant masters. Hardcoded fallbacks for rate, repayment, document, provisioning, ageing, ALM, legal, IIF, or treasury business choices are defects unless the value is explicitly code-owned above.
+- Checklist taxonomy is non-negotiable:
+  - `Checklist Item Catalog` (`mst_checklist_item_catalog`) is the reusable SSOT.
+  - `Product Document Requirements` (`los_document_checklist`) are product-specific borrower upload requirements sourced from catalog items.
+  - `Approval Checklist Templates` (`mst_approval_checklist_template` + items) are sanction/appraisal gates sourced from catalog items.
+  - `Loan Checklist` rows are transactional per-application snapshots, not master data.
+- Free-text checklist rows are blocked. Add or edit the catalog item first, then attach it to a product requirement or approval template.
+- Treasury lenders/funding sources are operational party records. Borrowing facilities, drawdowns, schedules, repayments, and source-of-funds deployments are transaction/facility lifecycle records. Do not move them into generic master tables.
+- Tenant-scoped lending/treasury APIs must derive organization context from auth/RLS. No `organizationId` request-body/query parameter is allowed except audited platform-admin routes.
+
 ### 4.8 Lending — LMS, Collections, NPA, Legal
+
 - Frontend: `src/pages/lending/lms/`, `src/pages/lending/collections/`, `src/pages/legal/`.
 - Backend: `/lending/loan-accounts`, `/disbursements`, `/receipts`, `/schedules`, `/collections`, `/npa`, `/ots`, `/restructure`, `/legal`.
 - Models: `LoanAccount`, `Tranche`, `PrincipalSchedule`, `InterestSchedule`, `RateReset`, `Demand`, `Receipt`, `NPAClassification`, `OTS`, `Restructure`, `LegalCase`, `Writeoff`.
@@ -237,6 +267,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase3_*`.
 
 ### 4.9 Treasury · ALM · Risk
+
 - Frontend: `src/pages/treasury/`, `src/pages/lending/treasury/`.
 - Backend: `/treasury`, `/lending/treasury/{borrowings,lenders,alm,gap-analysis,interest-rate-risk}`.
 - Models: `Borrowing`, `Lender`, `ALMPosition`, `IRSAnalysis`, `Exposure`, `PortfolioRisk`.
@@ -245,12 +276,14 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase4_*`.
 
 ### 4.10 HRIS
+
 - Frontend: `src/pages/hris/`.
 - Backend: `/api/v1/hris/*` (employees, shifts, holidays, leave-types, leave-applications, attendance, separation, training, performance).
 - Models: `Employee`, `Shift`, `Holiday`, `LeaveType`, `LeaveApplication`, `AttendanceRecord`, `Separation`, `TrainingProgram`, `AppraisalCycle`.
 - Spec: `refdocs/Phase5_*`, `refdocs/hrms_design.md`.
 
 ### 4.11 Payroll & Statutory
+
 - Frontend: `src/pages/payroll/`.
 - Backend: `/api/v1/payroll/*` (components, structures, employee-salary, statutory, batches, payslips).
 - Models: `SalaryComponent`, `SalaryStructure`, `EmployeeSalary`, `PayrollBatch`, `Payslip`, `StatutoryFiling`.
@@ -266,6 +299,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase5_*`.
 
 ### 4.12 Fixed Assets
+
 - Frontend: `src/pages/fixed-assets/`.
 - Backend: `/fixed-assets`.
 - Models: `FixedAsset`, `AssetCategory`, `Depreciation`, `Disposal`, `PhysicalVerification`, `Lease`.
@@ -274,6 +308,7 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase6_*`.
 
 ### 4.13 Fixed Deposits
+
 - Frontend: `src/pages/fixed-deposits/`.
 - Backend: `/fixed-deposits`.
 - Models: `FDPlaced`, `FDCollateral`, `FDInterest`.
@@ -281,47 +316,55 @@ For each module: frontend pages folder, backend API prefix, key models/services,
 - Spec: `refdocs/Phase6_*`.
 
 ### 4.14 Inventory
+
 - Frontend: `src/pages/inventory/`.
 - Backend: `/inventory`.
 - Models: `InventoryItem`, `StockTxn`, `ReorderLevel`, `StockAdjustment`.
 
 ### 4.15 Workflow · Approvals · Maker-Checker
+
 - Frontend: `src/pages/workflow/`.
 - Backend: `/workflows`, `/approvals`.
 - Services: `app/services/workflow/{workflow_engine,approval_service,escalation_service,background_tasks}.py`.
 - Invariant: **maker ≠ checker** on all financial, credit, HR, user-role-grant, and OTS actions. Escalation SLA and delegated authority matrix (amount bands) are table-driven.
 
 ### 4.16 DMS
+
 - Frontend: `src/pages/dms/`.
 - Backend: `/dms`.
 - Models: `Document`, `DocumentVersion`, `Folder`, `AccessLog`.
 - Invariants: versioned; content-type allowlist; size cap; antivirus scan hook; PUBLIC/PRIVATE/RESTRICTED access; every read is audited.
 
 ### 4.17 Notifications
+
 - Frontend: `src/pages/notification/`.
 - Backend: `/notifications`.
 - Channels: email, SMS, push, in-app. Templates stored in DB; rendering is Jinja2 with PII-safe filters.
-- Integrations: SMTP (`config.py` SMTP_*), Msg91 or equivalent for SMS (to be wired), FCM/APNS for push.
+- Integrations: SMTP (`config.py` SMTP\_\*), Msg91 or equivalent for SMS (to be wired), FCM/APNS for push.
 
 ### 4.18 Compliance
+
 - Frontend: `src/pages/compliance/`.
 - Backend: `/compliance`.
 - Models: `ComplianceItem`, `ComplianceInstance`, `FilingRecord`.
 - Reminders at D-7 (warning) and D+3 (escalation) via APScheduler job.
 
 ### 4.19 Reports · BI
+
 - Frontend: `src/pages/reports/`, `src/pages/bi/`.
 - Backend: `/reports`, `/bi`.
 - Core reports: Trial Balance, P&L, Balance Sheet, Day Book, Ledger, Cash Flow, AUM, Collection Efficiency, NPA Movement, MIS, Regulatory (NBS-1/2/3/4/7, ALM, CRILC).
 - Export: PDF via `jspdf`, Excel via `xlsx`, CSV — through the `<ExportMenu>` component (§5.7).
 
 ### 4.20 Portals
+
 - Borrower/Customer: `src/pages/portal/` → `/portal`.
 - Employee Self-Service: `src/pages/ess/` → `/ess`.
 - Vendor: `src/pages/vendor/` → `/vendor-portal`.
 - Each portal has its own `src/screens/<portal>/` login page and its own layout. Portal auth is a separate dependency (`get_current_portal_user`) and has stricter rate limits (§8.3).
 
 ### 4.21 Audit & System
+
 - Backend: `/audit-logs`, `/jobs`, `/webhooks`, `/integrations`.
 - Middleware: `app/middleware/audit.py` captures HTTP-level audit; services emit domain audit rows for financial mutations.
 
@@ -364,7 +407,7 @@ This is a multi-tenant ERP SaaS. Visual consistency across 354 pages × N tenant
 1. If you find yourself writing a styled `<div>` with more than ~10 lines of JSX, stop and make it a component.
 2. If you're about to write the same 3 lines of JSX twice in a single file, stop and make it a component.
 3. If a component already exists under `src/components/common/` or `src/components/<domain>/`, you **must** use it. Checking "does this exist" is the first step when starting any page change; open `src/components/` and skim before typing.
-4. If a component *should* exist but doesn't yet, build it under `src/components/common/` or `src/components/<domain>/` (not inline in the page) and wire the page to consume it. Separate PR if the component needs its own tests — CLAUDE.md §10.0 still applies (unit + integration + E2E).
+4. If a component _should_ exist but doesn't yet, build it under `src/components/common/` or `src/components/<domain>/` (not inline in the page) and wire the page to consume it. Separate PR if the component needs its own tests — CLAUDE.md §10.0 still applies (unit + integration + E2E).
 5. `src/components/common/*` are covered by design-token contract tests (`src/components/common/design-tokens.test.tsx`). Any component you add here must carry a test that pins its canonical class tokens so it can't drift silently.
 
 ### 5.2 Folder convention
@@ -399,7 +442,7 @@ Every form in this codebase uses react-hook-form + zod, rendered through shadcn'
 - **Percentage fields**: `z.coerce.number().min(0).max(100)` for rates. Render with `<PercentageInput>`.
 - **Date fields**: `z.string().date()` for business dates (ISO `yyyy-MM-dd`). Render with `<DatePicker>`.
 - **PII fields**: `<PANField>`, `<AadhaarField>`, `<PhoneField>`, `<EmailField>`, `<GSTINField>` — these validate format AND mask display by default.
-- **Required validation**: use `z.string().min(1, "Required")` + trim; for selects, `z.string().uuid()` or a `z.enum([...])`.
+- **Required validation**: use `z.string().min(1, "Required")` + trim; for selects, use `z.string().uuid()` for ID-backed masters and `z.enum([...])` only for code-owned enums. Master-backed business options, especially loan policy options, must validate against API/product-policy data rather than hardcoded enum arrays.
 - **Cross-field rules**: `.superRefine((val, ctx) => {...})`. Never write ad-hoc `useEffect` validation in the component.
 - **Multi-step**: `<WizardShell>` with step-scoped schemas; final submit validates the merged result. Each step's `onNext` triggers `form.trigger([...fieldNames])`.
 - **Submit buttons**: `disabled={form.formState.isSubmitting}`, with a spinner inside. The `<FormShell>` renders the action bar; pages do not add their own submit row.
@@ -435,11 +478,11 @@ Every form in this codebase uses react-hook-form + zod, rendered through shadcn'
 
 Three states MUST be rendered on every page that fetches data. If any of these is missing, the page is incomplete.
 
-| State | Component | Trigger |
-|---|---|---|
+| State   | Component                                                                                         | Trigger                                       |
+| ------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------- |
 | Loading | `<SkeletonTable rows={N}>` for table pages, `<Skeleton>` variants from `common/` for detail pages | `query.isLoading && !query.data` (first load) |
-| Empty | `<EmptyState title subtitle cta?>` | `query.isSuccess && query.data.length === 0` |
-| Error | `<ErrorState error onRetry={() => refetch()}>` | `query.isError` |
+| Empty   | `<EmptyState title subtitle cta?>`                                                                | `query.isSuccess && query.data.length === 0`  |
+| Error   | `<ErrorState error onRetry={() => refetch()}>`                                                    | `query.isError`                               |
 
 **Strict rules:**
 
@@ -453,7 +496,13 @@ A blank screen during fetch is a defect. A silent failure is a defect. "It was b
 
 ### 5.8 Money, percentages, dates, IDs, PII
 
-- Money: `<AmountDisplay value={…} currency="INR" />`. `AmountInput` stores `number | null` and formats on blur with Indian digit grouping. Never `toFixed(2)` inline; never `parseFloat` user input directly.
+- **Money — STRICT.** `<AmountDisplay amount={…} />` is the **only** sanctioned way to render an INR amount in a React tree. The component defaults to Indian-compact format ("₹1.02 Cr", "₹12.5 L", "₹4,500") with the exact rupees+paise in a hover tooltip. Pass `precise` only on screens where every paise truly matters (receipts, payment vouchers, GST + TDS rows, payslip statutory columns, bank reconciliation). All non-JSX call sites (PDF/CSV export, Excel cells, log lines) use `formatIndianCompactCurrency()` from `@/components/common/AmountDisplay` — that's the canonical helper, and `formatCurrency()` from `@/lib/utils` is just a back-compat shim that delegates to it.
+  - **Forbidden everywhere except the sanctioned files in `eslint.config.js`:**
+    - `new Intl.NumberFormat('en-IN', { currency: 'INR', … })` inline
+    - `const formatCurrency = …` or `function formatCurrency` per-file declarations
+    - `value.toFixed(2)`, `parseFloat`, `value.toLocaleString('en-IN', …)` on monetary values
+  - Enforced by ESLint `no-restricted-syntax` (rule lives in `eslint.config.js`). Adding a new sanctioned home of the formatter requires updating this section + the ESLint exception list in the same PR.
+  - `AmountInput` (form input) keeps the user's typed value editable and formats on blur with Indian digit grouping; the read-only display fields are always `<AmountDisplay>`.
 - Percentage: `<PercentageDisplay value={12.5} />` renders `12.50%`. Storage is the number, not the string.
 - Date: store and transport ISO `yyyy-MM-dd` for business dates, ISO-8601 + TZ for timestamps. Display via `<DateDisplay />` (default format `dd MMM yyyy`, IST). Never do `new Date().toLocaleString()` in components.
 - IDs: always show the business number (e.g. `SMFC/BOM/HL/2526/0001`), never the UUID. UUIDs are for URLs only.
@@ -579,7 +628,7 @@ Timeouts are explicit (`connect=5, read=30`). Webhooks verify HMAC + timestamp n
 - `JWT_SECRET_KEY`, `JWT_ALGORITHM`
 - `DATABASE_URL`, `REDIS_URL`
 - `ENCRYPTION_KEY` (the Fernet key we use to wrap tenant secrets)
-- SMTP relay creds for *our* outbound mail (app-level, not the tenant's)
+- SMTP relay creds for _our_ outbound mail (app-level, not the tenant's)
 - Third-party platform services we pay for: OTel collector, error tracker, log aggregator
 - Any other value that is part of our deployment, not a client's account
 
@@ -595,15 +644,18 @@ Timeouts are explicit (`connect=5, read=30`). Webhooks verify HMAC + timestamp n
 - Any key that would be invalid or wrong if it leaked into another tenant's data plane
 
 **Rule:**
+
 - If a value is part of our deployment → env var / `settings.py` / pydantic-settings.
 - If a value belongs to a specific client / org → Fernet-encrypted DB row, org-scoped, accessed through a service.
 
 **Canonical mechanisms in this repo:**
+
 - **Vendor integrations (primary)** → `IntegrationConfig` at `sys_integration_config` (model: `app/models/core/integration_config.py`). Keyed by `(organization_id, integration_type, provider)`. Credential fields land in the `config_data` JSONB column, Fernet-encrypted per-key via `IntegrationService._encrypt_config_data` (`app/services/core/integration_service.py`) using `encryption_service.encrypt_dict` from `app/core/encryption.py`. Reads require `decrypt=True` on `IntegrationService.get(...)` — default reads return the still-encrypted blob so nothing leaks to logs or generic responses. Webhook URLs + secrets live on the same row so rotation is one update.
 - **Domain-specific tenant secrets** → a dedicated encrypted column on the domain table, wrapped by a service helper. Example: `gst_registration.portal_password` (Fernet-encrypted per GSTIN via `gst_registration_service.get_portal_password`). Use this pattern when a tenant secret is tightly coupled to a domain record and `IntegrationConfig` would duplicate the relation.
 - **Platform secrets** → `app/config.py` Settings class, loaded via `pydantic-settings` from env. One value per deploy, identical for every NBFC.
 
 **Why this matters specifically:**
+
 - Putting a tenant's Razorpay key in env hard-codes the platform to one NBFC — the second tenant onboards and instantly reads the first tenant's money.
 - Env vars aren't rotatable per-tenant. If one NBFC's portal password leaks, we must rotate just theirs, not everyone's.
 - Tenant-scoped audit requires "who read what key when" — that's a DB read, not an env lookup.
@@ -649,20 +701,20 @@ Platform secrets must NEVER enter the tenant settings table; tenant secrets must
 
 ### 7.1 Domain invariants (quick reference — do not regress)
 
-| Area        | Invariant                                                                                  |
-|-------------|--------------------------------------------------------------------------------------------|
-| Vouchers    | Σ debit = Σ credit at post time; only leaf accounts post; HARD_CLOSED period rejects post. |
-| EMI         | `P·r·(1+r)ⁿ / ((1+r)ⁿ−1)` with explicit day-count; round at schedule-line persistence only.|
-| Receipts    | Allocation priority: penal → charges → ovd int → cur int → ovd prin → cur prin.            |
-| NPA         | Bucket thresholds per §4.8. Provisioning from `mst_provisioning_rate`.                     |
-| GST         | Intra-state CGST+SGST; inter-state IGST; RCM > ₹5,000/day from unregistered.               |
-| TDS         | No PAN → 20%; thresholds per section; challan due 7th of next month.                       |
-| Depreciation| SLM or WDV per category; full-month convention if > 15 days in month.                      |
-| Payroll     | PF cap ₹15,000; ESI eligibility gross ≤ ₹21,000; gratuity (last·15·years)/26 cap ₹20L.     |
-| FD collateral | 25% default haircut; lien-marked; released only on loan closure.                          |
-| Maker-checker | Maker ≠ checker on financial / credit / HR / role-grant actions.                          |
-| Fiscal year  | April–March IST; HARD_CLOSED posting rejected at service.                                  |
-| Audit       | Retain 7 years (financial), 2 years (login). Append-only; integrity hash chain per day.    |
+| Area          | Invariant                                                                                   |
+| ------------- | ------------------------------------------------------------------------------------------- |
+| Vouchers      | Σ debit = Σ credit at post time; only leaf accounts post; HARD_CLOSED period rejects post.  |
+| EMI           | `P·r·(1+r)ⁿ / ((1+r)ⁿ−1)` with explicit day-count; round at schedule-line persistence only. |
+| Receipts      | Allocation priority: penal → charges → ovd int → cur int → ovd prin → cur prin.             |
+| NPA           | Bucket thresholds per §4.8. Provisioning from `mst_provisioning_rate`.                      |
+| GST           | Intra-state CGST+SGST; inter-state IGST; RCM > ₹5,000/day from unregistered.                |
+| TDS           | No PAN → 20%; thresholds per section; challan due 7th of next month.                        |
+| Depreciation  | SLM or WDV per category; full-month convention if > 15 days in month.                       |
+| Payroll       | PF cap ₹15,000; ESI eligibility gross ≤ ₹21,000; gratuity (last·15·years)/26 cap ₹20L.      |
+| FD collateral | 25% default haircut; lien-marked; released only on loan closure.                            |
+| Maker-checker | Maker ≠ checker on financial / credit / HR / role-grant actions.                            |
+| Fiscal year   | April–March IST; HARD_CLOSED posting rejected at service.                                   |
+| Audit         | Retain 7 years (financial), 2 years (login). Append-only; integrity hash chain per day.     |
 
 ---
 
@@ -739,65 +791,65 @@ The canonical token set lives in `tailwind.config.cjs`. Every visual decision go
 
 **Colour palette** — each colour has a full 50–900 scale plus a `DEFAULT` shortcut.
 
-| Token | 50 | 500 | 700 | DEFAULT | Use |
-|---|---|---|---|---|---|
-| `primary` | `#eff6ff` | `#3b82f6` | `#1d4ed8` | `#2563eb` | Brand / focus ring / primary CTA |
+| Token       | 50        | 500       | 700       | DEFAULT   | Use                               |
+| ----------- | --------- | --------- | --------- | --------- | --------------------------------- |
+| `primary`   | `#eff6ff` | `#3b82f6` | `#1d4ed8` | `#2563eb` | Brand / focus ring / primary CTA  |
 | `secondary` | `#f8fafc` | `#64748b` | `#334155` | `#475569` | Secondary actions / table borders |
-| `success` | `#ecfdf5` | `#10b981` | `#047857` | `#059669` | Paid, approved, active |
-| `warning` | `#fffbeb` | `#f59e0b` | `#b45309` | `#d97706` | Overdue, pending action |
-| `danger` | `#fff1f2` | `#f43f5e` | `#be123c` | `#e11d48` | Rejected, NPA, destructive |
-| `info` | `#f0f9ff` | `#0ea5e9` | `#0369a1` | `#0284c7` | Informational tips |
-| `neutral` | `#f8fafc` | `#64748b` | `#334155` | — | Backgrounds, dividers, body text |
+| `success`   | `#ecfdf5` | `#10b981` | `#047857` | `#059669` | Paid, approved, active            |
+| `warning`   | `#fffbeb` | `#f59e0b` | `#b45309` | `#d97706` | Overdue, pending action           |
+| `danger`    | `#fff1f2` | `#f43f5e` | `#be123c` | `#e11d48` | Rejected, NPA, destructive        |
+| `info`      | `#f0f9ff` | `#0ea5e9` | `#0369a1` | `#0284c7` | Informational tips                |
+| `neutral`   | `#f8fafc` | `#64748b` | `#334155` | —         | Backgrounds, dividers, body text  |
 
 Semantic surface tokens (also in `tailwind.config.cjs`) — these are what shadcn primitives consume:
 
-| Token | Value | Use |
-|---|---|---|
-| `background` | `#ffffff` | App body |
-| `foreground` | `#0f172a` | Default text |
-| `border` / `input` | `#e2e8f0` | Dividers, form controls |
-| `ring` | `#2563eb` | Keyboard-focus ring |
-| `muted` | `#f1f5f9` (bg), `#64748b` (fg) | Secondary cards, disabled state |
-| `card` / `popover` | `#ffffff` / `#0f172a` | Surfaces |
-| `accent` | `#f1f5f9` | Hovered list items |
-| `destructive` | `#e11d48` / `#ffffff` | Destructive buttons, error state |
+| Token              | Value                          | Use                              |
+| ------------------ | ------------------------------ | -------------------------------- |
+| `background`       | `#ffffff`                      | App body                         |
+| `foreground`       | `#0f172a`                      | Default text                     |
+| `border` / `input` | `#e2e8f0`                      | Dividers, form controls          |
+| `ring`             | `#2563eb`                      | Keyboard-focus ring              |
+| `muted`            | `#f1f5f9` (bg), `#64748b` (fg) | Secondary cards, disabled state  |
+| `card` / `popover` | `#ffffff` / `#0f172a`          | Surfaces                         |
+| `accent`           | `#f1f5f9`                      | Hovered list items               |
+| `destructive`      | `#e11d48` / `#ffffff`          | Destructive buttons, error state |
 
 **Typography scale** — tuned for dense financial screens. Line-heights widen slightly at `lg+` so card titles breathe; table body stays tight.
 
-| Token | Size | Line-height | Use |
-|---|---|---|---|
-| `text-xs` | 0.75 rem | 1 rem | Captions, breadcrumbs, status pills |
-| `text-sm` | 0.875 rem | 1.25 rem | Table body, secondary text, form help |
-| `text-base` | 0.9375 rem | 1.5 rem | Form inputs, primary body |
-| `text-lg` | 1.0625 rem | 1.625 rem | Card titles |
-| `text-xl` | 1.25 rem | 1.75 rem | Section headers (inside cards) |
-| `text-2xl` | 1.5 rem | 2 rem | Page titles (`PageHeader`) |
-| `text-3xl` | 1.875 rem | 2.25 rem | Hero metrics |
+| Token       | Size       | Line-height | Use                                   |
+| ----------- | ---------- | ----------- | ------------------------------------- |
+| `text-xs`   | 0.75 rem   | 1 rem       | Captions, breadcrumbs, status pills   |
+| `text-sm`   | 0.875 rem  | 1.25 rem    | Table body, secondary text, form help |
+| `text-base` | 0.9375 rem | 1.5 rem     | Form inputs, primary body             |
+| `text-lg`   | 1.0625 rem | 1.625 rem   | Card titles                           |
+| `text-xl`   | 1.25 rem   | 1.75 rem    | Section headers (inside cards)        |
+| `text-2xl`  | 1.5 rem    | 2 rem       | Page titles (`PageHeader`)            |
+| `text-3xl`  | 1.875 rem  | 2.25 rem    | Hero metrics                          |
 
 Font families: `font-sans` = Inter → system fallback; `font-mono` = JetBrains Mono → ui-monospace. Numeric cells additionally use `tabular-nums` (locked-width digits).
 
 **Spacing** — 4 px base. Extensions used for dense layouts:
 
-| Token | Value | Use |
-|---|---|---|
-| `p-4.5` | 18 px | Half-step between `p-4` (16 px) and `p-5` (20 px) |
-| `h-13` | 52 px | Table header row |
-| `h-15` | 60 px | Compact toolbar |
-| `h-18` | 72 px | Dense list row with actions |
-| `w-sidebar` | 256 px | Default sidebar |
-| `w-sidebar-collapsed` | 64 px | Collapsed sidebar |
-| `min-h-row-sm/md/lg` | 32 / 40 / 48 px | Canonical table-row heights |
+| Token                 | Value           | Use                                               |
+| --------------------- | --------------- | ------------------------------------------------- |
+| `p-4.5`               | 18 px           | Half-step between `p-4` (16 px) and `p-5` (20 px) |
+| `h-13`                | 52 px           | Table header row                                  |
+| `h-15`                | 60 px           | Compact toolbar                                   |
+| `h-18`                | 72 px           | Dense list row with actions                       |
+| `w-sidebar`           | 256 px          | Default sidebar                                   |
+| `w-sidebar-collapsed` | 64 px           | Collapsed sidebar                                 |
+| `min-h-row-sm/md/lg`  | 32 / 40 / 48 px | Canonical table-row heights                       |
 
 **Radii** — `rounded-sm` (4 px) for toggles; default `rounded` (6 px); `rounded-md` (8 px) for inputs; `rounded-lg` (12 px) for cards; `rounded-full` for pills and avatars only.
 
 **Shadows** — four tiers only; do NOT invent new ones:
 
-| Token | Use |
-|---|---|
-| `shadow-sm` | Tables, row hover |
-| `shadow` | Cards, standard surfaces |
-| `shadow-md` | Popovers, dropdowns |
-| `shadow-lg` | Modals, command palette |
+| Token          | Use                                          |
+| -------------- | -------------------------------------------- |
+| `shadow-sm`    | Tables, row hover                            |
+| `shadow`       | Cards, standard surfaces                     |
+| `shadow-md`    | Popovers, dropdowns                          |
+| `shadow-lg`    | Modals, command palette                      |
 | `shadow-focus` | Focus-visible rings (`0 0 0 3px primary/35`) |
 
 **Density anchors** for dense financial tables:
@@ -809,6 +861,7 @@ Font families: `font-sans` = Inter → system fallback; `font-mono` = JetBrains 
 **Animation** — `animate-shake` is the ONLY bespoke keyframe, used for form-field error highlights.
 
 **Do NOT**:
+
 - Introduce `bg-[#xxxxxx]` or `text-[17px]` — extend `tailwind.config.cjs` instead.
 - Use `shadow-[0_0_10px_red]`-style ad-hoc shadows.
 - Hardcode hex codes in components.
@@ -819,13 +872,13 @@ Design-token drift is a regression. Contract tests live at `src/components/commo
 
 Every page in this app is one of three shapes. No alternatives. No "we'll add the shell later."
 
-| Shape | Required skeleton |
-|---|---|
-| **List** | `<div className="space-y-6">` → `<PageHeader ...>` → `<FilterBar>` (if filters exist) → `<Card>` containing `<DataTable>` (with loading skeleton, empty state, error state) → `<Pagination>` |
-| **Detail** | `<div className="space-y-6">` → `<PageHeader ... breadcrumbs={[...]}>` → `<DetailGrid>` (tabs via `<InlineTabs>`) → optional action bar as `<PageHeader actions={...}>` |
-| **Create / Edit** | `<div className="space-y-6">` → `<PageHeader ... breadcrumbs={[...]}>` → `<FormShell>` (steps via `<WizardShell>` when multi-step) → `<ActionBar>` inside `<FormShell>` |
+| Shape             | Required skeleton                                                                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **List**          | `<div className="space-y-6">` → `<PageHeader ...>` → `<FilterBar>` (if filters exist) → `<Card>` containing `<DataTable>` (with loading skeleton, empty state, error state) → `<Pagination>` |
+| **Detail**        | `<div className="space-y-6">` → `<PageHeader ... breadcrumbs={[...]}>` → `<DetailGrid>` (tabs via `<InlineTabs>`) → optional action bar as `<PageHeader actions={...}>`                      |
+| **Create / Edit** | `<div className="space-y-6">` → `<PageHeader ... breadcrumbs={[...]}>` → `<FormShell>` (steps via `<WizardShell>` when multi-step) → `<ActionBar>` inside `<FormShell>`                      |
 
-**Every header must be `<PageHeader>`.** You do NOT write `<div className="flex items-center justify-between"><div><h1 ...>Title</h1><p ...>Subtitle</p></div><Button>...</Button></div>`. That shape is the one we migrated *away* from. The canonical API:
+**Every header must be `<PageHeader>`.** You do NOT write `<div className="flex items-center justify-between"><div><h1 ...>Title</h1><p ...>Subtitle</p></div><Button>...</Button></div>`. That shape is the one we migrated _away_ from. The canonical API:
 
 ```tsx
 <PageHeader
@@ -920,7 +973,7 @@ Testing is part of the change, not a chore that follows it. Every fix ships with
 
 ### 10.0 Full-stack parity rule (non-negotiable)
 
-**No change ships on only one side of the stack.** Every user-facing feature, bug fix, or refactor must land with coverage on *every layer it actually touches*:
+**No change ships on only one side of the stack.** Every user-facing feature, bug fix, or refactor must land with coverage on _every layer it actually touches_:
 
 1. Backend unit (pytest) — service math / pure helpers.
 2. Backend integration (pytest + testcontainers Postgres) — endpoint → service → repo → DB, with auth + permission + RLS exercised.
@@ -931,6 +984,7 @@ Testing is part of the change, not a chore that follows it. Every fix ships with
 A PR that adds a backend endpoint without the matching frontend hook + page + Playwright flow is incomplete. A PR that adds a page without the backend endpoint + integration test is incomplete. A PR that fixes a bug on one side without a regression test on both sides is incomplete. If a layer genuinely doesn't apply (e.g. an internal cron job has no UI), say so explicitly in the PR description — silence is not acceptance.
 
 **What this rule forbids:**
+
 - Merging a backend feature and "opening a follow-up PR" for the frontend, or vice versa.
 - Shipping a page that calls a backend route which doesn't exist yet.
 - Closing a stage gate when only half the stack is done.
@@ -1070,7 +1124,7 @@ Under no circumstance, in any PR, may the following occur without a documented d
     - Raw `<form>` with `<Input>`/`<Select>` outside `<FormField>` (use `<FormShell>` + RHF + zod via shadcn `<Form>`).
     - Inline loading spinner for page-level loading (use `<SkeletonTable>` / `<Skeleton>`).
     - Inline "No results" text (use `<EmptyState>`).
-    - Inline `<span>{amount.toFixed(2)}</span>` for money (use `<AmountDisplay>`).
+    - **Inline money formatters of any kind** — `<span>{amount.toFixed(2)}</span>`, `new Intl.NumberFormat('en-IN', { currency: 'INR' })`, per-file `const formatCurrency = …`, `amount.toLocaleString('en-IN', …)`. The ONLY sanctioned render is `<AmountDisplay>`; the ONLY sanctioned non-JSX helper is `formatIndianCompactCurrency()` from `@/components/common/AmountDisplay`. The Indian-compact format ("₹1.02 Cr", "₹12.5 L") with hover-tooltip is the default and standard everywhere. See §5.8. Enforced by ESLint `no-restricted-syntax` — adding a new sanctioned file requires updating §5.8 + the exception list in the same PR.
     - Inline `<span>{new Date(x).toLocaleDateString()}</span>` (use `<DateDisplay>`).
     - Inline `<Badge className="bg-green-100 text-green-800">` for status (use `<StatusPill>` / `<DpdBadge>` / etc.).
     - Raw PAN / Aadhaar / phone / email / bank-account / IFSC values in JSX (use `<PANField>` / `<AadhaarField>` / `<PhoneField>` / etc., masked by default; unmask requires `pii.view` + audit).
@@ -1111,44 +1165,44 @@ Corollary: the historical list in §12.1 is not a license — it is a snapshot o
 
 Snapshot of §12.1 items after each stage. "Closed" means no live instance remains in the codebase. "Open (approved)" means it lives in `.stubs-approved.md` with an owner and an unblocker.
 
-| Violation | Spec ref | Status | Closed in | Notes |
-|-----------|----------|--------|-----------|-------|
-| RLS f-string interpolation in `backend/app/database.py:92` | §6.2 / §12.13 | **Closed** | Stage 1a | Now `SELECT set_config('app.current_org_id', :org_id, true)` + `UUID()` validation. Regression tests in `backend/tests/common/test_rls_context.py`. |
-| Plaintext portal passwords in `gst_registration_service.py` | §6.8 | **Closed** | Stage 1b | Fernet-encrypted via existing `app.core.encryption`. Regression tests in `backend/tests/gst/test_gst_password_encryption.py`. |
-| `AuthContext` stub (hardcoded admin) | §5.6 | **Closed** | Stage 2b | Real login/logout/refresh wired; Zustand `authStore` + `organizationStore` + `useAuth`/`usePermission`/`useOrganization` hooks. |
-| `tsconfig.json` not strict | §5.9 | **Closed** | Stage 1d | `strict: true`, `noFallthroughCasesInSwitch`, `noImplicitOverride`. All 39 cascading errors fixed. |
-| `// TODO: Get organization_id` in `src/pages/fixed-deposits/**` | §3.4 | **Closed** | Stage 2f | Uses `useRequiredActiveOrganizationId()`. |
-| Mock accounts/periods in `GLPostingCreate.tsx` | §12.7 | **Closed** | Stage 2g | Wired to `useAccounts()`/`usePeriods()` react-query hooks; uses `<PageHeader>`/`<FormShell>`; zod cross-field invariants. |
-| `console.log` in `src/pages/**/*.tsx` | §5.12 | **Closed** | Stage 1c | Replaced across 28 pages with `logger.debug`; ESLint `no-console` blocks regression. |
-| Duplicate lockfiles | §2.2 | **Closed** | Stage 0 | Only `pnpm-lock.yaml` remains; `packageManager: pnpm@9.15.0` enforced. |
-| `console.log` stub `onClick` handlers in lending/legal/npa/nach/borrowings | §12.3 | **Closed** | Stage 3a | Replaced with real handlers where the API exists; approved deferrals logged in `.stubs-approved.md`. |
-| `customer_id: ''` with TODO in `FDForm.tsx` | §5.1 | **Closed** | Stage 3a | `<CustomerPicker>` component built; form uses it. |
-| `src/components/common/*` re-export shims (AmountInput, DateDisplay, StatusPill, DpdBadge, PercentageDisplay) | §5.2 | **Closed** | Stage 3a | Implementations moved to `common/`; lending/ now re-exports for compat. |
-| `App.tsx` 1,127-line monolith | §5.10 | **Closed** | Stage 3b | Converted all page imports to `React.lazy` with `<Suspense>` wrapper; bundle split into ~30 chunks; initial chunk dropped from 5.2 MB to ~2 MB. |
-| Receipt allocation per-installment priority (CLAUDE.md §4.8 violation) | §4.8 | **Closed** | Stage 4-PENDING-001 | Rewrote `LoanAccountService.allocate_receipt` to three-pass cross-installment allocation (penal → interest → principal). 7 regression tests. |
-| Missing closed-period guard in `gl_posting_service.post_from_source` | §4.3 | **Closed** | Stage 4-PENDING-003 | `session.get(FinancialPeriod, period_id)` + guard that raises `ClosedPeriodError` on `is_closed` or `is_locked`. 4 new tests. |
-| Missing security response headers (CSP/HSTS/X-Frame-Options/nosniff/Referrer-Policy/Permissions-Policy) | §8.9 | **Closed** | Stage 5-001 | `SecurityHeadersMiddleware`; HSTS only on prod+https; Server header stripped; routes may override CSP. 6 tests. |
-| No rate limiting on `/auth/*` | §8.3 | **Closed** | Stage 5-002 | slowapi wired; `@auth_login_limit()` 5/min, `@auth_refresh_limit()` 20/min. 429 envelope with `error_code`+`retry_after_seconds`. 5 tests. |
-| No HMAC webhook verification primitive | §8.6 | **Closed (primitive)** | Stage 5-003 | `verify_webhook()` + `compute_hmac_sha256()` + `verify_timestamp()` in `app/core/webhook_signature.py`. 17 tests. Per-vendor wiring = STAGE-5-PENDING-005. |
-| No PII masking helpers | §8.7 | **Closed (primitive)** | Stage 5-004 | 6 mask functions + `MaskedPIIModel` Pydantic mixin. 24 tests. Rollout to response schemas = STAGE-5-PENDING-006. |
-| No DMS upload hardening | §8.7 | **Closed (primitive)** | Stage 5-005 | `validate_upload()` with allowlist, ALWAYS_DENY, magic-byte mismatch detection, 50 MB cap, path-traversal-safe filenames. 23 tests. ClamAV = STAGE-5-PENDING-001. |
-| No audit tamper-detection | §8.5 | **Closed (primitive)** | Stage 5-006 | `compute_day_anchor()` / `build_chain()` / `verify_chain()` — canonical row form + chain propagation. 16 tests. Persistence = STAGE-5-PENDING-002. |
-| No Arq worker / fan-out queue (§6.6) | §6.6 | **Closed (scaffold)** | Stage 6-001 | `app/workers/arq_worker.py` with 7 registered jobs, `WorkerSettings`, `enqueue()` producer wrapper with dedupe + defer. 14 tests. Worker-pool deploy = STAGE-6-PENDING-arq-worker-pool. |
-| No integration base client with retry / circuit breaker | §6.7 | **Closed** | Stage 6-002 | `app/integrations/base/client.py` — httpx + exponential-backoff retry + 3-state circuit breaker + typed errors. 18 tests. Per-vendor subclasses deferred (one STAGE-6-PENDING-* per vendor). |
-| No feature-flag gating for integrations (§6.7) | §6.7 | **Closed** | Stage 6-003 | `app/core/feature_flags.py` — 22 flags, per-env defaults, override via `FEATURE_FLAG_<NAME>` env var, `snapshot()` for admin introspection. 17 tests. |
-| No OpenTelemetry instrumentation | §6 | **Closed** | Stage 6-004 | `app/core/telemetry.py` wires FastAPI + httpx + SQLAlchemy; exporter reads `OTEL_EXPORTER_OTLP_ENDPOINT`. No-op when unset. 9 tests. Dashboards + alerting = STAGE-6-PENDING-grafana-dashboards / -alerting-rules. |
-| Bare-default `tailwind.config.cjs` — no NBFC palette / typography scale / density anchors | §9.1 | **Closed** | Stage 7-001 | Full palette (primary/secondary/success/warning/danger/info/neutral with 50–900 scales), semantic surface tokens, 7-step typography scale, density anchors (row heights, sidebar widths), 4-tier shadow system. Token tables documented in §9.1. |
-| No Playwright accessibility checks | §5.11 / §10.5 | **Closed** | Stage 7-002 | `@axe-core/playwright` fixture at `playwright/fixtures/axe.ts`. `runAxe(page)` fails the test on critical/serious violations; WCAG 2.1 AA tags by default. Login smoke now carries an axe assertion. Per-suppression must be logged in `.stubs-approved.md`. |
-| No visual regression coverage | §9 | **Closed (scaffold)** | Stage 7-003 | `playwright.config.ts` visual-regression block (`maxDiffPixelRatio: 0.002`, animations disabled). Sample visual spec + `pnpm test:e2e:visual:update` command. Baseline capture across 10 critical screens = STAGE-7-PENDING-visual-baselines. |
-| No design-token contract tests for common components | §9 | **Closed** | Stage 7-004 | 11 contract tests at `src/components/common/design-tokens.test.tsx` — `PageHeader`/`FormShell`/`FormSection`/`EmptyState`/`ErrorState`/`DataTable` canonical classes (text-2xl, text-muted-foreground, tabular-nums, border-destructive, etc.). Future refactor cannot drift silently. |
-| No production-readiness report | §Appendix A Stage 8 | **Closed** | Stage 8-001 | [`PRODUCTION_READINESS_REPORT.md`](PRODUCTION_READINESS_REPORT.md) — honest state, full evidence, risk list, go-live checklist, approval block. |
-| No dependency vulnerability audit in CI | §12.20 | **Closed** | Stage 8-002 / 8-003 | `pnpm audit --prod`: 0 critical, 0 high (down from 2 high in `xlsx`). `xlsx` removed and `exceljs` swapped in — STAGE-8-003 closure. 1 remaining moderate is `uuid` transitive via `exceljs` with no exploitable path. `pip-audit` on backend reports zero known vulnerabilities. |
-| `xlsx` package carrying 2 unfixable high-sev advisories (prototype pollution + ReDoS) | §12.20 | **Closed** | Stage 8-003 | `src/utils/exportUtils.ts` now uses `exceljs` exclusively. Export functions became `async` — 6 call-sites use fire-and-forget `onClick` so no functional change. `pnpm build` verified; bundle swapped in the new `vendor-excel` chunk. |
-| Bundle size — initial chunk 2.0 MB raw (498 kB gzip) | §Appendix A Stage 8 | **Closed** | Stage 8-004 | `vite.config.ts` `rollupOptions.output.manualChunks` splits vendor libs; main entry 2.0 MB → 1.0 MB raw (498 kB → 179 kB gzip). Named vendor chunks: `vendor-react`, `vendor-router`, `vendor-state`, `vendor-radix`, `vendor-forms`, `vendor-charts`, `vendor-pdf`, `vendor-excel`, `vendor-icons`, `vendor-other`. |
-| No unified SMS/email/push abstraction | §6 / §10.5 | **Closed** | Stage 6-005 | `app/services/notification/communication_service.py` — `Channel` enum + `Recipient.target_for` + provider registry + per-channel live/mock/off feature flags + fail-closed `send`/`fanout`. 9 tests. Closes STAGE-6-PENDING-communication-service. |
-| `gstn_service.py` mock returns (5+ TODOs) | §12.7 | **Open (approved)** | — | Stage 6 scope; tracked as STAGE-6-PENDING-gstn-live (`gstn_live` feature flag). |
-| `kyc_service.py` CKYC/bureau stubs | §12.7 | **Open (approved)** | — | Stage 6 scope; CKYC + bureau integration. Tracked in `.stubs-approved.md`. |
-| ~55 other backend TODO/FIXME from exploration inventory | various | **Open (approved)** | — | Each tracked in `.stubs-approved.md` with the Stage that will close it. |
+| Violation                                                                                                     | Spec ref            | Status                 | Closed in           | Notes                                                                                                                                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------------------------- | ------------------- | ---------------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RLS f-string interpolation in `backend/app/database.py:92`                                                    | §6.2 / §12.13       | **Closed**             | Stage 1a            | Now `SELECT set_config('app.current_org_id', :org_id, true)` + `UUID()` validation. Regression tests in `backend/tests/common/test_rls_context.py`.                                                                                                                                                                  |
+| Plaintext portal passwords in `gst_registration_service.py`                                                   | §6.8                | **Closed**             | Stage 1b            | Fernet-encrypted via existing `app.core.encryption`. Regression tests in `backend/tests/gst/test_gst_password_encryption.py`.                                                                                                                                                                                        |
+| `AuthContext` stub (hardcoded admin)                                                                          | §5.6                | **Closed**             | Stage 2b            | Real login/logout/refresh wired; Zustand `authStore` + `organizationStore` + `useAuth`/`usePermission`/`useOrganization` hooks.                                                                                                                                                                                      |
+| `tsconfig.json` not strict                                                                                    | §5.9                | **Closed**             | Stage 1d            | `strict: true`, `noFallthroughCasesInSwitch`, `noImplicitOverride`. All 39 cascading errors fixed.                                                                                                                                                                                                                   |
+| `// TODO: Get organization_id` in `src/pages/fixed-deposits/**`                                               | §3.4                | **Closed**             | Stage 2f            | Uses `useRequiredActiveOrganizationId()`.                                                                                                                                                                                                                                                                            |
+| Mock accounts/periods in `GLPostingCreate.tsx`                                                                | §12.7               | **Closed**             | Stage 2g            | Wired to `useAccounts()`/`usePeriods()` react-query hooks; uses `<PageHeader>`/`<FormShell>`; zod cross-field invariants.                                                                                                                                                                                            |
+| `console.log` in `src/pages/**/*.tsx`                                                                         | §5.12               | **Closed**             | Stage 1c            | Replaced across 28 pages with `logger.debug`; ESLint `no-console` blocks regression.                                                                                                                                                                                                                                 |
+| Duplicate lockfiles                                                                                           | §2.2                | **Closed**             | Stage 0             | Only `pnpm-lock.yaml` remains; `packageManager: pnpm@9.15.0` enforced.                                                                                                                                                                                                                                               |
+| `console.log` stub `onClick` handlers in lending/legal/npa/nach/borrowings                                    | §12.3               | **Closed**             | Stage 3a            | Replaced with real handlers where the API exists; approved deferrals logged in `.stubs-approved.md`.                                                                                                                                                                                                                 |
+| `customer_id: ''` with TODO in `FDForm.tsx`                                                                   | §5.1                | **Closed**             | Stage 3a            | `<CustomerPicker>` component built; form uses it.                                                                                                                                                                                                                                                                    |
+| `src/components/common/*` re-export shims (AmountInput, DateDisplay, StatusPill, DpdBadge, PercentageDisplay) | §5.2                | **Closed**             | Stage 3a            | Implementations moved to `common/`; lending/ now re-exports for compat.                                                                                                                                                                                                                                              |
+| `App.tsx` 1,127-line monolith                                                                                 | §5.10               | **Closed**             | Stage 3b            | Converted all page imports to `React.lazy` with `<Suspense>` wrapper; bundle split into ~30 chunks; initial chunk dropped from 5.2 MB to ~2 MB.                                                                                                                                                                      |
+| Receipt allocation per-installment priority (CLAUDE.md §4.8 violation)                                        | §4.8                | **Closed**             | Stage 4-PENDING-001 | Rewrote `LoanAccountService.allocate_receipt` to three-pass cross-installment allocation (penal → interest → principal). 7 regression tests.                                                                                                                                                                         |
+| Missing closed-period guard in `gl_posting_service.post_from_source`                                          | §4.3                | **Closed**             | Stage 4-PENDING-003 | `session.get(FinancialPeriod, period_id)` + guard that raises `ClosedPeriodError` on `is_closed` or `is_locked`. 4 new tests.                                                                                                                                                                                        |
+| Missing security response headers (CSP/HSTS/X-Frame-Options/nosniff/Referrer-Policy/Permissions-Policy)       | §8.9                | **Closed**             | Stage 5-001         | `SecurityHeadersMiddleware`; HSTS only on prod+https; Server header stripped; routes may override CSP. 6 tests.                                                                                                                                                                                                      |
+| No rate limiting on `/auth/*`                                                                                 | §8.3                | **Closed**             | Stage 5-002         | slowapi wired; `@auth_login_limit()` 5/min, `@auth_refresh_limit()` 20/min. 429 envelope with `error_code`+`retry_after_seconds`. 5 tests.                                                                                                                                                                           |
+| No HMAC webhook verification primitive                                                                        | §8.6                | **Closed (primitive)** | Stage 5-003         | `verify_webhook()` + `compute_hmac_sha256()` + `verify_timestamp()` in `app/core/webhook_signature.py`. 17 tests. Per-vendor wiring = STAGE-5-PENDING-005.                                                                                                                                                           |
+| No PII masking helpers                                                                                        | §8.7                | **Closed (primitive)** | Stage 5-004         | 6 mask functions + `MaskedPIIModel` Pydantic mixin. 24 tests. Rollout to response schemas = STAGE-5-PENDING-006.                                                                                                                                                                                                     |
+| No DMS upload hardening                                                                                       | §8.7                | **Closed (primitive)** | Stage 5-005         | `validate_upload()` with allowlist, ALWAYS_DENY, magic-byte mismatch detection, 50 MB cap, path-traversal-safe filenames. 23 tests. ClamAV = STAGE-5-PENDING-001.                                                                                                                                                    |
+| No audit tamper-detection                                                                                     | §8.5                | **Closed (primitive)** | Stage 5-006         | `compute_day_anchor()` / `build_chain()` / `verify_chain()` — canonical row form + chain propagation. 16 tests. Persistence = STAGE-5-PENDING-002.                                                                                                                                                                   |
+| No Arq worker / fan-out queue (§6.6)                                                                          | §6.6                | **Closed (scaffold)**  | Stage 6-001         | `app/workers/arq_worker.py` with 7 registered jobs, `WorkerSettings`, `enqueue()` producer wrapper with dedupe + defer. 14 tests. Worker-pool deploy = STAGE-6-PENDING-arq-worker-pool.                                                                                                                              |
+| No integration base client with retry / circuit breaker                                                       | §6.7                | **Closed**             | Stage 6-002         | `app/integrations/base/client.py` — httpx + exponential-backoff retry + 3-state circuit breaker + typed errors. 18 tests. Per-vendor subclasses deferred (one STAGE-6-PENDING-\* per vendor).                                                                                                                        |
+| No feature-flag gating for integrations (§6.7)                                                                | §6.7                | **Closed**             | Stage 6-003         | `app/core/feature_flags.py` — 22 flags, per-env defaults, override via `FEATURE_FLAG_<NAME>` env var, `snapshot()` for admin introspection. 17 tests.                                                                                                                                                                |
+| No OpenTelemetry instrumentation                                                                              | §6                  | **Closed**             | Stage 6-004         | `app/core/telemetry.py` wires FastAPI + httpx + SQLAlchemy; exporter reads `OTEL_EXPORTER_OTLP_ENDPOINT`. No-op when unset. 9 tests. Dashboards + alerting = STAGE-6-PENDING-grafana-dashboards / -alerting-rules.                                                                                                   |
+| Bare-default `tailwind.config.cjs` — no NBFC palette / typography scale / density anchors                     | §9.1                | **Closed**             | Stage 7-001         | Full palette (primary/secondary/success/warning/danger/info/neutral with 50–900 scales), semantic surface tokens, 7-step typography scale, density anchors (row heights, sidebar widths), 4-tier shadow system. Token tables documented in §9.1.                                                                     |
+| No Playwright accessibility checks                                                                            | §5.11 / §10.5       | **Closed**             | Stage 7-002         | `@axe-core/playwright` fixture at `playwright/fixtures/axe.ts`. `runAxe(page)` fails the test on critical/serious violations; WCAG 2.1 AA tags by default. Login smoke now carries an axe assertion. Per-suppression must be logged in `.stubs-approved.md`.                                                         |
+| No visual regression coverage                                                                                 | §9                  | **Closed (scaffold)**  | Stage 7-003         | `playwright.config.ts` visual-regression block (`maxDiffPixelRatio: 0.002`, animations disabled). Sample visual spec + `pnpm test:e2e:visual:update` command. Baseline capture across 10 critical screens = STAGE-7-PENDING-visual-baselines.                                                                        |
+| No design-token contract tests for common components                                                          | §9                  | **Closed**             | Stage 7-004         | 11 contract tests at `src/components/common/design-tokens.test.tsx` — `PageHeader`/`FormShell`/`FormSection`/`EmptyState`/`ErrorState`/`DataTable` canonical classes (text-2xl, text-muted-foreground, tabular-nums, border-destructive, etc.). Future refactor cannot drift silently.                               |
+| No production-readiness report                                                                                | §Appendix A Stage 8 | **Closed**             | Stage 8-001         | [`PRODUCTION_READINESS_REPORT.md`](PRODUCTION_READINESS_REPORT.md) — honest state, full evidence, risk list, go-live checklist, approval block.                                                                                                                                                                      |
+| No dependency vulnerability audit in CI                                                                       | §12.20              | **Closed**             | Stage 8-002 / 8-003 | `pnpm audit --prod`: 0 critical, 0 high (down from 2 high in `xlsx`). `xlsx` removed and `exceljs` swapped in — STAGE-8-003 closure. 1 remaining moderate is `uuid` transitive via `exceljs` with no exploitable path. `pip-audit` on backend reports zero known vulnerabilities.                                    |
+| `xlsx` package carrying 2 unfixable high-sev advisories (prototype pollution + ReDoS)                         | §12.20              | **Closed**             | Stage 8-003         | `src/utils/exportUtils.ts` now uses `exceljs` exclusively. Export functions became `async` — 6 call-sites use fire-and-forget `onClick` so no functional change. `pnpm build` verified; bundle swapped in the new `vendor-excel` chunk.                                                                              |
+| Bundle size — initial chunk 2.0 MB raw (498 kB gzip)                                                          | §Appendix A Stage 8 | **Closed**             | Stage 8-004         | `vite.config.ts` `rollupOptions.output.manualChunks` splits vendor libs; main entry 2.0 MB → 1.0 MB raw (498 kB → 179 kB gzip). Named vendor chunks: `vendor-react`, `vendor-router`, `vendor-state`, `vendor-radix`, `vendor-forms`, `vendor-charts`, `vendor-pdf`, `vendor-excel`, `vendor-icons`, `vendor-other`. |
+| No unified SMS/email/push abstraction                                                                         | §6 / §10.5          | **Closed**             | Stage 6-005         | `app/services/notification/communication_service.py` — `Channel` enum + `Recipient.target_for` + provider registry + per-channel live/mock/off feature flags + fail-closed `send`/`fanout`. 9 tests. Closes STAGE-6-PENDING-communication-service.                                                                   |
+| `gstn_service.py` mock returns (5+ TODOs)                                                                     | §12.7               | **Open (approved)**    | —                   | Stage 6 scope; tracked as STAGE-6-PENDING-gstn-live (`gstn_live` feature flag).                                                                                                                                                                                                                                      |
+| `kyc_service.py` CKYC/bureau stubs                                                                            | §12.7               | **Open (approved)**    | —                   | Stage 6 scope; CKYC + bureau integration. Tracked in `.stubs-approved.md`.                                                                                                                                                                                                                                           |
+| ~55 other backend TODO/FIXME from exploration inventory                                                       | various             | **Open (approved)**    | —                   | Each tracked in `.stubs-approved.md` with the Stage that will close it.                                                                                                                                                                                                                                              |
 
 ---
 
@@ -1168,12 +1222,14 @@ A ticket is Done only when **all** of the following are true:
 - [ ] §10.7 evidence block in the PR description.
 
 For UI changes specifically, also:
+
 - [ ] `<PageHeader>` / `<DataTable>` / `<FormShell>` used; no inline primitives.
 - [ ] Loading / empty / error states render on cold start.
 - [ ] Tested at 1440 and 1024 widths (plus 768 for portal/ESS).
 - [ ] `axe` clean (no critical / serious violations).
 
 For backend changes specifically, also:
+
 - [ ] Transaction boundary explicit; no implicit commits.
 - [ ] Optimistic locking `version` respected for mutations.
 - [ ] `get_db_with_tenant` used on any authenticated route.
@@ -1260,17 +1316,17 @@ Production migrations are applied in a separate release step with a DBA-approved
 
 ### 14.7 Troubleshooting
 
-| Symptom                                | First thing to check                                                     |
-|----------------------------------------|--------------------------------------------------------------------------|
-| 401 loop in browser                    | `AuthContext` wired? `VITE_API_URL` correct? `access_token` stored?      |
-| RLS empty results                      | `get_db_with_tenant` on the route? JWT `organization_id` claim present?  |
-| Voucher rejected                       | Period status? Account is a leaf? Σdebit = Σcredit?                      |
-| NPA not classifying                    | `run_npa_classification` job scheduled? DPD computed per `schedule_service`? |
-| GSTN call returns mock                 | Feature flag off; check `services/gst/gstn_service.py` stubs (§12.1).    |
-| CORS errors                            | Origin in `settings.CORS_ORIGINS`? Preflight returns 204?                |
-| Test DB out of sync                    | `alembic upgrade head` inside test fixture? testcontainers reused image? |
-| Console.error in Playwright            | Offending page name; console-gate fixture dumps the stack.               |
-| `docker compose` backend healthcheck fails | `pg_isready` on `db`? Migrations applied? Port 8000 free?             |
+| Symptom                                    | First thing to check                                                         |
+| ------------------------------------------ | ---------------------------------------------------------------------------- |
+| 401 loop in browser                        | `AuthContext` wired? `VITE_API_URL` correct? `access_token` stored?          |
+| RLS empty results                          | `get_db_with_tenant` on the route? JWT `organization_id` claim present?      |
+| Voucher rejected                           | Period status? Account is a leaf? Σdebit = Σcredit?                          |
+| NPA not classifying                        | `run_npa_classification` job scheduled? DPD computed per `schedule_service`? |
+| GSTN call returns mock                     | Feature flag off; check `services/gst/gstn_service.py` stubs (§12.1).        |
+| CORS errors                                | Origin in `settings.CORS_ORIGINS`? Preflight returns 204?                    |
+| Test DB out of sync                        | `alembic upgrade head` inside test fixture? testcontainers reused image?     |
+| Console.error in Playwright                | Offending page name; console-gate fixture dumps the stack.                   |
+| `docker compose` backend healthcheck fails | `pg_isready` on `db`? Migrations applied? Port 8000 free?                    |
 
 ---
 
@@ -1278,28 +1334,28 @@ Production migrations are applied in a separate release step with a DBA-approved
 
 Fill in as people and module owners stabilize. Every module has three named owners: a tech lead, a QA owner, and a compliance reviewer.
 
-| Module                        | Tech Lead | QA Owner | Compliance Reviewer |
-|-------------------------------|-----------|----------|----------------------|
-| Auth / Users / Roles          | TBD       | TBD      | TBD                  |
-| Masters / Organization        | TBD       | TBD      | TBD                  |
-| Finance · GL · Vouchers       | TBD       | TBD      | TBD                  |
-| AP/AR · BRS                   | TBD       | TBD      | TBD                  |
-| GST                           | TBD       | TBD      | TBD                  |
-| TDS                           | TBD       | TBD      | TBD                  |
-| Lending — LOS                 | TBD       | TBD      | TBD                  |
-| Lending — LMS / NPA / Legal   | TBD       | TBD      | TBD                  |
-| Treasury / ALM / Risk         | TBD       | TBD      | TBD                  |
-| HRIS                          | TBD       | TBD      | TBD                  |
-| Payroll / Statutory           | TBD       | TBD      | TBD                  |
-| Fixed Assets                  | TBD       | TBD      | TBD                  |
-| Fixed Deposits                | TBD       | TBD      | TBD                  |
-| Inventory                     | TBD       | TBD      | TBD                  |
-| Workflow / Approvals          | TBD       | TBD      | TBD                  |
-| DMS                           | TBD       | TBD      | TBD                  |
-| Notifications                 | TBD       | TBD      | TBD                  |
-| Compliance                    | TBD       | TBD      | TBD                  |
-| Reports / BI                  | TBD       | TBD      | TBD                  |
-| Portals (Borrower / ESS / Vendor) | TBD   | TBD      | TBD                  |
+| Module                            | Tech Lead | QA Owner | Compliance Reviewer |
+| --------------------------------- | --------- | -------- | ------------------- |
+| Auth / Users / Roles              | TBD       | TBD      | TBD                 |
+| Masters / Organization            | TBD       | TBD      | TBD                 |
+| Finance · GL · Vouchers           | TBD       | TBD      | TBD                 |
+| AP/AR · BRS                       | TBD       | TBD      | TBD                 |
+| GST                               | TBD       | TBD      | TBD                 |
+| TDS                               | TBD       | TBD      | TBD                 |
+| Lending — LOS                     | TBD       | TBD      | TBD                 |
+| Lending — LMS / NPA / Legal       | TBD       | TBD      | TBD                 |
+| Treasury / ALM / Risk             | TBD       | TBD      | TBD                 |
+| HRIS                              | TBD       | TBD      | TBD                 |
+| Payroll / Statutory               | TBD       | TBD      | TBD                 |
+| Fixed Assets                      | TBD       | TBD      | TBD                 |
+| Fixed Deposits                    | TBD       | TBD      | TBD                 |
+| Inventory                         | TBD       | TBD      | TBD                 |
+| Workflow / Approvals              | TBD       | TBD      | TBD                 |
+| DMS                               | TBD       | TBD      | TBD                 |
+| Notifications                     | TBD       | TBD      | TBD                 |
+| Compliance                        | TBD       | TBD      | TBD                 |
+| Reports / BI                      | TBD       | TBD      | TBD                 |
+| Portals (Borrower / ESS / Vendor) | TBD       | TBD      | TBD                 |
 
 ---
 
@@ -1307,17 +1363,17 @@ Fill in as people and module owners stabilize. Every module has three named owne
 
 The full plan lives at `.claude/plans/use-the-claude-review-prompt-md-for-reactive-leaf.md`. Each stage has a gate; no stage is skipped.
 
-| Stage | Focus | Status | Gate |
-|-------|-------|--------|------|
-| **0** | Orientation & baseline: pick pnpm, delete `package-lock.json`, land this CLAUDE.md, capture baseline test numbers, boot smoke. | ✅ **Closed** | Baseline captured; CLAUDE.md committed. |
-| **1** | Critical security & correctness: RLS f-string fix; Fernet encrypt GST portal passwords; TS `strict`; remove `console.log`; ESLint + Prettier + Husky; backend pre-commit. | ✅ **Closed** | Lint/typecheck clean; `console.log` count = 0. |
-| **2** | Frontend foundation: real `AuthContext` + `OrganizationContext`; react-query + interceptor; Zustand; canonical components; mock-data purge; `App.tsx` lazy-split. | ✅ **Closed** | Zero `TODO: organization_id`; zero mock data in production pages; every new page uses shell components. |
-| **3** | Test infrastructure: Vitest + Testing Library + jsdom; MSW; Playwright; testcontainers-python; GitHub Actions CI with required checks. | ✅ **Closed** | `pnpm test`, `pnpm test:integration`, `pnpm test:e2e`, `pytest` all green in CI. |
-| **4** | Domain correctness: golden-file fixtures for EMI, NPA buckets, provisioning, receipt allocation, GL posting (balance + closed-period guard), depreciation; idempotency middleware + table; optimistic-locking audit; receipt-allocation rewrite. | ✅ **Closed** (primitives) | High-criticality services tested; 8 items deferred to Stage 4.5 (TDS / GST / payroll / BRS / maker-checker golden tests; optimistic-lock column rollout). |
-| **5** | Security / audit hardening: rate limiting; webhook HMAC primitive; PII masking utility; DMS upload hardening; audit hash chain primitive; security-response headers. | ✅ **Closed** (primitives) | Primitives landed + tested. 8 items deferred for per-vendor wiring, ClamAV sidecar, hash-chain persistence, cold-partition storage. |
-| **6** | Background jobs + integrations + observability: Arq scaffold; integration-base client (retry + circuit breaker); feature flags; OpenTelemetry (FastAPI + httpx + SQLAlchemy). | ✅ **Closed** (scaffold) | Scaffold + 58 tests. 22 per-vendor integrations deferred (each with feature flag + approval in `.stubs-approved.md`). |
-| **7** | UI/UX quality pass: NBFC palette in `tailwind.config.cjs`; `@axe-core/playwright` fixture; visual-regression scaffold; design-token contract tests. | ✅ **Closed** (primitives) | Tokens + tooling landed + tested. 354-page module sweep and visual-baseline capture deferred as STAGE-7-PENDING-*. |
-| **8** | Final gate: full test matrix with numbers; dependency scan (`pnpm audit`, `pip-audit`); production-readiness report; tag release. | ✅ **Closed** (report + audits + xlsx swap + chunking) | Report: [`PRODUCTION_READINESS_REPORT.md`](PRODUCTION_READINESS_REPORT.md). Full evidence captured. `pnpm audit --prod`: **0 critical, 0 high** after `xlsx` → `exceljs` swap (STAGE-8-003); 1 remaining moderate is `uuid` transitive via `exceljs` with no exploitable path. Backend `pip-audit` clean. Bundle chunking (STAGE-8-004) dropped the main entry from 2.0 MB → 1.0 MB raw (179 kB gzip). **Release tag (v1.0) explicitly deferred — STAGE-8-PENDING-release-tag — until the go-live checklist in report §5 is green.** |
+| Stage | Focus                                                                                                                                                                                                                                            | Status                                                 | Gate                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **0** | Orientation & baseline: pick pnpm, delete `package-lock.json`, land this CLAUDE.md, capture baseline test numbers, boot smoke.                                                                                                                   | ✅ **Closed**                                          | Baseline captured; CLAUDE.md committed.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **1** | Critical security & correctness: RLS f-string fix; Fernet encrypt GST portal passwords; TS `strict`; remove `console.log`; ESLint + Prettier + Husky; backend pre-commit.                                                                        | ✅ **Closed**                                          | Lint/typecheck clean; `console.log` count = 0.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| **2** | Frontend foundation: real `AuthContext` + `OrganizationContext`; react-query + interceptor; Zustand; canonical components; mock-data purge; `App.tsx` lazy-split.                                                                                | ✅ **Closed**                                          | Zero `TODO: organization_id`; zero mock data in production pages; every new page uses shell components.                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| **3** | Test infrastructure: Vitest + Testing Library + jsdom; MSW; Playwright; testcontainers-python; GitHub Actions CI with required checks.                                                                                                           | ✅ **Closed**                                          | `pnpm test`, `pnpm test:integration`, `pnpm test:e2e`, `pytest` all green in CI.                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| **4** | Domain correctness: golden-file fixtures for EMI, NPA buckets, provisioning, receipt allocation, GL posting (balance + closed-period guard), depreciation; idempotency middleware + table; optimistic-locking audit; receipt-allocation rewrite. | ✅ **Closed** (primitives)                             | High-criticality services tested; 8 items deferred to Stage 4.5 (TDS / GST / payroll / BRS / maker-checker golden tests; optimistic-lock column rollout).                                                                                                                                                                                                                                                                                                                                                                            |
+| **5** | Security / audit hardening: rate limiting; webhook HMAC primitive; PII masking utility; DMS upload hardening; audit hash chain primitive; security-response headers.                                                                             | ✅ **Closed** (primitives)                             | Primitives landed + tested. 8 items deferred for per-vendor wiring, ClamAV sidecar, hash-chain persistence, cold-partition storage.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **6** | Background jobs + integrations + observability: Arq scaffold; integration-base client (retry + circuit breaker); feature flags; OpenTelemetry (FastAPI + httpx + SQLAlchemy).                                                                    | ✅ **Closed** (scaffold)                               | Scaffold + 58 tests. 22 per-vendor integrations deferred (each with feature flag + approval in `.stubs-approved.md`).                                                                                                                                                                                                                                                                                                                                                                                                                |
+| **7** | UI/UX quality pass: NBFC palette in `tailwind.config.cjs`; `@axe-core/playwright` fixture; visual-regression scaffold; design-token contract tests.                                                                                              | ✅ **Closed** (primitives)                             | Tokens + tooling landed + tested. 354-page module sweep and visual-baseline capture deferred as STAGE-7-PENDING-\*.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| **8** | Final gate: full test matrix with numbers; dependency scan (`pnpm audit`, `pip-audit`); production-readiness report; tag release.                                                                                                                | ✅ **Closed** (report + audits + xlsx swap + chunking) | Report: [`PRODUCTION_READINESS_REPORT.md`](PRODUCTION_READINESS_REPORT.md). Full evidence captured. `pnpm audit --prod`: **0 critical, 0 high** after `xlsx` → `exceljs` swap (STAGE-8-003); 1 remaining moderate is `uuid` transitive via `exceljs` with no exploitable path. Backend `pip-audit` clean. Bundle chunking (STAGE-8-004) dropped the main entry from 2.0 MB → 1.0 MB raw (179 kB gzip). **Release tag (v1.0) explicitly deferred — STAGE-8-PENDING-release-tag — until the go-live checklist in report §5 is green.** |
 
 **Running totals after Stage 8:**
 
@@ -1335,27 +1391,27 @@ See `PRODUCTION_READINESS_REPORT.md` for the honest state, the risk list, and th
 
 ## Appendix B — Quick-reference decision table
 
-| Situation                                              | Rule                                                    | Section |
-|--------------------------------------------------------|---------------------------------------------------------|---------|
-| I need to show money                                   | `<AmountDisplay>`                                        | §5.8    |
-| I need to fetch server data                            | Write/use a hook in `src/hooks/<domain>/`; not axios in the page | §5.4 |
-| I need the current organization                        | `OrganizationContext.activeOrganizationId`               | §3.4    |
-| I'm adding a financial mutation endpoint               | Idempotency-Key required; permission gated; audit rows; optimistic locking | §6.3 |
-| I'm posting a voucher                                  | Service enforces Σdebit = Σcredit + period open + leaf accounts | §4.3 |
-| I need a new table                                     | Extend `BaseModel` + `AuditMixin` + `SoftDeleteMixin` + `VersionedMixin`; include `organization_id` | §3.4 |
-| I need to catch an error                               | Typed `AppException` subclass; never bare `except Exception` | §6.10 |
-| I need to add a PII field                              | Mask at API; `pii.view` permission; audit unmasked reads | §8.7    |
-| I need to call an external API                         | New module under `app/integrations/<vendor>/` with retry, circuit breaker, timeouts | §6.7 |
-| I'm tempted to add `any`                               | Don't. Use `unknown` + narrow.                           | §5.9    |
-| A test is flaky                                        | Fix the flake; never `.skip` without a ticket and expiry | §10.8   |
-| A user reports a UI bug                                | Follow §11 seven-step loop                               | §11     |
-| I need a new secret (API key, password, token)         | Platform-wide (same for every NBFC) → env / pydantic-settings. Tenant-owned (NBFC-specific) → Fernet-encrypted DB setting keyed by `organization_id`, never env. | §6.8 / §12.24 |
-| I'm onboarding a new NBFC                              | No redeploy. Create an `Organization` row + seed perms / feature-flag defaults / tenant secrets via the admin UI or a migration-independent script. | §1 |
-| I'm about to write a query that might cross tenants    | Don't — unless it's an explicit super-admin endpoint with `RequirePermissions("platform.admin")`, maker-checker, and an audit row. RLS is the default. | §3.4 / §1 |
+| Situation                                           | Rule                                                                                                                                                             | Section       |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| I need to show money                                | `<AmountDisplay>`                                                                                                                                                | §5.8          |
+| I need to fetch server data                         | Write/use a hook in `src/hooks/<domain>/`; not axios in the page                                                                                                 | §5.4          |
+| I need the current organization                     | `OrganizationContext.activeOrganizationId`                                                                                                                       | §3.4          |
+| I'm adding a financial mutation endpoint            | Idempotency-Key required; permission gated; audit rows; optimistic locking                                                                                       | §6.3          |
+| I'm posting a voucher                               | Service enforces Σdebit = Σcredit + period open + leaf accounts                                                                                                  | §4.3          |
+| I need a new table                                  | Extend `BaseModel` + `AuditMixin` + `SoftDeleteMixin` + `VersionedMixin`; include `organization_id`                                                              | §3.4          |
+| I need to catch an error                            | Typed `AppException` subclass; never bare `except Exception`                                                                                                     | §6.10         |
+| I need to add a PII field                           | Mask at API; `pii.view` permission; audit unmasked reads                                                                                                         | §8.7          |
+| I need to call an external API                      | New module under `app/integrations/<vendor>/` with retry, circuit breaker, timeouts                                                                              | §6.7          |
+| I'm tempted to add `any`                            | Don't. Use `unknown` + narrow.                                                                                                                                   | §5.9          |
+| A test is flaky                                     | Fix the flake; never `.skip` without a ticket and expiry                                                                                                         | §10.8         |
+| A user reports a UI bug                             | Follow §11 seven-step loop                                                                                                                                       | §11           |
+| I need a new secret (API key, password, token)      | Platform-wide (same for every NBFC) → env / pydantic-settings. Tenant-owned (NBFC-specific) → Fernet-encrypted DB setting keyed by `organization_id`, never env. | §6.8 / §12.24 |
+| I'm onboarding a new NBFC                           | No redeploy. Create an `Organization` row + seed perms / feature-flag defaults / tenant secrets via the admin UI or a migration-independent script.              | §1            |
+| I'm about to write a query that might cross tenants | Don't — unless it's an explicit super-admin endpoint with `RequirePermissions("platform.admin")`, maker-checker, and an audit row. RLS is the default.           | §3.4 / §1     |
 
 ---
 
-*This file is the contract. If something here is wrong, fix it in the PR that deviates. Otherwise, follow it.*
+_This file is the contract. If something here is wrong, fix it in the PR that deviates. Otherwise, follow it._
 
 ---
 
@@ -1364,6 +1420,7 @@ See `PRODUCTION_READINESS_REPORT.md` for the honest state, the risk list, and th
 Background: a semantic audit across every non-LOS module found accumulated drift. This appendix is the post-sweep canonical list. Every rule below is enforced by either a lint rule, a pre-commit gate, or a CI check. Adding a new violation must update both this appendix and the relevant gate in the same PR.
 
 **Backend (non-LOS scope)**
+
 1. **Tenant-scoped DB on every authenticated route.** `Depends(get_db_with_tenant)` only — `Depends(get_db)` on an authenticated route is a defect. Gate: `scripts/lint/check_db_dep.py` runs in pre-commit + CI.
 2. **`organization_id` from `current_user` only.** Never from query / body / path. The platform-admin escape uses `Depends(RequirePermissions("PLATFORM_ADMIN"))` + an explicit audit row.
 3. **Service-owned transactions.** One `async with db.begin():` per user-facing service method. Helpers never call `session.commit()` directly. Gate: `scripts/lint/check_service_commits.py`.
@@ -1376,6 +1433,7 @@ Background: a semantic audit across every non-LOS module found accumulated drift
 10. **`Decimal` only for money.** `Numeric(18, 2)` on the model, `Decimal` in the schema, never `float`.
 
 **Frontend (non-LOS scope)**
+
 1. **No direct axios in pages.** Server state goes through a hook in `src/hooks/<domain>/`. Pages never `import api`.
 2. **No `fetch(...)` in pages.** Same rule, harder violation.
 3. **No `useEffect + useState` for server state.** Use react-query (`useQuery` / `useMutation`).
@@ -1394,6 +1452,7 @@ Background: a semantic audit across every non-LOS module found accumulated drift
 16. **`<PageHeader>` for every page title.** A bare `<h1>` on a page is a defect.
 
 **Tooling**
+
 - ESLint flat config at `eslint.config.js` enforces 1, 4, 5, 6, 7, 8 (where possible) and the import / ts-comment rules.
 - Backend pre-commit: ruff + black + targeted lints under `scripts/lint/`.
 - Frontend pre-commit: `lint-staged` + `check-stubs`.

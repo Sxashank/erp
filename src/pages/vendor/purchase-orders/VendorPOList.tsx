@@ -42,7 +42,7 @@ import { useToast } from '@/hooks/use-toast';
 import { vendorPOApi } from '@/services/vendorApi';
 import type { PurchaseOrder } from '@/types/vendor';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function VendorPOList() {
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -89,15 +89,6 @@ export default function VendorPOList() {
     setPage(1);
     fetchPurchaseOrders();
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const getStatusBadge = (po: PurchaseOrder) => {
     const ackStatus = po.acknowledgement_status;
     if (ackStatus === 'ACKNOWLEDGED') {
@@ -114,15 +105,12 @@ export default function VendorPOList() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Purchase Orders"
-        subtitle="View and acknowledge purchase orders"
-      />
+      <PageHeader title="Purchase Orders" subtitle="View and acknowledge purchase orders" />
 
       {/* Filters */}
       <Card>
         <CardContent className="pt-6">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row">
             <form onSubmit={handleSearch} className="flex-1">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -157,48 +145,55 @@ export default function VendorPOList() {
       </Card>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-orange-50 border-orange-200">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <Card className="border-orange-200 bg-orange-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <Clock className="h-5 w-5 text-orange-600" />
               <span className="text-sm font-medium text-orange-800">Pending</span>
             </div>
-            <p className="text-2xl font-bold text-orange-900 mt-2">
-              {purchaseOrders.filter(po => !po.acknowledgement_status || po.acknowledgement_status === 'PENDING').length}
+            <p className="mt-2 text-2xl font-bold text-orange-900">
+              {
+                purchaseOrders.filter(
+                  (po) => !po.acknowledgement_status || po.acknowledgement_status === 'PENDING',
+                ).length
+              }
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-green-50 border-green-200">
+        <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <CheckCircle className="h-5 w-5 text-green-600" />
               <span className="text-sm font-medium text-green-800">Acknowledged</span>
             </div>
-            <p className="text-2xl font-bold text-green-900 mt-2">
-              {purchaseOrders.filter(po => po.acknowledgement_status === 'ACKNOWLEDGED').length}
+            <p className="mt-2 text-2xl font-bold text-green-900">
+              {purchaseOrders.filter((po) => po.acknowledgement_status === 'ACKNOWLEDGED').length}
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-yellow-50 border-yellow-200">
+        <Card className="border-yellow-200 bg-yellow-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <AlertCircle className="h-5 w-5 text-yellow-600" />
               <span className="text-sm font-medium text-yellow-800">Change Requested</span>
             </div>
-            <p className="text-2xl font-bold text-yellow-900 mt-2">
-              {purchaseOrders.filter(po => po.acknowledgement_status === 'CHANGE_REQUESTED').length}
+            <p className="mt-2 text-2xl font-bold text-yellow-900">
+              {
+                purchaseOrders.filter((po) => po.acknowledgement_status === 'CHANGE_REQUESTED')
+                  .length
+              }
             </p>
           </CardContent>
         </Card>
-        <Card className="bg-red-50 border-red-200">
+        <Card className="border-red-200 bg-red-50">
           <CardContent className="pt-4">
             <div className="flex items-center space-x-2">
               <XCircle className="h-5 w-5 text-red-600" />
               <span className="text-sm font-medium text-red-800">Rejected</span>
             </div>
-            <p className="text-2xl font-bold text-red-900 mt-2">
-              {purchaseOrders.filter(po => po.acknowledgement_status === 'REJECTED').length}
+            <p className="mt-2 text-2xl font-bold text-red-900">
+              {purchaseOrders.filter((po) => po.acknowledgement_status === 'REJECTED').length}
             </p>
           </CardContent>
         </Card>
@@ -212,12 +207,12 @@ export default function VendorPOList() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="flex items-center justify-center h-64">
+            <div className="flex h-64 items-center justify-center">
               <Loader2 className="h-8 w-8 animate-spin text-purple-600" />
             </div>
           ) : purchaseOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <ShoppingCart className="h-12 w-12 text-gray-300 mb-2" />
+            <div className="flex h-64 flex-col items-center justify-center text-gray-500">
+              <ShoppingCart className="mb-2 h-12 w-12 text-gray-300" />
               <p>No purchase orders found</p>
             </div>
           ) : (
@@ -236,16 +231,20 @@ export default function VendorPOList() {
                 {purchaseOrders.map((po) => (
                   <TableRow key={po.id}>
                     <TableCell className="font-medium">{po.po_number}</TableCell>
-                    <TableCell><DateDisplay date={po.po_date} /></TableCell>
+                    <TableCell>
+                      <DateDisplay date={po.po_date} />
+                    </TableCell>
                     <TableCell>
                       <DateDisplay date={po.delivery_date} />
                     </TableCell>
-                    <TableCell className="text-right">{formatCurrency(po.total_amount)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(po.total_amount)}
+                    </TableCell>
                     <TableCell>{getStatusBadge(po)}</TableCell>
                     <TableCell className="text-right">
                       <Link to={`/vendor/purchase-orders/${po.id}`}>
                         <Button variant="ghost" size="sm">
-                          <Eye className="h-4 w-4 mr-1" />
+                          <Eye className="mr-1 h-4 w-4" />
                           View
                         </Button>
                       </Link>
@@ -258,7 +257,7 @@ export default function VendorPOList() {
 
           {/* Pagination */}
           {total > limit && (
-            <div className="flex items-center justify-between mt-4">
+            <div className="mt-4 flex items-center justify-between">
               <p className="text-sm text-gray-500">
                 Showing {(page - 1) * limit + 1} to {Math.min(page * limit, total)} of {total}
               </p>

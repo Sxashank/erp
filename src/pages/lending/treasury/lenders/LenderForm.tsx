@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { useToast } from '@/components/ui/use-toast';
 import { useCreateLender, useLender, useUpdateLender } from '@/hooks/lending/useLenders';
 import {
@@ -36,28 +37,26 @@ import {
   type LenderFormData,
 } from '@/schemas/lending/treasuryLenderSchema';
 
-const LENDER_TYPES = [
-  { value: 'BANK', label: 'Bank' },
-  { value: 'DFI', label: 'Development Finance Institution' },
-  { value: 'NBFC', label: 'NBFC' },
-  { value: 'MUTUAL_FUND', label: 'Mutual Fund' },
-  { value: 'INSURANCE_COMPANY', label: 'Insurance Company' },
-  { value: 'PENSION_FUND', label: 'Pension Fund' },
-  { value: 'FII', label: 'Foreign Institutional Investor' },
-  { value: 'NCD', label: 'NCD Trustee/Bondholders' },
-  { value: 'CP', label: 'Commercial Paper Holders' },
-  { value: 'ECB', label: 'External Commercial Borrowing' },
-  { value: 'SUBORDINATED_DEBT', label: 'Subordinated Debt' },
-  { value: 'RELATED_PARTY', label: 'Related Party' },
-  { value: 'OTHER', label: 'Other' },
-];
-
 export default function LenderForm() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
   const isEditMode = Boolean(id);
   const { data: lender, isLoading, isError, error, refetch } = useLender(id);
+  const {
+    data: lenderTypes,
+    isLoading: isLenderTypesLoading,
+    isError: isLenderTypesError,
+    error: lenderTypesError,
+    refetch: refetchLenderTypes,
+  } = useLendingOptionRows('LENDER_TYPE');
+  const {
+    data: ratingAgencies,
+    isLoading: isRatingAgenciesLoading,
+    isError: isRatingAgenciesError,
+    error: ratingAgenciesError,
+    refetch: refetchRatingAgencies,
+  } = useLendingOptionRows('RATING_AGENCY');
   const createLenderMutation = useCreateLender();
   const updateLenderMutation = useUpdateLender();
   const saving = createLenderMutation.isPending || updateLenderMutation.isPending;
@@ -106,7 +105,18 @@ export default function LenderForm() {
     }
   };
 
-  if (isLoading) {
+  const lenderTypeOptions =
+    lenderTypes?.items.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.code ?? ''),
+    })) ?? [];
+  const ratingAgencyOptions =
+    ratingAgencies?.items.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.code ?? ''),
+    })) ?? [];
+
+  if (isLoading || isLenderTypesLoading || isRatingAgenciesLoading) {
     return (
       <div className="flex h-64 items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -120,6 +130,26 @@ export default function LenderForm() {
         title="Could not load lender details"
         error={error}
         onRetry={() => void refetch()}
+      />
+    );
+  }
+
+  if (isLenderTypesError) {
+    return (
+      <ErrorState
+        title="Could not load lender type master data"
+        error={lenderTypesError}
+        onRetry={() => void refetchLenderTypes()}
+      />
+    );
+  }
+
+  if (isRatingAgenciesError) {
+    return (
+      <ErrorState
+        title="Could not load rating agency master data"
+        error={ratingAgenciesError}
+        onRetry={() => void refetchRatingAgencies()}
       />
     );
   }
@@ -175,7 +205,7 @@ export default function LenderForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {LENDER_TYPES.map((type) => (
+                          {lenderTypeOptions.map((type) => (
                             <SelectItem key={type.value} value={type.value}>
                               {type.label}
                             </SelectItem>
@@ -452,12 +482,11 @@ export default function LenderForm() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="CRISIL">CRISIL</SelectItem>
-                          <SelectItem value="ICRA">ICRA</SelectItem>
-                          <SelectItem value="CARE">CARE</SelectItem>
-                          <SelectItem value="India Ratings">India Ratings</SelectItem>
-                          <SelectItem value="Acuite">Acuite</SelectItem>
-                          <SelectItem value="Brickwork">Brickwork</SelectItem>
+                          {ratingAgencyOptions.map((agency) => (
+                            <SelectItem key={agency.value} value={agency.value}>
+                              {agency.label}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />

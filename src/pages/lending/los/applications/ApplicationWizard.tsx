@@ -19,6 +19,8 @@ import StepFundUtilization, { type UtilizationLineDraft } from './steps/StepFund
 import { PageHeader } from '@/components/common/PageHeader';
 import { WizardContainer } from '@/components/lending/wizard/WizardContainer';
 import { WizardStep } from '@/components/lending/wizard/WizardStep';
+import { useToast } from '@/hooks/use-toast';
+import { showErrorToast } from '@/lib/errorToast';
 import { applicationApi } from '@/services/lending';
 import { applicationUtilizationApi } from '@/services/lending/iifApi';
 import type { CreateApplicationRequest, LoanApplication } from '@/types/lending';
@@ -94,6 +96,7 @@ function buildApplicationPayload(data: Record<string, unknown>): CreateApplicati
 
 export default function ApplicationWizard() {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const isEditMode = Boolean(id);
@@ -103,7 +106,7 @@ export default function ApplicationWizard() {
   const [initialData, setInitialData] = useState<Record<string, unknown>>({});
 
   // Get pre-selected entity from URL params (when coming from entity page)
-  const preSelectedEntityId = searchParams.get('entity_id');
+  const preSelectedEntityId = searchParams.get('entityId');
 
   // Load application data for edit mode
   useEffect(() => {
@@ -150,7 +153,8 @@ export default function ApplicationWizard() {
           projectCompletionDate: data.projectCompletionDate,
         },
       });
-    } catch {
+    } catch (err) {
+      showErrorToast(err, toast);
       navigate('/admin/lending/applications');
     } finally {
       setLoading(false);
@@ -201,7 +205,9 @@ export default function ApplicationWizard() {
         await applicationApi.submitApplication(savedApplicationId);
       }
       navigate(`/admin/lending/applications/${savedApplicationId}`);
-    } catch {}
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
   // Handle draft save
@@ -215,7 +221,9 @@ export default function ApplicationWizard() {
         // Redirect to edit mode for the new draft
         navigate(`/admin/lending/applications/${result.id}/edit`, { replace: true });
       }
-    } catch {}
+    } catch (err) {
+      showErrorToast(err, toast);
+    }
   };
 
   if (loading) {

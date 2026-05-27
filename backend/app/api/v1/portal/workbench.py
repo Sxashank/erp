@@ -1,16 +1,15 @@
-"""Scheme-portal workbench endpoint."""
+"""SFC borrower-portal workbench endpoint."""
 
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_db
 from app.api.v1.portal.auth import get_portal_db_with_tenant, get_portal_user
 from app.schemas.portal.workbench import PortalWorkbenchResponse
 from app.services.portal.workbench_service import PortalWorkbenchService
 
-router = APIRouter(prefix="/workbench", tags=["Scheme Portal · Workbench"])
+router = APIRouter(prefix="/workbench", tags=["Borrower Portal · Workbench"])
 
 
 @router.get(

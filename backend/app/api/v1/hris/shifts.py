@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import RequirePermissions, get_current_user, get_db, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_current_user, get_db_with_tenant
 from app.core.constants import Permissions
 from app.models.auth.user import User
 from app.schemas.hris.shift import (
@@ -29,12 +29,22 @@ from app.core.exceptions import BadRequestException, NotFoundException
 router = APIRouter()
 
 
+def _require_organization_id(current_user: User) -> UUID:
+    if not current_user.organization_id:
+        raise BadRequestException(
+            detail="Current user is not assigned to an organization",
+            error_code="ORGANIZATION_CONTEXT_REQUIRED",
+        )
+    return current_user.organization_id
+
+
 # ============================================
 # Shifts
 # ============================================
-@router.get("/shifts", response_model=PaginatedResponse[ShiftResponse], response_model_by_alias=True)
+@router.get(
+    "/shifts", response_model=PaginatedResponse[ShiftResponse], response_model_by_alias=True
+)
 async def list_shifts(
-    organization_id: UUID,
     active_only: bool = True,
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=100),
@@ -43,11 +53,21 @@ async def list_shifts(
 ):
     """List shifts for organization."""
     service = ShiftService(db)
-    shifts, total = await service.list(organization_id, active_only, skip, limit)
+    shifts, total = await service.list(
+        _require_organization_id(current_user),
+        active_only,
+        skip,
+        limit,
+    )
     return PaginatedResponse(items=shifts, total=total, skip=skip, limit=limit)
 
 
-@router.post("/shifts", response_model=ShiftResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/shifts",
+    response_model=ShiftResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_shift(
     data: ShiftCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -55,16 +75,18 @@ async def create_shift(
 ):
     """Create a new shift."""
     service = ShiftService(db)
+    organization_id = _require_organization_id(current_user)
+    payload = data.model_copy(update={"organization_id": organization_id})
 
     # Check if shift code already exists
-    existing = await service.get_by_code(data.organization_id, data.shift_code)
+    existing = await service.get_by_code(organization_id, payload.shift_code)
     if existing:
         raise BadRequestException(
             detail="Shift code already exists",
             error_code="SHIFT_CODE_ALREADY_EXISTS",
         )
 
-    shift = await service.create(data, current_user.id)
+    shift = await service.create(payload, current_user.id)
     return shift
 
 
@@ -113,9 +135,10 @@ async def delete_shift(
 # ============================================
 # Holiday Calendars
 # ============================================
-@router.get("/holiday-calendars", response_model=List[HolidayCalendarResponse], response_model_by_alias=True)
+@router.get(
+    "/holiday-calendars", response_model=List[HolidayCalendarResponse], response_model_by_alias=True
+)
 async def list_holiday_calendars(
-    organization_id: UUID,
     year: Optional[int] = None,
     active_only: bool = True,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -123,11 +146,20 @@ async def list_holiday_calendars(
 ):
     """List holiday calendars for organization."""
     service = HolidayService(db)
-    calendars = await service.list_calendars(organization_id, year, active_only)
+    calendars = await service.list_calendars(
+        _require_organization_id(current_user),
+        year,
+        active_only,
+    )
     return calendars
 
 
-@router.post("/holiday-calendars", response_model=HolidayCalendarResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/holiday-calendars",
+    response_model=HolidayCalendarResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_holiday_calendar(
     data: HolidayCalendarCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -135,11 +167,16 @@ async def create_holiday_calendar(
 ):
     """Create a new holiday calendar."""
     service = HolidayService(db)
-    calendar = await service.create_calendar(data, current_user.id)
+    payload = data.model_copy(update={"organization_id": _require_organization_id(current_user)})
+    calendar = await service.create_calendar(payload, current_user.id)
     return calendar
 
 
-@router.get("/holiday-calendars/{calendar_id}", response_model=HolidayCalendarResponse, response_model_by_alias=True)
+@router.get(
+    "/holiday-calendars/{calendar_id}",
+    response_model=HolidayCalendarResponse,
+    response_model_by_alias=True,
+)
 async def get_holiday_calendar(
     calendar_id: UUID,
     include_holidays: bool = True,
@@ -157,7 +194,11 @@ async def get_holiday_calendar(
     return calendar
 
 
-@router.put("/holiday-calendars/{calendar_id}", response_model=HolidayCalendarResponse, response_model_by_alias=True)
+@router.put(
+    "/holiday-calendars/{calendar_id}",
+    response_model=HolidayCalendarResponse,
+    response_model_by_alias=True,
+)
 async def update_holiday_calendar(
     calendar_id: UUID,
     data: HolidayCalendarUpdate,
@@ -208,7 +249,12 @@ async def list_holidays(
     return holidays
 
 
-@router.post("/holidays", response_model=HolidayResponse, response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/holidays",
+    response_model=HolidayResponse,
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def create_holiday(
     data: HolidayCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -220,7 +266,12 @@ async def create_holiday(
     return holiday
 
 
-@router.post("/holidays/bulk", response_model=List[HolidayResponse], response_model_by_alias=True, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/holidays/bulk",
+    response_model=List[HolidayResponse],
+    response_model_by_alias=True,
+    status_code=status.HTTP_201_CREATED,
+)
 async def bulk_create_holidays(
     data: HolidayBulkCreate,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -277,9 +328,10 @@ async def delete_holiday(
 # ============================================
 # Utility Endpoints
 # ============================================
-@router.get("/check-holiday", response_model=Optional[HolidayResponse], response_model_by_alias=True)
+@router.get(
+    "/check-holiday", response_model=Optional[HolidayResponse], response_model_by_alias=True
+)
 async def check_holiday(
-    organization_id: UUID,
     check_date: date,
     unit_id: Optional[UUID] = None,
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -287,5 +339,9 @@ async def check_holiday(
 ):
     """Check if a date is a holiday."""
     service = HolidayService(db)
-    holiday = await service.is_holiday(organization_id, check_date, unit_id)
+    holiday = await service.is_holiday(
+        _require_organization_id(current_user),
+        check_date,
+        unit_id,
+    )
     return holiday

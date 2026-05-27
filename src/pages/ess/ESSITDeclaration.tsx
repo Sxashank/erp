@@ -20,22 +20,45 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { essITDeclarationApi } from '@/services/essApi';
 import { useEssAuthStore } from '@/stores/essAuthStore';
-import type { ITDeclaration, ITDeclarationSection, ITDeclarationItem, TaxCalculation } from '@/types/ess';
+import type {
+  ITDeclaration,
+  ITDeclarationSection,
+  ITDeclarationItem,
+  TaxCalculation,
+} from '@/types/ess';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 export default function ESSITDeclarationPage() {
   const navigate = useNavigate();
   const accessToken = useEssAuthStore((state) => state.accessToken);
@@ -88,9 +111,9 @@ export default function ESSITDeclarationPage() {
         section_code: selectedSection.section_code,
         particular: formData.get('particular') as string,
         declared_amount: Number(formData.get('declared_amount')),
-        investment_date: formData.get('investment_date') as string || undefined,
-        policy_number: formData.get('policy_number') as string || undefined,
-        institution_name: formData.get('institution_name') as string || undefined,
+        investment_date: (formData.get('investment_date') as string) || undefined,
+        policy_number: (formData.get('policy_number') as string) || undefined,
+        institution_name: (formData.get('institution_name') as string) || undefined,
       });
       setAddItemDialogOpen(false);
       setSelectedSection(null);
@@ -111,15 +134,6 @@ export default function ESSITDeclarationPage() {
       logger.error('Failed to submit declaration:', error);
     }
   };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      maximumFractionDigits: 0,
-    }).format(amount);
-  };
-
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; icon: typeof Clock }> = {
       DRAFT: { bg: 'bg-gray-100 text-gray-700', icon: FileText },
@@ -132,7 +146,7 @@ export default function ESSITDeclarationPage() {
     const Icon = style.icon;
     return (
       <Badge className={style.bg}>
-        <Icon className="h-3 w-3 mr-1" />
+        <Icon className="mr-1 h-3 w-3" />
         {status}
       </Badge>
     );
@@ -149,14 +163,16 @@ export default function ESSITDeclarationPage() {
   };
 
   const getSectionTotal = (sectionCode: string) => {
-    return declaration?.items
-      .filter((item) => item.section_code === sectionCode)
-      .reduce((sum, item) => sum + item.declared_amount, 0) || 0;
+    return (
+      declaration?.items
+        .filter((item) => item.section_code === sectionCode)
+        .reduce((sum, item) => sum + item.declared_amount, 0) || 0
+    );
   };
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex min-h-[400px] items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
       </div>
     );
@@ -172,7 +188,7 @@ export default function ESSITDeclarationPage() {
         actions={
           declaration?.status === 'DRAFT' ? (
             <Button onClick={handleSubmitDeclaration}>
-              <Send className="h-4 w-4 mr-2" />
+              <Send className="mr-2 h-4 w-4" />
               Submit Declaration
             </Button>
           ) : undefined
@@ -180,42 +196,50 @@ export default function ESSITDeclarationPage() {
       />
 
       {/* Status & Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 flex items-center justify-between">
               <span className="text-sm text-gray-500">Status</span>
               {declaration && getStatusBadge(declaration.status)}
             </div>
             <p className="text-sm text-gray-500">Tax Regime</p>
-            <p className="font-medium">{declaration?.tax_regime === 'OLD' ? 'Old Regime' : 'New Regime'}</p>
+            <p className="font-medium">
+              {declaration?.tax_regime === 'OLD' ? 'Old Regime' : 'New Regime'}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <IndianRupee className="h-4 w-4 text-blue-600" />
               <span className="text-sm text-gray-500">Total Declared</span>
             </div>
-            <p className="text-xl font-bold">{formatCurrency(declaration?.total_declared_amount || 0)}</p>
+            <p className="text-xl font-bold">
+              {formatIndianCompactCurrency(declaration?.total_declared_amount || 0)}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <Calculator className="h-4 w-4 text-purple-600" />
               <span className="text-sm text-gray-500">Est. Tax Liability</span>
             </div>
-            <p className="text-xl font-bold">{formatCurrency(taxCalculation?.total_tax_liability || 0)}</p>
+            <p className="text-xl font-bold">
+              {formatIndianCompactCurrency(taxCalculation?.total_tax_liability || 0)}
+            </p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-2">
+            <div className="mb-2 flex items-center gap-2">
               <Calculator className="h-4 w-4 text-green-600" />
               <span className="text-sm text-gray-500">Monthly TDS</span>
             </div>
-            <p className="text-xl font-bold">{formatCurrency(taxCalculation?.monthly_tds || 0)}</p>
+            <p className="text-xl font-bold">
+              {formatIndianCompactCurrency(taxCalculation?.monthly_tds || 0)}
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -237,9 +261,9 @@ export default function ESSITDeclarationPage() {
             <CardContent>
               <Accordion type="multiple" className="space-y-2">
                 {Object.entries(groupedSections).map(([category, categorySections]) => (
-                  <AccordionItem key={category} value={category} className="border rounded-lg px-4">
+                  <AccordionItem key={category} value={category} className="rounded-lg border px-4">
                     <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center justify-between w-full mr-4">
+                      <div className="mr-4 flex w-full items-center justify-between">
                         <span className="font-medium">{category}</span>
                         <span className="text-sm text-gray-500">
                           {categorySections.length} sections
@@ -250,23 +274,29 @@ export default function ESSITDeclarationPage() {
                       <div className="space-y-4 pt-2">
                         {categorySections.map((section) => {
                           const sectionTotal = getSectionTotal(section.section_code);
-                          const progress = section.max_limit > 0
-                            ? Math.min((sectionTotal / section.max_limit) * 100, 100)
-                            : 0;
-                          const sectionItems = declaration?.items.filter(
-                            (item) => item.section_code === section.section_code
-                          ) || [];
+                          const progress =
+                            section.max_limit > 0
+                              ? Math.min((sectionTotal / section.max_limit) * 100, 100)
+                              : 0;
+                          const sectionItems =
+                            declaration?.items.filter(
+                              (item) => item.section_code === section.section_code,
+                            ) || [];
 
                           return (
-                            <div key={section.id} className="p-4 bg-gray-50 rounded-lg">
-                              <div className="flex items-start justify-between mb-2">
+                            <div key={section.id} className="rounded-lg bg-gray-50 p-4">
+                              <div className="mb-2 flex items-start justify-between">
                                 <div>
                                   <div className="flex items-center gap-2">
                                     <span className="font-medium">{section.section_code}</span>
-                                    <span className="text-sm text-gray-600">{section.section_name}</span>
+                                    <span className="text-sm text-gray-600">
+                                      {section.section_name}
+                                    </span>
                                   </div>
                                   {section.help_text && (
-                                    <p className="text-xs text-gray-500 mt-1">{section.help_text}</p>
+                                    <p className="mt-1 text-xs text-gray-500">
+                                      {section.help_text}
+                                    </p>
                                   )}
                                 </div>
                                 <Button
@@ -278,38 +308,49 @@ export default function ESSITDeclarationPage() {
                                   }}
                                   disabled={declaration?.status !== 'DRAFT'}
                                 >
-                                  <Plus className="h-3 w-3 mr-1" />
+                                  <Plus className="mr-1 h-3 w-3" />
                                   Add
                                 </Button>
                               </div>
 
                               {section.max_limit > 0 && (
                                 <div className="mb-3">
-                                  <div className="flex justify-between text-xs text-gray-500 mb-1">
-                                    <span>Declared: {formatCurrency(sectionTotal)}</span>
-                                    <span>Limit: {formatCurrency(section.max_limit)}</span>
+                                  <div className="mb-1 flex justify-between text-xs text-gray-500">
+                                    <span>
+                                      Declared: {formatIndianCompactCurrency(sectionTotal)}
+                                    </span>
+                                    <span>
+                                      Limit: {formatIndianCompactCurrency(section.max_limit)}
+                                    </span>
                                   </div>
                                   <Progress value={progress} className="h-2" />
                                 </div>
                               )}
 
                               {sectionItems.length > 0 && (
-                                <div className="space-y-2 mt-3">
+                                <div className="mt-3 space-y-2">
                                   {sectionItems.map((item) => (
                                     <div
                                       key={item.id}
-                                      className="flex items-center justify-between p-2 bg-white rounded border"
+                                      className="flex items-center justify-between rounded border bg-white p-2"
                                     >
                                       <div>
                                         <p className="text-sm font-medium">{item.particular}</p>
                                         {item.institution_name && (
-                                          <p className="text-xs text-gray-500">{item.institution_name}</p>
+                                          <p className="text-xs text-gray-500">
+                                            {item.institution_name}
+                                          </p>
                                         )}
                                       </div>
                                       <div className="text-right">
-                                        <p className="font-medium">{formatCurrency(item.declared_amount)}</p>
+                                        <p className="font-medium">
+                                          {formatIndianCompactCurrency(item.declared_amount)}
+                                        </p>
                                         {item.is_verified && (
-                                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-700">
+                                          <Badge
+                                            variant="secondary"
+                                            className="bg-green-100 text-xs text-green-700"
+                                          >
                                             Verified
                                           </Badge>
                                         )}
@@ -333,16 +374,18 @@ export default function ESSITDeclarationPage() {
         <TabsContent value="hra">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base flex items-center gap-2">
+              <CardTitle className="flex items-center gap-2 text-base">
                 <Home className="h-4 w-4" />
                 HRA Exemption Details
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
                 <div>
                   <Label>Monthly Rent</Label>
-                  <p className="text-lg font-medium">{formatCurrency(declaration?.rent_paid_monthly || 0)}</p>
+                  <p className="text-lg font-medium">
+                    {formatIndianCompactCurrency(declaration?.rent_paid_monthly || 0)}
+                  </p>
                 </div>
                 <div>
                   <Label>Landlord Name</Label>
@@ -358,10 +401,10 @@ export default function ESSITDeclarationPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-green-50 rounded-lg">
+              <div className="rounded-lg bg-green-50 p-4">
                 <p className="text-sm text-gray-600">Estimated HRA Exemption</p>
                 <p className="text-2xl font-bold text-green-700">
-                  {formatCurrency(declaration?.hra_declared || 0)}
+                  {formatIndianCompactCurrency(declaration?.hra_declared || 0)}
                 </p>
               </div>
 
@@ -369,18 +412,20 @@ export default function ESSITDeclarationPage() {
               {declaration?.hra_receipts && declaration.hra_receipts.length > 0 && (
                 <div>
                   <Label className="mb-2 block">Monthly Rent Receipts</Label>
-                  <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                  <div className="grid grid-cols-3 gap-2 md:grid-cols-6">
                     {declaration.hra_receipts.map((receipt) => (
                       <div
                         key={receipt.id}
-                        className={`p-2 text-center rounded border ${
-                          receipt.receipt_uploaded ? 'bg-green-50 border-green-200' : 'bg-gray-50'
+                        className={`rounded border p-2 text-center ${
+                          receipt.receipt_uploaded ? 'border-green-200 bg-green-50' : 'bg-gray-50'
                         }`}
                       >
                         <p className="text-xs text-gray-500">{receipt.month}</p>
-                        <p className="font-medium text-sm">{formatCurrency(receipt.rent_amount)}</p>
+                        <p className="text-sm font-medium">
+                          {formatIndianCompactCurrency(receipt.rent_amount)}
+                        </p>
                         {receipt.receipt_uploaded && (
-                          <CheckCircle className="h-3 w-3 text-green-600 mx-auto mt-1" />
+                          <CheckCircle className="mx-auto mt-1 h-3 w-3 text-green-600" />
                         )}
                       </div>
                     ))}
@@ -397,14 +442,18 @@ export default function ESSITDeclarationPage() {
               <CardTitle className="text-base">Home Loan Interest (Section 24b)</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
                 <div>
                   <Label>Interest Paid (Annual)</Label>
-                  <p className="text-lg font-medium">{formatCurrency(declaration?.home_loan_interest || 0)}</p>
+                  <p className="text-lg font-medium">
+                    {formatIndianCompactCurrency(declaration?.home_loan_interest || 0)}
+                  </p>
                 </div>
                 <div>
                   <Label>Principal Paid (Annual)</Label>
-                  <p className="text-lg font-medium">{formatCurrency(declaration?.home_loan_principal || 0)}</p>
+                  <p className="text-lg font-medium">
+                    {formatIndianCompactCurrency(declaration?.home_loan_principal || 0)}
+                  </p>
                 </div>
                 <div>
                   <Label>Lender Name</Label>
@@ -412,15 +461,17 @@ export default function ESSITDeclarationPage() {
                 </div>
               </div>
 
-              <div className="p-4 bg-blue-50 rounded-lg">
-                <div className="flex items-center gap-2 mb-2">
+              <div className="rounded-lg bg-blue-50 p-4">
+                <div className="mb-2 flex items-center gap-2">
                   <Info className="h-4 w-4 text-blue-600" />
                   <span className="text-sm font-medium text-blue-700">Deduction Limits</span>
                 </div>
-                <ul className="text-sm text-gray-600 space-y-1">
+                <ul className="space-y-1 text-sm text-gray-600">
                   <li>• Self-occupied property: Max ₹2,00,000 interest deduction (Section 24b)</li>
                   <li>• Principal repayment: Included in 80C limit (₹1,50,000)</li>
-                  <li>• First-time buyer (80EE): Additional ₹50,000 if loan ≤ ₹35L, property ≤ ₹50L</li>
+                  <li>
+                    • First-time buyer (80EE): Additional ₹50,000 if loan ≤ ₹35L, property ≤ ₹50L
+                  </li>
                 </ul>
               </div>
             </CardContent>
@@ -436,61 +487,79 @@ export default function ESSITDeclarationPage() {
             <CardContent>
               {taxCalculation ? (
                 <div className="space-y-6">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div className="p-4 bg-gray-50 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4 md:grid-cols-3">
+                    <div className="rounded-lg bg-gray-50 p-4">
                       <p className="text-sm text-gray-500">Gross Income</p>
-                      <p className="text-xl font-bold">{formatCurrency(taxCalculation.gross_income)}</p>
-                    </div>
-                    <div className="p-4 bg-green-50 rounded-lg">
-                      <p className="text-sm text-gray-500">Total Deductions</p>
-                      <p className="text-xl font-bold text-green-700">
-                        -{formatCurrency(taxCalculation.chapter_vi_a_deductions + taxCalculation.standard_deduction)}
+                      <p className="text-xl font-bold">
+                        {formatIndianCompactCurrency(taxCalculation.gross_income)}
                       </p>
                     </div>
-                    <div className="p-4 bg-blue-50 rounded-lg">
+                    <div className="rounded-lg bg-green-50 p-4">
+                      <p className="text-sm text-gray-500">Total Deductions</p>
+                      <p className="text-xl font-bold text-green-700">
+                        -
+                        {formatIndianCompactCurrency(
+                          taxCalculation.chapter_vi_a_deductions +
+                            taxCalculation.standard_deduction,
+                        )}
+                      </p>
+                    </div>
+                    <div className="rounded-lg bg-blue-50 p-4">
                       <p className="text-sm text-gray-500">Taxable Income</p>
-                      <p className="text-xl font-bold">{formatCurrency(taxCalculation.taxable_income)}</p>
+                      <p className="text-xl font-bold">
+                        {formatIndianCompactCurrency(taxCalculation.taxable_income)}
+                      </p>
                     </div>
                   </div>
 
                   {/* Tax Slabs */}
                   <div>
-                    <h4 className="font-medium mb-3">Tax Computation</h4>
+                    <h4 className="mb-3 font-medium">Tax Computation</h4>
                     <div className="space-y-2">
                       {taxCalculation.breakdown?.tax_slabs?.map((slab, idx) => (
-                        <div key={idx} className="flex justify-between p-2 bg-gray-50 rounded">
-                          <span className="text-sm">{slab.slab} @ {slab.rate}%</span>
-                          <span className="font-medium">{formatCurrency(slab.tax)}</span>
+                        <div key={idx} className="flex justify-between rounded bg-gray-50 p-2">
+                          <span className="text-sm">
+                            {slab.slab} @ {slab.rate}%
+                          </span>
+                          <span className="font-medium">
+                            {formatIndianCompactCurrency(slab.tax)}
+                          </span>
                         </div>
                       ))}
-                      <div className="flex justify-between p-2 bg-gray-100 rounded">
+                      <div className="flex justify-between rounded bg-gray-100 p-2">
                         <span>Tax on Income</span>
-                        <span className="font-medium">{formatCurrency(taxCalculation.tax_on_income)}</span>
+                        <span className="font-medium">
+                          {formatIndianCompactCurrency(taxCalculation.tax_on_income)}
+                        </span>
                       </div>
                       {taxCalculation.surcharge > 0 && (
                         <div className="flex justify-between p-2">
                           <span className="text-sm text-gray-600">Surcharge</span>
-                          <span>{formatCurrency(taxCalculation.surcharge)}</span>
+                          <span>{formatIndianCompactCurrency(taxCalculation.surcharge)}</span>
                         </div>
                       )}
                       <div className="flex justify-between p-2">
                         <span className="text-sm text-gray-600">Education Cess (4%)</span>
-                        <span>{formatCurrency(taxCalculation.education_cess)}</span>
+                        <span>{formatIndianCompactCurrency(taxCalculation.education_cess)}</span>
                       </div>
-                      <div className="flex justify-between p-3 bg-red-50 rounded font-bold">
+                      <div className="flex justify-between rounded bg-red-50 p-3 font-bold">
                         <span>Total Tax Liability</span>
-                        <span className="text-red-700">{formatCurrency(taxCalculation.total_tax_liability)}</span>
+                        <span className="text-red-700">
+                          {formatIndianCompactCurrency(taxCalculation.total_tax_liability)}
+                        </span>
                       </div>
-                      <div className="flex justify-between p-3 bg-blue-50 rounded">
+                      <div className="flex justify-between rounded bg-blue-50 p-3">
                         <span className="font-medium">Monthly TDS</span>
-                        <span className="font-bold text-blue-700">{formatCurrency(taxCalculation.monthly_tds)}</span>
+                        <span className="font-bold text-blue-700">
+                          {formatIndianCompactCurrency(taxCalculation.monthly_tds)}
+                        </span>
                       </div>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Calculator className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <div className="py-8 text-center text-gray-500">
+                  <Calculator className="mx-auto mb-2 h-8 w-8 opacity-50" />
                   <p>Tax calculation will be available after adding declarations</p>
                 </div>
               )}
@@ -509,15 +578,30 @@ export default function ESSITDeclarationPage() {
           <form onSubmit={handleAddItem} className="space-y-4">
             <div>
               <Label htmlFor="particular">Particular/Description</Label>
-              <Input id="particular" name="particular" placeholder="e.g., LIC Policy, PPF, ELSS Fund" required />
+              <Input
+                id="particular"
+                name="particular"
+                placeholder="e.g., LIC Policy, PPF, ELSS Fund"
+                required
+              />
             </div>
             <div>
               <Label htmlFor="declared_amount">Amount (₹)</Label>
-              <Input id="declared_amount" name="declared_amount" type="number" placeholder="Enter amount" required />
+              <Input
+                id="declared_amount"
+                name="declared_amount"
+                type="number"
+                placeholder="Enter amount"
+                required
+              />
             </div>
             <div>
               <Label htmlFor="institution_name">Institution/Company Name</Label>
-              <Input id="institution_name" name="institution_name" placeholder="e.g., LIC, SBI, HDFC" />
+              <Input
+                id="institution_name"
+                name="institution_name"
+                placeholder="e.g., LIC, SBI, HDFC"
+              />
             </div>
             <div>
               <Label htmlFor="policy_number">Policy/Account Number</Label>
@@ -527,12 +611,12 @@ export default function ESSITDeclarationPage() {
               <Label htmlFor="investment_date">Investment Date</Label>
               <Input id="investment_date" name="investment_date" type="date" />
             </div>
-            <div className="flex gap-3 justify-end">
+            <div className="flex justify-end gap-3">
               <Button type="button" variant="outline" onClick={() => setAddItemDialogOpen(false)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={submitting}>
-                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Add Investment
               </Button>
             </div>

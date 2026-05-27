@@ -27,15 +27,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock comparison data
 const rfqData = {
   rfqNumber: 'RFQ2025010001',
@@ -106,12 +97,12 @@ export default function VendorComparison() {
   const [selectedVendor, setSelectedVendor] = useState<string>('');
   const [remarks, setRemarks] = useState('');
 
-  const lowestPrice = Math.min(...quotations.map(q => q.totalAmount));
-  const fastestDelivery = Math.min(...quotations.map(q => q.deliveryDays));
-  const longestWarranty = Math.max(...quotations.map(q => parseInt(q.warranty)));
+  const lowestPrice = Math.min(...quotations.map((q) => q.totalAmount));
+  const fastestDelivery = Math.min(...quotations.map((q) => q.deliveryDays));
+  const longestWarranty = Math.max(...quotations.map((q) => parseInt(q.warranty)));
 
   const getLowestPriceForItem = (itemId: number) => {
-    const prices = quotations.map(q => q.items.find(i => i.itemId === itemId)?.unitPrice || 0);
+    const prices = quotations.map((q) => q.items.find((i) => i.itemId === itemId)?.unitPrice || 0);
     return Math.min(...prices);
   };
 
@@ -122,7 +113,7 @@ export default function VendorComparison() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="container mx-auto space-y-6 py-6">
       <PageHeader
         title="Vendor Comparison"
         subtitle={`${rfqData.rfqNumber} - ${rfqData.title}`}
@@ -133,7 +124,7 @@ export default function VendorComparison() {
         ]}
         actions={
           <Button variant="outline">
-            <Download className="h-4 w-4 mr-2" />
+            <Download className="mr-2 h-4 w-4" />
             Export Comparison
           </Button>
         }
@@ -153,7 +144,7 @@ export default function VendorComparison() {
                 {quotations.map((q) => (
                   <TableHead key={q.vendorId} className="text-center">
                     <div className="font-semibold">{q.vendorName}</div>
-                    <div className="text-xs text-muted-foreground font-normal">{q.vendorId}</div>
+                    <div className="text-xs font-normal text-muted-foreground">{q.vendorId}</div>
                   </TableHead>
                 ))}
               </TableRow>
@@ -164,12 +155,14 @@ export default function VendorComparison() {
                 {quotations.map((q) => (
                   <TableCell key={q.vendorId} className="text-center">
                     <div className="flex items-center justify-center gap-2">
-                      <span className={q.totalAmount === lowestPrice ? 'text-green-600 font-bold' : ''}>
-                        {formatCurrency(q.totalAmount)}
+                      <span
+                        className={q.totalAmount === lowestPrice ? 'font-bold text-green-600' : ''}
+                      >
+                        {formatIndianCompactCurrency(q.totalAmount)}
                       </span>
                       {q.totalAmount === lowestPrice && (
                         <Badge variant="default" className="bg-green-100 text-green-800">
-                          <TrendingDown className="h-3 w-3 mr-1" />
+                          <TrendingDown className="mr-1 h-3 w-3" />
                           Lowest
                         </Badge>
                       )}
@@ -183,11 +176,17 @@ export default function VendorComparison() {
                   <TableCell key={q.vendorId} className="text-center">
                     <div className="flex items-center justify-center gap-2">
                       <Clock className="h-4 w-4 text-muted-foreground" />
-                      <span className={q.deliveryDays === fastestDelivery ? 'text-green-600 font-bold' : ''}>
+                      <span
+                        className={
+                          q.deliveryDays === fastestDelivery ? 'font-bold text-green-600' : ''
+                        }
+                      >
                         {q.deliveryDays} days
                       </span>
                       {q.deliveryDays === fastestDelivery && (
-                        <Badge variant="default" className="bg-green-100 text-green-800">Fastest</Badge>
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          Fastest
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
@@ -199,11 +198,17 @@ export default function VendorComparison() {
                   <TableCell key={q.vendorId} className="text-center">
                     <div className="flex items-center justify-center gap-2">
                       <Shield className="h-4 w-4 text-muted-foreground" />
-                      <span className={parseInt(q.warranty) === longestWarranty ? 'text-green-600 font-bold' : ''}>
+                      <span
+                        className={
+                          parseInt(q.warranty) === longestWarranty ? 'font-bold text-green-600' : ''
+                        }
+                      >
                         {q.warranty}
                       </span>
                       {parseInt(q.warranty) === longestWarranty && (
-                        <Badge variant="default" className="bg-green-100 text-green-800">Best</Badge>
+                        <Badge variant="default" className="bg-green-100 text-green-800">
+                          Best
+                        </Badge>
                       )}
                     </div>
                   </TableCell>
@@ -213,21 +218,23 @@ export default function VendorComparison() {
                 <TableCell className="font-medium">Vendor Rating</TableCell>
                 {quotations.map((q) => (
                   <TableCell key={q.vendorId} className="text-center">
-                    <span className="text-yellow-600 font-medium">★ {q.rating.toFixed(1)}</span>
+                    <span className="font-medium text-yellow-600">★ {q.rating.toFixed(1)}</span>
                   </TableCell>
                 ))}
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">Past Orders</TableCell>
                 {quotations.map((q) => (
-                  <TableCell key={q.vendorId} className="text-center">{q.pastOrders}</TableCell>
+                  <TableCell key={q.vendorId} className="text-center">
+                    {q.pastOrders}
+                  </TableCell>
                 ))}
               </TableRow>
               <TableRow>
                 <TableCell className="font-medium">On-Time Delivery %</TableCell>
                 {quotations.map((q) => (
                   <TableCell key={q.vendorId} className="text-center">
-                    <span className={q.onTimeDelivery >= 95 ? 'text-green-600 font-medium' : ''}>
+                    <span className={q.onTimeDelivery >= 95 ? 'font-medium text-green-600' : ''}>
                       {q.onTimeDelivery}%
                     </span>
                   </TableCell>
@@ -251,7 +258,9 @@ export default function VendorComparison() {
                 <TableHead>Item Description</TableHead>
                 <TableHead className="text-center">Qty</TableHead>
                 {quotations.map((q) => (
-                  <TableHead key={q.vendorId} className="text-right">{q.vendorName}</TableHead>
+                  <TableHead key={q.vendorId} className="text-right">
+                    {q.vendorName}
+                  </TableHead>
                 ))}
               </TableRow>
             </TableHeader>
@@ -261,14 +270,16 @@ export default function VendorComparison() {
                 return (
                   <TableRow key={item.id}>
                     <TableCell className="font-medium">{item.description}</TableCell>
-                    <TableCell className="text-center">{item.quantity} {item.uom}</TableCell>
+                    <TableCell className="text-center">
+                      {item.quantity} {item.uom}
+                    </TableCell>
                     {quotations.map((q) => {
-                      const quotedItem = q.items.find(i => i.itemId === item.id);
+                      const quotedItem = q.items.find((i) => i.itemId === item.id);
                       const isLowest = quotedItem?.unitPrice === lowestItemPrice;
                       return (
                         <TableCell key={q.vendorId} className="text-right">
-                          <span className={isLowest ? 'text-green-600 font-bold' : ''}>
-                            {quotedItem ? formatCurrency(quotedItem.unitPrice) : '-'}
+                          <span className={isLowest ? 'font-bold text-green-600' : ''}>
+                            {quotedItem ? formatIndianCompactCurrency(quotedItem.unitPrice) : '-'}
                           </span>
                         </TableCell>
                       );
@@ -281,7 +292,7 @@ export default function VendorComparison() {
                 <TableCell></TableCell>
                 {quotations.map((q) => (
                   <TableCell key={q.vendorId} className="text-right">
-                    {formatCurrency(q.totalAmount)}
+                    {formatIndianCompactCurrency(q.totalAmount)}
                   </TableCell>
                 ))}
               </TableRow>
@@ -301,25 +312,29 @@ export default function VendorComparison() {
         </CardHeader>
         <CardContent className="space-y-6">
           <RadioGroup value={selectedVendor} onValueChange={setSelectedVendor}>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               {quotations.map((q) => (
                 <div
                   key={q.vendorId}
-                  className={`relative border rounded-lg p-4 cursor-pointer transition-colors ${
-                    selectedVendor === q.vendorId ? 'border-primary bg-primary/5' : 'hover:bg-muted/50'
+                  className={`relative cursor-pointer rounded-lg border p-4 transition-colors ${
+                    selectedVendor === q.vendorId
+                      ? 'border-primary bg-primary/5'
+                      : 'hover:bg-muted/50'
                   }`}
                   onClick={() => setSelectedVendor(q.vendorId)}
                 >
                   <div className="flex items-start gap-3">
                     <RadioGroupItem value={q.vendorId} id={q.vendorId} />
                     <div className="flex-1">
-                      <Label htmlFor={q.vendorId} className="font-semibold cursor-pointer">
+                      <Label htmlFor={q.vendorId} className="cursor-pointer font-semibold">
                         {q.vendorName}
                       </Label>
                       <div className="mt-2 space-y-1 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Amount:</span>
-                          <span className="font-medium">{formatCurrency(q.totalAmount)}</span>
+                          <span className="font-medium">
+                            {formatIndianCompactCurrency(q.totalAmount)}
+                          </span>
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Delivery:</span>
@@ -333,9 +348,7 @@ export default function VendorComparison() {
                     </div>
                   </div>
                   {q.totalAmount === lowestPrice && (
-                    <Badge className="absolute top-2 right-2 bg-green-100 text-green-800">
-                      L1
-                    </Badge>
+                    <Badge className="absolute right-2 top-2 bg-green-100 text-green-800">L1</Badge>
                   )}
                 </div>
               ))}
@@ -355,11 +368,8 @@ export default function VendorComparison() {
           </div>
 
           <div className="flex gap-2">
-            <Button
-              onClick={handleAwardPO}
-              disabled={!selectedVendor}
-            >
-              <CheckCircle className="h-4 w-4 mr-2" />
+            <Button onClick={handleAwardPO} disabled={!selectedVendor}>
+              <CheckCircle className="mr-2 h-4 w-4" />
               Award & Create PO
             </Button>
             <Button variant="outline" onClick={() => navigate(-1)}>

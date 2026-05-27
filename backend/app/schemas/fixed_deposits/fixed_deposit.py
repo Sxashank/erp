@@ -21,6 +21,7 @@ from app.models.fixed_deposits.fd_product import (
 # Nominee Schemas
 class FDNomineeBase(CamelSchema):
     """Base schema for FD nominee."""
+
     nominee_name: str = Field(..., min_length=1, max_length=200)
     relationship: str = Field(..., min_length=1, max_length=50)
     date_of_birth: Optional[date] = None
@@ -37,11 +38,13 @@ class FDNomineeBase(CamelSchema):
 
 class FDNomineeCreate(FDNomineeBase):
     """Schema for creating nominee."""
+
     pass
 
 
 class FDNomineeUpdate(CamelSchema):
     """Schema for updating nominee."""
+
     nominee_name: Optional[str] = None
     relationship: Optional[str] = None
     date_of_birth: Optional[date] = None
@@ -105,6 +108,7 @@ class FDInterestAccrualResponse(CamelSchema):
 # Fixed Deposit Schemas
 class FixedDepositBase(CamelSchema):
     """Base schema for fixed deposit."""
+
     product_id: UUID
     customer_id: UUID
     customer_category: FDCustomerCategory = FDCustomerCategory.GENERAL
@@ -117,7 +121,9 @@ class FixedDepositBase(CamelSchema):
     interest_payout_frequency: Optional[FDInterestPayoutFrequency] = None
     compounding_frequency: Optional[FDCompoundingFrequency] = None
 
-    interest_payout_mode: str = Field("BANK_TRANSFER", pattern="^(BANK_TRANSFER|CAPITALIZE|CHEQUE)$")
+    interest_payout_mode: str = Field(
+        "BANK_TRANSFER", pattern="^(BANK_TRANSFER|CAPITALIZE|CHEQUE)$"
+    )
     payout_bank_account_id: Optional[UUID] = None
 
     auto_renew: bool = False
@@ -129,12 +135,14 @@ class FixedDepositBase(CamelSchema):
 
 class FixedDepositCreate(FixedDepositBase):
     """Schema for creating fixed deposit."""
-    organization_id: UUID
+
+    organization_id: Optional[UUID] = None
     nominees: Optional[List[FDNomineeCreate]] = None
 
 
 class FixedDepositUpdate(CamelSchema):
     """Schema for updating fixed deposit."""
+
     interest_payout_mode: Optional[str] = None
     payout_bank_account_id: Optional[UUID] = None
     auto_renew: Optional[bool] = None
@@ -205,12 +213,14 @@ class FixedDepositResponse(CamelSchema):
 
 class FixedDepositListResponse(CamelSchema):
     """Schema for paginated fixed deposit list."""
+
     items: List[FixedDepositResponse]
     total: int
 
 
 class FixedDepositSummary(CamelSchema):
     """Summary statistics for FDs."""
+
     total_fds: int
     active_fds: int
     total_deposit_amount: Decimal
@@ -223,6 +233,7 @@ class FixedDepositSummary(CamelSchema):
 
 class FDMaturityProjection(CamelSchema):
     """Maturity projection for an FD."""
+
     fd_id: UUID
     fd_number: str
     deposit_amount: Decimal
@@ -238,6 +249,7 @@ class FDMaturityProjection(CamelSchema):
 
 class FDClosureRequest(CamelSchema):
     """Request for closing an FD."""
+
     closure_date: date
     closure_reason: str = Field(..., pattern="^(MATURITY|PREMATURE|CUSTOMER_REQUEST)$")
     payout_mode: str = Field("BANK_TRANSFER", pattern="^(BANK_TRANSFER|CHEQUE|CASH)$")
@@ -247,6 +259,7 @@ class FDClosureRequest(CamelSchema):
 
 class FDRenewalRequest(CamelSchema):
     """Request for renewing an FD."""
+
     new_tenure_days: Optional[int] = None  # If null, same tenure
     new_product_id: Optional[UUID] = None  # If null, same product
     include_interest: bool = True  # Add maturity interest to principal

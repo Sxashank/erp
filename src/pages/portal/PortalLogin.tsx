@@ -1,5 +1,5 @@
 /**
- * Scheme Portal Login Page
+ * Borrower Portal Login Page
  * Supports borrower OTP login and invited internal-actor password login.
  */
 
@@ -17,7 +17,7 @@ import {
   portalAuthApi,
   resolvePortalOrganizationId,
 } from '@/services/portalApi';
-import { getErrorMessage } from "@/lib/errorMessage";
+import { getErrorMessage } from '@/lib/errorMessage';
 
 type LoginMode = 'borrower' | 'internal';
 type LoginStep = 'mobile' | 'otp';
@@ -153,7 +153,7 @@ export default function PortalLogin(): JSX.Element {
         otp: requiresInternalMfa ? internalOtp : undefined,
         device_info: {
           device_type: 'WEB',
-          device_name: 'Scheme Portal',
+          device_name: 'Borrower Portal',
         },
       });
 
@@ -178,7 +178,7 @@ export default function PortalLogin(): JSX.Element {
           <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-600">
             <Wallet className="h-8 w-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Scheme Portal</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Borrower Portal</h1>
           <p className="mt-1 text-gray-600">
             Track institutional maritime and shipyard applications
           </p>
@@ -218,7 +218,7 @@ export default function PortalLogin(): JSX.Element {
                 ? step === 'mobile'
                   ? 'Enter your authorised mobile number to receive an OTP'
                   : `Enter the 6-digit OTP sent to ${mobile.slice(0, 3)}****${mobile.slice(-3)}`
-                : 'Use your invited email address and password to access lender, SMFCL, ministry, or scheme-admin queues.'}
+                : 'Use your invited email address and password to access authorised SFC portal queues.'}
             </CardDescription>
           </CardHeader>
           <CardContent>

@@ -22,15 +22,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 2,
-  }).format(value);
-};
-
 // Mock data
 const categories = [
   { id: '1', name: 'Office Supplies' },
@@ -218,10 +209,10 @@ export default function ItemMasterList() {
                       <Badge variant="outline">{item.type}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(item.standardCost)}
+                      {formatIndianCompactCurrency(item.standardCost)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(item.sellingPrice)}
+                      {formatIndianCompactCurrency(item.sellingPrice)}
                     </TableCell>
                     <TableCell className="text-right font-medium">
                       {item.currentStock} {item.uom}

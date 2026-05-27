@@ -47,19 +47,23 @@ import {
   type BorrowingListItem,
   type BorrowingFilters,
 } from '@/hooks/lending/useBorrowings';
+import { useLendingOptionRows } from '@/hooks/lending/useLendingMasters';
 import { logger } from '@/lib/logger';
 
-const typeColors: Record<string, string> = {
-  TERM_LOAN: 'bg-blue-100 text-blue-700',
-  CC: 'bg-green-100 text-green-700',
-  NCD: 'bg-orange-100 text-orange-700',
-  CP: 'bg-pink-100 text-pink-700',
-  WCDL: 'bg-purple-100 text-purple-700',
-  REFINANCE: 'bg-indigo-100 text-indigo-700',
-  WORKING_CAPITAL: 'bg-teal-100 text-teal-700',
-  SUBORDINATED_DEBT: 'bg-amber-100 text-amber-700',
-  OTHER: 'bg-gray-100 text-gray-700',
-};
+const badgePalette = [
+  'bg-blue-100 text-blue-700',
+  'bg-green-100 text-green-700',
+  'bg-orange-100 text-orange-700',
+  'bg-pink-100 text-pink-700',
+  'bg-purple-100 text-purple-700',
+  'bg-indigo-100 text-indigo-700',
+  'bg-teal-100 text-teal-700',
+  'bg-amber-100 text-amber-700',
+];
+
+function fallbackLabel(value: string): string {
+  return value.replace(/_/g, ' ');
+}
 
 export default function BorrowingList() {
   const navigate = useNavigate();
@@ -71,7 +75,20 @@ export default function BorrowingList() {
     pageSize: 100,
     ...(statusFilter !== 'ALL' && { status: statusFilter }),
   };
-  const { data, isLoading: loading, isError, error, refetch } = useBorrowings(filters);
+  const { data, isLoading: borrowingsLoading, isError, error, refetch } = useBorrowings(filters);
+  const borrowingTypesQuery = useLendingOptionRows('BORROWING_TYPE');
+  const borrowingTypeOptions =
+    borrowingTypesQuery.data?.items.map((row) => ({
+      value: String(row.data.code ?? ''),
+      label: String(row.data.label ?? row.data.code ?? ''),
+    })) ?? [];
+  const loading = borrowingsLoading || borrowingTypesQuery.isLoading;
+  const borrowingTypeLabel = (value: string) =>
+    borrowingTypeOptions.find((option) => option.value === value)?.label ?? fallbackLabel(value);
+  const borrowingTypeColor = (value: string) => {
+    const index = borrowingTypeOptions.findIndex((option) => option.value === value);
+    return index >= 0 ? badgePalette[index % badgePalette.length] : 'bg-gray-100 text-gray-700';
+  };
 
   const all: BorrowingListItem[] = data?.items ?? [];
   const borrowings = all.filter((b) => {
@@ -206,14 +223,11 @@ export default function BorrowingList() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="ALL">All Types</SelectItem>
-                  <SelectItem value="TERM_LOAN">Term Loan</SelectItem>
-                  <SelectItem value="CC">Cash Credit</SelectItem>
-                  <SelectItem value="NCD">NCD</SelectItem>
-                  <SelectItem value="CP">Commercial Paper</SelectItem>
-                  <SelectItem value="WCDL">WCDL</SelectItem>
-                  <SelectItem value="REFINANCE">Refinance</SelectItem>
-                  <SelectItem value="WORKING_CAPITAL">Working Capital</SelectItem>
-                  <SelectItem value="SUBORDINATED_DEBT">Sub Debt</SelectItem>
+                  {borrowingTypeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -259,13 +273,16 @@ export default function BorrowingList() {
                     Loading borrowings...
                   </TableCell>
                 </TableRow>
-              ) : isError ? (
+              ) : isError || borrowingTypesQuery.isError ? (
                 <TableRow>
                   <TableCell colSpan={9} className="py-8">
                     <ErrorState
                       title="Could not load borrowings"
-                      error={error}
-                      onRetry={() => refetch()}
+                      error={error ?? borrowingTypesQuery.error}
+                      onRetry={() => {
+                        refetch();
+                        borrowingTypesQuery.refetch();
+                      }}
                     />
                   </TableCell>
                 </TableRow>
@@ -277,7 +294,7 @@ export default function BorrowingList() {
                 </TableRow>
               ) : (
                 borrowings.map((borrowing) => {
-                  const typeColor = typeColors[borrowing.borrowingType] ?? typeColors.OTHER;
+                  const typeColor = borrowingTypeColor(borrowing.borrowingType);
                   return (
                     <TableRow
                       key={borrowing.id}
@@ -297,7 +314,7 @@ export default function BorrowingList() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className={typeColor}>
-                          {borrowing.borrowingType}
+                          {borrowingTypeLabel(borrowing.borrowingType)}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-right">

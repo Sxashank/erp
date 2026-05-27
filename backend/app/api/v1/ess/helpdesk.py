@@ -4,23 +4,36 @@ from datetime import date
 from typing import Optional, List
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
+from app.api.deps import ESSUserContext, get_current_ess_user, get_ess_db_with_tenant
 from app.services.ess.helpdesk_service import ESSHelpdeskService
 from app.models.ess.enums import TicketCategory, TicketPriority, TicketStatus
 from app.core.exceptions import BadRequestException, NotFoundException
 
-
 router = APIRouter(prefix="/helpdesk", tags=["ESS Helpdesk"])
+
+
+async def _get_owned_ticket(
+    service: ESSHelpdeskService,
+    ticket_id: UUID,
+    employee_id: UUID,
+):
+    """Return a ticket only if it belongs to the authenticated employee."""
+    ticket = await service.get_ticket_by_id(ticket_id, include_comments=True)
+    if not ticket or ticket.employee_id != employee_id:
+        raise NotFoundException("Ticket not found")
+    return ticket
 
 
 # ==================== Schemas ====================
 
+
 class TicketCategoryResponse(BaseModel):
     """Ticket category response."""
+
     id: str
     code: str
     name: str
@@ -32,6 +45,7 @@ class TicketCategoryResponse(BaseModel):
 
 class TicketCreate(BaseModel):
     """Create helpdesk ticket."""
+
     subject: str = Field(..., max_length=300)
     description: str
     category_type: TicketCategory
@@ -42,17 +56,20 @@ class TicketCreate(BaseModel):
 
 class CommentCreate(BaseModel):
     """Add comment to ticket."""
+
     comment: str
 
 
 class FeedbackCreate(BaseModel):
     """Submit feedback for ticket."""
+
     rating: int = Field(..., ge=1, le=5)
     feedback: Optional[str] = None
 
 
 class TicketCommentResponse(BaseModel):
     """Ticket comment response."""
+
     id: str
     author_type: str
     comment: str
@@ -62,6 +79,7 @@ class TicketCommentResponse(BaseModel):
 
 class TicketResponse(BaseModel):
     """Ticket response."""
+
     id: str
     ticket_number: str
     subject: str
@@ -76,6 +94,7 @@ class TicketResponse(BaseModel):
 
 class TicketDetailResponse(TicketResponse):
     """Detailed ticket response."""
+
     description: str
     category: Optional[str]
     assigned_to: Optional[str]
@@ -95,6 +114,7 @@ class TicketDetailResponse(TicketResponse):
 
 class TicketSummaryResponse(BaseModel):
     """Ticket summary response."""
+
     total: int
     open: int
     in_progress: int
@@ -105,16 +125,19 @@ class TicketSummaryResponse(BaseModel):
 
 # ==================== Endpoints ====================
 
-@router.get("/categories", response_model=List[TicketCategoryResponse], response_model_by_alias=True)
+
+@router.get(
+    "/categories", response_model=List[TicketCategoryResponse], response_model_by_alias=True
+)
 async def get_categories(
-    organization_id: UUID,  # From authenticated user
     department: Optional[str] = None,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get helpdesk categories."""
     service = ESSHelpdeskService(session)
     categories = await service.get_categories(
-        organization_id=organization_id,
+        organization_id=ess_context.organization_id,
         department=department,
     )
 
@@ -135,18 +158,16 @@ async def get_categories(
 @router.post("", response_model=TicketResponse, response_model_by_alias=True)
 async def create_ticket(
     request: TicketCreate,
-    organization_id: UUID,  # From authenticated user
-    ess_user_id: UUID,  # From authenticated user
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Create a new helpdesk ticket."""
     service = ESSHelpdeskService(session)
 
     ticket = await service.create_ticket(
-        organization_id=organization_id,
-        ess_user_id=ess_user_id,
-        employee_id=employee_id,
+        organization_id=ess_context.organization_id,
+        ess_user_id=ess_context.ess_user_id,
+        employee_id=ess_context.employee_id,
         subject=request.subject,
         description=request.description,
         category_type=request.category_type,
@@ -173,20 +194,20 @@ async def create_ticket(
 
 @router.get("", response_model=List[TicketResponse], response_model_by_alias=True)
 async def get_tickets(
-    employee_id: UUID,  # From authenticated user
     status: Optional[TicketStatus] = None,
     category_type: Optional[TicketCategory] = None,
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
     limit: int = Query(50, le=100),
     offset: int = Query(0, ge=0),
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get tickets for the employee."""
     service = ESSHelpdeskService(session)
 
     tickets, total = await service.get_tickets_by_employee(
-        employee_id=employee_id,
+        employee_id=ess_context.employee_id,
         status=status,
         category_type=category_type,
         from_date=from_date,
@@ -214,26 +235,24 @@ async def get_tickets(
 
 @router.get("/summary", response_model=TicketSummaryResponse, response_model_by_alias=True)
 async def get_ticket_summary(
-    employee_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get ticket summary for the employee."""
     service = ESSHelpdeskService(session)
-    summary = await service.get_ticket_summary(employee_id)
+    summary = await service.get_ticket_summary(ess_context.employee_id)
     return TicketSummaryResponse(**summary)
 
 
 @router.get("/{ticket_id}", response_model=TicketDetailResponse, response_model_by_alias=True)
 async def get_ticket_detail(
     ticket_id: UUID,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Get ticket details with comments."""
     service = ESSHelpdeskService(session)
-    ticket = await service.get_ticket_by_id(ticket_id, include_comments=True)
-
-    if not ticket:
-        raise NotFoundException(detail="Ticket not found", error_code="TICKET_NOT_FOUND")
+    ticket = await _get_owned_ticket(service, ticket_id, ess_context.employee_id)
 
     return TicketDetailResponse(
         id=str(ticket.id),
@@ -253,8 +272,12 @@ async def get_ticket_detail(
         rating=ticket.rating,
         feedback=ticket.feedback,
         response_due_at=ticket.response_due_at.isoformat() if ticket.response_due_at else None,
-        resolution_due_at=ticket.resolution_due_at.isoformat() if ticket.resolution_due_at else None,
-        first_response_at=ticket.first_response_at.isoformat() if ticket.first_response_at else None,
+        resolution_due_at=(
+            ticket.resolution_due_at.isoformat() if ticket.resolution_due_at else None
+        ),
+        first_response_at=(
+            ticket.first_response_at.isoformat() if ticket.first_response_at else None
+        ),
         is_escalated=ticket.is_escalated,
         reopen_count=ticket.reopen_count,
         created_at=ticket.created_at.isoformat(),
@@ -274,22 +297,25 @@ async def get_ticket_detail(
     )
 
 
-@router.post("/{ticket_id}/comments", response_model=TicketCommentResponse, response_model_by_alias=True)
+@router.post(
+    "/{ticket_id}/comments", response_model=TicketCommentResponse, response_model_by_alias=True
+)
 async def add_comment(
     ticket_id: UUID,
     request: CommentCreate,
-    ess_user_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Add a comment to a ticket."""
     service = ESSHelpdeskService(session)
+    await _get_owned_ticket(service, ticket_id, ess_context.employee_id)
 
     try:
         comment = await service.add_comment(
             ticket_id=ticket_id,
             comment=request.comment,
             author_type="EMPLOYEE",
-            ess_user_id=ess_user_id,
+            ess_user_id=ess_context.ess_user_id,
         )
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
@@ -309,17 +335,18 @@ async def add_comment(
 async def close_ticket(
     ticket_id: UUID,
     remarks: Optional[str] = None,
-    ess_user_id: UUID = None,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Close a resolved ticket."""
     service = ESSHelpdeskService(session)
+    await _get_owned_ticket(service, ticket_id, ess_context.employee_id)
 
     try:
         ticket = await service.close_ticket(
             ticket_id=ticket_id,
             closed_by_type="EMPLOYEE",
-            ess_user_id=ess_user_id,
+            ess_user_id=ess_context.ess_user_id,
             remarks=remarks,
         )
     except ValueError as e:
@@ -337,17 +364,18 @@ async def close_ticket(
 async def reopen_ticket(
     ticket_id: UUID,
     reason: str,
-    ess_user_id: UUID,  # From authenticated user
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Reopen a closed/resolved ticket."""
     service = ESSHelpdeskService(session)
+    await _get_owned_ticket(service, ticket_id, ess_context.employee_id)
 
     try:
         ticket = await service.reopen_ticket(
             ticket_id=ticket_id,
             reason=reason,
-            ess_user_id=ess_user_id,
+            ess_user_id=ess_context.ess_user_id,
         )
     except ValueError as e:
         raise BadRequestException(detail=str(e), error_code="BAD_REQUEST")
@@ -364,10 +392,12 @@ async def reopen_ticket(
 async def submit_feedback(
     ticket_id: UUID,
     request: FeedbackCreate,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_ess_db_with_tenant),
+    ess_context: ESSUserContext = Depends(get_current_ess_user),
 ):
     """Submit feedback for a resolved ticket."""
     service = ESSHelpdeskService(session)
+    await _get_owned_ticket(service, ticket_id, ess_context.employee_id)
 
     try:
         ticket = await service.submit_feedback(

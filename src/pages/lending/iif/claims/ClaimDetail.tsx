@@ -5,7 +5,15 @@
  * (Cancel) require a typed confirmation. Permissions gate the verify button.
  */
 
-import { CheckCircle2, Download, FileSpreadsheet, FileText, Send, X } from 'lucide-react';
+import {
+  CheckCircle2,
+  Download,
+  FileCheck2,
+  FileSpreadsheet,
+  FileText,
+  Send,
+  X,
+} from 'lucide-react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 
@@ -33,6 +41,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   useCancelClaim,
   useClaim,
+  useGenerateClaimCertificate,
   useInitiateClaimRelease,
   useMarkClaimReleased,
   useSubmitClaim,
@@ -78,6 +87,10 @@ function triggerDownload(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
+function safeFilenamePart(value: string): string {
+  return value.replace(/[\\/:*?"<>|]+/g, '_');
+}
+
 export default function ClaimDetail(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const { toast } = useToast();
@@ -90,6 +103,12 @@ export default function ClaimDetail(): JSX.Element {
   });
   const verifyMut = useVerifyClaim({
     onSuccess: () => toast({ title: 'Claim verified' }),
+  });
+  const rejectMut = useVerifyClaim({
+    onSuccess: () => toast({ title: 'Claim rejected' }),
+  });
+  const certificateMut = useGenerateClaimCertificate({
+    onSuccess: () => toast({ title: 'SFC certificate generated and filed' }),
   });
   const initiateReleaseMut = useInitiateClaimRelease({
     onSuccess: () => toast({ title: 'Claim moved to release in progress' }),
@@ -109,7 +128,10 @@ export default function ClaimDetail(): JSX.Element {
   const [releasedDate, setReleasedDate] = useState('');
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  const [rejectOpen, setRejectOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
   const [downloading, setDownloading] = useState<'csv' | 'xlsx' | 'pdf' | null>(null);
+  const [certificateDownloading, setCertificateDownloading] = useState(false);
 
   if (isLoading) {
     return (
@@ -155,6 +177,18 @@ export default function ClaimDetail(): JSX.Element {
   const handleVerify = () => {
     if (!id) return;
     verifyMut.mutate({ id, decision: 'APPROVE' });
+  };
+  const handleReject = () => {
+    if (!id) return;
+    rejectMut.mutate(
+      { id, decision: 'REJECT', reason: rejectReason },
+      {
+        onSuccess: () => {
+          setRejectOpen(false);
+          setRejectReason('');
+        },
+      },
+    );
   };
   const handleInitiateRelease = () => {
     if (!id) return;
@@ -212,7 +246,7 @@ export default function ClaimDetail(): JSX.Element {
           : kind === 'pdf'
             ? await claimsApi.downloadReportPdf(id)
             : await claimsApi.downloadReportCsv(id);
-      triggerDownload(blob, `${claim.claimReference}.${kind}`);
+      triggerDownload(blob, `${safeFilenamePart(claim.claimReference)}.${kind}`);
     } catch (e) {
       toast({
         title: 'Download failed',
@@ -221,6 +255,26 @@ export default function ClaimDetail(): JSX.Element {
       });
     } finally {
       setDownloading(null);
+    }
+  };
+  const handleGenerateCertificate = () => {
+    if (!id) return;
+    certificateMut.mutate(id);
+  };
+  const handleDownloadCertificate = async () => {
+    if (!id) return;
+    setCertificateDownloading(true);
+    try {
+      const blob = await claimsApi.downloadCertificate(id);
+      triggerDownload(blob, `${safeFilenamePart(claim.claimReference)}-certificate.pdf`);
+    } catch (e) {
+      toast({
+        title: 'Certificate download failed',
+        variant: 'destructive',
+        description: (e as Error)?.message,
+      });
+    } finally {
+      setCertificateDownloading(false);
     }
   };
 
@@ -261,10 +315,40 @@ export default function ClaimDetail(): JSX.Element {
               </Button>
             )}
             {claim.status === 'SUBMITTED' && canVerify && (
-              <Button onClick={handleVerify} disabled={verifyMut.isPending}>
-                <CheckCircle2 className="mr-2 h-4 w-4" />
-                Mark verified
-              </Button>
+              <>
+                <Button onClick={handleVerify} disabled={verifyMut.isPending}>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Mark verified
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => setRejectOpen(true)}
+                  disabled={rejectMut.isPending}
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Reject
+                </Button>
+              </>
+            )}
+            {['VERIFIED', 'RELEASE_IN_PROGRESS', 'RELEASED'].includes(claim.status) && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={handleGenerateCertificate}
+                  disabled={certificateMut.isPending}
+                >
+                  <FileCheck2 className="mr-2 h-4 w-4" />
+                  Generate SFC certificate
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleDownloadCertificate}
+                  disabled={certificateDownloading}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Certificate
+                </Button>
+              </>
             )}
             {claim.status === 'VERIFIED' && (
               <Button onClick={() => setInitiateOpen(true)}>
@@ -416,6 +500,40 @@ export default function ClaimDetail(): JSX.Element {
           )}
         </CardContent>
       </Card>
+
+      {/* Reject modal */}
+      <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reject claim</DialogTitle>
+            <DialogDescription>
+              Provide the rejection reason. It will be visible in the claim lifecycle audit.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="iif-claim-reject-reason">Reason *</Label>
+            <Textarea
+              id="iif-claim-reject-reason"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={4}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleReject}
+              disabled={rejectReason.trim().length < 5 || rejectMut.isPending}
+            >
+              <X className="mr-2 h-4 w-4" />
+              Reject claim
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Initiate release modal */}
       <Dialog open={initiateOpen} onOpenChange={setInitiateOpen}>

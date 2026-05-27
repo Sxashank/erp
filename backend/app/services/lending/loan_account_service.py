@@ -1,6 +1,6 @@
 """Services for Phase 2 Loan Accounting."""
 
-from datetime import date
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 from uuid import UUID
@@ -13,15 +13,21 @@ from app.models.lending.enums import (
     AccrualStatus,
     AdjustmentType,
     AllocationComponent,
+    ApplicationStage,
+    ApplicationStatus,
     AssetClassification,
     DisbursementStatus,
     InstallmentStatus,
     LoanAccountStatus,
     MandateStatus,
+    ReceiptType,
     ProvisioningCategory,
     ReceiptStatus,
+    ScheduleType,
     SanctionStatus,
 )
+from app.models.lending.application import LoanApplication
+from app.models.lending.entity import Entity
 from app.models.lending.loan_account import (
     AssetClassificationHistory,
     Disbursement,
@@ -34,6 +40,10 @@ from app.models.lending.loan_account import (
     RepaymentSchedule,
     ScheduleInstallment,
 )
+from app.models.lending.product import LoanProduct
+from app.models.lending.sanction import LoanSanction
+from app.repositories.lending.application_repo import LoanApplicationRepository
+from app.repositories.lending.entity_repo import EntityRepository
 from app.repositories.lending.loan_account_repo import (
     AssetClassificationHistoryRepository,
     DisbursementRepository,
@@ -47,11 +57,14 @@ from app.repositories.lending.loan_account_repo import (
     RepaymentScheduleRepository,
     ScheduleInstallmentRepository,
 )
+from app.repositories.lending.product_repo import LoanProductRepository
 from app.repositories.lending.sanction_repo import LoanSanctionRepository
 from app.schemas.lending.loan_account import (
     DisbursementApproval,
     DisbursementCreate,
     DisbursementProcess,
+    HistoricalLoanOnboardingCreate,
+    HistoricalLoanOnboardingResult,
     LoanAccountCreate,
     LoanAccountUpdate,
     LoanAdjustmentCreate,
@@ -81,6 +94,9 @@ class LoanAccountService:
         self.provision_repo = LoanProvisionRepository(db)
         self.adjustment_repo = LoanAdjustmentRepository(db)
         self.sanction_repo = LoanSanctionRepository(db)
+        self.application_repo = LoanApplicationRepository(db)
+        self.entity_repo = EntityRepository(db)
+        self.product_repo = LoanProductRepository(db)
 
     # =========================================================================
     # Loan Account Operations
@@ -192,9 +208,575 @@ class LoanAccountService:
 
         return loan_account
 
+    def _derive_installment_status(
+        self,
+        *,
+        due_date: date,
+        cutover_date: date,
+        principal_amount: Decimal,
+        interest_amount: Decimal,
+        penal_interest_due: Decimal,
+        principal_paid: Decimal,
+        interest_paid: Decimal,
+        penal_interest_paid: Decimal,
+        explicit_status: InstallmentStatus | None,
+    ) -> InstallmentStatus:
+        """Classify one imported instalment without relying on today's date."""
+        if explicit_status is not None:
+            return explicit_status
+
+        total_due = principal_amount + interest_amount + penal_interest_due
+        total_paid = principal_paid + interest_paid + penal_interest_paid
+        if total_due <= 0:
+            return InstallmentStatus.PAID
+        if total_paid >= total_due:
+            return InstallmentStatus.PAID
+        if total_paid > 0:
+            return InstallmentStatus.PARTIALLY_PAID
+        if due_date < cutover_date:
+            return InstallmentStatus.OVERDUE
+        if due_date == cutover_date:
+            return InstallmentStatus.DUE
+        return InstallmentStatus.NOT_DUE
+
+    def _derive_asset_classification(self, dpd: int) -> AssetClassification:
+        if dpd <= 0:
+            return AssetClassification.STANDARD
+        if dpd <= 30:
+            return AssetClassification.SMA_0
+        if dpd <= 60:
+            return AssetClassification.SMA_1
+        if dpd <= 90:
+            return AssetClassification.SMA_2
+        return AssetClassification.NPA
+
+    async def _resolve_historical_entity(
+        self,
+        data: HistoricalLoanOnboardingCreate,
+        organization_id: UUID,
+    ) -> Entity:
+        if data.entity_id is not None:
+            entity = await self.entity_repo.get(data.entity_id)
+            if entity and entity.organization_id == organization_id:
+                return entity
+        elif data.entity_code:
+            entity = await self.entity_repo.get_by_code(data.entity_code, organization_id)
+            if entity:
+                return entity
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Historical onboarding entity was not found in this tenant",
+        )
+
+    async def _resolve_historical_product(
+        self,
+        data: HistoricalLoanOnboardingCreate,
+        organization_id: UUID,
+    ) -> LoanProduct:
+        if data.product_id is not None:
+            product = await self.product_repo.get_for_organization(data.product_id, organization_id)
+            if product:
+                return product
+        elif data.product_code:
+            product = await self.product_repo.get_by_code(data.product_code, organization_id)
+            if product:
+                return product
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Historical onboarding product was not found in this tenant",
+        )
+
+    async def validate_historical_onboarding(
+        self,
+        data: HistoricalLoanOnboardingCreate,
+        organization_id: UUID,
+    ) -> HistoricalLoanOnboardingResult:
+        """Validate a legacy loan import without creating records."""
+        warnings: list[str] = []
+        entity = await self._resolve_historical_entity(data, organization_id)
+        product = await self._resolve_historical_product(data, organization_id)
+
+        account_number = data.loan_account_number
+        if account_number:
+            existing = await self.loan_account_repo.get_by_account_number(account_number)
+            if existing:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Loan account number already exists: {account_number}",
+                )
+
+        if data.post_historical_accounting:
+            warnings.append(
+                "postHistoricalAccounting is not enabled in this manual-first release; "
+                "legacy EMI rows are imported as operational history and accounting starts "
+                "from the cutover balances."
+            )
+
+        if not data.installments:
+            warnings.append(
+                "No installment rows were supplied; the loan will retain balances but will not "
+                "show historical EMI history until schedule rows are imported."
+            )
+
+        return HistoricalLoanOnboardingResult(
+            loan_account_number=account_number,
+            imported_installments=len(data.installments),
+            dry_run=True,
+            warnings=[
+                f"Resolved entity {entity.entity_code}",
+                f"Resolved product {product.code}",
+                *warnings,
+            ],
+        )
+
+    async def onboard_historical_loan(
+        self,
+        data: HistoricalLoanOnboardingCreate,
+        organization_id: UUID,
+        user_id: UUID,
+        *,
+        dry_run: bool = False,
+    ) -> HistoricalLoanOnboardingResult:
+        """Create a legacy loan account with historical schedule and EMI receipts.
+
+        This path is for onboarding pre-existing corporate/project loans from a
+        client Excel register. It deliberately avoids re-running historical
+        accounting. Historical receipts are stored as LMS operational history;
+        finance carries the cutover outstanding through opening balances.
+        """
+        validation = await self.validate_historical_onboarding(data, organization_id)
+        if dry_run:
+            return validation
+
+        entity = await self._resolve_historical_entity(data, organization_id)
+        product = await self._resolve_historical_product(data, organization_id)
+
+        application_number = await self.application_repo.generate_application_number(
+            organization_id, product.code
+        )
+        sanction_number = await self.sanction_repo.generate_sanction_number(
+            organization_id, product.code
+        )
+        loan_account_number = (
+            data.loan_account_number
+            or await self.loan_account_repo.generate_account_number(organization_id)
+        )
+        existing = await self.loan_account_repo.get_by_account_number(loan_account_number)
+        if existing:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Loan account number already exists: {loan_account_number}",
+            )
+
+        application = await self.application_repo.create(
+            {
+                "organization_id": organization_id,
+                "application_number": application_number,
+                "entity_id": entity.id,
+                "product_id": product.id,
+                "requested_amount": data.sanctioned_amount,
+                "requested_tenure_months": data.tenure_months,
+                "purpose": data.purpose,
+                "detailed_purpose": data.remarks,
+                "is_project_finance": bool(data.project_name),
+                "project_name": data.project_name,
+                "project_cost": data.sanctioned_amount,
+                "preferred_interest_type": data.interest_type,
+                "preferred_repayment_frequency": data.repayment_frequency,
+                "preferred_repayment_mode": data.repayment_mode,
+                "requested_moratorium_months": data.moratorium_months,
+                "stage": ApplicationStage.DISBURSED,
+                "status": ApplicationStatus.SANCTIONED,
+                "application_date": data.application_date,
+                "submission_date": data.application_date,
+                "decision_date": data.sanction_date,
+                "source_channel": "MIGRATION",
+                "source_reference": data.legacy_loan_number,
+                "remarks": data.remarks,
+                "extra_data": {
+                    "legacyOnboarding": True,
+                    "legacyLoanNumber": data.legacy_loan_number,
+                    "cutoverDate": data.cutover_date.isoformat(),
+                },
+                "created_by": user_id,
+            }
+        )
+
+        validity_date = max(
+            data.account_open_date,
+            data.sanction_date + timedelta(days=90),
+        )
+        sanction = await self.sanction_repo.create(
+            {
+                "organization_id": organization_id,
+                "application_id": application.id,
+                "entity_id": entity.id,
+                "product_id": product.id,
+                "sanction_number": sanction_number,
+                "sanction_letter_number": data.legacy_loan_number,
+                "sanction_date": data.sanction_date,
+                "validity_date": validity_date,
+                "sanctioned_amount": data.sanctioned_amount,
+                "requested_amount": data.sanctioned_amount,
+                "approved_project_cost": data.sanctioned_amount,
+                "tenure_months": data.tenure_months,
+                "moratorium_months": data.moratorium_months,
+                "interest_type": data.interest_type,
+                "effective_rate": data.current_interest_rate,
+                "penal_interest_rate": data.penal_interest_rate,
+                "repayment_frequency": data.repayment_frequency,
+                "repayment_mode": data.repayment_mode,
+                "repayment_start_date": data.repayment_start_date,
+                "day_count_convention": data.day_count_convention,
+                "disbursement_type": "LEGACY",
+                "max_tranches": 1,
+                "status": SanctionStatus.ACCEPTED,
+                "acceptance_required": False,
+                "accepted_at": datetime.combine(data.sanction_date, time.min, tzinfo=UTC),
+                "special_terms": "Imported from pre-go-live loan register.",
+                "remarks": data.remarks,
+                "created_by": user_id,
+            }
+        )
+
+        sorted_installments = sorted(data.installments, key=lambda row: row.installment_number)
+        oldest_unpaid_due_date: date | None = None
+        calculated_principal_overdue = Decimal("0")
+        calculated_interest_overdue = Decimal("0")
+        total_principal_received = Decimal("0")
+        total_interest_received = Decimal("0")
+        total_penal_received = Decimal("0")
+        imported_receipts = 0
+
+        for row in sorted_installments:
+            status_value = self._derive_installment_status(
+                due_date=row.due_date,
+                cutover_date=data.cutover_date,
+                principal_amount=row.principal_amount,
+                interest_amount=row.interest_amount,
+                penal_interest_due=row.penal_interest_due,
+                principal_paid=row.principal_paid,
+                interest_paid=row.interest_paid,
+                penal_interest_paid=row.penal_interest_paid,
+                explicit_status=row.status,
+            )
+            unpaid_principal = row.principal_amount - row.principal_paid
+            unpaid_interest = row.interest_amount - row.interest_paid
+            if (
+                status_value
+                in {
+                    InstallmentStatus.DUE,
+                    InstallmentStatus.PARTIALLY_PAID,
+                    InstallmentStatus.OVERDUE,
+                }
+                and row.due_date <= data.cutover_date
+            ):
+                calculated_principal_overdue += max(unpaid_principal, Decimal("0"))
+                calculated_interest_overdue += max(unpaid_interest, Decimal("0"))
+                if oldest_unpaid_due_date is None or row.due_date < oldest_unpaid_due_date:
+                    oldest_unpaid_due_date = row.due_date
+
+            total_principal_received += row.principal_paid
+            total_interest_received += row.interest_paid
+            total_penal_received += row.penal_interest_paid
+            if data.create_historical_receipts:
+                paid_total = row.principal_paid + row.interest_paid + row.penal_interest_paid
+                if paid_total > 0:
+                    imported_receipts += 1
+
+        days_past_due = (
+            data.days_past_due
+            if data.days_past_due is not None
+            else (
+                max((data.cutover_date - oldest_unpaid_due_date).days, 0)
+                if oldest_unpaid_due_date
+                else 0
+            )
+        )
+        asset_classification = data.asset_classification or self._derive_asset_classification(
+            days_past_due
+        )
+        principal_overdue = (
+            data.principal_overdue
+            if data.principal_overdue is not None
+            else calculated_principal_overdue
+        )
+        interest_overdue = (
+            data.interest_overdue
+            if data.interest_overdue is not None
+            else calculated_interest_overdue
+        )
+        total_outstanding = data.total_outstanding or (
+            data.principal_outstanding
+            + data.interest_outstanding
+            + interest_overdue
+            + data.penal_interest_outstanding
+            + data.charges_outstanding
+        )
+        status_value = (
+            LoanAccountStatus.CLOSED if total_outstanding <= 0 else LoanAccountStatus.ACTIVE
+        )
+        current_emi_amount = data.current_emi_amount
+        if current_emi_amount is None and sorted_installments:
+            next_open = next(
+                (
+                    row.emi_amount
+                    for row in sorted_installments
+                    if row.due_date >= data.cutover_date
+                ),
+                sorted_installments[-1].emi_amount,
+            )
+            current_emi_amount = next_open
+
+        loan_account = await self.loan_account_repo.create(
+            {
+                "organization_id": organization_id,
+                "sanction_id": sanction.id,
+                "entity_id": entity.id,
+                "product_id": product.id,
+                "loan_account_number": loan_account_number,
+                "loan_reference_number": data.loan_reference_number or data.legacy_loan_number,
+                "account_open_date": data.account_open_date,
+                "first_disbursement_date": data.first_disbursement_date,
+                "last_disbursement_date": data.last_disbursement_date
+                or data.first_disbursement_date,
+                "repayment_start_date": data.repayment_start_date
+                or (sorted_installments[0].due_date if sorted_installments else None),
+                "maturity_date": data.maturity_date
+                or (sorted_installments[-1].due_date if sorted_installments else None),
+                "sanctioned_amount": data.sanctioned_amount,
+                "tenure_months": data.tenure_months,
+                "moratorium_months": data.moratorium_months,
+                "interest_type": data.interest_type,
+                "current_interest_rate": data.current_interest_rate,
+                "penal_interest_rate": data.penal_interest_rate,
+                "repayment_frequency": data.repayment_frequency,
+                "repayment_mode": data.repayment_mode,
+                "day_count_convention": data.day_count_convention,
+                "current_emi_amount": current_emi_amount,
+                "total_disbursed_amount": data.total_disbursed_amount,
+                "undisbursed_amount": max(
+                    data.sanctioned_amount - data.total_disbursed_amount, Decimal("0")
+                ),
+                "principal_outstanding": data.principal_outstanding,
+                "interest_outstanding": data.interest_outstanding,
+                "interest_overdue": interest_overdue,
+                "principal_overdue": principal_overdue,
+                "penal_interest_outstanding": data.penal_interest_outstanding,
+                "charges_outstanding": data.charges_outstanding,
+                "total_outstanding": total_outstanding,
+                "total_principal_received": total_principal_received,
+                "total_interest_received": total_interest_received,
+                "total_penal_interest_received": total_penal_received,
+                "days_past_due": days_past_due,
+                "oldest_due_date": oldest_unpaid_due_date,
+                "asset_classification": asset_classification,
+                "npa_date": data.npa_date,
+                "status": status_value,
+                "remarks": (
+                    f"Legacy onboarding as of {data.cutover_date.isoformat()}."
+                    + (f" {data.remarks}" if data.remarks else "")
+                ),
+                "created_by": user_id,
+            }
+        )
+
+        schedule: RepaymentSchedule | None = None
+        if sorted_installments:
+            for existing_schedule in await self.schedule_repo.get_all_schedules(loan_account.id):
+                existing_schedule.is_current = False
+                existing_schedule.superseded_date = data.cutover_date
+
+            schedule = await self.schedule_repo.create(
+                {
+                    "loan_account_id": loan_account.id,
+                    "schedule_number": 1,
+                    "schedule_type": ScheduleType.ORIGINAL,
+                    "principal_amount": data.total_disbursed_amount,
+                    "interest_rate": data.current_interest_rate,
+                    "tenure_months": len(sorted_installments),
+                    "emi_amount": current_emi_amount,
+                    "effective_date": data.account_open_date,
+                    "first_installment_date": sorted_installments[0].due_date,
+                    "last_installment_date": sorted_installments[-1].due_date,
+                    "total_installments": len(sorted_installments),
+                    "total_principal": sum(
+                        (row.principal_amount for row in sorted_installments), Decimal("0")
+                    ),
+                    "total_interest": sum(
+                        (row.interest_amount for row in sorted_installments), Decimal("0")
+                    ),
+                    "is_current": True,
+                    "change_reason": "LEGACY_ONBOARDING",
+                    "remarks": f"Imported schedule as of cutover date {data.cutover_date.isoformat()}",
+                    "created_by": user_id,
+                }
+            )
+
+            for row in sorted_installments:
+                status_value = self._derive_installment_status(
+                    due_date=row.due_date,
+                    cutover_date=data.cutover_date,
+                    principal_amount=row.principal_amount,
+                    interest_amount=row.interest_amount,
+                    penal_interest_due=row.penal_interest_due,
+                    principal_paid=row.principal_paid,
+                    interest_paid=row.interest_paid,
+                    penal_interest_paid=row.penal_interest_paid,
+                    explicit_status=row.status,
+                )
+                unpaid_principal = max(row.principal_amount - row.principal_paid, Decimal("0"))
+                unpaid_interest = max(row.interest_amount - row.interest_paid, Decimal("0"))
+                installment = await self.installment_repo.create(
+                    {
+                        "schedule_id": schedule.id,
+                        "installment_number": row.installment_number,
+                        "due_date": row.due_date,
+                        "principal_amount": row.principal_amount,
+                        "interest_amount": row.interest_amount,
+                        "emi_amount": row.emi_amount,
+                        "opening_balance": row.opening_balance,
+                        "closing_balance": row.closing_balance,
+                        "principal_paid": row.principal_paid,
+                        "interest_paid": row.interest_paid,
+                        "penal_interest_due": row.penal_interest_due,
+                        "penal_interest_paid": row.penal_interest_paid,
+                        "principal_overdue": (
+                            unpaid_principal
+                            if row.due_date <= data.cutover_date
+                            and status_value
+                            in {
+                                InstallmentStatus.DUE,
+                                InstallmentStatus.PARTIALLY_PAID,
+                                InstallmentStatus.OVERDUE,
+                            }
+                            else Decimal("0")
+                        ),
+                        "interest_overdue": (
+                            unpaid_interest
+                            if row.due_date <= data.cutover_date
+                            and status_value
+                            in {
+                                InstallmentStatus.DUE,
+                                InstallmentStatus.PARTIALLY_PAID,
+                                InstallmentStatus.OVERDUE,
+                            }
+                            else Decimal("0")
+                        ),
+                        "status": status_value,
+                        "paid_date": (
+                            row.paid_date if status_value == InstallmentStatus.PAID else None
+                        ),
+                        "created_by": user_id,
+                    }
+                )
+
+                if data.create_historical_receipts:
+                    paid_total = row.principal_paid + row.interest_paid + row.penal_interest_paid
+                    if paid_total <= 0:
+                        continue
+                    receipt_number = (
+                        f"LEG-{loan_account_number[-18:].replace('/', '-')}-"
+                        f"{row.installment_number:05d}"
+                    )[:50]
+                    receipt = await self.receipt_repo.create(
+                        {
+                            "organization_id": organization_id,
+                            "loan_account_id": loan_account.id,
+                            "receipt_number": receipt_number,
+                            "receipt_date": row.paid_date or row.due_date,
+                            "value_date": row.paid_date or row.due_date,
+                            "receipt_amount": paid_total,
+                            "receipt_type": ReceiptType.REGULAR,
+                            "receipt_mode": row.receipt_mode,
+                            "instrument_number": row.receipt_reference,
+                            "allocated_amount": paid_total,
+                            "unallocated_amount": Decimal("0"),
+                            "principal_allocated": row.principal_paid,
+                            "interest_allocated": row.interest_paid,
+                            "penal_interest_allocated": row.penal_interest_paid,
+                            "charges_allocated": Decimal("0"),
+                            "status": ReceiptStatus.ALLOCATED,
+                            "processed_by_id": user_id,
+                            "processed_at": datetime.combine(
+                                row.paid_date or row.due_date, time.min, tzinfo=UTC
+                            ),
+                            "remarks": "Imported historical EMI receipt.",
+                            "created_by": user_id,
+                        }
+                    )
+                    sequence = 0
+                    for component, amount in (
+                        (AllocationComponent.PENAL_INTEREST, row.penal_interest_paid),
+                        (AllocationComponent.INTEREST, row.interest_paid),
+                        (AllocationComponent.PRINCIPAL, row.principal_paid),
+                    ):
+                        if amount <= 0:
+                            continue
+                        sequence += 1
+                        await self.allocation_repo.create(
+                            {
+                                "receipt_id": receipt.id,
+                                "installment_id": installment.id,
+                                "allocation_component": component,
+                                "allocated_amount": amount,
+                                "allocation_sequence": sequence,
+                                "remarks": "Imported historical allocation.",
+                                "created_by": user_id,
+                            }
+                        )
+
+        await self.db.flush()
+        await self.db.refresh(loan_account)
+
+        warnings = [
+            *validation.warnings,
+            (
+                "Historical EMI receipts are LMS operational history only; "
+                "GL accounting should be opened from the cutover outstanding balances."
+            ),
+        ]
+        return HistoricalLoanOnboardingResult(
+            loan_account_id=loan_account.id,
+            loan_account_number=loan_account.loan_account_number,
+            application_id=application.id,
+            sanction_id=sanction.id,
+            schedule_id=schedule.id if schedule else None,
+            imported_installments=len(sorted_installments),
+            imported_receipts=imported_receipts,
+            dry_run=False,
+            warnings=warnings,
+        )
+
     async def get_loan_account(self, loan_account_id: UUID) -> LoanAccount:
         """Get loan account by ID."""
         loan_account = await self.loan_account_repo.get(loan_account_id)
+        if not loan_account:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Loan account not found",
+            )
+        return loan_account
+
+    async def get_loan_account_with_relations(self, loan_account_id: UUID) -> LoanAccount:
+        """Get loan account with entity + product eagerly loaded.
+
+        Lighter than `get_loan_account_with_details` (which loads schedules,
+        receipts, etc.) — just enough for the view page header to surface
+        entity_name, product_name, product_code without N+1.
+        """
+        from sqlalchemy import select as _select
+        from sqlalchemy.orm import selectinload
+
+        result = await self.db.execute(
+            _select(LoanAccount)
+            .where(LoanAccount.id == loan_account_id)
+            .options(
+                selectinload(LoanAccount.entity),
+                selectinload(LoanAccount.product),
+            )
+        )
+        loan_account = result.scalar_one_or_none()
         if not loan_account:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -842,7 +1424,63 @@ class LoanAccountService:
                 detail="Receipt not found",
             )
 
-        # TODO: Reverse allocations and update loan account
+        # Reverse the receipt's allocations and roll back the loan-account
+        # balances. A bounced receipt must not leave behind the principal /
+        # interest / penal credits it originally booked — otherwise the
+        # outstanding balance is understated and the next demand looks
+        # already paid.
+        from sqlalchemy import select
+
+        from app.models.lending.loan_account import LoanAccount
+        from app.models.lending.receipt import LoanReceiptAllocation
+
+        # 1. Sum the original component allocations
+        alloc_result = await self.db.execute(
+            select(LoanReceiptAllocation).where(LoanReceiptAllocation.receipt_id == receipt_id)
+        )
+        allocations = list(alloc_result.scalars().all())
+
+        principal_rev = sum(
+            (a.amount or 0)
+            for a in allocations
+            if str(a.component).upper() in {"PRINCIPAL", "OVERDUE_PRINCIPAL"}
+        )
+        interest_rev = sum(
+            (a.amount or 0)
+            for a in allocations
+            if str(a.component).upper() in {"INTEREST", "OVERDUE_INTEREST"}
+        )
+        penal_rev = sum(
+            (a.amount or 0)
+            for a in allocations
+            if str(a.component).upper() in {"PENAL_INTEREST", "PENAL"}
+        )
+        charges_rev = sum(
+            (a.amount or 0)
+            for a in allocations
+            if str(a.component).upper() in {"CHARGES", "OTHER_CHARGES"}
+        )
+
+        # 2. Roll back the loan-account outstanding columns
+        loan = await self.db.get(LoanAccount, receipt.loan_account_id)
+        if loan is not None:
+            loan.principal_outstanding = (loan.principal_outstanding or 0) + principal_rev
+            loan.interest_outstanding = (loan.interest_outstanding or 0) + interest_rev
+            if hasattr(loan, "penal_interest_outstanding"):
+                loan.penal_interest_outstanding = (loan.penal_interest_outstanding or 0) + penal_rev
+            if hasattr(loan, "charges_outstanding"):
+                loan.charges_outstanding = (loan.charges_outstanding or 0) + charges_rev
+            if hasattr(loan, "total_received"):
+                loan.total_received = (loan.total_received or 0) - (receipt.receipt_amount or 0)
+
+        # 3. Mark allocations as reversed (soft) so audit trail is clear
+        for a in allocations:
+            if hasattr(a, "is_reversed"):
+                a.is_reversed = True
+            if hasattr(a, "reversed_at"):
+                from datetime import datetime, timezone
+
+                a.reversed_at = datetime.now(timezone.utc)
 
         update_data = {
             "bounced": True,
@@ -856,6 +1494,63 @@ class LoanAccountService:
         receipt = await self.receipt_repo.update(receipt, update_data)
         await self.db.flush()
         await self.db.refresh(receipt)
+
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.db).record_event(
+            organization_id=(
+                receipt.organization_id
+                if hasattr(receipt, "organization_id")
+                else loan.organization_id if "loan" in dir() else None
+            ),
+            subject_type=LifecycleSubjectType.RECEIPT,
+            subject_id=receipt.id,
+            event_type="RECEIPT_BOUNCED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=user_id,
+            business_number=getattr(receipt, "receipt_number", None),
+            state_to="BOUNCED",
+            reason_text=bounce_data.bounce_reason,
+            payload={
+                "bounce_date": (
+                    bounce_data.bounce_date.isoformat()
+                    if hasattr(bounce_data, "bounce_date") and bounce_data.bounce_date
+                    else None
+                ),
+                "bounce_charges": (
+                    float(bounce_data.bounce_charges or 0)
+                    if hasattr(bounce_data, "bounce_charges")
+                    else None
+                ),
+                "principal_reversed": float(principal_rev),
+                "interest_reversed": float(interest_rev),
+                "penal_reversed": float(penal_rev),
+                "charges_reversed": float(charges_rev),
+                "receipt_amount": float(receipt.receipt_amount or 0),
+                "loan_account_id": str(receipt.loan_account_id),
+            },
+        )
+        # Mirror on the loan-account timeline
+        await LifecycleService(self.db).record_event(
+            organization_id=(
+                receipt.organization_id if hasattr(receipt, "organization_id") else None
+            ),
+            subject_type=LifecycleSubjectType.LOAN_ACCOUNT,
+            subject_id=receipt.loan_account_id,
+            event_type="RECEIPT_BOUNCED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=user_id,
+            business_number=getattr(receipt, "receipt_number", None),
+            payload={
+                "receipt_id": str(receipt.id),
+                "receipt_amount": float(receipt.receipt_amount or 0),
+                "bounce_reason": bounce_data.bounce_reason,
+            },
+        )
 
         return receipt
 
@@ -1146,10 +1841,44 @@ class LoanAccountService:
         """Calculate and create provision for a loan account."""
         loan_account = await self.get_loan_account(loan_account_id)
 
-        # Get provision percentage based on classification
+        # Determine whether the loan is secured by querying the sanction's
+        # security roster. A loan is "secured" for provisioning purposes if
+        # it has at least one ACTIVE LoanSecurity row of category PRIMARY or
+        # COLLATERAL (per CLAUDE.md §4.8 — RBI secured/unsecured table).
+        has_security = False
+        try:
+            from sqlalchemy import select
+
+            from app.models.lending.sanction import LoanSecurity
+            from app.models.lending.enums import (
+                SecurityCategory,
+                SecurityStatus,
+            )
+
+            security_result = await self.db.execute(
+                select(LoanSecurity.id)
+                .where(
+                    LoanSecurity.sanction_id == loan_account.sanction_id,
+                    LoanSecurity.security_category.in_(
+                        [SecurityCategory.PRIMARY, SecurityCategory.COLLATERAL]
+                    ),
+                    LoanSecurity.status.notin_(
+                        [SecurityStatus.RELEASED, SecurityStatus.SUBSTITUTED]
+                    ),
+                )
+                .limit(1)
+            )
+            has_security = security_result.scalar_one_or_none() is not None
+        except Exception:  # noqa: BLE001 — keep provisioning available even
+            # if the security check fails. Conservative fallback is True (i.e.
+            # treat as secured / lower provision); however, for safety we
+            # actually want UN-secured (higher provision) as the conservative
+            # default in lending. Use False on failure.
+            has_security = False
+
         prov_category, prov_pct = self._get_provision_rate(
             loan_account.asset_classification,
-            has_security=True,  # TODO: Check actual security
+            has_security=has_security,
         )
 
         provision_required = (loan_account.total_outstanding * prov_pct / Decimal("100")).quantize(

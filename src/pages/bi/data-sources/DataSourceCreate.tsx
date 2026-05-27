@@ -12,45 +12,25 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 import { biDataSourceApi } from '@/services/biApi';
-import { logger } from "@/lib/logger";
-import type {
-  DataSourceCreate as DataSourceCreateType,
-  DataSourceType,
-  APIMethod,
-} from '@/types/bi';
-import { getErrorMessage } from "@/lib/errorMessage";
+import { logger } from '@/lib/logger';
+import type { DataSourceCreate as DataSourceCreateType, DataSourceType } from '@/types/bi';
+import { getErrorMessage } from '@/lib/errorMessage';
 
 interface FormData {
   code: string;
   name: string;
   description: string;
   source_type: DataSourceType;
-  api_endpoint: string;
-  api_method: APIMethod;
-  query_template: string;
   static_data: string;
   parameters_schema: string;
   response_transform: string;
   cache_ttl_seconds: number;
 }
 
-const SOURCE_TYPES: { value: DataSourceType; label: string; description: string }[] = [
-  { value: 'API_ENDPOINT', label: 'API Endpoint', description: 'Fetch data from a REST API' },
-  { value: 'SQL_QUERY', label: 'SQL Query', description: 'Execute a database query' },
-  { value: 'STATIC', label: 'Static Data', description: 'Use hardcoded JSON data' },
-];
-
-const API_METHODS: APIMethod[] = ['GET', 'POST'];
+const SOURCE_TYPE: DataSourceType = 'STATIC';
 
 export function DataSourceCreate() {
   const navigate = useNavigate();
@@ -59,26 +39,19 @@ export function DataSourceCreate() {
   const {
     register,
     handleSubmit,
-    watch,
-    setValue,
     formState: { errors },
   } = useForm<FormData>({
     defaultValues: {
       code: '',
       name: '',
       description: '',
-      source_type: 'API_ENDPOINT',
-      api_endpoint: '',
-      api_method: 'GET',
-      query_template: '',
+      source_type: SOURCE_TYPE,
       static_data: '[]',
       parameters_schema: '{}',
       response_transform: '{}',
       cache_ttl_seconds: 300,
     },
   });
-
-  const sourceType = watch('source_type');
 
   const onSubmit = async (data: FormData) => {
     try {
@@ -88,17 +61,15 @@ export function DataSourceCreate() {
       let parametersSchema = {};
       let responseTransform = {};
 
-      if (data.source_type === 'STATIC') {
-        try {
-          staticData = JSON.parse(data.static_data);
-        } catch {
-          toast({
-            title: 'Error',
-            description: 'Invalid JSON in static data field',
-            variant: 'destructive',
-          });
-          return;
-        }
+      try {
+        staticData = JSON.parse(data.static_data);
+      } catch {
+        toast({
+          title: 'Error',
+          description: 'Invalid JSON in static data field',
+          variant: 'destructive',
+        });
+        return;
       }
 
       try {
@@ -127,10 +98,7 @@ export function DataSourceCreate() {
         code: data.code,
         name: data.name,
         description: data.description || undefined || undefined,
-        source_type: data.source_type,
-        api_endpoint: data.source_type === 'API_ENDPOINT' ? data.api_endpoint : undefined,
-        api_method: data.source_type === 'API_ENDPOINT' ? data.api_method : undefined,
-        query_template: data.source_type === 'SQL_QUERY' ? data.query_template : undefined,
+        source_type: SOURCE_TYPE,
         static_data: staticData,
         parameters_schema: parametersSchema,
         response_transform: responseTransform,
@@ -161,7 +129,7 @@ export function DataSourceCreate() {
     <div className="space-y-6">
       <PageHeader
         title="Create Data Source"
-        subtitle="Configure a new data source for BI widgets"
+        subtitle="Configure a manual-first static BI data source for widgets"
         breadcrumbs={[{ label: 'Data Sources', to: '/admin/bi/data-sources' }, { label: 'New' }]}
       />
 
@@ -211,27 +179,15 @@ export function DataSourceCreate() {
               </div>
 
               <div className="space-y-2">
-                <Label>Source Type *</Label>
-                <Select
-                  value={sourceType}
-                  onValueChange={(value) => setValue('source_type', value as DataSourceType)}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SOURCE_TYPES.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>
-                        <div>
-                          <span className="font-medium">{t.label}</span>
-                          <span className="ml-2 text-sm text-muted-foreground">
-                            - {t.description}
-                          </span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Supported Source Type</Label>
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <div className="font-medium">Static Data</div>
+                  <p className="text-muted-foreground">
+                    This release supports manual-first static JSON data sources only. API endpoint
+                    and SQL-query execution are intentionally disabled until their runtime contracts
+                    are implemented end to end.
+                  </p>
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -251,90 +207,26 @@ export function DataSourceCreate() {
 
           <Card>
             <CardHeader>
-              <CardTitle>
-                {sourceType === 'API_ENDPOINT' && 'API Configuration'}
-                {sourceType === 'SQL_QUERY' && 'SQL Configuration'}
-                {sourceType === 'STATIC' && 'Static Data Configuration'}
-              </CardTitle>
+              <CardTitle>Static Data Configuration</CardTitle>
               <CardDescription>
-                {sourceType === 'API_ENDPOINT' && 'Configure the API endpoint to fetch data from'}
-                {sourceType === 'SQL_QUERY' && 'Configure the SQL query to execute'}
-                {sourceType === 'STATIC' && 'Enter the static JSON data'}
+                Enter the JSON payload that BI widgets should render.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {sourceType === 'API_ENDPOINT' && (
-                <>
-                  <div className="space-y-2">
-                    <Label>API Endpoint *</Label>
-                    <Input
-                      placeholder="/api/v1/reports/revenue"
-                      {...register('api_endpoint', {
-                        required:
-                          sourceType === 'API_ENDPOINT' ? 'API endpoint is required' : false,
-                      })}
-                    />
-                    {errors.api_endpoint && (
-                      <p className="text-sm text-red-500">{errors.api_endpoint.message}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label>API Method</Label>
-                    <Select
-                      value={watch('api_method')}
-                      onValueChange={(value) => setValue('api_method', value as APIMethod)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {API_METHODS.map((m) => (
-                          <SelectItem key={m} value={m}>
-                            {m}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </>
-              )}
-
-              {sourceType === 'SQL_QUERY' && (
-                <div className="space-y-2">
-                  <Label>SQL Query *</Label>
-                  <Textarea
-                    placeholder="SELECT * FROM revenue WHERE month = :month"
-                    rows={8}
-                    className="font-mono text-sm"
-                    {...register('query_template', {
-                      required: sourceType === 'SQL_QUERY' ? 'SQL query is required' : false,
-                    })}
-                  />
-                  {errors.query_template && (
-                    <p className="text-sm text-red-500">{errors.query_template.message}</p>
-                  )}
-                  <p className="text-sm text-muted-foreground">
-                    Use :paramName for query parameters
-                  </p>
-                </div>
-              )}
-
-              {sourceType === 'STATIC' && (
-                <div className="space-y-2">
-                  <Label>Static Data (JSON) *</Label>
-                  <Textarea
-                    placeholder='[{"name": "Item 1", "value": 100}]'
-                    rows={10}
-                    className="font-mono text-sm"
-                    {...register('static_data', {
-                      required: sourceType === 'STATIC' ? 'Static data is required' : false,
-                    })}
-                  />
-                  {errors.static_data && (
-                    <p className="text-sm text-red-500">{errors.static_data.message}</p>
-                  )}
-                </div>
-              )}
+              <div className="space-y-2">
+                <Label>Static Data (JSON) *</Label>
+                <Textarea
+                  placeholder='[{"name": "Item 1", "value": 100}]'
+                  rows={10}
+                  className="font-mono text-sm"
+                  {...register('static_data', {
+                    required: 'Static data is required',
+                  })}
+                />
+                {errors.static_data && (
+                  <p className="text-sm text-red-500">{errors.static_data.message}</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>

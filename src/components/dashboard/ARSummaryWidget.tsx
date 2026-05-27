@@ -29,16 +29,6 @@ interface ARSummaryProps {
   topCustomers: TopParty[];
   collectionRate?: number;
 }
-
-const formatCurrency = (amount: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-};
-
 const formatCompact = (amount: number | undefined | null) => {
   const num = Number(amount) || 0;
   if (num >= 10000000) {
@@ -63,23 +53,21 @@ export function ARSummaryWidget({
   topCustomers,
   collectionRate,
 }: ARSummaryProps) {
-  const overduePercentage = totalOutstanding > 0
-    ? (totalOverdue / totalOutstanding) * 100
-    : 0;
+  const overduePercentage = totalOutstanding > 0 ? (totalOverdue / totalOutstanding) * 100 : 0;
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg font-semibold flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 text-lg font-semibold">
             <Receipt className="h-5 w-5 text-blue-500" />
             Accounts Receivable
           </CardTitle>
           <Link
             to="/admin/ap-ar/sales-invoices"
-            className="text-sm text-blue-600 hover:underline flex items-center"
+            className="flex items-center text-sm text-blue-600 hover:underline"
           >
-            View All <ArrowRight className="h-4 w-4 ml-1" />
+            View All <ArrowRight className="ml-1 h-4 w-4" />
           </Link>
         </div>
       </CardHeader>
@@ -88,21 +76,23 @@ export function ARSummaryWidget({
         <div className="grid grid-cols-2 gap-4">
           <div>
             <p className="text-sm text-muted-foreground">Total Outstanding</p>
-            <p className="text-2xl font-bold">{formatCurrency(totalOutstanding)}</p>
+            <p className="text-2xl font-bold">{formatIndianCompactCurrency(totalOutstanding)}</p>
           </div>
           <div>
-            <p className="text-sm text-muted-foreground flex items-center gap-1">
+            <p className="flex items-center gap-1 text-sm text-muted-foreground">
               <AlertTriangle className="h-4 w-4 text-red-500" />
               Overdue
             </p>
-            <p className="text-2xl font-bold text-red-600">{formatCurrency(totalOverdue)}</p>
+            <p className="text-2xl font-bold text-red-600">
+              {formatIndianCompactCurrency(totalOverdue)}
+            </p>
             <p className="text-xs text-muted-foreground">{overdueCount} invoices</p>
           </div>
         </div>
 
         {/* Overdue Progress */}
         <div>
-          <div className="flex justify-between text-sm mb-1">
+          <div className="mb-1 flex justify-between text-sm">
             <span>Overdue Ratio</span>
             <span className="font-medium">{overduePercentage.toFixed(1)}%</span>
           </div>
@@ -111,24 +101,22 @@ export function ARSummaryWidget({
 
         {/* Collection Rate */}
         {collectionRate !== undefined && (
-          <div className="bg-green-50 rounded-lg p-3">
+          <div className="rounded-lg bg-green-50 p-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-green-700">Collection Rate</span>
-              <span className="text-lg font-bold text-green-700">
-                {collectionRate.toFixed(1)}%
-              </span>
+              <span className="text-lg font-bold text-green-700">{collectionRate.toFixed(1)}%</span>
             </div>
           </div>
         )}
 
         {/* Due This Week */}
-        <div className="bg-blue-50 rounded-lg p-3">
+        <div className="rounded-lg bg-blue-50 p-3">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-blue-600" />
             <span className="text-sm font-medium">Due This Week</span>
           </div>
-          <p className="text-lg font-bold text-blue-700 mt-1">
-            {formatCurrency(dueThisWeek)}
+          <p className="mt-1 text-lg font-bold text-blue-700">
+            {formatIndianCompactCurrency(dueThisWeek)}
           </p>
           <p className="text-xs text-blue-600">{dueThisWeekCount} invoices</p>
         </div>
@@ -136,7 +124,7 @@ export function ARSummaryWidget({
         {/* Aging Buckets */}
         {agingBuckets.length > 0 && (
           <div>
-            <p className="text-sm font-medium mb-2">Overdue Aging</p>
+            <p className="mb-2 text-sm font-medium">Overdue Aging</p>
             <div className="space-y-2">
               {agingBuckets.map((bucket, idx) => (
                 <div key={idx} className="flex items-center justify-between text-sm">
@@ -156,11 +144,11 @@ export function ARSummaryWidget({
         {/* Top Customers */}
         {topCustomers.length > 0 && (
           <div>
-            <p className="text-sm font-medium mb-2">Top Customers by Outstanding</p>
+            <p className="mb-2 text-sm font-medium">Top Customers by Outstanding</p>
             <div className="space-y-2">
               {topCustomers.slice(0, 3).map((customer) => (
                 <div key={customer.id} className="flex items-center justify-between text-sm">
-                  <div className="truncate max-w-[150px]">
+                  <div className="max-w-[150px] truncate">
                     <span className="font-medium">{customer.name}</span>
                   </div>
                   <span className="font-medium">{formatCompact(customer.outstanding)}</span>

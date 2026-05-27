@@ -53,8 +53,8 @@ from app.schemas.portal.reporting import (
     PortalReportBorrowerBreakdownItem,
     PortalReportClaimSummary,
     PortalReportingResponse,
-    PortalReportLenderBreakdownItem,
     PortalReportRecentReleaseItem,
+    PortalReportReviewBreakdownItem,
     PortalReportStatusBreakdownItem,
 )
 from app.schemas.portal.workbench import (
@@ -118,8 +118,8 @@ __all__ = [
     "PortalReportApplicationSummary",
     "PortalReportBorrowerBreakdownItem",
     "PortalReportClaimSummary",
-    "PortalReportLenderBreakdownItem",
     "PortalReportRecentReleaseItem",
+    "PortalReportReviewBreakdownItem",
     "PortalReportingResponse",
     "PortalReportStatusBreakdownItem",
 ]

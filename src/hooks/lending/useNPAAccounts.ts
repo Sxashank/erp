@@ -51,7 +51,7 @@ async function fetchNPAAccounts(filters?: NPAFilters) {
   const params = new URLSearchParams();
   if (filters?.classification) params.append('classification', filters.classification);
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<PaginatedResponse<NPAAccountListItem>>(
     `/lending/collections/npa-accounts?${params.toString()}`,
   );

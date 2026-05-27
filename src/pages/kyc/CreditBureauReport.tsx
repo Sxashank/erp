@@ -186,15 +186,6 @@ const reportData = {
     },
   ],
 };
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 export default function CreditBureauReport() {
   const { reportId } = useParams();
   const [activeTab, setActiveTab] = useState('summary');
@@ -352,7 +343,7 @@ export default function CreditBureauReport() {
                   Total Credit Limit
                 </div>
                 <div className="mt-1 text-2xl font-bold">
-                  {formatCurrency(reportData.summary.totalCreditLimit)}
+                  {formatIndianCompactCurrency(reportData.summary.totalCreditLimit)}
                 </div>
               </CardContent>
             </Card>
@@ -363,7 +354,7 @@ export default function CreditBureauReport() {
                   Current Outstanding
                 </div>
                 <div className="mt-1 text-2xl font-bold">
-                  {formatCurrency(reportData.summary.totalOutstanding)}
+                  {formatIndianCompactCurrency(reportData.summary.totalOutstanding)}
                 </div>
               </CardContent>
             </Card>
@@ -444,10 +435,10 @@ export default function CreditBureauReport() {
                       <TableCell>{account.accountType}</TableCell>
                       <TableCell className="font-mono">{account.accountNumber}</TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(account.sanctionedAmount)}
+                        {formatIndianCompactCurrency(account.sanctionedAmount)}
                       </TableCell>
                       <TableCell className="text-right">
-                        {formatCurrency(account.currentBalance)}
+                        {formatIndianCompactCurrency(account.currentBalance)}
                       </TableCell>
                       <TableCell>{getAccountStatusBadge(account.status)}</TableCell>
                       <TableCell>{account.openDate}</TableCell>
@@ -489,7 +480,9 @@ export default function CreditBureauReport() {
                       <TableCell>{enquiry.date}</TableCell>
                       <TableCell className="font-medium">{enquiry.lender}</TableCell>
                       <TableCell>{enquiry.type}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(enquiry.amount)}</TableCell>
+                      <TableCell className="text-right">
+                        {formatIndianCompactCurrency(enquiry.amount)}
+                      </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -582,7 +575,9 @@ export default function CreditBureauReport() {
                       <p className="text-sm text-muted-foreground">{emp.designation}</p>
                       <p className="mt-2 text-sm">
                         Monthly Income:{' '}
-                        <span className="font-medium">{formatCurrency(emp.income)}</span>
+                        <span className="font-medium">
+                          {formatIndianCompactCurrency(emp.income)}
+                        </span>
                       </p>
                       <p className="mt-1 text-xs text-muted-foreground">
                         Reported by {emp.reportedBy} on {emp.reportedOn}

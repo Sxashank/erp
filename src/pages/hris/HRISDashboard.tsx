@@ -1,461 +1,279 @@
 import {
   AlertTriangle,
-  ArrowRight,
-  Award,
-  Briefcase,
-  Calendar,
-  CalendarCheck,
-  CheckCircle,
-  Clock,
-  DollarSign,
-  FileText,
+  BadgeCheck,
+  CalendarClock,
+  Clock3,
   GraduationCap,
-  Heart,
+  TimerReset,
   TrendingUp,
-  UserCheck,
   UserMinus,
   Users,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 
+import { DataTable, type Column } from '@/components/common/DataTable';
 import { DateDisplay } from '@/components/common/DateDisplay';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Progress } from '@/components/ui/progress';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
-import { organizationsApi } from '@/services/api';
-import type { Organization, PaginatedResponse } from '@/types';
+import { StatusPill } from '@/components/common/StatusPill';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useHRDashboard } from '@/hooks/hris/useDashboard';
+import { useRequiredActiveOrganizationId } from '@/hooks/useOrganization';
+import type {
+  HRDashboardPendingAction,
+  HRDashboardUpcomingEvent,
+} from '@/services/hris/dashboardApi';
 
-import { logger } from "@/lib/logger";
-interface DashboardStats {
-  totalEmployees: number;
-  activeEmployees: number;
-  newJoineesThisMonth: number;
-  separationsThisMonth: number;
-  pendingLeaveApprovals: number;
-  pendingRegularizations: number;
-  todayPresent: number;
-  todayAbsent: number;
-  todayOnLeave: number;
-  attendancePercentage: number;
-  upcomingTrainings: number;
-  activeCycles: number;
-  pendingGoals: number;
-  pendingAppraisals: number;
+function MetricCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: typeof Users;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex items-start justify-between pt-6">
+        <div>
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="mt-2 text-3xl font-semibold">{value}</p>
+          <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
+        </div>
+        <div className="rounded-full bg-muted p-3">
+          <Icon className="h-5 w-5 text-muted-foreground" />
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
-interface PendingAction {
-  id: string;
-  type: 'LEAVE' | 'REGULARIZATION' | 'SEPARATION' | 'APPRAISAL' | 'TRAINING';
+function DistributionList({
+  title,
+  items,
+}: {
   title: string;
-  employee: string;
-  requestDate: string;
-  status: string;
-}
-
-interface UpcomingEvent {
-  id: string;
-  type: 'HOLIDAY' | 'BIRTHDAY' | 'ANNIVERSARY' | 'TRAINING' | 'APPRAISAL_DUE';
-  title: string;
-  date: string;
-  count?: number;
+  items: { label: string; count: number }[];
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No activity recorded yet.</p>
+        ) : (
+          items.map((item) => (
+            <div key={item.label} className="flex items-center justify-between gap-4">
+              <span className="text-sm">{item.label}</span>
+              <span className="text-sm font-medium">{item.count}</span>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function HRISDashboard() {
-  const navigate = useNavigate();
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashboardStats>({
-    totalEmployees: 0,
-    activeEmployees: 0,
-    newJoineesThisMonth: 0,
-    separationsThisMonth: 0,
-    pendingLeaveApprovals: 0,
-    pendingRegularizations: 0,
-    todayPresent: 0,
-    todayAbsent: 0,
-    todayOnLeave: 0,
-    attendancePercentage: 0,
-    upcomingTrainings: 0,
-    activeCycles: 0,
-    pendingGoals: 0,
-    pendingAppraisals: 0,
-  });
-  const [pendingActions, setPendingActions] = useState<PendingAction[]>([]);
-  const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
+  useRequiredActiveOrganizationId();
+  const dashboardQuery = useHRDashboard();
 
-  useEffect(() => {
-    fetchOrganizations();
-  }, []);
-
-  useEffect(() => {
-    if (selectedOrgId) {
-      fetchDashboardData();
-    }
-  }, [selectedOrgId]);
-
-  const fetchOrganizations = async () => {
-    try {
-      const response = await organizationsApi.list({ pageSize: 100 });
-      const data: PaginatedResponse<Organization> = response.data;
-      setOrganizations(data.items);
-      if (data.items.length > 0) {
-        setSelectedOrgId(data.items[0].id);
-      }
-    } catch (error) {
-      logger.error('Failed to fetch organizations:', error);
-    }
-  };
-
-  const fetchDashboardData = async () => {
-    try {
-      setLoading(true);
-      setStats({
-        totalEmployees: 0,
-        activeEmployees: 0,
-        newJoineesThisMonth: 0,
-        separationsThisMonth: 0,
-        pendingLeaveApprovals: 0,
-        pendingRegularizations: 0,
-        todayPresent: 0,
-        todayAbsent: 0,
-        todayOnLeave: 0,
-        attendancePercentage: 0,
-        upcomingTrainings: 0,
-        activeCycles: 0,
-        pendingGoals: 0,
-        pendingAppraisals: 0,
-      });
-      setPendingActions([]);
-      setUpcomingEvents([]);
-    } catch (error) {
-      logger.error('Failed to fetch dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getEventIcon = (type: string) => {
-    switch (type) {
-      case 'HOLIDAY':
-        return <Calendar className="h-4 w-4 text-emerald-500" />;
-      case 'BIRTHDAY':
-        return <Heart className="h-4 w-4 text-pink-500" />;
-      case 'ANNIVERSARY':
-        return <Award className="h-4 w-4 text-purple-500" />;
-      case 'TRAINING':
-        return <GraduationCap className="h-4 w-4 text-blue-500" />;
-      case 'APPRAISAL_DUE':
-        return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-      default:
-        return <Calendar className="h-4 w-4 text-slate-500" />;
-    }
-  };
-
-  const getActionIcon = (type: string) => {
-    switch (type) {
-      case 'LEAVE':
-        return <CalendarCheck className="h-4 w-4 text-blue-500" />;
-      case 'REGULARIZATION':
-        return <Clock className="h-4 w-4 text-yellow-500" />;
-      case 'SEPARATION':
-        return <UserMinus className="h-4 w-4 text-red-500" />;
-      case 'APPRAISAL':
-        return <TrendingUp className="h-4 w-4 text-purple-500" />;
-      case 'TRAINING':
-        return <GraduationCap className="h-4 w-4 text-emerald-500" />;
-      default:
-        return <FileText className="h-4 w-4 text-slate-500" />;
-    }
-  };
-
-  if (loading) {
+  if (dashboardQuery.isError) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <p className="text-slate-500">Loading dashboard...</p>
-      </div>
+      <ErrorState error={dashboardQuery.error} onRetry={() => void dashboardQuery.refetch()} />
     );
   }
+
+  const dashboard = dashboardQuery.data;
+
+  const pendingColumns: Column<HRDashboardPendingAction>[] = [
+    { key: 'title', header: 'Queue Item' },
+    { key: 'employee', header: 'Employee' },
+    {
+      key: 'requestDate',
+      header: 'Requested',
+      render: (row) => <DateDisplay date={row.requestDate} />,
+      sortable: true,
+      sortValue: (row) => row.requestDate,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => <StatusPill type="application" status={row.status} />,
+    },
+  ];
+
+  const eventColumns: Column<HRDashboardUpcomingEvent>[] = [
+    { key: 'title', header: 'Event' },
+    {
+      key: 'date',
+      header: 'Date',
+      render: (row) => <DateDisplay date={row.date} />,
+      sortable: true,
+      sortValue: (row) => row.date,
+    },
+    {
+      key: 'count',
+      header: 'Count',
+      align: 'right',
+      render: (row) => row.count ?? '—',
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      render: (row) => <StatusPill type="application" status={row.type} />,
+    },
+  ];
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="HRIS Dashboard"
-        subtitle="Human Resource Information System Overview"
-        actions={
-          <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
-            <SelectTrigger className="w-[200px]">
-              <SelectValue placeholder="Select organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {organizations.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
+        title="HR Dashboard"
+        subtitle="Live headcount, attendance, payroll readiness, training, and appraisal operations."
       />
 
-      {/* Employee Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Employees</CardTitle>
-            <Users className="h-4 w-4 text-blue-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{stats.totalEmployees}</div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span className="text-emerald-600">+{stats.newJoineesThisMonth} new</span>
-              <span>|</span>
-              <span className="text-red-600">-{stats.separationsThisMonth} exit</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Today&apos;s Attendance</CardTitle>
-            <UserCheck className="h-4 w-4 text-emerald-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-emerald-600">{stats.attendancePercentage}%</div>
-            <div className="flex items-center gap-2 text-xs">
-              <Badge variant="outline" className="bg-emerald-50 text-emerald-700">
-                {stats.todayPresent} Present
-              </Badge>
-              <Badge variant="outline" className="bg-red-50 text-red-700">
-                {stats.todayAbsent} Absent
-              </Badge>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                {stats.todayOnLeave} Leave
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
-            <Clock className="h-4 w-4 text-yellow-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-600">
-              {stats.pendingLeaveApprovals + stats.pendingRegularizations}
-            </div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>{stats.pendingLeaveApprovals} leave</span>
-              <span>|</span>
-              <span>{stats.pendingRegularizations} regularization</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Performance</CardTitle>
-            <TrendingUp className="h-4 w-4 text-purple-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{stats.activeCycles}</div>
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <span>Active cycle</span>
-              <span>|</span>
-              <span>{stats.pendingAppraisals} pending</span>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="Active Workforce"
+          value={dashboard?.stats.activeEmployees ?? 0}
+          subtitle={`${dashboard?.stats.totalEmployees ?? 0} total employees`}
+          icon={Users}
+        />
+        <MetricCard
+          title="Today's Attendance"
+          value={`${dashboard?.stats.attendancePercentage ?? 0}%`}
+          subtitle={`${dashboard?.stats.todayPresent ?? 0} present · ${dashboard?.stats.todayAbsent ?? 0} absent`}
+          icon={BadgeCheck}
+        />
+        <MetricCard
+          title="Pending Approvals"
+          value={
+            (dashboard?.stats.pendingLeaveApprovals ?? 0) +
+            (dashboard?.stats.pendingRegularizations ?? 0)
+          }
+          subtitle={`${dashboard?.stats.pendingLeaveApprovals ?? 0} leave · ${dashboard?.stats.pendingRegularizations ?? 0} regularization`}
+          icon={Clock3}
+        />
+        <MetricCard
+          title="Payroll Readiness"
+          value={dashboard?.stats.payrollReadyBatches ?? 0}
+          subtitle={`${dashboard?.stats.payrollPendingBatches ?? 0} processed batches awaiting next step`}
+          icon={TrendingUp}
+        />
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Quick Actions */}
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Pending Actions</CardTitle>
-            <CardDescription>Items requiring your attention</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {pendingActions.length === 0 ? (
-              <div className="text-center py-8 text-slate-500">
-                <CheckCircle className="mx-auto h-12 w-12 text-emerald-300 mb-2" />
-                <p>No pending actions</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {pendingActions.map((action) => (
-                  <div
-                    key={action.id}
-                    className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 cursor-pointer"
-                  >
-                    <div className="flex items-center gap-3">
-                      {getActionIcon(action.type)}
-                      <div>
-                        <p className="font-medium">{action.title}</p>
-                        <p className="text-sm text-slate-500">
-                          {action.employee} • <DateDisplay date={action.requestDate} />
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={
-                          action.status === 'PENDING'
-                            ? 'bg-yellow-50 text-yellow-700'
-                            : 'bg-blue-50 text-blue-700'
-                        }
-                      >
-                        {action.status}
-                      </Badge>
-                      <ArrowRight className="h-4 w-4 text-slate-400" />
-                    </div>
-                  </div>
-                ))}
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => navigate('/admin/hris/leave-applications')}
-                >
-                  View All Pending
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="New Joiners"
+          value={dashboard?.stats.newJoineesThisMonth ?? 0}
+          subtitle="Joined this month"
+          icon={Users}
+        />
+        <MetricCard
+          title="Separations"
+          value={dashboard?.stats.separationsThisMonth ?? 0}
+          subtitle="Exited this month"
+          icon={UserMinus}
+        />
+        <MetricCard
+          title="Training Pipeline"
+          value={dashboard?.stats.upcomingTrainings ?? 0}
+          subtitle="Programs in the next 30 days"
+          icon={GraduationCap}
+        />
+        <MetricCard
+          title="Appraisal Load"
+          value={dashboard?.stats.pendingAppraisals ?? 0}
+          subtitle={`${dashboard?.stats.activeCycles ?? 0} active cycles · ${dashboard?.stats.pendingGoals ?? 0} goal packets pending`}
+          icon={TimerReset}
+        />
+      </div>
 
-        {/* Upcoming Events */}
+      <div className="grid gap-6 xl:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Upcoming Events</CardTitle>
-            <CardDescription>Next 7 days</CardDescription>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <AlertTriangle className="h-4 w-4" />
+              Pending HR Workbench
+            </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {upcomingEvents.map((event) => (
-                <div key={event.id} className="flex items-center gap-3">
-                  {getEventIcon(event.type)}
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{event.title}</p>
-                    <p className="text-xs text-slate-500"><DateDisplay date={event.date} /></p>
-                  </div>
-                  {event.count && (
-                    <Badge variant="outline">{event.count}</Badge>
-                  )}
-                </div>
-              ))}
-            </div>
+            <DataTable
+              data={dashboard?.pendingActions ?? []}
+              columns={pendingColumns}
+              getRowId={(row) => row.id}
+              isLoading={dashboardQuery.isLoading}
+              emptyTitle="No pending actions"
+              emptySubtitle="Leave approvals, attendance regularizations, separations, training, and appraisal queues are currently clear."
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CalendarClock className="h-4 w-4" />
+              Upcoming Events
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <DataTable
+              data={dashboard?.upcomingEvents ?? []}
+              columns={eventColumns}
+              getRowId={(row) => row.id}
+              isLoading={dashboardQuery.isLoading}
+              emptyTitle="No upcoming events"
+              emptySubtitle="Holidays, trainings, anniversaries, and appraisal deadlines will appear here."
+            />
           </CardContent>
         </Card>
       </div>
 
-      {/* Quick Links */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card
-          className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => navigate('/admin/hris/employees')}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-blue-50 p-3">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Employees</h3>
-                <p className="text-sm text-slate-500">Manage employee data</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => navigate('/admin/hris/attendance')}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-emerald-50 p-3">
-                <CalendarCheck className="h-6 w-6 text-emerald-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Attendance</h3>
-                <p className="text-sm text-slate-500">Track attendance</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => navigate('/admin/hris/leave-applications')}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-purple-50 p-3">
-                <Briefcase className="h-6 w-6 text-purple-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Leave</h3>
-                <p className="text-sm text-slate-500">Leave management</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card
-          className="cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => navigate('/admin/payroll/batches')}
-        >
-          <CardContent className="p-4">
-            <div className="flex items-center gap-4">
-              <div className="rounded-lg bg-amber-50 p-3">
-                <DollarSign className="h-6 w-6 text-amber-600" />
-              </div>
-              <div>
-                <h3 className="font-semibold">Payroll</h3>
-                <p className="text-sm text-slate-500">Process salaries</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-6 lg:grid-cols-2 xl:grid-cols-4">
+        <DistributionList
+          title="Department Distribution"
+          items={dashboard?.departmentDistribution ?? []}
+        />
+        <DistributionList title="Unit Distribution" items={dashboard?.unitDistribution ?? []} />
+        <DistributionList title="Training Completion" items={dashboard?.trainingCompletion ?? []} />
+        <DistributionList title="Separation Pipeline" items={dashboard?.separationPipeline ?? []} />
       </div>
 
-      {/* Department Attendance */}
       <Card>
         <CardHeader>
-          <CardTitle>Department-wise Attendance</CardTitle>
-          <CardDescription>Today&apos;s attendance by department</CardDescription>
+          <CardTitle className="text-base">Payroll Status</CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            {[
-              { name: 'Engineering', present: 45, total: 50, percentage: 90 },
-              { name: 'Sales', present: 28, total: 32, percentage: 87.5 },
-              { name: 'Operations', present: 38, total: 42, percentage: 90.5 },
-              { name: 'Finance', present: 18, total: 20, percentage: 90 },
-              { name: 'HR', present: 12, total: 14, percentage: 85.7 },
-            ].map((dept) => (
-              <div key={dept.name} className="space-y-1">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{dept.name}</span>
-                  <span className="text-slate-500">
-                    {dept.present}/{dept.total} ({dept.percentage.toFixed(1)}%)
-                  </span>
-                </div>
-                <Progress value={dept.percentage} className="h-2" />
+        <CardContent className="grid gap-4 md:grid-cols-4">
+          <div>
+            <p className="text-sm text-muted-foreground">Latest Batch</p>
+            <p className="mt-1 font-medium">{dashboard?.payroll.latestBatchNumber ?? '—'}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Latest Status</p>
+            {dashboard?.payroll.latestBatchStatus ? (
+              <div className="mt-1">
+                <StatusPill type="application" status={dashboard.payroll.latestBatchStatus} />
               </div>
-            ))}
+            ) : (
+              <p className="mt-1 font-medium">—</p>
+            )}
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Approved This Year</p>
+            <p className="mt-1 font-medium">{dashboard?.payroll.approvedBatchesThisYear ?? 0}</p>
+          </div>
+          <div>
+            <p className="text-sm text-muted-foreground">Paid This Year</p>
+            <p className="mt-1 font-medium">{dashboard?.payroll.paidBatchesThisYear ?? 0}</p>
           </div>
         </CardContent>
       </Card>
     </div>
   );
 }
+
+export default HRISDashboard;

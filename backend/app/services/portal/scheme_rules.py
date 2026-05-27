@@ -12,21 +12,28 @@ from typing import Any
 
 from app.models.lending.enums import ApplicationStage, ApplicationStatus, EntityType
 
-INSTITUTIONAL_ENTITY_TYPES: frozenset[EntityType] = frozenset(
+INSTITUTIONAL_ENTITY_TYPE_CODES: frozenset[str] = frozenset(
     {
-        EntityType.CORPORATE,
-        EntityType.LLP,
-        EntityType.PARTNERSHIP,
-        EntityType.TRUST,
-        EntityType.SOCIETY,
+        EntityType.CORPORATE.value,
+        EntityType.LLP.value,
+        EntityType.PARTNERSHIP.value,
+        EntityType.TRUST.value,
+        EntityType.SOCIETY.value,
+        "GOVT_ENTITY",
+        "PSU",
+        "SPV",
+        "COOPERATIVE",
     }
 )
 
 
-def is_scheme_eligible_entity_type(entity_type: EntityType) -> bool:
+def is_scheme_eligible_entity_type(entity_type: EntityType | str | None) -> bool:
     """Return ``True`` only for institutional scheme borrowers."""
 
-    return entity_type in INSTITUTIONAL_ENTITY_TYPES
+    if entity_type is None:
+        return False
+    code = entity_type.value if hasattr(entity_type, "value") else str(entity_type)
+    return code.strip().upper() in INSTITUTIONAL_ENTITY_TYPE_CODES
 
 
 def derive_scheme_application_status(
@@ -34,10 +41,10 @@ def derive_scheme_application_status(
     raw_stage: ApplicationStage,
     extra_data: Mapping[str, Any] | None = None,
 ) -> str:
-    """Translate LOS application state into scheme-facing milestones.
+    """Translate LOS application state into SFC-facing milestones.
 
-    The current data model does not yet persist separate lender-vs-SMFCL
-    review stages. We therefore expose the closest stable borrower-facing
+    The current data model still uses legacy internal review-state codes.
+    We therefore expose the closest stable borrower-facing
     milestone while preserving the canonical raw LOS ``status``/``stage``
     alongside it.
     """

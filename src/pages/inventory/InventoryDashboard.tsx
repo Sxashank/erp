@@ -23,15 +23,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    maximumFractionDigits: 0,
-  }).format(value);
-};
-
 // Mock data
 const dashboardStats = {
   totalItems: 1250,
@@ -195,7 +186,7 @@ export default function InventoryDashboard() {
               <div>
                 <p className="text-sm text-muted-foreground">Stock Value</p>
                 <p className="text-xl font-bold">
-                  {formatCurrency(dashboardStats.totalStockValue)}
+                  {formatIndianCompactCurrency(dashboardStats.totalStockValue)}
                 </p>
               </div>
             </div>
@@ -315,7 +306,9 @@ export default function InventoryDashboard() {
                   <TableRow key={wh.id}>
                     <TableCell className="font-medium">{wh.name}</TableCell>
                     <TableCell className="text-right">{wh.items}</TableCell>
-                    <TableCell className="text-right">{formatCurrency(wh.value)}</TableCell>
+                    <TableCell className="text-right">
+                      {formatIndianCompactCurrency(wh.value)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="h-2 w-16 overflow-hidden rounded-full bg-gray-200">
@@ -390,7 +383,9 @@ export default function InventoryDashboard() {
                     {txn.qty}
                   </TableCell>
                   <TableCell>{txn.warehouse}</TableCell>
-                  <TableCell><DateDisplay date={txn.date} /></TableCell>
+                  <TableCell>
+                    <DateDisplay date={txn.date} />
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

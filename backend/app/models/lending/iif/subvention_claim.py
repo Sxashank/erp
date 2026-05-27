@@ -22,6 +22,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -51,6 +52,16 @@ class SubventionClaim(BaseModel):
         Index("ix_txn_subvention_claim_reference", "claim_reference"),
         Index("ix_txn_subvention_claim_status", "status"),
         Index("ix_txn_subvention_claim_period", "period_start", "period_end"),
+        Index(
+            "uq_txn_subvention_claim_live_period",
+            "organization_id",
+            "enrollment_id",
+            "period_start",
+            "period_end",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND status <> 'CANCELLED'"),
+            sqlite_where=text("deleted_at IS NULL AND status <> 'CANCELLED'"),
+        ),
     )
 
     organization_id: Mapped[UUID] = mapped_column(
@@ -100,6 +111,11 @@ class SubventionClaim(BaseModel):
 
     # [{name: str, path: str, uploaded_at: ISO8601 str, ...}]
     documents: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False, default=list)
+    calculation_snapshot: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=dict,
+    )
 
     # Relationship to the parent enrolment (loan + scheme are reached
     # through this for the response DTO and report).

@@ -7,7 +7,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.core.constants import Permissions, AssetStatus, AssetType
 from app.core.permissions import PermissionChecker
@@ -24,7 +24,6 @@ router = APIRouter()
 @router.get("/asset-register", response_model=AssetRegisterResponse, response_model_by_alias=True)
 async def get_asset_register(
     request: Request,
-    organization_id: UUID,
     as_on_date: date = Query(default=None, description="As on date (defaults to today)"),
     category_id: Optional[UUID] = None,
     location_id: Optional[UUID] = None,
@@ -61,7 +60,7 @@ async def get_asset_register(
 
     service = FAReportsService(db)
     return await service.get_asset_register(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         as_on_date=as_on_date,
         category_id=category_id,
         location_id=location_id,
@@ -70,10 +69,13 @@ async def get_asset_register(
     )
 
 
-@router.get("/depreciation-summary", response_model=DepreciationSummaryResponse, response_model_by_alias=True)
+@router.get(
+    "/depreciation-summary",
+    response_model=DepreciationSummaryResponse,
+    response_model_by_alias=True,
+)
 async def get_depreciation_summary(
     request: Request,
-    organization_id: UUID,
     depreciation_period: str = Query(..., pattern=r"^\d{4}-\d{2}$"),
     db: AsyncSession = Depends(get_db_with_tenant),
     current_user: User = Depends(get_current_user),
@@ -89,7 +91,7 @@ async def get_depreciation_summary(
     """
     service = FAReportsService(db)
     return await service.get_depreciation_summary(
-        organization_id=organization_id,
+        organization_id=current_user.organization_id,
         depreciation_period=depreciation_period,
     )
 
@@ -185,15 +187,17 @@ async def get_category_wise_summary(
 
     categories = []
     for row in rows:
-        categories.append({
-            "category_id": str(row.id),
-            "category_code": row.category_code,
-            "category_name": row.category_name,
-            "asset_count": row.asset_count,
-            "total_cost": float(row.total_cost or 0),
-            "total_depreciation": float(row.total_depreciation or 0),
-            "total_wdv": float(row.total_wdv or 0),
-        })
+        categories.append(
+            {
+                "category_id": str(row.id),
+                "category_code": row.category_code,
+                "category_name": row.category_name,
+                "asset_count": row.asset_count,
+                "total_cost": float(row.total_cost or 0),
+                "total_depreciation": float(row.total_depreciation or 0),
+                "total_wdv": float(row.total_wdv or 0),
+            }
+        )
 
     return {
         "organization_id": str(organization_id),
@@ -250,14 +254,16 @@ async def get_location_wise_summary(
 
     locations = []
     for row in rows:
-        locations.append({
-            "location_id": str(row.id),
-            "location_code": row.code,
-            "location_name": row.name,
-            "asset_count": row.asset_count,
-            "total_cost": float(row.total_cost or 0),
-            "total_wdv": float(row.total_wdv or 0),
-        })
+        locations.append(
+            {
+                "location_id": str(row.id),
+                "location_code": row.code,
+                "location_name": row.name,
+                "asset_count": row.asset_count,
+                "total_cost": float(row.total_cost or 0),
+                "total_wdv": float(row.total_wdv or 0),
+            }
+        )
 
     # Get unassigned assets
     unassigned = await db.execute(
@@ -265,8 +271,7 @@ async def get_location_wise_summary(
             func.count(FixedAsset.id).label("asset_count"),
             func.sum(FixedAsset.total_cost).label("total_cost"),
             func.sum(FixedAsset.wdv_value).label("total_wdv"),
-        )
-        .where(
+        ).where(
             FixedAsset.organization_id == organization_id,
             FixedAsset.location_id.is_(None),
             FixedAsset.status.in_([AssetStatus.ACTIVE, AssetStatus.FULLY_DEPRECIATED]),
@@ -275,14 +280,16 @@ async def get_location_wise_summary(
     )
     unassigned_row = unassigned.one()
     if unassigned_row.asset_count > 0:
-        locations.append({
-            "location_id": None,
-            "location_code": "UNASSIGNED",
-            "location_name": "Unassigned Location",
-            "asset_count": unassigned_row.asset_count,
-            "total_cost": float(unassigned_row.total_cost or 0),
-            "total_wdv": float(unassigned_row.total_wdv or 0),
-        })
+        locations.append(
+            {
+                "location_id": None,
+                "location_code": "UNASSIGNED",
+                "location_name": "Unassigned Location",
+                "asset_count": unassigned_row.asset_count,
+                "total_cost": float(unassigned_row.total_cost or 0),
+                "total_wdv": float(unassigned_row.total_wdv or 0),
+            }
+        )
 
     return {
         "organization_id": str(organization_id),

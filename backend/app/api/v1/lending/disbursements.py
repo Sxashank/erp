@@ -8,7 +8,8 @@ from fastapi import APIRouter, Depends, Query
 from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_db, get_db_with_tenant
+from app.api.deps import get_current_user, get_db_with_tenant
+from app.core.exceptions import NotFoundException
 from app.models.auth.user import User
 from app.models.lending.enums import DisbursementStatus
 from app.schemas.base import CamelSchema, PaginatedResponse
@@ -160,7 +161,7 @@ class DisbursementActionResponse(CamelSchema):
 )
 async def list_disbursements(
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, ge=1, le=100, alias="pageSize"),
     search: str | None = Query(None),
     status: DisbursementStatus | None = Query(None),
     db: AsyncSession = Depends(get_db_with_tenant),
@@ -178,6 +179,27 @@ async def list_disbursements(
     )
     list_items = [DisbursementListResponse.model_validate(d) for d in items]
     return PaginatedResponse.create(list_items, total, page, page_size)
+
+
+@router.get(
+    "/detail/{disbursement_id}",
+    response_model=DisbursementListResponse,
+    response_model_by_alias=True,
+)
+async def get_disbursement(
+    disbursement_id: UUID,
+    db: AsyncSession = Depends(get_db_with_tenant),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single disbursement scoped to caller's organization."""
+    service = DisbursementService(db)
+    disbursement = await service.get_disbursement_for_org(
+        current_user.organization_id,
+        disbursement_id,
+    )
+    if disbursement is None:
+        raise NotFoundException("Disbursement not found")
+    return DisbursementListResponse.model_validate(disbursement)
 
 
 @router.post(

@@ -19,7 +19,6 @@ from uuid import UUID
 
 from pydantic import Field, model_validator
 
-from app.schemas.base import CamelSchema, PaginatedResponse
 from app.core.iif_rules import (
     DEFAULT_CALCULATION_RULES,
     DEFAULT_ELIGIBILITY_RULES,
@@ -27,6 +26,7 @@ from app.core.iif_rules import (
     DEFAULT_REQUIRED_DOCUMENTS,
     DEFAULT_WORKFLOW_RULES,
 )
+from app.schemas.base import CamelSchema, PaginatedResponse
 
 # =============================================================================
 # Subvention Scheme
@@ -56,8 +56,12 @@ class SubventionSchemeCreate(CamelSchema):
     claim_frequency: str = Field(..., max_length=20)
     npa_disqualification_dpd_days: int = Field(default=30, ge=0)
 
-    calculation_rules: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_CALCULATION_RULES))
-    eligibility_rules: dict[str, Any] = Field(default_factory=lambda: dict(DEFAULT_ELIGIBILITY_RULES))
+    calculation_rules: dict[str, Any] = Field(
+        default_factory=lambda: dict(DEFAULT_CALCULATION_RULES)
+    )
+    eligibility_rules: dict[str, Any] = Field(
+        default_factory=lambda: dict(DEFAULT_ELIGIBILITY_RULES)
+    )
     required_documents: list[dict[str, Any]] = Field(
         default_factory=lambda: list(DEFAULT_REQUIRED_DOCUMENTS)
     )
@@ -505,13 +509,6 @@ class SubventionClaimMarkReleasedRequest(CamelSchema):
     released_date: date | None = None
 
 
-class SubventionClaimMarkPaidRequest(CamelSchema):
-    """Backward-compatible alias payload for POST /claims/{id}/mark-paid."""
-
-    utr_reference: str = Field(..., max_length=100, min_length=1)
-    paid_date: date | None = None
-
-
 class SubventionClaimCancelRequest(CamelSchema):
     """Payload for POST /claims/{id}/cancel."""
 
@@ -563,6 +560,20 @@ class SubventionClaimResponse(CamelSchema):
         enrollment = getattr(obj, "enrollment", None)
         loan = getattr(enrollment, "loan_account", None) if enrollment else None
         scheme = getattr(enrollment, "scheme", None) if enrollment else None
+        documents: list[dict[str, Any]] = []
+        for doc in obj.documents or []:
+            if not isinstance(doc, dict):
+                continue
+            documents.append(
+                {
+                    "documentId": doc.get("document_id") or doc.get("documentId"),
+                    "name": doc.get("name"),
+                    "fileName": doc.get("file_name") or doc.get("fileName"),
+                    "documentCategory": doc.get("document_category") or doc.get("documentCategory"),
+                    "path": doc.get("path"),
+                    "uploadedAt": doc.get("uploaded_at") or doc.get("uploadedAt"),
+                }
+            )
         return {
             "id": obj.id,
             "organization_id": obj.organization_id,
@@ -588,7 +599,7 @@ class SubventionClaimResponse(CamelSchema):
             "release_reference": obj.utr_reference,
             "declaration_signed_by": obj.declaration_signed_by,
             "declaration_signed_at": obj.declaration_signed_at,
-            "documents": obj.documents or [],
+            "documents": documents,
             "is_active": obj.is_active,
             "created_at": obj.created_at,
             "updated_at": obj.updated_at,
@@ -626,10 +637,18 @@ class RepaymentRecordLine(CamelSchema):
     receipt_number: str
     value_date: date
     receipt_amount: Decimal
+    installment_number: int | None = None
+    due_date: date | None = None
+    installment_status: str | None = None
+    emi_amount: Decimal | None = None
+    principal_due: Decimal | None = None
+    interest_due: Decimal | None = None
+    penal_due: Decimal | None = None
     allocated_to_interest: Decimal
     allocated_to_principal: Decimal
     allocated_to_penal: Decimal
     allocated_to_charges: Decimal
+    instrument_number: str | None = None
 
 
 class ClaimReportHeader(CamelSchema):

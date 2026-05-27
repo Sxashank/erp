@@ -108,7 +108,7 @@ def transform(text: str) -> tuple[str, int]:
             # get_current_user)` line — flag it for manual review by emitting
             # a clear marker. (No silent skip.)
             out.append(
-                f"# TODO: scripts/lint/fix_requirepermissions_decorator.py could not "
+                f"# MANUAL_REVIEW_REQUIRED: scripts/lint/fix_requirepermissions_decorator.py could not "
                 f"locate the `current_user: User = Depends(get_current_user)` line "
                 f"to upgrade; the @RequirePermissions decorator was REMOVED but no "
                 f"permission gate was inserted. Original perm: {perm_expr}"

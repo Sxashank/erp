@@ -1,17 +1,17 @@
 """API dependencies for dependency injection."""
 
 from dataclasses import dataclass
-from typing import Optional, Set
 from uuid import UUID
 
 from fastapi import Depends, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
-from app.database import get_db, set_tenant_context
-from app.core.security import verify_token
 from app.core.constants import TokenType
-from app.core.exceptions import UnauthorizedException, ForbiddenException
+from app.core.exceptions import BadRequestException, ForbiddenException, UnauthorizedException
+from app.core.security import verify_token
+from app.database import get_db, set_tenant_context
 from app.models.auth.user import User
 from app.models.ess.enums import ESSUserStatus
 from app.models.ess.ess_user import ESSUser
@@ -40,7 +40,7 @@ class ESSUserContext:
 
 
 async def get_current_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> User:
     """Get current authenticated user from JWT token."""
@@ -68,9 +68,9 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
-) -> Optional[User]:
+) -> User | None:
     """Get current user if authenticated, None otherwise."""
     if not token:
         return None
@@ -84,10 +84,55 @@ async def get_current_user_optional(
 async def get_current_user_permissions(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> Set[str]:
+) -> set[str]:
     """Get permissions for the current user."""
     user_repo = UserRepository(db)
-    return await user_repo.get_user_permissions(user.id)
+    permissions = set(await user_repo.get_user_permissions(user.id))
+
+    for user_role in getattr(user, "user_roles", []) or []:
+        role = getattr(user_role, "role", None)
+        role_code = getattr(role, "code", None)
+        if role_code:
+            permissions.add(str(role_code))
+
+        for role_permission in getattr(role, "role_permissions", []) or []:
+            permission = getattr(role_permission, "permission", None)
+            permission_code = getattr(permission, "code", None)
+            if permission_code:
+                permissions.add(str(permission_code))
+
+    return permissions
+
+
+async def get_active_organization_id(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    user_permissions: set[str] = Depends(get_current_user_permissions),
+) -> UUID | None:
+    """Resolve the active tenant for the current request.
+
+    Tenant-scoped admin APIs honor ``X-Organization-Id`` for users allowed to
+    switch organizations from the UI. Non-super-admin users remain pinned to
+    their own organization.
+    """
+    active_organization_id = current_user.organization_id
+    requested_org_id = request.headers.get("X-Organization-Id")
+
+    if requested_org_id:
+        try:
+            requested_uuid = UUID(requested_org_id)
+        except ValueError as exc:
+            raise BadRequestException("Invalid X-Organization-Id header") from exc
+
+        if requested_uuid != current_user.organization_id and "SUPER_ADMIN" not in user_permissions:
+            raise ForbiddenException("Cross-tenant access requires SUPER_ADMIN")
+
+        active_organization_id = requested_uuid
+
+    if active_organization_id is not None:
+        setattr(current_user, "_active_organization_id", active_organization_id)
+
+    return active_organization_id
 
 
 class RequirePermissions:
@@ -100,20 +145,19 @@ class RequirePermissions:
     async def __call__(
         self,
         user: User = Depends(get_current_user),
-        user_permissions: Set[str] = Depends(get_current_user_permissions),
+        user_permissions: set[str] = Depends(get_current_user_permissions),
     ) -> User:
         """Check if user has required permissions."""
+        if "SUPER_ADMIN" in user_permissions:
+            return user
+
         if self.require_all:
             missing = self.permissions - user_permissions
             if missing:
-                raise ForbiddenException(
-                    f"Missing required permissions: {', '.join(missing)}"
-                )
+                raise ForbiddenException(f"Missing required permissions: {', '.join(missing)}")
         else:
             if not (self.permissions & user_permissions):
-                raise ForbiddenException(
-                    f"Requires one of: {', '.join(self.permissions)}"
-                )
+                raise ForbiddenException(f"Requires one of: {', '.join(self.permissions)}")
 
         return user
 
@@ -126,6 +170,7 @@ def require_permission(*permissions: str):
 async def get_db_with_tenant(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    active_organization_id: UUID | None = Depends(get_active_organization_id),
 ) -> AsyncSession:
     """Get database session with tenant RLS context set.
 
@@ -141,13 +186,19 @@ async def get_db_with_tenant(
     Returns:
         The database session with tenant context configured
     """
-    if current_user.organization_id:
-        await set_tenant_context(db, current_user.organization_id)
+    if active_organization_id and current_user.organization_id != active_organization_id:
+        # Keep endpoint code paths that still read `current_user.organization_id`
+        # aligned with the tenant RLS context for this request without
+        # persisting a profile change back to the user row.
+        set_committed_value(current_user, "organization_id", active_organization_id)
+
+    if active_organization_id:
+        await set_tenant_context(db, active_organization_id)
     return db
 
 
 async def get_current_ess_user(
-    token: Optional[str] = Depends(oauth2_scheme),
+    token: str | None = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> ESSUserContext:
     """Resolve the authenticated ESS user and set tenant RLS context."""

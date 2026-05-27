@@ -180,12 +180,33 @@ class BorrowingCreate(BorrowingBase):
 class BorrowingUpdate(CamelSchema):
     """Schema for updating a borrowing."""
 
+    lender_id: UUID | None = None
+    borrowing_type: str | None = Field(None, max_length=50)
+    sanction_date: date | None = None
     sanction_reference: str | None = Field(None, max_length=100)
+    sanctioned_amount: Decimal | None = None
+    currency: str | None = Field(None, max_length=3)
+    rate_type: str | None = Field(None, max_length=30)
+    base_rate_name: str | None = Field(None, max_length=50)
     base_rate_value: Decimal | None = None
     spread_bps: int | None = None
     effective_rate: Decimal | None = None
+    rate_reset_frequency: str | None = Field(None, max_length=30)
+    day_count_convention: str | None = Field(None, max_length=20)
+    interest_payment_frequency: str | None = Field(None, max_length=20)
+    principal_payment_frequency: str | None = Field(None, max_length=20)
+    tenure_months: int | None = None
+    moratorium_months: int | None = None
+    first_interest_date: date | None = None
+    first_principal_date: date | None = None
+    maturity_date: date | None = None
     next_rate_reset_date: date | None = None
+    security_type: str | None = Field(None, max_length=30)
     security_description: str | None = None
+    security_cover_required: Decimal | None = None
+    processing_fee_percent: Decimal | None = None
+    commitment_fee_percent: Decimal | None = None
+    prepayment_penalty_percent: Decimal | None = None
     financial_covenants: dict[str, Any] | None = None
     reporting_requirements: dict[str, Any] | None = None
     sanction_letter_path: str | None = Field(None, max_length=500)

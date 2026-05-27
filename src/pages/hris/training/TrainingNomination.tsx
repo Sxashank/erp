@@ -1,25 +1,14 @@
-import {
-  ArrowLeft,
-  Search,
-  Plus,
-  CheckCircle,
-  XCircle,
-  Clock,
-  Users,
-  UserPlus,
-  Calendar,
-  GraduationCap,
-  Send,
-  Trash2,
-} from 'lucide-react';
-import { useState } from 'react';
+import { AlertTriangle, CheckCircle, Clock, Search, UserPlus, Users, XCircle } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 
+import { EmptyState } from '@/components/common/EmptyState';
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   Dialog,
@@ -46,79 +35,111 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  useAddTrainingNominations,
+  useTrainingAvailableEmployees,
+  useTrainingNominations,
+  useTrainingProgram,
+  useUpdateTrainingNomination,
+} from '@/hooks/hris/useTraining';
 import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/errorMessage';
 import { formatDate } from '@/lib/utils';
+import type { TrainingNominationStatus } from '@/services/hris/trainingApi';
 
-type NominationStatus = 'NOMINATED' | 'CONFIRMED' | 'ATTENDED' | 'NO_SHOW' | 'CANCELLED';
-
-interface Nomination {
-  id: string;
-  employee_id: string;
-  employee_code: string;
-  employee_name: string;
-  department: string;
-  designation: string;
-  nominated_by: string;
-  nominated_on: string;
-  status: NominationStatus;
-  attendance_marked: boolean;
+function getStatusBadge(status: TrainingNominationStatus) {
+  switch (status) {
+    case 'NOMINATED':
+      return <Badge variant="outline">Nominated</Badge>;
+    case 'CONFIRMED':
+      return <Badge variant="secondary">Confirmed</Badge>;
+    case 'ATTENDED':
+      return <Badge variant="default">Attended</Badge>;
+    case 'NO_SHOW':
+      return <Badge variant="destructive">No Show</Badge>;
+    case 'CANCELLED':
+      return <Badge variant="destructive">Cancelled</Badge>;
+  }
 }
-
-interface AvailableEmployee {
-  id: string;
-  employee_code: string;
-  full_name: string;
-  department: string;
-  designation: string;
-  email: string;
-}
-
-interface ProgramDetails {
-  id: string;
-  program_code: string;
-  title: string;
-  start_date: string;
-  end_date: string;
-  duration_hours: number;
-  location: string;
-  max_participants: number;
-  trainer_name: string;
-}
-
-const getProgramDetails = (): ProgramDetails | null => null;
-const nominations: Nomination[] = [];
-const availableEmployees: AvailableEmployee[] = [];
-
-const getStatusBadge = (status: NominationStatus) => {
-  const config: Record<NominationStatus, { variant: 'default' | 'secondary' | 'destructive' | 'outline'; label: string }> = {
-    NOMINATED: { variant: 'outline', label: 'Nominated' },
-    CONFIRMED: { variant: 'secondary', label: 'Confirmed' },
-    ATTENDED: { variant: 'default', label: 'Attended' },
-    NO_SHOW: { variant: 'destructive', label: 'No Show' },
-    CANCELLED: { variant: 'destructive', label: 'Cancelled' },
-  };
-  const cfg = config[status];
-  return <Badge variant={cfg.variant}>{cfg.label}</Badge>;
-};
 
 export default function TrainingNomination() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { toast } = useToast();
-  const programDetails = getProgramDetails();
-  const [nominationList, setNominationList] = useState(nominations);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | TrainingNominationStatus>('all');
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedEmployees, setSelectedEmployees] = useState<string[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState('');
 
-  if (!programDetails) {
+  const programQuery = useTrainingProgram(id);
+  const nominationsQuery = useTrainingNominations(id);
+  const availableEmployeesQuery = useTrainingAvailableEmployees(id, employeeSearch || undefined);
+  const addNominations = useAddTrainingNominations(id ?? '');
+  const updateNomination = useUpdateTrainingNomination(id ?? '');
+
+  const nominations = nominationsQuery.data ?? [];
+  const filteredNominations = useMemo(
+    () =>
+      nominations.filter((nomination) => {
+        const matchesSearch =
+          nomination.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          nomination.employeeCode.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          nomination.department.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesStatus = statusFilter === 'all' || nomination.status === statusFilter;
+        return matchesSearch && matchesStatus;
+      }),
+    [nominations, searchTerm, statusFilter],
+  );
+  const availableEmployees = availableEmployeesQuery.data ?? [];
+  const program = programQuery.data;
+
+  const enrolledCount = nominations.filter((nomination) =>
+    ['NOMINATED', 'CONFIRMED', 'ATTENDED'].includes(nomination.status),
+  ).length;
+  const availableSlots = Math.max(0, (program?.maxParticipants ?? 0) - enrolledCount);
+
+  const handleAddNominations = async () => {
+    try {
+      await addNominations.mutateAsync(selectedEmployees);
+      setSelectedEmployees([]);
+      setShowAddDialog(false);
+      toast({ title: 'Nominations added' });
+    } catch (error: unknown) {
+      toast({
+        title: 'Unable to add nominations',
+        description: getErrorMessage(error, 'Please try again.'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleStatusChange = async (
+    nominationId: string,
+    status: TrainingNominationStatus,
+    attendanceMarked?: boolean,
+  ) => {
+    try {
+      await updateNomination.mutateAsync({
+        nominationId,
+        payload: { status, attendanceMarked },
+      });
+      toast({ title: 'Nomination updated' });
+    } catch (error: unknown) {
+      toast({
+        title: 'Unable to update nomination',
+        description: getErrorMessage(error, 'Please try again.'),
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (programQuery.isLoading || nominationsQuery.isLoading) {
     return (
       <div className="space-y-6">
         <PageHeader
           title="Training Nominations"
-          subtitle={id ? `Program ${id}` : 'Program details unavailable'}
+          subtitle="Loading training program"
           breadcrumbs={[
             { label: 'Training', to: '/admin/hris/training' },
             { label: 'Nominations' },
@@ -126,95 +147,65 @@ export default function TrainingNomination() {
         />
         <Card>
           <CardContent className="py-10 text-center text-sm text-muted-foreground">
-            Training nomination data is pending backend HRIS training endpoints.
+            Loading nominations...
           </CardContent>
         </Card>
       </div>
     );
   }
 
-  const filteredNominations = nominationList.filter((n) => {
-    const matchesSearch =
-      n.employee_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.employee_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      n.department.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || n.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
-
-  const filteredEmployees = availableEmployees.filter(
-    (e) =>
-      e.full_name.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-      e.employee_code.toLowerCase().includes(employeeSearch.toLowerCase()) ||
-      e.department.toLowerCase().includes(employeeSearch.toLowerCase())
-  );
-
-  const handleConfirmNomination = (nominationId: string) => {
-    setNominationList(
-      nominationList.map((n) =>
-        n.id === nominationId ? { ...n, status: 'CONFIRMED' as NominationStatus } : n
-      )
+  if (programQuery.isError || nominationsQuery.isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Training Nominations"
+          subtitle="Unable to load nomination details"
+          breadcrumbs={[
+            { label: 'Training', to: '/admin/hris/training' },
+            { label: 'Nominations' },
+          ]}
+        />
+        <ErrorState
+          error={programQuery.error ?? nominationsQuery.error}
+          onRetry={() => {
+            void programQuery.refetch();
+            void nominationsQuery.refetch();
+          }}
+        />
+      </div>
     );
-  };
+  }
 
-  const handleCancelNomination = (nominationId: string) => {
-    setNominationList(
-      nominationList.map((n) =>
-        n.id === nominationId ? { ...n, status: 'CANCELLED' as NominationStatus } : n
-      )
+  if (!program) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Training Nominations"
+          subtitle="Program details unavailable"
+          breadcrumbs={[
+            { label: 'Training', to: '/admin/hris/training' },
+            { label: 'Nominations' },
+          ]}
+        />
+        <EmptyState
+          title="Training program not found"
+          subtitle="The selected training program is not available."
+        />
+      </div>
     );
-  };
-
-  const handleAddNominations = () => {
-    const newNominations = selectedEmployees.map((empId) => {
-      const emp = availableEmployees.find((e) => e.id === empId)!;
-      return {
-        id: `new-${empId}`,
-        employee_id: emp.id,
-        employee_code: emp.employee_code,
-        employee_name: emp.full_name,
-        department: emp.department,
-        designation: emp.designation,
-        nominated_by: 'HR Admin',
-        nominated_on: new Date().toISOString().split('T')[0],
-        status: 'NOMINATED' as NominationStatus,
-        attendance_marked: false,
-      };
-    });
-    setNominationList([...nominationList, ...newNominations]);
-    setSelectedEmployees([]);
-    setShowAddDialog(false);
-  };
-
-  const handleSendReminders = () => {
-    // API call to send reminder emails
-    toast({ title: 'Reminders queued for confirmed participants' });
-  };
-
-  const enrolledCount = nominationList.filter(
-    (n) => n.status === 'CONFIRMED' || n.status === 'NOMINATED'
-  ).length;
-  const availableSlots = programDetails.max_participants - enrolledCount;
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Training Nominations"
-        subtitle={programDetails.title}
-        breadcrumbs={[
-          { label: 'Training', to: '/admin/hris/training' },
-          { label: 'Nominations' },
-        ]}
+        subtitle={program.title}
+        breadcrumbs={[{ label: 'Training', to: '/admin/hris/training' }, { label: 'Nominations' }]}
         actions={
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleSendReminders}>
-              <Send className="h-4 w-4 mr-2" />
-              Send Reminders
-            </Button>
-            <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+          <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
             <DialogTrigger asChild>
               <Button disabled={availableSlots <= 0}>
-                <UserPlus className="h-4 w-4 mr-2" />
+                <UserPlus className="mr-2 h-4 w-4" />
                 Add Nominations
               </Button>
             </DialogTrigger>
@@ -222,165 +213,149 @@ export default function TrainingNomination() {
               <DialogHeader>
                 <DialogTitle>Add Nominations</DialogTitle>
                 <DialogDescription>
-                  Select employees to nominate for this training program
+                  Select active employees to nominate for this training program.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                   <Input
+                    value={employeeSearch}
+                    onChange={(event) => setEmployeeSearch(event.target.value)}
                     placeholder="Search employees..."
                     className="pl-10"
-                    value={employeeSearch}
-                    onChange={(e) => setEmployeeSearch(e.target.value)}
                   />
                 </div>
-                <div className="border rounded-lg max-h-[300px] overflow-y-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]"></TableHead>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Department</TableHead>
-                        <TableHead>Designation</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredEmployees.map((emp) => (
-                        <TableRow key={emp.id}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedEmployees.includes(emp.id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setSelectedEmployees([...selectedEmployees, emp.id]);
-                                } else {
-                                  setSelectedEmployees(
-                                    selectedEmployees.filter((id) => id !== emp.id)
-                                  );
-                                }
-                              }}
-                              disabled={selectedEmployees.length >= availableSlots && !selectedEmployees.includes(emp.id)}
-                            />
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <div className="font-medium">{emp.full_name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {emp.employee_code}
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>{emp.department}</TableCell>
-                          <TableCell>{emp.designation}</TableCell>
+                {availableEmployeesQuery.isError ? (
+                  <ErrorState
+                    error={availableEmployeesQuery.error}
+                    onRetry={() => void availableEmployeesQuery.refetch()}
+                  />
+                ) : (
+                  <div className="max-h-[320px] overflow-y-auto rounded-lg border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[50px]" />
+                          <TableHead>Employee</TableHead>
+                          <TableHead>Department</TableHead>
+                          <TableHead>Designation</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                      </TableHeader>
+                      <TableBody>
+                        {availableEmployees.map((employee) => (
+                          <TableRow key={employee.id}>
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedEmployees.includes(employee.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedEmployees((current) => [...current, employee.id]);
+                                  } else {
+                                    setSelectedEmployees((current) =>
+                                      current.filter((value) => value !== employee.id),
+                                    );
+                                  }
+                                }}
+                                disabled={
+                                  selectedEmployees.length >= availableSlots &&
+                                  !selectedEmployees.includes(employee.id)
+                                }
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <div className="font-medium">{employee.fullName}</div>
+                                <div className="text-xs text-muted-foreground">
+                                  {employee.employeeCode}
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{employee.department}</TableCell>
+                            <TableCell>{employee.designation}</TableCell>
+                          </TableRow>
+                        ))}
+                        {!availableEmployeesQuery.isLoading && availableEmployees.length === 0 ? (
+                          <TableRow>
+                            <TableCell
+                              colSpan={4}
+                              className="py-8 text-center text-muted-foreground"
+                            >
+                              No more employees are available for nomination.
+                            </TableCell>
+                          </TableRow>
+                        ) : null}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
                 <p className="text-sm text-muted-foreground">
-                  {selectedEmployees.length} selected | {availableSlots} slots available
+                  {selectedEmployees.length} selected • {availableSlots} slots available
                 </p>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowAddDialog(false)}>
                   Cancel
                 </Button>
-                <Button onClick={handleAddNominations} disabled={selectedEmployees.length === 0}>
-                  Add {selectedEmployees.length} Nominations
+                <Button
+                  onClick={() => void handleAddNominations()}
+                  disabled={selectedEmployees.length === 0 || addNominations.isPending}
+                >
+                  {addNominations.isPending
+                    ? 'Adding...'
+                    : `Add ${selectedEmployees.length} Nominations`}
                 </Button>
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          </div>
         }
       />
 
-      {/* Program Summary */}
       <Card>
         <CardContent className="pt-6">
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-6">
             <div>
               <p className="text-xs text-muted-foreground">Program Code</p>
-              <p className="font-medium">{programDetails.program_code}</p>
+              <p className="font-medium">{program.programCode}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Start Date</p>
-              <p className="font-medium">{formatDate(programDetails.start_date)}</p>
+              <p className="font-medium">{formatDate(program.startDate)}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Duration</p>
-              <p className="font-medium">{programDetails.duration_hours} hours</p>
+              <p className="font-medium">{program.durationHours} hours</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Location</p>
-              <p className="font-medium">{programDetails.location}</p>
+              <p className="font-medium">{program.location}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Trainer</p>
-              <p className="font-medium">{programDetails.trainer_name}</p>
+              <p className="font-medium">{program.trainerName}</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Capacity</p>
               <p className="font-medium">
-                {enrolledCount}/{programDetails.max_participants}
-                <span className="text-green-600 ml-2">({availableSlots} available)</span>
+                {enrolledCount}/{program.maxParticipants}
               </p>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Alerts */}
-      {availableSlots <= 5 && availableSlots > 0 && (
-        <Alert>
-          <Clock className="h-4 w-4" />
-          <AlertTitle>Limited Slots Available</AlertTitle>
+      {availableSlots <= 3 && (
+        <Alert variant={availableSlots === 0 ? 'destructive' : 'default'}>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>{availableSlots === 0 ? 'Training Full' : 'Limited Slots Left'}</AlertTitle>
           <AlertDescription>
-            Only {availableSlots} slots remaining. Please finalize nominations soon.
+            {availableSlots === 0
+              ? 'Maximum capacity reached. No more nominations can be added.'
+              : `Only ${availableSlots} slots remain for this program.`}
           </AlertDescription>
         </Alert>
       )}
 
-      {availableSlots === 0 && (
-        <Alert variant="destructive">
-          <XCircle className="h-4 w-4" />
-          <AlertTitle>Training Full</AlertTitle>
-          <AlertDescription>
-            Maximum capacity reached. No more nominations can be added.
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search by name, code, or department..."
-                className="pl-10"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="NOMINATED">Nominated</SelectItem>
-                <SelectItem value="CONFIRMED">Confirmed</SelectItem>
-                <SelectItem value="CANCELLED">Cancelled</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Nominations Table */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -389,72 +364,127 @@ export default function TrainingNomination() {
           </CardTitle>
           <CardDescription>{filteredNominations.length} nominations</CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Employee</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Designation</TableHead>
-                <TableHead>Nominated By</TableHead>
-                <TableHead>Nominated On</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredNominations.map((nom) => (
-                <TableRow key={nom.id}>
-                  <TableCell>
-                    <div>
-                      <div className="font-medium">{nom.employee_name}</div>
-                      <div className="text-xs text-muted-foreground">{nom.employee_code}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell>{nom.department}</TableCell>
-                  <TableCell>{nom.designation}</TableCell>
-                  <TableCell>{nom.nominated_by}</TableCell>
-                  <TableCell>{formatDate(nom.nominated_on)}</TableCell>
-                  <TableCell>{getStatusBadge(nom.status)}</TableCell>
-                  <TableCell>
-                    <div className="flex gap-2">
-                      {nom.status === 'NOMINATED' && (
-                        <>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleConfirmNomination(nom.id)}
-                          >
-                            <CheckCircle className="h-4 w-4 mr-1" />
-                            Confirm
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-red-600"
-                            onClick={() => handleCancelNomination(nom.id)}
-                          >
-                            <XCircle className="h-4 w-4" />
-                          </Button>
-                        </>
-                      )}
-                      {nom.status === 'CONFIRMED' && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-red-600"
-                          onClick={() => handleCancelNomination(nom.id)}
-                        >
-                          <Trash2 className="h-4 w-4 mr-1" />
-                          Cancel
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-4">
+            <div className="relative min-w-[220px] flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search nominations..."
+                className="pl-10"
+              />
+            </div>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => setStatusFilter(value as typeof statusFilter)}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="NOMINATED">Nominated</SelectItem>
+                <SelectItem value="CONFIRMED">Confirmed</SelectItem>
+                <SelectItem value="ATTENDED">Attended</SelectItem>
+                <SelectItem value="NO_SHOW">No Show</SelectItem>
+                <SelectItem value="CANCELLED">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {filteredNominations.length === 0 ? (
+            <EmptyState
+              title="No nominations found"
+              subtitle="Nominate employees to track attendance and collect feedback."
+            />
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Employee</TableHead>
+                  <TableHead>Department</TableHead>
+                  <TableHead>Nominated By</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredNominations.map((nomination) => (
+                  <TableRow key={nomination.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-medium">{nomination.employeeName}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {nomination.employeeCode} • {nomination.designation}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>{nomination.department}</TableCell>
+                    <TableCell>{nomination.nominatedBy ?? '-'}</TableCell>
+                    <TableCell>{formatDate(nomination.nominatedOn)}</TableCell>
+                    <TableCell>{getStatusBadge(nomination.status)}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        {nomination.status === 'NOMINATED' ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => void handleStatusChange(nomination.id, 'CONFIRMED')}
+                            >
+                              <CheckCircle className="mr-1 h-4 w-4" />
+                              Confirm
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => void handleStatusChange(nomination.id, 'CANCELLED')}
+                            >
+                              <XCircle className="mr-1 h-4 w-4" />
+                              Cancel
+                            </Button>
+                          </>
+                        ) : null}
+                        {nomination.status === 'CONFIRMED' ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void handleStatusChange(nomination.id, 'ATTENDED', true)
+                              }
+                            >
+                              Mark Attended
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                void handleStatusChange(nomination.id, 'NO_SHOW', false)
+                              }
+                            >
+                              No Show
+                            </Button>
+                          </>
+                        ) : null}
+                        {nomination.status === 'ATTENDED' ? (
+                          <Badge variant="default">Attendance marked</Badge>
+                        ) : null}
+                        {nomination.status === 'NO_SHOW' ? (
+                          <Badge variant="destructive">Absent</Badge>
+                        ) : null}
+                        {nomination.status === 'CANCELLED' ? (
+                          <Badge variant="outline">Closed</Badge>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

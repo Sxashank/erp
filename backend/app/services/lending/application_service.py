@@ -63,6 +63,71 @@ class ApplicationService:
     # Loan Application Operations
     # =========================================================================
 
+    @staticmethod
+    def _code(value: Any) -> str | None:
+        if value is None:
+            return None
+        if hasattr(value, "value"):
+            return str(value.value)
+        return str(value)
+
+    def _validate_product_policy(
+        self,
+        *,
+        product: Any,
+        requested_amount: Decimal,
+        requested_tenure_months: int,
+        preferred_interest_type: Any,
+        preferred_repayment_frequency: Any,
+        preferred_repayment_mode: Any,
+        requested_moratorium_months: int,
+    ) -> None:
+        if requested_amount < product.min_amount:
+            raise ValidationException(f"Requested amount is below minimum ({product.min_amount})")
+        if requested_amount > product.max_amount:
+            raise ValidationException(f"Requested amount exceeds maximum ({product.max_amount})")
+
+        if requested_tenure_months < product.min_tenure_months:
+            raise ValidationException(
+                f"Requested tenure is below minimum ({product.min_tenure_months} months)"
+            )
+        if requested_tenure_months > product.max_tenure_months:
+            raise ValidationException(
+                f"Requested tenure exceeds maximum ({product.max_tenure_months} months)"
+            )
+
+        interest_type = self._code(preferred_interest_type)
+        if interest_type and product.interest_type and interest_type != product.interest_type:
+            raise ValidationException(
+                f"Interest type '{interest_type}' is not allowed for product {product.code}"
+            )
+
+        allowed_frequencies = set(product.allowed_repayment_frequencies or [])
+        frequency = self._code(preferred_repayment_frequency)
+        if allowed_frequencies and frequency not in allowed_frequencies:
+            raise ValidationException(
+                f"Repayment frequency '{frequency}' is not allowed for product {product.code}"
+            )
+
+        allowed_modes = set(product.allowed_repayment_modes or [])
+        repayment_mode = self._code(preferred_repayment_mode)
+        if allowed_modes and repayment_mode not in allowed_modes:
+            raise ValidationException(
+                f"Repayment mode '{repayment_mode}' is not allowed for product {product.code}"
+            )
+
+        moratorium_months = requested_moratorium_months or 0
+        if moratorium_months > 0 and not product.allows_moratorium:
+            raise ValidationException(f"Moratorium is not allowed for product {product.code}")
+        if (
+            product.max_moratorium_months is not None
+            and moratorium_months > product.max_moratorium_months
+        ):
+            raise ValidationException(
+                "Requested moratorium exceeds product maximum "
+                f"({product.max_moratorium_months} months)"
+            )
+
     async def create_application(
         self, data: LoanApplicationCreate, created_by: UUID
     ) -> LoanApplication:
@@ -77,21 +142,15 @@ class ApplicationService:
         if not product:
             raise NotFoundException("Product not found")
 
-        # Validate amount against product limits
-        if data.requested_amount < product.min_amount:
-            raise ValidationException(f"Requested amount is below minimum ({product.min_amount})")
-        if data.requested_amount > product.max_amount:
-            raise ValidationException(f"Requested amount exceeds maximum ({product.max_amount})")
-
-        # Validate tenure against product limits
-        if data.requested_tenure_months < product.min_tenure_months:
-            raise ValidationException(
-                f"Requested tenure is below minimum ({product.min_tenure_months} months)"
-            )
-        if data.requested_tenure_months > product.max_tenure_months:
-            raise ValidationException(
-                f"Requested tenure exceeds maximum ({product.max_tenure_months} months)"
-            )
+        self._validate_product_policy(
+            product=product,
+            requested_amount=data.requested_amount,
+            requested_tenure_months=data.requested_tenure_months,
+            preferred_interest_type=data.preferred_interest_type,
+            preferred_repayment_frequency=data.preferred_repayment_frequency,
+            preferred_repayment_mode=data.preferred_repayment_mode,
+            requested_moratorium_months=data.requested_moratorium_months,
+        )
 
         # Generate application number
         application_number = await self.app_repo.generate_application_number(
@@ -125,6 +184,44 @@ class ApplicationService:
         ]:
             raise ValidationException("Application cannot be updated in current status")
 
+        product = await self.product_repo.get(application.product_id)
+        if not product:
+            raise NotFoundException("Product not found")
+
+        self._validate_product_policy(
+            product=product,
+            requested_amount=(
+                data.requested_amount
+                if data.requested_amount is not None
+                else application.requested_amount
+            ),
+            requested_tenure_months=(
+                data.requested_tenure_months
+                if data.requested_tenure_months is not None
+                else application.requested_tenure_months
+            ),
+            preferred_interest_type=(
+                data.preferred_interest_type
+                if data.preferred_interest_type is not None
+                else application.preferred_interest_type
+            ),
+            preferred_repayment_frequency=(
+                data.preferred_repayment_frequency
+                if data.preferred_repayment_frequency is not None
+                else application.preferred_repayment_frequency
+            ),
+            preferred_repayment_mode=(
+                data.preferred_repayment_mode
+                if data.preferred_repayment_mode is not None
+                else application.preferred_repayment_mode
+            ),
+            requested_moratorium_months=(
+                data.requested_moratorium_months
+                if data.requested_moratorium_months is not None
+                else application.requested_moratorium_months
+            ),
+        )
+
         update_data = data.model_dump(exclude_unset=True)
         for field, value in update_data.items():
             setattr(application, field, value)
@@ -143,10 +240,33 @@ class ApplicationService:
         if application.status != ApplicationStatus.DRAFT:
             raise ValidationException("Only draft applications can be submitted")
 
+        previous_status = (
+            application.status.value
+            if hasattr(application.status, "value")
+            else str(application.status)
+        )
         application.status = ApplicationStatus.SUBMITTED
         application.stage = ApplicationStage.APPLICATION
         application.submitted_at = datetime.utcnow()
         application.updated_by = submitted_by
+
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.session).record_event(
+            organization_id=application.organization_id,
+            subject_type=LifecycleSubjectType.APPLICATION,
+            subject_id=application.id,
+            event_type="APPLICATION_SUBMITTED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=submitted_by,
+            business_number=application.application_number,
+            state_from=previous_status,
+            state_to="SUBMITTED",
+        )
 
         # Route through the workflow engine. The application's requested
         # amount drives the delegation-band required level. See CLAUDE.md §8.4.
@@ -198,9 +318,32 @@ class ApplicationService:
         if application.stage != ApplicationStage.APPLICATION:
             raise ValidationException("Application must be in APPLICATION stage")
 
+        previous_stage = (
+            application.stage.value
+            if hasattr(application.stage, "value")
+            else str(application.stage)
+        )
         application.stage = ApplicationStage.APPRAISAL
         application.status = ApplicationStatus.UNDER_REVIEW
         application.updated_by = updated_by
+
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.session).record_event(
+            organization_id=application.organization_id,
+            subject_type=LifecycleSubjectType.APPLICATION,
+            subject_id=application.id,
+            event_type="APPRAISAL_STARTED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=updated_by,
+            business_number=application.application_number,
+            state_from=previous_stage,
+            state_to="APPRAISAL",
+        )
 
         await self.session.flush()
         await self.session.refresh(application)
@@ -291,7 +434,7 @@ class ApplicationService:
     async def upload_document(
         self, data: ApplicationDocumentCreate, created_by: UUID
     ) -> ApplicationDocument:
-        """Upload a document for an application."""
+        """Upload a document for an application — emits lifecycle event."""
         application = await self.app_repo.get(data.application_id)
         if not application:
             raise NotFoundException("Application not found")
@@ -305,7 +448,148 @@ class ApplicationService:
         self.session.add(doc)
         await self.session.flush()
         await self.session.refresh(doc)
+
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        await LifecycleService(self.session).record_event(
+            organization_id=application.organization_id,
+            subject_type=LifecycleSubjectType.APPLICATION,
+            subject_id=application.id,
+            event_type="DOCUMENT_UPLOADED",
+            actor_kind=LifecycleActorKind.LENDER,
+            actor_user_id=created_by,
+            business_number=application.application_number,
+            payload={
+                "document_id": str(doc.id),
+                "document_code": getattr(doc, "document_code", None),
+                "document_name": getattr(doc, "document_name", None),
+                "version": doc.version,
+            },
+        )
         return doc
+
+    async def replace_document(
+        self,
+        document_id: UUID,
+        new_file_path: str,
+        new_file_name: str,
+        new_file_size_bytes: int,
+        new_file_mime_type: str,
+        new_dms_document_id: UUID | None,
+        replaced_by: UUID,
+        replaced_by_kind: str = "BORROWER",
+    ) -> ApplicationDocument:
+        """Replace an existing application document with a new version.
+
+        Wires the document-versioning columns the model has had since
+        inception but no service path was using: ``version`` increments,
+        ``previous_version_id`` chains to the old row, the old row is
+        marked superseded (``is_active=False``), and the lifecycle event
+        records the change.
+        """
+        old = await self.doc_repo.get(document_id)
+        if not old:
+            raise NotFoundException("Document not found")
+        application = await self.app_repo.get(old.application_id)
+        if not application:
+            raise NotFoundException("Application not found")
+
+        # Supersede the old row — keep history intact via the chain.
+        old.is_active = False
+        old_version = old.version or 1
+
+        new_doc = ApplicationDocument(
+            organization_id=old.organization_id,
+            application_id=old.application_id,
+            checklist_item_id=old.checklist_item_id,
+            document_code=old.document_code,
+            document_name=old.document_name,
+            document_description=old.document_description,
+            file_name=new_file_name,
+            file_path=new_file_path,
+            file_size_bytes=new_file_size_bytes,
+            file_mime_type=new_file_mime_type,
+            dms_document_id=new_dms_document_id,
+            upload_date=datetime.utcnow(),
+            status="PENDING",  # re-verification required after re-upload
+            version=old_version + 1,
+            previous_version_id=old.id,
+            created_by=replaced_by,
+        )
+        self.session.add(new_doc)
+        await self.session.flush()
+        await self.session.refresh(new_doc)
+
+        from app.models.lending.lifecycle_event import (
+            LifecycleActorKind,
+            LifecycleSubjectType,
+        )
+        from app.services.lending.lifecycle_service import LifecycleService
+
+        actor_kind = (
+            LifecycleActorKind.BORROWER
+            if replaced_by_kind.upper() == "BORROWER"
+            else LifecycleActorKind.LENDER
+        )
+        await LifecycleService(self.session).record_event(
+            organization_id=application.organization_id,
+            subject_type=LifecycleSubjectType.APPLICATION,
+            subject_id=application.id,
+            event_type="DOCUMENT_UPLOADED",
+            actor_kind=actor_kind,
+            actor_user_id=replaced_by,
+            business_number=application.application_number,
+            state_from=f"v{old_version}",
+            state_to=f"v{new_doc.version}",
+            payload={
+                "document_id": str(new_doc.id),
+                "previous_version_id": str(old.id),
+                "version": new_doc.version,
+                "document_code": new_doc.document_code,
+                "document_name": new_doc.document_name,
+                "is_replacement": True,
+            },
+        )
+        return new_doc
+
+    async def get_document_versions(self, document_id: UUID) -> list[ApplicationDocument]:
+        """Return all versions of a document — current first, ancestors after.
+
+        Walks the ``previous_version_id`` chain. Useful for "Show history"
+        UI on the application detail page.
+        """
+        from sqlalchemy import select
+
+        # Find the root current row first (might be an old version passed in)
+        current = await self.doc_repo.get(document_id)
+        if current is None:
+            raise NotFoundException("Document not found")
+
+        # Walk forward to the most-recent version
+        forward = current
+        while True:
+            stmt = select(ApplicationDocument).where(
+                ApplicationDocument.previous_version_id == forward.id
+            )
+            next_row = (await self.session.execute(stmt)).scalar_one_or_none()
+            if next_row is None:
+                break
+            forward = next_row
+
+        # Now walk backward collecting the chain
+        chain: list[ApplicationDocument] = [forward]
+        node = forward
+        while node.previous_version_id is not None:
+            ancestor = await self.doc_repo.get(node.previous_version_id)
+            if ancestor is None:
+                break
+            chain.append(ancestor)
+            node = ancestor
+        return chain
 
     async def verify_document(
         self,

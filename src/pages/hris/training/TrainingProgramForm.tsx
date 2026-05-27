@@ -1,22 +1,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  ArrowLeft,
-  GraduationCap,
-  Calendar,
-  Clock,
-  MapPin,
-  Users,
-  IndianRupee,
-  User,
-} from 'lucide-react';
-import { useState } from 'react';
+import { Calendar, Clock, GraduationCap, IndianRupee, MapPin, User, Users } from 'lucide-react';
+import { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useNavigate, useParams } from 'react-router-dom';
 import { z } from 'zod';
 
+import { ErrorState } from '@/components/common/ErrorState';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -36,66 +28,158 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
-import { logger } from '@/lib/logger';
+import {
+  useCreateTrainingProgram,
+  useTrainingProgram,
+  useUpdateTrainingProgram,
+} from '@/hooks/hris/useTraining';
+import { useToast } from '@/hooks/use-toast';
+import { getErrorMessage } from '@/lib/errorMessage';
+
 const trainingSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters'),
   description: z.string().min(20, 'Description must be at least 20 characters'),
   category: z.string().min(1, 'Category is required'),
   mode: z.enum(['CLASSROOM', 'VIRTUAL', 'E_LEARNING', 'WORKSHOP', 'ON_THE_JOB']),
-  trainer_type: z.enum(['INTERNAL', 'EXTERNAL']),
-  trainer_name: z.string().min(2, 'Trainer name is required'),
-  trainer_contact: z.string().optional(),
-  start_date: z.string().min(1, 'Start date is required'),
-  end_date: z.string().min(1, 'End date is required'),
-  duration_hours: z.number().min(1, 'Duration must be at least 1 hour'),
+  trainerType: z.enum(['INTERNAL', 'EXTERNAL']),
+  trainerName: z.string().min(2, 'Trainer name is required'),
+  trainerContact: z.string().optional(),
+  startDate: z.string().min(1, 'Start date is required'),
+  endDate: z.string().min(1, 'End date is required'),
+  durationHours: z.coerce.number().min(1, 'Duration must be at least 1 hour'),
   location: z.string().min(1, 'Location is required'),
-  max_participants: z.number().min(1, 'Max participants must be at least 1'),
-  cost_per_participant: z.number().min(0),
-  pre_requisites: z.string().optional(),
-  learning_objectives: z.string().optional(),
-  is_mandatory: z.boolean().default(false),
-  certificate_provided: z.boolean().default(true),
+  maxParticipants: z.coerce.number().min(1, 'Max participants must be at least 1'),
+  costPerParticipant: z.coerce.number().min(0),
+  preRequisites: z.string().optional(),
+  learningObjectives: z.string().optional(),
+  isMandatory: z.boolean().default(false),
+  certificateProvided: z.boolean().default(true),
 });
 
 type TrainingFormInput = z.input<typeof trainingSchema>;
 type TrainingFormData = z.output<typeof trainingSchema>;
 
+const DEFAULT_VALUES: TrainingFormInput = {
+  title: '',
+  description: '',
+  category: '',
+  mode: 'CLASSROOM',
+  trainerType: 'INTERNAL',
+  trainerName: '',
+  trainerContact: '',
+  startDate: '',
+  endDate: '',
+  durationHours: 8,
+  location: '',
+  maxParticipants: 25,
+  costPerParticipant: 0,
+  preRequisites: '',
+  learningObjectives: '',
+  isMandatory: false,
+  certificateProvided: true,
+};
+
 export default function TrainingProgramForm() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { toast } = useToast();
   const isEdit = Boolean(id);
+
+  const programQuery = useTrainingProgram(id);
+  const createProgram = useCreateTrainingProgram();
+  const updateProgram = useUpdateTrainingProgram(id ?? '');
 
   const form = useForm<TrainingFormInput, unknown, TrainingFormData>({
     resolver: zodResolver(trainingSchema),
-    defaultValues: {
-      title: '',
-      description: '',
-      category: '',
-      mode: 'CLASSROOM',
-      trainer_type: 'INTERNAL',
-      trainer_name: '',
-      trainer_contact: '',
-      start_date: '',
-      end_date: '',
-      duration_hours: 8,
-      location: '',
-      max_participants: 25,
-      cost_per_participant: 0,
-      pre_requisites: '',
-      learning_objectives: '',
-      is_mandatory: false,
-      certificate_provided: true,
-    },
+    defaultValues: DEFAULT_VALUES,
   });
 
-  const selectedMode = form.watch('mode');
-  const trainerType = form.watch('trainer_type');
+  useEffect(() => {
+    if (!programQuery.data) {
+      return;
+    }
+    form.reset({
+      title: programQuery.data.title,
+      description: programQuery.data.description,
+      category: programQuery.data.category,
+      mode: programQuery.data.mode,
+      trainerType: programQuery.data.trainerType,
+      trainerName: programQuery.data.trainerName,
+      trainerContact: programQuery.data.trainerContact ?? '',
+      startDate: programQuery.data.startDate,
+      endDate: programQuery.data.endDate,
+      durationHours: programQuery.data.durationHours,
+      location: programQuery.data.location,
+      maxParticipants: programQuery.data.maxParticipants,
+      costPerParticipant: programQuery.data.costPerParticipant,
+      preRequisites: programQuery.data.preRequisites ?? '',
+      learningObjectives: programQuery.data.learningObjectives ?? '',
+      isMandatory: programQuery.data.isMandatory,
+      certificateProvided: programQuery.data.certificateProvided,
+    });
+  }, [form, programQuery.data]);
 
-  const onSubmit = (data: TrainingFormData) => {
-    logger.debug('Training program data:', data);
-    // API call would go here
-    navigate('/admin/hris/training');
+  const selectedMode = form.watch('mode');
+  const trainerType = form.watch('trainerType');
+
+  const onSubmit = async (data: TrainingFormData) => {
+    try {
+      if (isEdit && id) {
+        await updateProgram.mutateAsync(data);
+        toast({ title: 'Training program updated' });
+      } else {
+        const createdProgram = await createProgram.mutateAsync(data);
+        toast({ title: 'Training program created' });
+        navigate(`/admin/hris/training/${createdProgram.id}`);
+        return;
+      }
+      navigate('/admin/hris/training');
+    } catch (error: unknown) {
+      toast({
+        title: 'Unable to save training program',
+        description: getErrorMessage(error, 'Please try again.'),
+        variant: 'destructive',
+      });
+    }
   };
+
+  if (isEdit && programQuery.isLoading) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Edit Training Program"
+          subtitle="Loading training program details"
+          breadcrumbs={[
+            { label: 'Training Programs', to: '/admin/hris/training' },
+            { label: 'Edit' },
+          ]}
+        />
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Loading training program...
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (isEdit && programQuery.isError) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          title="Edit Training Program"
+          subtitle="Unable to load the selected program"
+          breadcrumbs={[
+            { label: 'Training Programs', to: '/admin/hris/training' },
+            { label: 'Edit' },
+          ]}
+        />
+        <ErrorState error={programQuery.error} onRetry={() => void programQuery.refetch()} />
+      </div>
+    );
+  }
+
+  const isSaving = createProgram.isPending || updateProgram.isPending;
 
   return (
     <div className="space-y-6">
@@ -110,9 +194,8 @@ export default function TrainingProgramForm() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Main Details */}
-            <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="space-y-6 lg:col-span-2">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -160,7 +243,7 @@ export default function TrainingProgramForm() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Category</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select category" />
@@ -187,7 +270,7 @@ export default function TrainingProgramForm() {
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Training Mode</FormLabel>
-                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <Select value={field.value} onValueChange={field.onChange}>
                             <FormControl>
                               <SelectTrigger>
                                 <SelectValue placeholder="Select mode" />
@@ -209,7 +292,7 @@ export default function TrainingProgramForm() {
 
                   <FormField
                     control={form.control}
-                    name="learning_objectives"
+                    name="learningObjectives"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Learning Objectives</FormLabel>
@@ -230,10 +313,10 @@ export default function TrainingProgramForm() {
 
                   <FormField
                     control={form.control}
-                    name="pre_requisites"
+                    name="preRequisites"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Pre-requisites (Optional)</FormLabel>
+                        <FormLabel>Pre-requisites</FormLabel>
                         <FormControl>
                           <Textarea
                             placeholder="Any pre-requisites for this training..."
@@ -247,7 +330,6 @@ export default function TrainingProgramForm() {
                 </CardContent>
               </Card>
 
-              {/* Schedule & Location */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -259,7 +341,7 @@ export default function TrainingProgramForm() {
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="start_date"
+                      name="startDate"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>Start Date</FormLabel>
@@ -270,10 +352,9 @@ export default function TrainingProgramForm() {
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={form.control}
-                      name="end_date"
+                      name="endDate"
                       render={({ field }) => (
                         <FormItem>
                           <FormLabel>End Date</FormLabel>
@@ -289,35 +370,41 @@ export default function TrainingProgramForm() {
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="duration_hours"
+                      name="durationHours"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Total Duration (Hours)</FormLabel>
+                          <FormLabel>Duration (Hours)</FormLabel>
                           <FormControl>
                             <Input
                               type="number"
-                              {...field}
-                              onChange={(e) => field.onChange(parseInt(e.target.value))}
+                              min="1"
+                              step="0.5"
+                              value={typeof field.value === 'number' ? field.value : ''}
+                              onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                              onBlur={field.onBlur}
+                              name={field.name}
+                              ref={field.ref}
                             />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={form.control}
                       name="location"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Location</FormLabel>
+                          <FormLabel>
+                            {selectedMode === 'VIRTUAL' || selectedMode === 'E_LEARNING'
+                              ? 'Meeting Link / Platform'
+                              : 'Training Venue'}
+                          </FormLabel>
                           <FormControl>
                             <Input
                               placeholder={
-                                selectedMode === 'VIRTUAL'
-                                  ? 'Online platform link'
-                                  : selectedMode === 'E_LEARNING'
-                                  ? 'E-Learning Portal'
+                                selectedMode === 'VIRTUAL' || selectedMode === 'E_LEARNING'
+                                  ? 'Meeting link or platform'
                                   : 'Training venue'
                               }
                               {...field}
@@ -331,7 +418,6 @@ export default function TrainingProgramForm() {
                 </CardContent>
               </Card>
 
-              {/* Trainer Details */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -340,83 +426,88 @@ export default function TrainingProgramForm() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <FormField
-                    control={form.control}
-                    name="trainer_type"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Trainer Type</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select trainer type" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="INTERNAL">Internal Trainer</SelectItem>
-                            <SelectItem value="EXTERNAL">External Trainer</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
-                      name="trainer_name"
+                      name="trainerType"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Trainer Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Enter trainer name" {...field} />
-                          </FormControl>
+                          <FormLabel>Trainer Type</FormLabel>
+                          <Select value={field.value} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select trainer type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="INTERNAL">Internal</SelectItem>
+                              <SelectItem value="EXTERNAL">External</SelectItem>
+                            </SelectContent>
+                          </Select>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-
                     <FormField
                       control={form.control}
-                      name="trainer_contact"
+                      name="trainerName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Contact (Optional)</FormLabel>
+                          <FormLabel>
+                            {trainerType === 'INTERNAL'
+                              ? 'Employee / Trainer Name'
+                              : 'Trainer Name'}
+                          </FormLabel>
                           <FormControl>
-                            <Input placeholder="Email or phone" {...field} />
+                            <Input placeholder="Trainer name" {...field} />
                           </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
                   </div>
+
+                  <FormField
+                    control={form.control}
+                    name="trainerContact"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Trainer Contact</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Email or phone number" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                 </CardContent>
               </Card>
             </div>
 
-            {/* Sidebar */}
             <div className="space-y-6">
-              {/* Capacity & Cost */}
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Users className="h-5 w-5" />
-                    Capacity & Cost
+                    Participation
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="max_participants"
+                    name="maxParticipants"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Maximum Participants</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value))}
+                            min="1"
+                            value={typeof field.value === 'number' ? field.value : ''}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
                           />
                         </FormControl>
                         <FormMessage />
@@ -426,20 +517,23 @@ export default function TrainingProgramForm() {
 
                   <FormField
                     control={form.control}
-                    name="cost_per_participant"
+                    name="costPerParticipant"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Cost per Participant (₹)</FormLabel>
+                        <FormLabel>Cost Per Participant</FormLabel>
                         <FormControl>
                           <Input
                             type="number"
-                            {...field}
-                            onChange={(e) => field.onChange(parseInt(e.target.value))}
+                            min="0"
+                            step="0.01"
+                            value={typeof field.value === 'number' ? field.value : ''}
+                            onChange={(event) => field.onChange(event.target.valueAsNumber)}
+                            onBlur={field.onBlur}
+                            name={field.name}
+                            ref={field.ref}
                           />
                         </FormControl>
-                        <FormDescription>
-                          Set to 0 for internal training
-                        </FormDescription>
+                        <FormDescription>Set to 0 for internal training</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -447,28 +541,24 @@ export default function TrainingProgramForm() {
                 </CardContent>
               </Card>
 
-              {/* Settings */}
               <Card>
                 <CardHeader>
-                  <CardTitle>Settings</CardTitle>
+                  <CardTitle>Program Settings</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <FormField
                     control={form.control}
-                    name="is_mandatory"
+                    name="isMandatory"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
+                      <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-1">
                           <FormLabel className="text-base">Mandatory Training</FormLabel>
                           <FormDescription>
-                            Mark as mandatory for specific roles
+                            Mark if attendance is compulsory for selected employees
                           </FormDescription>
                         </div>
                         <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -476,20 +566,17 @@ export default function TrainingProgramForm() {
 
                   <FormField
                     control={form.control}
-                    name="certificate_provided"
+                    name="certificateProvided"
                     render={({ field }) => (
-                      <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                        <div>
-                          <FormLabel className="text-base">Certificate</FormLabel>
+                      <FormItem className="flex items-center justify-between rounded-lg border p-4">
+                        <div className="space-y-1">
+                          <FormLabel className="text-base">Certificate Provided</FormLabel>
                           <FormDescription>
-                            Issue certificate on completion
+                            Enable if participants receive completion certificates
                           </FormDescription>
                         </div>
                         <FormControl>
-                          <Switch
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                          />
+                          <Switch checked={field.value} onCheckedChange={field.onChange} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -497,23 +584,23 @@ export default function TrainingProgramForm() {
                 </CardContent>
               </Card>
 
-              {/* Actions */}
               <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-2">
-                    <Button type="submit" className="w-full">
-                      <GraduationCap className="h-4 w-4 mr-2" />
-                      {isEdit ? 'Update Program' : 'Create Program'}
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => navigate('/admin/hris/training')}
-                    >
-                      Cancel
-                    </Button>
-                  </div>
+                <CardHeader>
+                  <CardTitle>Actions</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Button type="submit" className="w-full" disabled={isSaving}>
+                    {isSaving ? 'Saving...' : isEdit ? 'Update Program' : 'Create Program'}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => navigate('/admin/hris/training')}
+                    disabled={isSaving}
+                  >
+                    Cancel
+                  </Button>
                 </CardContent>
               </Card>
             </div>

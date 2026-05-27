@@ -1,4 +1,18 @@
-import { expect, request as pwRequest, test as base, type APIRequestContext, type Locator, type Page } from '@playwright/test';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
+import {
+  chromium,
+  expect,
+  request as pwRequest,
+  test as base,
+  type APIRequestContext,
+  type Locator,
+  type Page,
+} from '@playwright/test';
+
+import { loginAsAdmin } from '../fixtures/auth';
 
 const env =
   (globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {};
@@ -26,11 +40,8 @@ interface TestFixtures {
   bootBundle: BootBundle;
 }
 
-interface OrganizationOption {
-  id: string;
-  name?: string;
-  is_primary?: boolean;
-  isPrimary?: boolean;
+interface WorkerFixtures {
+  storageStatePath: string;
 }
 
 interface FinancialYearOption {
@@ -77,6 +88,19 @@ function getQuarterWindow(startDate: string) {
   return { quarterFrom, quarterTo, quarterMid };
 }
 
+function getFinancialYearWindow(today = new Date()) {
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+  const startYear = month >= 3 ? year : year - 1;
+  const endYear = startYear + 1;
+  return {
+    code: `FY${startYear}-${String(endYear).slice(-2)}`,
+    name: `${startYear}-${String(endYear).slice(-2)}`,
+    startDate: isoDate(new Date(Date.UTC(startYear, 3, 1))),
+    endDate: isoDate(new Date(Date.UTC(endYear, 2, 31))),
+  };
+}
+
 async function loginWithBackoff(ctx: APIRequestContext) {
   let lastFailure = '';
   for (const waitMs of [0, 5_000, 10_000, 30_000, 60_000]) {
@@ -117,32 +141,65 @@ async function getBootBundle(): Promise<BootBundle> {
 
   const ctx = await pwRequest.newContext();
   const auth = await loginWithBackoff(ctx);
-  const headers = { Authorization: `Bearer ${auth.access_token}` };
-
-  const organizationsResponse = await ctx.get(`${API_BASE}/organizations`, {
-    params: { page_size: 10 },
-    headers,
+  const accessToken = auth.accessToken ?? auth.access_token;
+  const meResponse = await ctx.get(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!organizationsResponse.ok()) {
-    throw new Error(`Organizations fetch failed: ${organizationsResponse.status()} ${await organizationsResponse.text()}`);
+  if (!meResponse.ok()) {
+    throw new Error(`Profile fetch failed: ${meResponse.status()} ${await meResponse.text()}`);
   }
-  const organizationsBody = await organizationsResponse.json();
-  const organizations: OrganizationOption[] = Array.isArray(organizationsBody.items) ? organizationsBody.items : [];
-  const organization = organizations.find((item) => item.is_primary || item.isPrimary) ?? organizations[0];
-  if (!organization) {
-    throw new Error('No organization available for Playwright tax workflows');
+  const me = await meResponse.json();
+  const organizationId = me.organizationId ?? me.organization_id;
+  const organizationName = me.organizationName ?? me.organization_name ?? organizationId;
+  if (!organizationId) {
+    throw new Error(
+      'Authenticated admin does not have an organization for Playwright tax workflows',
+    );
   }
+
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    'X-Organization-Id': organizationId,
+  };
 
   const financialYearsResponse = await ctx.get(`${API_BASE}/financial-years`, {
-    params: { organization_id: organization.id, page_size: 20, include_inactive: false },
+    params: { pageSize: 20, includeInactive: false },
     headers,
   });
   if (!financialYearsResponse.ok()) {
-    throw new Error(`Financial years fetch failed: ${financialYearsResponse.status()} ${await financialYearsResponse.text()}`);
+    throw new Error(
+      `Financial years fetch failed: ${financialYearsResponse.status()} ${await financialYearsResponse.text()}`,
+    );
   }
   const financialYearsBody = await financialYearsResponse.json();
-  const financialYears: FinancialYearOption[] = Array.isArray(financialYearsBody.items) ? financialYearsBody.items : [];
-  const financialYear = financialYears.find((item) => item.is_current || item.isCurrent) ?? financialYears[0];
+  const financialYears: FinancialYearOption[] = Array.isArray(financialYearsBody.items)
+    ? financialYearsBody.items
+    : [];
+  let financialYear =
+    financialYears.find((item) => item.is_current || item.isCurrent) ?? financialYears[0];
+  if (!financialYear) {
+    const nextYear = getFinancialYearWindow();
+    const createFinancialYearResponse = await ctx.post(`${API_BASE}/financial-years`, {
+      headers: {
+        ...headers,
+        'Idempotency-Key': `tax-fy-${organizationId}-${nextYear.code}`,
+      },
+      data: {
+        code: nextYear.code,
+        name: nextYear.name,
+        start_date: nextYear.startDate,
+        end_date: nextYear.endDate,
+        is_current: true,
+        organization_id: organizationId,
+      },
+    });
+    if (!createFinancialYearResponse.ok()) {
+      throw new Error(
+        `Financial year create failed: ${createFinancialYearResponse.status()} ${await createFinancialYearResponse.text()}`,
+      );
+    }
+    financialYear = (await createFinancialYearResponse.json()) as FinancialYearOption;
+  }
   if (!financialYear) {
     throw new Error('No financial year available for Playwright tax workflows');
   }
@@ -157,10 +214,10 @@ async function getBootBundle(): Promise<BootBundle> {
   const { quarterFrom, quarterTo, quarterMid } = getQuarterWindow(financialYearStart);
 
   const bundle: BootBundle = {
-    accessToken: auth.access_token,
-    refreshToken: auth.refresh_token,
-    organizationId: organization.id,
-    organizationName: organization.name ?? organization.id,
+    accessToken,
+    refreshToken: auth.refreshToken ?? auth.refresh_token,
+    organizationId,
+    organizationName,
     financialYearId: financialYear.id,
     financialYearName: financialYear.name ?? financialYear.code ?? financialYear.id,
     financialYearValue,
@@ -175,32 +232,31 @@ async function getBootBundle(): Promise<BootBundle> {
   return bundle;
 }
 
-const test = base.extend<TestFixtures>({
+const test = base.extend<TestFixtures, WorkerFixtures>({
   bootBundle: async ({ browserName: _browserName }, use) => {
     await use(await getBootBundle());
   },
-  authedPage: async ({ page, context, bootBundle }, use) => {
-    await context.addInitScript((bundle) => {
-      window.localStorage.setItem(
-        'smfc-auth',
-        JSON.stringify({
-          state: {
-            accessToken: bundle.accessToken,
-            refreshToken: bundle.refreshToken,
-          },
-          version: 0,
-        }),
-      );
-      window.localStorage.setItem(
-        'smfc-organization',
-        JSON.stringify({
-          state: {
-            activeOrganizationId: bundle.organizationId,
-          },
-          version: 0,
-        }),
-      );
-    }, bootBundle);
+  storageStatePath: [
+    async ({ browserName: _browserName }, use) => {
+      const dir = mkdtempSync(join(tmpdir(), 'taxation-workflows-'));
+      const path = join(dir, 'storage.json');
+      const browser = await chromium.launch();
+      const ctx = await browser.newContext();
+      const page = await ctx.newPage();
+      await loginAsAdmin(page);
+      await ctx.storageState({ path });
+      await ctx.close();
+      await browser.close();
+      await use(path);
+    },
+    { scope: 'worker' },
+  ],
+  context: async ({ browser, storageStatePath }, use) => {
+    const ctx = await browser.newContext({ storageState: storageStatePath });
+    await use(ctx);
+    await ctx.close();
+  },
+  authedPage: async ({ page }, use) => {
     await use(page);
   },
 });
@@ -235,7 +291,10 @@ async function openSelectOption(trigger: Locator, optionText: string) {
 
 test.describe('taxation workflows', () => {
   test.describe.configure({ mode: 'serial' });
-  test.skip(!LIVE_BACKEND_ENABLED, 'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live taxation workflows.');
+  test.skip(
+    !LIVE_BACKEND_ENABLED,
+    'Set PLAYWRIGHT_LIVE_BACKEND=1 to run the live taxation workflows.',
+  );
 
   const suffix = Date.now().toString().slice(-6);
   const gstRateCode = `GST${suffix}`;
@@ -369,7 +428,10 @@ test.describe('taxation workflows', () => {
     await page.getByLabel('Period to').fill(bootBundle.quarterTo);
     await page.getByLabel('Deductor tan').fill(deductorTan);
     await page.getByLabel('Deductor name').fill(bootBundle.organizationName);
-    const entryCheckbox = page.locator('label').filter({ hasText: new RegExp(deducteeName, 'i') }).locator('input[type="checkbox"]');
+    const entryCheckbox = page
+      .locator('label')
+      .filter({ hasText: new RegExp(deducteeName, 'i') })
+      .locator('input[type="checkbox"]');
     await entryCheckbox.check();
     await Promise.all([
       page.waitForURL(/\/admin\/tds\/challans\/[0-9a-f-]{36}$/),
@@ -377,32 +439,40 @@ test.describe('taxation workflows', () => {
     ]);
     await waitForPageIdle(page);
 
-    const paymentCard = page.locator('div.rounded-lg.border').filter({ hasText: 'Payment Details' }).first();
+    const paymentCard = page
+      .locator('div.rounded-lg.border')
+      .filter({ hasText: 'Payment Details' })
+      .first();
     await paymentCard.locator('input').nth(0).fill(challanNumber);
     await paymentCard.locator('input').nth(1).fill(bsrCode);
     await paymentCard.locator('input').nth(3).fill(bootBundle.quarterTo);
     await paymentCard.locator('input').nth(5).fill('State Bank of India');
     await Promise.all([
-      page.waitForResponse((response) =>
-        response.request().method() === 'POST'
-        && response.url().includes('/api/v1/tds/challans/')
-        && response.url().includes('/payment')
-        && response.status() === 200,
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          response.url().includes('/api/v1/tds/challans/') &&
+          response.url().includes('/payment') &&
+          response.status() === 200,
       ),
       page.getByTestId('tds-challan-save-payment').click(),
     ]);
     await waitForPageIdle(page);
 
-    const oltasCard = page.locator('div.rounded-lg.border').filter({ hasText: 'OLTAS Verification' }).first();
+    const oltasCard = page
+      .locator('div.rounded-lg.border')
+      .filter({ hasText: 'OLTAS Verification' })
+      .first();
     await oltasCard.locator('input').nth(0).fill(`OLTAS-${suffix}`);
     await oltasCard.locator('input').nth(1).fill('VERIFIED');
     await oltasCard.locator('input').nth(2).fill(bootBundle.quarterTo);
     await Promise.all([
-      page.waitForResponse((response) =>
-        response.request().method() === 'POST'
-        && response.url().includes('/api/v1/tds/challans/')
-        && response.url().includes('/verify-oltas')
-        && response.status() === 200,
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          response.url().includes('/api/v1/tds/challans/') &&
+          response.url().includes('/verify-oltas') &&
+          response.status() === 200,
       ),
       page.getByTestId('tds-challan-save-oltas').click(),
     ]);
@@ -432,16 +502,29 @@ test.describe('taxation workflows', () => {
     await page.getByLabel('Deductor email').fill(`tax-${suffix}@example.com`);
     await page.getByRole('button', { name: 'Save Return' }).click();
     const returnCreationOutcome = await Promise.race([
-      page.waitForURL(/\/admin\/tds\/returns\/[0-9a-f-]{36}$/, { timeout: 10_000 }).then(() => 'created' as const).catch(() => null),
-      page.getByText(/Return already exists for/i).waitFor({ state: 'visible', timeout: 10_000 }).then(() => 'duplicate' as const).catch(() => null),
+      page
+        .waitForURL(/\/admin\/tds\/returns\/[0-9a-f-]{36}$/, { timeout: 10_000 })
+        .then(() => 'created' as const)
+        .catch(() => null),
+      page
+        .getByText(/Return already exists for/i)
+        .waitFor({ state: 'visible', timeout: 10_000 })
+        .then(() => 'duplicate' as const)
+        .catch(() => null),
     ]);
     if (returnCreationOutcome === 'duplicate') {
       await page.goto('/admin/tds/returns', { waitUntil: 'domcontentloaded' });
-      const existingReturnRow = page.getByRole('row', { name: /26Q.*2024-25.*Q1/i }).first();
+      const existingReturnRow = page
+        .getByRole('row', {
+          name: new RegExp(`26Q.*${escapeRegExp(bootBundle.financialYearName)}.*Q1`, 'i'),
+        })
+        .first();
       await expect(existingReturnRow).toBeVisible();
       await existingReturnRow.click();
     } else if (returnCreationOutcome !== 'created') {
-      throw new Error('TDS return creation did not navigate or surface a duplicate-return message.');
+      throw new Error(
+        'TDS return creation did not navigate or surface a duplicate-return message.',
+      );
     }
     await waitForPageIdle(page);
 
@@ -453,15 +536,19 @@ test.describe('taxation workflows', () => {
     await page.getByRole('button', { name: /Download .*\.txt/i }).click();
     await returnDownload;
 
-    const filingCard = page.locator('div.rounded-lg.border').filter({ hasText: 'Filing Evidence' }).first();
+    const filingCard = page
+      .locator('div.rounded-lg.border')
+      .filter({ hasText: 'Filing Evidence' })
+      .first();
     await filingCard.locator('input').nth(2).fill(filingAckNumber);
     await filingCard.locator('input').nth(3).fill(bootBundle.quarterTo);
     await Promise.all([
-      page.waitForResponse((response) =>
-        response.request().method() === 'POST'
-        && response.url().includes('/api/v1/tds/returns/')
-        && response.url().includes('/filing-details')
-        && response.status() === 200,
+      page.waitForResponse(
+        (response) =>
+          response.request().method() === 'POST' &&
+          response.url().includes('/api/v1/tds/returns/') &&
+          response.url().includes('/filing-details') &&
+          response.status() === 200,
       ),
       page.getByRole('button', { name: 'Save Filing Details' }).click(),
     ]);

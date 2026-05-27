@@ -27,7 +27,7 @@ import {
 import { reportsApi, organizationsApi, voucherTypesApi } from '@/services/api';
 import { exportDayBookToExcel, exportDayBookToPDF } from '@/utils/exportUtils';
 
-import { logger } from "@/lib/logger";
+import { logger } from '@/lib/logger';
 interface Organization {
   id: string;
   name: string;
@@ -131,15 +131,6 @@ export function DayBook() {
       setLoading(false);
     }
   };
-
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-      minimumFractionDigits: 2,
-    }).format(amount);
-
-
   const handlePrint = () => {
     window.print();
   };
@@ -168,14 +159,18 @@ export function DayBook() {
   };
 
   // Group entries by date for the report
-  const entriesByDate = reportData?.entries.reduce((acc, entry) => {
-    const date = entry.voucher_date;
-    if (!acc[date]) {
-      acc[date] = [];
-    }
-    acc[date].push(entry);
-    return acc;
-  }, {} as Record<string, DayBookEntry[]>) || {};
+  const entriesByDate =
+    reportData?.entries.reduce(
+      (acc, entry) => {
+        const date = entry.voucher_date;
+        if (!acc[date]) {
+          acc[date] = [];
+        }
+        acc[date].push(entry);
+        return acc;
+      },
+      {} as Record<string, DayBookEntry[]>,
+    ) || {};
 
   return (
     <div className="space-y-6">
@@ -276,40 +271,48 @@ export function DayBook() {
               <h2 className="text-xl font-bold">{reportData.organization_name}</h2>
               <h3 className="text-lg font-semibold text-slate-700">Day Book / Journal Register</h3>
               <p className="text-sm text-slate-500">
-                From <DateDisplay date={reportData.from_date} /> to <DateDisplay date={reportData.to_date} />
+                From <DateDisplay date={reportData.from_date} /> to{' '}
+                <DateDisplay date={reportData.to_date} />
               </p>
             </div>
           </CardHeader>
           <CardContent>
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-              <div className="bg-slate-50 rounded-lg p-4 text-center">
+            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div className="rounded-lg bg-slate-50 p-4 text-center">
                 <p className="text-sm text-slate-500">Total Vouchers</p>
                 <p className="text-2xl font-bold text-slate-800">{reportData.total_vouchers}</p>
               </div>
-              <div className="bg-blue-50 rounded-lg p-4 text-center">
+              <div className="rounded-lg bg-blue-50 p-4 text-center">
                 <p className="text-sm text-slate-500">Total Debit</p>
-                <p className="text-xl font-bold text-blue-700">{formatCurrency(reportData.total_debit)}</p>
+                <p className="text-xl font-bold text-blue-700">
+                  {formatIndianCompactCurrency(reportData.total_debit)}
+                </p>
               </div>
-              <div className="bg-red-50 rounded-lg p-4 text-center">
+              <div className="rounded-lg bg-red-50 p-4 text-center">
                 <p className="text-sm text-slate-500">Total Credit</p>
-                <p className="text-xl font-bold text-red-700">{formatCurrency(reportData.total_credit)}</p>
+                <p className="text-xl font-bold text-red-700">
+                  {formatIndianCompactCurrency(reportData.total_credit)}
+                </p>
               </div>
-              <div className={`rounded-lg p-4 text-center ${
-                Math.abs(reportData.total_debit - reportData.total_credit) < 0.01
-                  ? 'bg-emerald-50'
-                  : 'bg-amber-50'
-              }`}>
-                <p className="text-sm text-slate-500">Balance Check</p>
-                <p className={`text-lg font-bold ${
+              <div
+                className={`rounded-lg p-4 text-center ${
                   Math.abs(reportData.total_debit - reportData.total_credit) < 0.01
-                    ? 'text-emerald-600'
-                    : 'text-amber-600'
-                }`}>
+                    ? 'bg-emerald-50'
+                    : 'bg-amber-50'
+                }`}
+              >
+                <p className="text-sm text-slate-500">Balance Check</p>
+                <p
+                  className={`text-lg font-bold ${
+                    Math.abs(reportData.total_debit - reportData.total_credit) < 0.01
+                      ? 'text-emerald-600'
+                      : 'text-amber-600'
+                  }`}
+                >
                   {Math.abs(reportData.total_debit - reportData.total_credit) < 0.01
                     ? 'Balanced'
-                    : `Diff: ${formatCurrency(Math.abs(reportData.total_debit - reportData.total_credit))}`
-                  }
+                    : `Diff: ${formatIndianCompactCurrency(Math.abs(reportData.total_debit - reportData.total_credit))}`}
                 </p>
               </div>
             </div>
@@ -327,9 +330,9 @@ export function DayBook() {
                     <TableHead className="w-[120px]">Voucher No.</TableHead>
                     <TableHead className="w-[100px]">Type</TableHead>
                     <TableHead>Narration</TableHead>
-                    <TableHead className="text-center w-[60px]">Lines</TableHead>
-                    <TableHead className="text-right w-[130px]">Debit</TableHead>
-                    <TableHead className="text-right w-[130px]">Credit</TableHead>
+                    <TableHead className="w-[60px] text-center">Lines</TableHead>
+                    <TableHead className="w-[130px] text-right">Debit</TableHead>
+                    <TableHead className="w-[130px] text-right">Credit</TableHead>
                     <TableHead className="w-[60px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -352,29 +355,36 @@ export function DayBook() {
                             {entry.voucher_number}
                           </TableCell>
                           <TableCell>
-                            <Badge className={`${getVoucherTypeBadgeClass(entry.voucher_type)} hover:${getVoucherTypeBadgeClass(entry.voucher_type)}`}>
+                            <Badge
+                              className={`${getVoucherTypeBadgeClass(entry.voucher_type)} hover:${getVoucherTypeBadgeClass(entry.voucher_type)}`}
+                            >
                               {entry.voucher_type}
                             </Badge>
                           </TableCell>
-                          <TableCell className="max-w-[300px] truncate" title={entry.narration || '-'}>
+                          <TableCell
+                            className="max-w-[300px] truncate"
+                            title={entry.narration || '-'}
+                          >
                             {entry.narration || '-'}
                           </TableCell>
                           <TableCell className="text-center">
-                            <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-slate-200 text-xs font-medium">
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-slate-200 text-xs font-medium">
                               {entry.line_count}
                             </span>
                           </TableCell>
                           <TableCell className="text-right font-mono text-blue-600">
-                            {formatCurrency(entry.total_debit)}
+                            {formatIndianCompactCurrency(entry.total_debit)}
                           </TableCell>
                           <TableCell className="text-right font-mono text-red-600">
-                            {formatCurrency(entry.total_credit)}
+                            {formatIndianCompactCurrency(entry.total_credit)}
                           </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="icon"
-                              onClick={() => navigate(`/admin/finance/vouchers/${entry.voucher_id}`)}
+                              onClick={() =>
+                                navigate(`/admin/finance/vouchers/${entry.voucher_id}`)
+                              }
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
@@ -384,13 +394,15 @@ export function DayBook() {
                     </>
                   ))}
                   {/* Total Row */}
-                  <TableRow className="bg-slate-800 text-white font-bold">
-                    <TableCell colSpan={5}>GRAND TOTAL ({reportData.total_vouchers} vouchers)</TableCell>
-                    <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.total_debit)}
+                  <TableRow className="bg-slate-800 font-bold text-white">
+                    <TableCell colSpan={5}>
+                      GRAND TOTAL ({reportData.total_vouchers} vouchers)
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {formatCurrency(reportData.total_credit)}
+                      {formatIndianCompactCurrency(reportData.total_debit)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono">
+                      {formatIndianCompactCurrency(reportData.total_credit)}
                     </TableCell>
                     <TableCell></TableCell>
                   </TableRow>
@@ -401,7 +413,8 @@ export function DayBook() {
             <div className="mt-4 flex justify-between text-xs text-slate-500 print:mt-8">
               <span>Generated on: {new Date(reportData.generated_at).toLocaleString('en-IN')}</span>
               <span>
-                Entries: {reportData.total_vouchers} | Total: {formatCurrency(reportData.total_debit)}
+                Entries: {reportData.total_vouchers} | Total:{' '}
+                {formatIndianCompactCurrency(reportData.total_debit)}
               </span>
             </div>
           </CardContent>

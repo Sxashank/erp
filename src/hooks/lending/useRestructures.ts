@@ -19,14 +19,7 @@ export type RestructureStatusValue =
   | 'IMPLEMENTED'
   | 'CANCELLED';
 
-export type RestructureTypeValue =
-  | 'TENURE_EXTENSION'
-  | 'RATE_REDUCTION'
-  | 'EMI_REDUCTION'
-  | 'MORATORIUM'
-  | 'FITL'
-  | 'COMPREHENSIVE'
-  | 'OTHER';
+export type RestructureTypeValue = string;
 
 // Monetary + rate fields are JSON strings on the wire (Pydantic Decimal —
 // CLAUDE.md §6.2). Coerce via `Number(...)` for display arithmetic.
@@ -65,7 +58,7 @@ async function fetchRestructures(filters?: RestructureFilters) {
   const params = new URLSearchParams();
   if (filters?.status) params.append('status', filters.status);
   if (filters?.page) params.append('page', String(filters.page));
-  if (filters?.pageSize) params.append('page_size', String(filters.pageSize));
+  if (filters?.pageSize) params.append('pageSize', String(filters.pageSize));
   const { data } = await api.get<PaginatedResponse<RestructureListItem>>(
     `/lending/collections/restructures?${params.toString()}`,
   );

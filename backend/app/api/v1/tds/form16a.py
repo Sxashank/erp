@@ -7,19 +7,19 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import HTMLResponse
-from pydantic import BaseModel, Field
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
-from app.api.deps import RequirePermissions, get_db_with_tenant
+from app.api.deps import RequirePermissions, get_active_organization_id, get_db_with_tenant
 from app.models.auth.user import User
 from app.services.tds.form16a_service import Form16AService
 from app.core.exceptions import NotFoundException
+from app.schemas.base import CamelSchema
 
 router = APIRouter()
 
 
-class DeducteeForCertificate(BaseModel):
+class DeducteeForCertificate(CamelSchema):
     """Deductee eligible for Form 16A."""
 
     deductee_pan: Optional[str]
@@ -32,7 +32,7 @@ class DeducteeForCertificate(BaseModel):
     transaction_count: int
 
 
-class CertificateGenerationRequest(BaseModel):
+class CertificateGenerationRequest(CamelSchema):
     """Request to generate Form 16A certificate."""
 
     deductee_pan: str = Field(..., max_length=10)
@@ -41,14 +41,14 @@ class CertificateGenerationRequest(BaseModel):
     quarter: str = Field(..., max_length=2, description="Q1, Q2, Q3, or Q4")
 
 
-class BulkCertificateRequest(BaseModel):
+class BulkCertificateRequest(CamelSchema):
     """Request to generate bulk Form 16A certificates."""
 
     financial_year: str = Field(..., max_length=10)
     quarter: str = Field(..., max_length=2, description="Q1, Q2, Q3, or Q4")
 
 
-class CertificateInfo(BaseModel):
+class CertificateInfo(CamelSchema):
     """Certificate summary info."""
 
     certificate_number: str
@@ -60,9 +60,13 @@ class CertificateInfo(BaseModel):
     total_amount_paid: Decimal
     total_tds_deducted: Decimal
     entry_count: int
+    artifact_status: str
+    legal_status: str
+    source: str
+    compliance_note: Optional[str] = None
 
 
-class CertificateResponse(BaseModel):
+class CertificateResponse(CamelSchema):
     """Generated certificate response."""
 
     certificate_number: str
@@ -82,19 +86,24 @@ class CertificateResponse(BaseModel):
     transaction_count: int
     challan_count: int
     generated_date: date
+    artifact_status: str
+    legal_status: str
+    source: str
+    compliance_note: Optional[str] = None
 
 
 @router.get("/deductees", response_model=List[DeducteeForCertificate], response_model_by_alias=True)
 async def get_deductees_for_certificates(
     financial_year: str = Query(...),
     quarter: str = Query(...),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get list of deductees eligible for Form 16A certificates."""
     service = Form16AService(db)
     deductees = await service.get_deductees_for_certificates(
-        current_user.organization_id,
+        active_organization_id,
         financial_year,
         quarter,
     )
@@ -104,13 +113,14 @@ async def get_deductees_for_certificates(
 @router.post("/generate", response_model=CertificateResponse, response_model_by_alias=True)
 async def generate_certificate(
     data: CertificateGenerationRequest,
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate Form 16A certificate for a deductee."""
     service = Form16AService(db)
     cert = await service.generate_certificate(
-        current_user.organization_id,
+        active_organization_id,
         data.deductee_pan,
         data.tds_section_id,
         data.financial_year,
@@ -134,19 +144,26 @@ async def generate_certificate(
         transaction_count=len(cert.transactions),
         challan_count=len(cert.challans),
         generated_date=cert.generated_date,
+        artifact_status=service.WORKING_SUMMARY_STATUS,
+        legal_status=service.LEGAL_STATUS,
+        source=service.SOURCE,
+        compliance_note=service.COMPLIANCE_NOTE,
     )
 
 
-@router.post("/generate-bulk", response_model=List[CertificateResponse], response_model_by_alias=True)
+@router.post(
+    "/generate-bulk", response_model=List[CertificateResponse], response_model_by_alias=True
+)
 async def generate_bulk_certificates(
     data: BulkCertificateRequest,
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_VOUCHER_CREATE")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Generate Form 16A certificates for all eligible deductees."""
     service = Form16AService(db)
     certificates = await service.generate_bulk_certificates(
-        current_user.organization_id,
+        active_organization_id,
         data.financial_year,
         data.quarter,
     )
@@ -169,6 +186,10 @@ async def generate_bulk_certificates(
             transaction_count=len(cert.transactions),
             challan_count=len(cert.challans),
             generated_date=cert.generated_date,
+            artifact_status=service.WORKING_SUMMARY_STATUS,
+            legal_status=service.LEGAL_STATUS,
+            source=service.SOURCE,
+            compliance_note=service.COMPLIANCE_NOTE,
         )
         for cert in certificates
     ]
@@ -177,6 +198,7 @@ async def generate_bulk_certificates(
 @router.get("/download/{certificate_number}")
 async def download_certificate(
     certificate_number: str,
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
@@ -185,12 +207,11 @@ async def download_certificate(
 
     # Get certificate data
     cert_info = await service.get_certificate_by_number(
-        current_user.organization_id,
+        active_organization_id,
         certificate_number,
     )
 
     if not cert_info:
-        from fastapi import HTTPException
         raise NotFoundException(detail="Certificate not found", error_code="CERTIFICATE_NOT_FOUND")
 
     # Generate full certificate (need to regenerate to get all data)
@@ -221,13 +242,14 @@ async def download_certificate(
 async def list_certificates(
     financial_year: str = Query(...),
     quarter: Optional[str] = Query(None),
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get list of generated certificates."""
     service = Form16AService(db)
     certificates = await service.get_generated_certificates(
-        current_user.organization_id,
+        active_organization_id,
         financial_year,
         quarter,
     )
@@ -237,18 +259,18 @@ async def list_certificates(
 @router.get("/{certificate_number}", response_model=CertificateInfo, response_model_by_alias=True)
 async def get_certificate(
     certificate_number: str,
+    active_organization_id: UUID = Depends(get_active_organization_id),
     current_user: User = Depends(RequirePermissions("FIN_REPORT_VIEW")),
     db: AsyncSession = Depends(get_db_with_tenant),
 ):
     """Get certificate details by number."""
     service = Form16AService(db)
     cert = await service.get_certificate_by_number(
-        current_user.organization_id,
+        active_organization_id,
         certificate_number,
     )
 
     if not cert:
-        from fastapi import HTTPException
         raise NotFoundException(detail="Certificate not found", error_code="CERTIFICATE_NOT_FOUND")
 
     return CertificateInfo(**cert)

@@ -241,6 +241,16 @@ class PortalRegistrationService:
         user.mobile_verified = True
         user.mobile_verified_at = datetime.utcnow()
 
+        auto_approved, linked_entity_ids = await self._try_auto_approve(user)
+        if auto_approved:
+            return RegisterVerifyOtpResponse(
+                registration_reference=registration_reference,
+                portal_user_id=user.id,
+                registration_status="ACTIVE",
+                auto_approved=True,
+                linked_entity_ids=linked_entity_ids,
+            )
+
         return RegisterVerifyOtpResponse(
             registration_reference=registration_reference,
             portal_user_id=user.id,
