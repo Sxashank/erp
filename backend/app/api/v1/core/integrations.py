@@ -7,7 +7,6 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.database import get_db
 from app.api.deps import get_current_user, get_db_with_tenant
 from app.models.auth.user import User
 from app.models.core.integration_config import IntegrationType, IntegrationProvider
@@ -18,11 +17,10 @@ from app.schemas.core.integration_config import (
     IntegrationConfigResponse,
     IntegrationConfigListResponse,
     IntegrationLogResponse,
-    IntegrationTestRequest,
     IntegrationTestResponse,
     IntegrationConfigTemplate,
 )
-from app.schemas.base import PaginatedResponse, MessageResponse
+from app.schemas.base import MessageResponse
 from app.core.responses import PaginatedResponse as PaginatedResponseModel
 from app.core.exceptions import NotFoundException
 
@@ -38,9 +36,13 @@ router = APIRouter(prefix="/integrations", tags=["Integrations"])
     summary="List integration configurations",
 )
 async def list_integrations(
-    integration_type: Optional[IntegrationType] = Query(None, description="Filter by type"),
+    integration_type: Optional[IntegrationType] = Query(
+        None,
+        alias="integrationType",
+        description="Filter by type",
+    ),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, alias="pageSize", ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_with_tenant),
 ) -> PaginatedResponseModel[IntegrationConfigListResponse]:
@@ -94,10 +96,10 @@ async def create_integration(
     - CREDIT_BUREAU: member_id, member_password, api_key
     - PAYMENT_GATEWAY: merchant_id, api_key, api_secret (or key_id/key_secret for Razorpay)
     """
-    # Force tenant scope from the JWT — never trust the body's organization_id.
-    data.organization_id = current_user.organization_id
     service = IntegrationService(db)
-    config = await service.create(data, current_user.id)
+    # Force tenant scope from the JWT — never trust the request body for org scope.
+    scoped_data = data.model_copy(update={"organization_id": current_user.organization_id})
+    config = await service.create(scoped_data, current_user.id)
 
     return IntegrationConfigResponse.model_validate(config)
 
@@ -141,6 +143,34 @@ async def list_integration_types(
             ],
         },
         {
+            "type": IntegrationType.AADHAAR_KYC.value,
+            "label": "Aadhaar KYC",
+            "description": "Aadhaar XML/eKYC verification through approved providers",
+            "providers": [
+                {"value": p.value, "label": _get_provider_label(p)}
+                for p in [
+                    IntegrationProvider.UIDAI,
+                    IntegrationProvider.DIGILOCKER,
+                    IntegrationProvider.KARZA,
+                    IntegrationProvider.IDFY,
+                ]
+            ],
+        },
+        {
+            "type": IntegrationType.PAN_VERIFICATION.value,
+            "label": "PAN Verification",
+            "description": "PAN validation and name/status verification",
+            "providers": [
+                {"value": p.value, "label": _get_provider_label(p)}
+                for p in [
+                    IntegrationProvider.NSDL_PAN,
+                    IntegrationProvider.PROTEAN,
+                    IntegrationProvider.KARZA,
+                    IntegrationProvider.IDFY,
+                ]
+            ],
+        },
+        {
             "type": IntegrationType.GSTN.value,
             "label": "GSTN Portal",
             "description": "GST return filing and ITC reconciliation",
@@ -178,6 +208,44 @@ async def list_integration_types(
                 ]
             ],
         },
+        {
+            "type": IntegrationType.SMS_GATEWAY.value,
+            "label": "SMS Gateway",
+            "description": "OTP, alerts, reminders, and borrower/employee notifications",
+            "providers": [
+                {"value": p.value, "label": _get_provider_label(p)}
+                for p in [
+                    IntegrationProvider.MSG91,
+                    IntegrationProvider.TWILIO,
+                    IntegrationProvider.TEXTLOCAL,
+                ]
+            ],
+        },
+        {
+            "type": IntegrationType.EMAIL_GATEWAY.value,
+            "label": "Email Gateway",
+            "description": "Transactional email, reports, certificates, and notification delivery",
+            "providers": [
+                {"value": p.value, "label": _get_provider_label(p)}
+                for p in [
+                    IntegrationProvider.SENDGRID,
+                    IntegrationProvider.AWS_SES,
+                    IntegrationProvider.MAILGUN,
+                ]
+            ],
+        },
+        {
+            "type": IntegrationType.E_INVOICE.value,
+            "label": "E-Invoice / E-Way Bill",
+            "description": "Invoice reference and e-way bill API configuration",
+            "providers": [
+                {"value": p.value, "label": _get_provider_label(p)}
+                for p in [
+                    IntegrationProvider.NIC_EINVOICE,
+                    IntegrationProvider.CLEARTAX_EINVOICE,
+                ]
+            ],
+        },
     ]
 
 
@@ -190,14 +258,34 @@ def _get_provider_label(provider: IntegrationProvider) -> str:
         IntegrationProvider.FINVU: "Finvu",
         IntegrationProvider.ONEMONEY: "OneMoney",
         IntegrationProvider.SETU: "Setu",
+        IntegrationProvider.YODLEE: "Yodlee",
+        IntegrationProvider.UIDAI: "UIDAI",
+        IntegrationProvider.DIGILOCKER: "DigiLocker",
+        IntegrationProvider.KARZA: "Karza",
+        IntegrationProvider.IDFY: "IDfy",
+        IntegrationProvider.NSDL_PAN: "NSDL PAN",
+        IntegrationProvider.PROTEAN: "Protean",
         IntegrationProvider.GSTN: "GSTN Direct",
         IntegrationProvider.CLEARTAX: "ClearTax",
+        IntegrationProvider.ZOHO_GST: "Zoho GST",
         IntegrationProvider.CIBIL: "CIBIL",
         IntegrationProvider.EXPERIAN: "Experian",
         IntegrationProvider.EQUIFAX: "Equifax",
+        IntegrationProvider.CRIF: "CRIF",
         IntegrationProvider.RAZORPAY: "Razorpay",
         IntegrationProvider.CASHFREE: "Cashfree",
         IntegrationProvider.PAYU: "PayU",
+        IntegrationProvider.CCAVENUE: "CCAvenue",
+        IntegrationProvider.STRIPE: "Stripe",
+        IntegrationProvider.PAYTM: "Paytm",
+        IntegrationProvider.MSG91: "MSG91",
+        IntegrationProvider.TWILIO: "Twilio",
+        IntegrationProvider.TEXTLOCAL: "Textlocal",
+        IntegrationProvider.SENDGRID: "SendGrid",
+        IntegrationProvider.AWS_SES: "AWS SES",
+        IntegrationProvider.MAILGUN: "Mailgun",
+        IntegrationProvider.NIC_EINVOICE: "NIC e-Invoice",
+        IntegrationProvider.CLEARTAX_EINVOICE: "ClearTax e-Invoice",
     }
     return labels.get(provider, provider.value)
 
@@ -244,7 +332,6 @@ async def get_integration(
     config = await service.get(config_id, decrypt=False, mask=True)
 
     if not config:
-        from fastapi import HTTPException
         raise NotFoundException(
             detail="Integration config not found",
             error_code="INTEGRATION_CONFIG_NOT_FOUND",
@@ -325,7 +412,7 @@ async def test_integration(
 async def get_integration_logs(
     config_id: UUID,
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, alias="pageSize", ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_with_tenant),
 ) -> PaginatedResponseModel[IntegrationLogResponse]:
@@ -348,12 +435,12 @@ async def get_integration_logs(
     summary="Get organization integration logs",
 )
 async def get_organization_logs(
-    integration_type: Optional[str] = Query(None),
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
-    success_only: Optional[bool] = Query(None),
+    integration_type: Optional[str] = Query(None, alias="integrationType"),
+    from_date: Optional[datetime] = Query(None, alias="fromDate"),
+    to_date: Optional[datetime] = Query(None, alias="toDate"),
+    success_only: Optional[bool] = Query(None, alias="successOnly"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(50, ge=1, le=100),
+    page_size: int = Query(50, alias="pageSize", ge=1, le=100),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_with_tenant),
 ) -> PaginatedResponseModel[IntegrationLogResponse]:
@@ -383,9 +470,9 @@ async def get_organization_logs(
     summary="Get integration log statistics",
 )
 async def get_log_stats(
-    integration_type: Optional[str] = Query(None),
-    from_date: Optional[datetime] = Query(None),
-    to_date: Optional[datetime] = Query(None),
+    integration_type: Optional[str] = Query(None, alias="integrationType"),
+    from_date: Optional[datetime] = Query(None, alias="fromDate"),
+    to_date: Optional[datetime] = Query(None, alias="toDate"),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db_with_tenant),
 ) -> dict:
@@ -442,6 +529,42 @@ async def get_config_template(
             "description": "Setu Account Aggregator integration",
             "documentation_url": "https://docs.setu.co/data/account-aggregator",
         },
+        (IntegrationType.AADHAAR_KYC, IntegrationProvider.UIDAI): {
+            "required_fields": ["client_id", "client_secret"],
+            "optional_fields": ["redirect_url", "private_key"],
+            "description": "Aadhaar eKYC configuration. Live retrieval requires an approved UIDAI/KUA integration.",
+            "documentation_url": None,
+        },
+        (IntegrationType.AADHAAR_KYC, IntegrationProvider.DIGILOCKER): {
+            "required_fields": ["client_id", "client_secret", "redirect_url"],
+            "optional_fields": ["api_key"],
+            "description": "DigiLocker Aadhaar document fetch configuration.",
+            "documentation_url": "https://www.digilocker.gov.in/developer",
+        },
+        (IntegrationType.AADHAAR_KYC, IntegrationProvider.KARZA): {
+            "required_fields": ["api_key"],
+            "optional_fields": ["api_secret", "redirect_url"],
+            "description": "Karza Aadhaar verification configuration.",
+            "documentation_url": None,
+        },
+        (IntegrationType.PAN_VERIFICATION, IntegrationProvider.NSDL_PAN): {
+            "required_fields": ["client_id", "client_secret"],
+            "optional_fields": ["purpose_code"],
+            "description": "NSDL PAN verification configuration.",
+            "documentation_url": None,
+        },
+        (IntegrationType.PAN_VERIFICATION, IntegrationProvider.PROTEAN): {
+            "required_fields": ["client_id", "client_secret"],
+            "optional_fields": ["purpose_code"],
+            "description": "Protean PAN verification configuration.",
+            "documentation_url": None,
+        },
+        (IntegrationType.PAN_VERIFICATION, IntegrationProvider.KARZA): {
+            "required_fields": ["api_key"],
+            "optional_fields": ["api_secret", "purpose_code"],
+            "description": "Karza PAN verification configuration.",
+            "documentation_url": None,
+        },
         (IntegrationType.GSTN, IntegrationProvider.GSTN): {
             "required_fields": ["gstin", "username"],
             "optional_fields": ["password", "asp_id", "asp_secret", "auto_file_gstr1", "auto_file_gstr3b"],
@@ -465,6 +588,30 @@ async def get_config_template(
             "optional_fields": ["webhook_secret", "payment_page_name", "theme_color", "logo_url"],
             "description": "Razorpay payment gateway for online collections",
             "documentation_url": "https://razorpay.com/docs/",
+        },
+        (IntegrationType.SMS_GATEWAY, IntegrationProvider.MSG91): {
+            "required_fields": ["sender_id", "api_key", "dlt_entity_id"],
+            "optional_fields": ["default_template_id", "auth_token"],
+            "description": "MSG91 SMS gateway configuration with DLT metadata.",
+            "documentation_url": "https://docs.msg91.com/",
+        },
+        (IntegrationType.EMAIL_GATEWAY, IntegrationProvider.SENDGRID): {
+            "required_fields": ["from_email", "api_key"],
+            "optional_fields": ["from_name", "webhook_secret"],
+            "description": "SendGrid transactional email configuration.",
+            "documentation_url": "https://docs.sendgrid.com/",
+        },
+        (IntegrationType.EMAIL_GATEWAY, IntegrationProvider.AWS_SES): {
+            "required_fields": ["from_email", "api_key", "api_secret"],
+            "optional_fields": ["from_name"],
+            "description": "AWS SES transactional email configuration.",
+            "documentation_url": "https://docs.aws.amazon.com/ses/",
+        },
+        (IntegrationType.E_INVOICE, IntegrationProvider.NIC_EINVOICE): {
+            "required_fields": ["gstin", "username", "password"],
+            "optional_fields": ["api_key", "api_secret"],
+            "description": "NIC e-invoice and e-way bill API configuration.",
+            "documentation_url": "https://einvoice1.gst.gov.in/",
         },
     }
 

@@ -3,10 +3,11 @@
 Manages the borrower-side onboarding flow, distinct from the legacy
 customer-portal login. The lifecycle is:
 
-1. ``register(...)`` — caller submits CIN/GSTIN/LLPIN/PAN +
-   authorised-signatory + mobile + email. The service either reuses an
-   existing PENDING_APPROVAL row for the same mobile (idempotent
-   re-tries) or inserts a fresh ``PortalUser`` row with
+1. ``register(...)`` — caller submits either CIN/GSTIN/LLPIN/PAN or an
+   existing loan-account number + sanctioned amount, plus
+   authorised-signatory + mobile + email. The service either reuses the
+   same in-flight PENDING_APPROVAL row (idempotent retries) or inserts a
+   fresh ``PortalUser`` row with
    ``registration_status='PENDING_APPROVAL'`` and a new
    ``registration_reference`` (``REG/{YYYY}/{NNNNNN}``). An OTP row is
    issued via the existing ``PortalAuthService`` plumbing.
@@ -14,6 +15,7 @@ customer-portal login. The lifecycle is:
 2. ``verify_otp(reference, otp)`` — checks the OTP. On success, runs the
    **auto-approval** heuristic:
 
+      * exact loan-account-number + sanctioned-amount match, or
       * exactly one matching ``los_entity`` on CIN/GSTIN/PAN/LLPIN
       * AND a contact with the same mobile + email on that entity
 
@@ -38,7 +40,7 @@ from datetime import UTC, datetime
 from hashlib import sha256
 from uuid import UUID
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
@@ -48,6 +50,7 @@ from app.core.exceptions import (
 )
 from app.models.lending.entity import Entity, EntityContact
 from app.models.lending.enums import EntityType
+from app.models.lending.loan_account import LoanAccount
 from app.models.masters.organization import Organization
 from app.models.portal.enums import (
     OTPPurpose,
@@ -113,10 +116,10 @@ class PortalRegistrationService:
 
         normalized_mobile = payload.mobile.strip()
 
-        # Reuse a PENDING_APPROVAL row for the same mobile so retries are
-        # idempotent and don't pile up. We DO NOT reuse REJECTED rows —
-        # the user needs to be re-vetted.
-        user = await self._find_pending_user(intake_org_id, normalized_mobile)
+        # Reuse only the same in-flight registration. Matching on mobile
+        # alone is too weak because one authorised signatory can represent
+        # multiple borrowers.
+        user = await self._find_pending_user(intake_org_id, payload)
 
         if user is None:
             user = PortalUser(
@@ -131,6 +134,8 @@ class PortalRegistrationService:
                 registration_requested_cin=_normalize(payload.cin),
                 registration_requested_gstin=_normalize(payload.gstin),
                 registration_requested_llpin=_normalize(payload.llpin),
+                registration_requested_loan_account_number=_normalize(payload.loan_account_number),
+                registration_requested_sanctioned_amount=payload.sanctioned_amount,
                 registration_authorized_signatory_name=(payload.authorized_signatory_name.strip()),
                 registered_at=datetime.now(UTC),
                 registration_reference=await self._next_registration_reference(),
@@ -145,6 +150,10 @@ class PortalRegistrationService:
             user.registration_requested_cin = _normalize(payload.cin)
             user.registration_requested_gstin = _normalize(payload.gstin)
             user.registration_requested_llpin = _normalize(payload.llpin)
+            user.registration_requested_loan_account_number = _normalize(
+                payload.loan_account_number
+            )
+            user.registration_requested_sanctioned_amount = payload.sanctioned_amount
             user.registration_authorized_signatory_name = payload.authorized_signatory_name.strip()
 
         otp_result = await PortalAuthService(self.db).send_otp(
@@ -536,20 +545,24 @@ class PortalRegistrationService:
     async def _find_pending_user(
         self,
         organization_id: UUID,
-        mobile: str,
+        payload: RegisterRequest,
     ) -> PortalUser | None:
+        normalized_mobile = payload.mobile.strip()
         stmt = (
             select(PortalUser)
             .where(
                 PortalUser.organization_id == organization_id,
-                PortalUser.mobile == mobile,
+                PortalUser.mobile == normalized_mobile,
                 PortalUser.registration_status == PortalRegistrationStatus.PENDING_APPROVAL,
                 PortalUser.deleted_at.is_(None),
             )
             .order_by(PortalUser.created_at.desc())
-            .limit(1)
         )
-        return (await self.db.execute(stmt)).scalar_one_or_none()
+        candidates = list((await self.db.execute(stmt)).scalars().all())
+        for candidate in candidates:
+            if self._pending_request_matches(candidate, payload):
+                return candidate
+        return None
 
     async def _get_user_by_reference(self, registration_reference: str) -> PortalUser | None:
         stmt = select(PortalUser).where(
@@ -573,6 +586,96 @@ class PortalRegistrationService:
         )
         return [row[0] for row in (await self.db.execute(stmt)).all()]
 
+    def _pending_request_matches(
+        self,
+        user: PortalUser,
+        payload: RegisterRequest,
+    ) -> bool:
+        return (
+            user.email == payload.email
+            and user.registration_requested_pan == _normalize(payload.pan)
+            and user.registration_requested_cin == _normalize(payload.cin)
+            and user.registration_requested_gstin == _normalize(payload.gstin)
+            and user.registration_requested_llpin == _normalize(payload.llpin)
+            and user.registration_requested_loan_account_number
+            == _normalize(payload.loan_account_number)
+            and user.registration_requested_sanctioned_amount == payload.sanctioned_amount
+            and (user.registration_authorized_signatory_name or "").strip()
+            == payload.authorized_signatory_name.strip()
+        )
+
+    async def _contact_matches_entity(
+        self,
+        entity: Entity,
+        user: PortalUser,
+    ) -> bool:
+        normalized_mobile = re.sub(r"\D", "", user.mobile)
+        target_email = (user.email or "").strip().lower()
+        if not normalized_mobile or not target_email:
+            return False
+
+        primary_phone = re.sub(r"\D", "", entity.primary_phone or "")
+        primary_email = (entity.primary_email or "").strip().lower()
+        if primary_phone.endswith(normalized_mobile[-10:]) and primary_email == target_email:
+            return True
+
+        contact_stmt = select(EntityContact).where(
+            EntityContact.entity_id == entity.id,
+            EntityContact.deleted_at.is_(None),
+        )
+        contacts = list((await self.db.execute(contact_stmt)).scalars().all())
+        return any(
+            (c.mobile and re.sub(r"\D", "", c.mobile).endswith(normalized_mobile[-10:]))
+            and ((c.email or "").strip().lower() == target_email)
+            for c in contacts
+        )
+
+    async def _activate_user_for_entity(
+        self,
+        user: PortalUser,
+        entity: Entity,
+        granted_by: UUID | None,
+    ) -> None:
+        existing_links = await self._linked_entity_ids(user.id)
+        if entity.id not in existing_links:
+            self.db.add(
+                PortalUserEntity(
+                    portal_user_id=user.id,
+                    entity_id=entity.id,
+                    organization_id=entity.organization_id,
+                    granted_at=datetime.now(UTC),
+                    granted_by=granted_by,
+                    is_link_active=True,
+                )
+            )
+
+        user.registration_status = PortalRegistrationStatus.ACTIVE
+        user.approved_at = datetime.now(UTC)
+        user.approved_by = granted_by
+        user.organization_id = entity.organization_id
+        user.rejection_reason = None
+        await self.db.flush()
+
+    async def _find_existing_loan_entity(self, user: PortalUser) -> Entity | None:
+        loan_account_number = _normalize(user.registration_requested_loan_account_number)
+        sanctioned_amount = user.registration_requested_sanctioned_amount
+        if not loan_account_number or sanctioned_amount is None:
+            return None
+
+        stmt = (
+            select(Entity)
+            .join(LoanAccount, LoanAccount.entity_id == Entity.id)
+            .where(
+                LoanAccount.deleted_at.is_(None),
+                func.upper(LoanAccount.loan_account_number) == loan_account_number,
+                LoanAccount.sanctioned_amount == sanctioned_amount,
+                Entity.deleted_at.is_(None),
+                Entity.entity_type != EntityType.INDIVIDUAL,
+            )
+            .limit(1)
+        )
+        return (await self.db.execute(stmt)).scalar_one_or_none()
+
     async def _try_auto_approve(
         self,
         user: PortalUser,
@@ -583,6 +686,11 @@ class PortalRegistrationService:
         the user's ``organization_id`` is rebound to the matched entity's
         org, the link row is inserted, and status is flipped to ACTIVE.
         """
+        loan_entity = await self._find_existing_loan_entity(user)
+        if loan_entity is not None and await self._contact_matches_entity(loan_entity, user):
+            await self._activate_user_for_entity(user, loan_entity, granted_by=None)
+            return True, [loan_entity.id]
+
         candidates = await self._find_entity_matches(user, organization_id=None)
         if len(candidates) != 1:
             return False, []
@@ -590,43 +698,10 @@ class PortalRegistrationService:
         candidate = candidates[0]
         ent_stmt = select(Entity).where(Entity.id == candidate.entity_id)
         entity = (await self.db.execute(ent_stmt)).scalar_one_or_none()
-        if entity is None:
+        if entity is None or not await self._contact_matches_entity(entity, user):
             return False, []
 
-        # Contact match — at least one entity contact must share both
-        # mobile (digits-only suffix match) and email (case-insensitive).
-        normalized_mobile = re.sub(r"\D", "", user.mobile)
-        target_email = (user.email or "").strip().lower()
-
-        contact_stmt = select(EntityContact).where(
-            EntityContact.entity_id == entity.id,
-            EntityContact.deleted_at.is_(None),
-        )
-        contacts = list((await self.db.execute(contact_stmt)).scalars().all())
-        contact_match = any(
-            (c.mobile and re.sub(r"\D", "", c.mobile).endswith(normalized_mobile[-10:]))
-            and ((c.email or "").strip().lower() == target_email)
-            for c in contacts
-        )
-        if not contact_match:
-            return False, []
-
-        # Create the link row + flip status.
-        link = PortalUserEntity(
-            portal_user_id=user.id,
-            entity_id=entity.id,
-            organization_id=entity.organization_id,
-            granted_at=datetime.now(UTC),
-            granted_by=None,
-            is_link_active=True,
-        )
-        self.db.add(link)
-        user.registration_status = PortalRegistrationStatus.ACTIVE
-        user.approved_at = datetime.now(UTC)
-        user.approved_by = None
-        user.organization_id = entity.organization_id
-        await self.db.flush()
-
+        await self._activate_user_for_entity(user, entity, granted_by=None)
         return True, [entity.id]
 
     async def _find_entity_matches(
@@ -643,11 +718,35 @@ class PortalRegistrationService:
         out: list[EntitySuggestion] = []
         seen: set[UUID] = set()
 
+        if (
+            user.registration_requested_loan_account_number
+            and user.registration_requested_sanctioned_amount is not None
+        ):
+            loan_stmt = (
+                select(Entity, LoanAccount)
+                .join(LoanAccount, LoanAccount.entity_id == Entity.id)
+                .where(
+                    Entity.deleted_at.is_(None),
+                    Entity.entity_type != EntityType.INDIVIDUAL,
+                    LoanAccount.deleted_at.is_(None),
+                    func.upper(LoanAccount.loan_account_number)
+                    == user.registration_requested_loan_account_number,
+                    LoanAccount.sanctioned_amount
+                    == user.registration_requested_sanctioned_amount,
+                )
+            )
+            if organization_id is not None:
+                loan_stmt = loan_stmt.where(Entity.organization_id == organization_id)
+            for ent, loan in (await self.db.execute(loan_stmt)).all():
+                if ent.id in seen:
+                    continue
+                out.append(_entity_to_suggestion(ent, "EXACT_LOAN_ACCOUNT", loan))
+                seen.add(ent.id)
+
         async def _query(
             *,
             field_value: str,
             field_attr,
-            strength: str,
         ) -> list[Entity]:
             stmt = select(Entity).where(
                 Entity.deleted_at.is_(None),
@@ -662,7 +761,6 @@ class PortalRegistrationService:
             for ent in await _query(
                 field_value=user.registration_requested_cin,
                 field_attr=Entity.cin,
-                strength="EXACT_CIN",
             ):
                 if ent.id in seen:
                     continue
@@ -673,7 +771,6 @@ class PortalRegistrationService:
             for ent in await _query(
                 field_value=user.registration_requested_gstin,
                 field_attr=Entity.gstin,
-                strength="EXACT_GSTIN",
             ):
                 if ent.id in seen:
                     continue
@@ -684,7 +781,6 @@ class PortalRegistrationService:
             for ent in await _query(
                 field_value=user.registration_requested_pan,
                 field_attr=Entity.pan,
-                strength="EXACT_PAN",
             ):
                 if ent.id in seen:
                     continue
@@ -695,32 +791,10 @@ class PortalRegistrationService:
             for ent in await _query(
                 field_value=user.registration_requested_llpin,
                 field_attr=Entity.llpin,
-                strength="EXACT_LLPIN",
             ):
                 if ent.id in seen:
                     continue
                 out.append(_entity_to_suggestion(ent, "EXACT_LLPIN"))
-                seen.add(ent.id)
-
-        # Fuzzy fallback — exact match on signatory's legal name. Cheap
-        # ILIKE; intentionally not a heavy trigram search.
-        signatory = user.registration_authorized_signatory_name
-        if signatory:
-            stmt = select(Entity).where(
-                Entity.deleted_at.is_(None),
-                Entity.entity_type != EntityType.INDIVIDUAL,
-                or_(
-                    func.upper(Entity.legal_name).contains(signatory.upper()),
-                    func.upper(Entity.trade_name).contains(signatory.upper()),
-                ),
-            )
-            if organization_id is not None:
-                stmt = stmt.where(Entity.organization_id == organization_id)
-            stmt = stmt.limit(10)
-            for ent in (await self.db.execute(stmt)).scalars().all():
-                if ent.id in seen:
-                    continue
-                out.append(_entity_to_suggestion(ent, "FUZZY_NAME"))
                 seen.add(ent.id)
 
         return out
@@ -734,6 +808,8 @@ class PortalRegistrationService:
             requested_gstin=user.registration_requested_gstin,
             requested_llpin=user.registration_requested_llpin,
             requested_pan=user.registration_requested_pan,
+            requested_loan_account_number=user.registration_requested_loan_account_number,
+            requested_sanctioned_amount=user.registration_requested_sanctioned_amount,
             authorized_signatory_name=(user.registration_authorized_signatory_name or ""),
             mobile=user.mobile,
             email=user.email or "",
@@ -743,7 +819,11 @@ class PortalRegistrationService:
         )
 
 
-def _entity_to_suggestion(entity: Entity, strength: str) -> EntitySuggestion:
+def _entity_to_suggestion(
+    entity: Entity,
+    strength: str,
+    loan: LoanAccount | None = None,
+) -> EntitySuggestion:
     return EntitySuggestion(
         entity_id=entity.id,
         legal_name=entity.legal_name,
@@ -751,5 +831,7 @@ def _entity_to_suggestion(entity: Entity, strength: str) -> EntitySuggestion:
         gstin=entity.gstin,
         pan=entity.pan,
         llpin=entity.llpin,
+        loan_account_number=loan.loan_account_number if loan is not None else None,
+        sanctioned_amount=loan.sanctioned_amount if loan is not None else None,
         match_strength=strength,  # type: ignore[arg-type]
     )

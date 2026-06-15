@@ -32,6 +32,8 @@ class IntegrationType(str, enum.Enum):
 
     NACH = "NACH"
     ACCOUNT_AGGREGATOR = "ACCOUNT_AGGREGATOR"
+    AADHAAR_KYC = "AADHAAR_KYC"
+    PAN_VERIFICATION = "PAN_VERIFICATION"
     GSTN = "GSTN"
     CREDIT_BUREAU = "CREDIT_BUREAU"
     PAYMENT_GATEWAY = "PAYMENT_GATEWAY"
@@ -54,6 +56,14 @@ class IntegrationProvider(str, enum.Enum):
     ONEMONEY = "ONEMONEY"
     SETU = "SETU"
     YODLEE = "YODLEE"
+
+    # KYC / identity verification providers
+    UIDAI = "UIDAI"
+    DIGILOCKER = "DIGILOCKER"
+    KARZA = "KARZA"
+    IDFY = "IDFY"
+    NSDL_PAN = "NSDL_PAN"
+    PROTEAN = "PROTEAN"
 
     # GSTN Provider
     GSTN = "GSTN"
@@ -307,6 +317,12 @@ class IntegrationLog(Base):
         server_default=func.now(),
         nullable=False,
         index=True,
+    )
+    version: Mapped[int] = mapped_column(
+        Integer,
+        default=1,
+        server_default="1",
+        nullable=False,
     )
 
     # User who triggered the request (optional)

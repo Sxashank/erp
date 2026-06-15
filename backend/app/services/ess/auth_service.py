@@ -70,7 +70,7 @@ class ESSAuthService:
             email=email,
             is_mobile_verified=False,
             is_email_verified=False,
-            status=ESSUserStatus.ACTIVE,
+            status=ESSUserStatus.ACTIVE.value,
         )
         self.session.add(ess_user)
         await self.session.flush()
@@ -137,7 +137,7 @@ class ESSAuthService:
         )
 
         result = await self.session.execute(query)
-        otp = result.scalar_one_or_none()
+        otp = result.scalars().first()
 
         if not otp:
             return False, "OTP expired or not found"
@@ -181,8 +181,8 @@ class ESSAuthService:
         if not ess_user:
             return None, "User not found"
 
-        if ess_user.status != ESSUserStatus.ACTIVE:
-            return None, f"Account is {ess_user.status.value.lower()}"
+        if ess_user.status != ESSUserStatus.ACTIVE.value:
+            return None, f"Account is {str(ess_user.status).lower()}"
 
         # Check if account is locked
         if ess_user.locked_until and ess_user.locked_until > datetime.utcnow():
@@ -232,7 +232,7 @@ class ESSAuthService:
             "expires_in": 3600,
             "user": {
                 "id": str(ess_user.id),
-                "employee_id": str(ess_user.employee_id),
+                "employeeId": str(ess_user.employee_id),
                 "mobile": ess_user.mobile,
                 "email": ess_user.email,
             },
@@ -263,7 +263,7 @@ class ESSAuthService:
 
         # Get user
         ess_user = await self.get_ess_user_by_id(session.ess_user_id)
-        if not ess_user or ess_user.status != ESSUserStatus.ACTIVE:
+        if not ess_user or ess_user.status != ESSUserStatus.ACTIVE.value:
             return None, "User not found or inactive"
 
         # Generate new tokens
@@ -407,7 +407,7 @@ class ESSAuthService:
         ess_user = await self.get_ess_user_by_id(ess_user_id)
         if ess_user:
             ess_user.locked_until = datetime.utcnow() + timedelta(minutes=lock_duration_minutes)
-            ess_user.status = ESSUserStatus.LOCKED
+            ess_user.status = ESSUserStatus.LOCKED.value
             await self.session.flush()
 
     async def unlock_account(self, ess_user_id: UUID) -> None:
@@ -416,7 +416,7 @@ class ESSAuthService:
         if ess_user:
             ess_user.locked_until = None
             ess_user.login_attempts = 0
-            ess_user.status = ESSUserStatus.ACTIVE
+            ess_user.status = ESSUserStatus.ACTIVE.value
             await self.session.flush()
 
     async def update_password(

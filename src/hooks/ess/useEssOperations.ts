@@ -2,7 +2,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   essAttendanceApi,
+  essLeaveApi,
   essOperationsApi,
+  type ESSLeaveApplication,
   type AttendanceRecordsResponse,
   type AttendanceSummaryResponse,
   type ESSPerformanceSelfAppraisalPayload,
@@ -86,16 +88,62 @@ export function useRegularizations(params?: {
   });
 }
 
+export function useRegularizationTypes() {
+  return useQuery({
+    queryKey: [...ESS_OPERATIONS_QUERY_KEY, 'regularization-types'] as const,
+    queryFn: () => essAttendanceApi.getRegularizationTypes(),
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function useCreateRegularization() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (payload: {
       attendanceDate: string;
-      regularizationType: string;
-      requestedInTime?: string;
-      requestedOutTime?: string;
+      requestType: string;
+      requestedFirstIn?: string;
+      requestedLastOut?: string;
       reason: string;
     }) => essAttendanceApi.createRegularization(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ESS_OPERATIONS_QUERY_KEY });
+    },
+  });
+}
+
+export function useEssLeaveSummary(year?: number) {
+  return useQuery({
+    queryKey: [...ESS_OPERATIONS_QUERY_KEY, 'leave-summary', year] as const,
+    queryFn: () => essLeaveApi.getSummary(year),
+  });
+}
+
+export function useCreateLeaveApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (payload: {
+      leaveTypeId: string;
+      fromDate: string;
+      toDate: string;
+      isHalfDay?: boolean;
+      halfDayType?: string;
+      reason: string;
+      contactNumber?: string;
+      contactAddress?: string;
+      attachments?: string[];
+    }) => essLeaveApi.createApplication(payload),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ESS_OPERATIONS_QUERY_KEY });
+    },
+  });
+}
+
+export function useCancelLeaveApplication() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ application, reason }: { application: ESSLeaveApplication; reason: string }) =>
+      essLeaveApi.cancelApplication(application.id, reason),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ESS_OPERATIONS_QUERY_KEY });
     },

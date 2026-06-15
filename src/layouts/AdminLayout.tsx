@@ -8,6 +8,7 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  Palette,
   Search,
   Settings,
   Users,
@@ -36,10 +37,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { useAppTheme } from '@/contexts/AppThemeContext';
 import { Separator } from '@/components/ui/separator';
 import { filterNavItemsByAccess } from '@/lib/moduleAccess';
 import { cn } from '@/lib/utils';
@@ -297,6 +301,7 @@ export function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const permissions = useAuthStore((state) => state.permissions);
+  const { theme, setTheme, themes } = useAppTheme();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   // Single-open accordion: only one parent menu is expanded at a time.
   // Storing one string (not a list) makes the "only that menu activates"
@@ -381,10 +386,10 @@ export function AdminLayout() {
           <button
             onClick={() => toggleExpand(item.label)}
             className={cn(
-              'flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium leading-5 transition-colors',
+              'app-sidebar-item flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium leading-5 transition-colors',
               active
-                ? 'bg-blue-50 text-blue-700'
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                ? 'app-sidebar-item-active'
+                : '',
             )}
           >
             <span className="flex min-w-0 flex-1 items-center gap-3">
@@ -398,17 +403,17 @@ export function AdminLayout() {
             )}
           </button>
           {isExpanded && (
-            <div className="ml-4 mt-1 space-y-1 border-l border-slate-200 pl-3">
+            <div className="app-sidebar-subnav ml-4 mt-1 space-y-1 border-l pl-3">
               {item.children?.map((child) => (
                 <Link
                   key={child.href}
                   to={child.href}
                   onClick={() => setSidebarOpen(false)}
                   className={cn(
-                    'block rounded-lg px-3 py-2 text-left text-sm leading-5 transition-colors',
+                    'app-sidebar-item block rounded-lg px-3 py-2 text-left text-sm leading-5 transition-colors',
                     isActive(child.href)
-                      ? 'bg-blue-50 font-medium text-blue-700'
-                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+                      ? 'app-sidebar-item-active font-medium'
+                      : '',
                   )}
                 >
                   {child.label}
@@ -426,10 +431,10 @@ export function AdminLayout() {
         to={item.href!}
         onClick={() => setSidebarOpen(false)}
         className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium leading-5 transition-colors',
+          'app-sidebar-item flex items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium leading-5 transition-colors',
           active
-            ? 'bg-blue-50 text-blue-700'
-            : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+            ? 'app-sidebar-item-active'
+            : '',
         )}
       >
         <item.icon className="h-4 w-4 shrink-0" />
@@ -439,9 +444,9 @@ export function AdminLayout() {
   };
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-slate-50 text-slate-900">
+    <div className="app-shell flex h-screen flex-col overflow-hidden text-slate-900">
       {/* Header - Fixed at top */}
-      <header className="z-30 flex-shrink-0 border-b border-slate-200 bg-white">
+      <header className="app-header z-30 flex-shrink-0 border-b">
         <div className="flex items-center gap-4 px-4 py-3 lg:px-6">
           <Button
             variant="ghost"
@@ -453,7 +458,7 @@ export function AdminLayout() {
           </Button>
 
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <div className="app-brand-mark flex h-10 w-10 items-center justify-center rounded-xl">
               <Building2 className="h-5 w-5" />
             </div>
             <div className="hidden sm:block">
@@ -476,6 +481,45 @@ export function AdminLayout() {
             <Button variant="ghost" size="icon">
               <Bell className="h-5 w-5" />
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label="Change appearance">
+                  <Palette className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuRadioGroup
+                  value={theme}
+                  onValueChange={(value) => setTheme(value as typeof theme)}
+                >
+                  {themes.map((themeOption) => (
+                    <DropdownMenuRadioItem
+                      key={themeOption.id}
+                      value={themeOption.id}
+                      className="items-start gap-3 py-2"
+                    >
+                      <div className="mt-0.5 flex gap-1.5">
+                        {themeOption.swatches.map((swatch, index) => (
+                          <span
+                            key={`${themeOption.id}-${index}`}
+                            className="app-theme-swatch h-3.5 w-3.5 rounded-full"
+                            style={{ backgroundColor: swatch }}
+                          />
+                        ))}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-slate-900">{themeOption.label}</div>
+                        <div className="text-xs leading-5 text-slate-500">
+                          {themeOption.description}
+                        </div>
+                      </div>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </DropdownMenuRadioGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
             </Button>
@@ -512,7 +556,7 @@ export function AdminLayout() {
           <button
             type="button"
             aria-label="Close navigation"
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            className="fixed inset-0 z-40 bg-slate-950/50 lg:hidden"
             onClick={() => setSidebarOpen(false)}
           />
         )}
@@ -520,16 +564,27 @@ export function AdminLayout() {
         {/* Sidebar - Scrolls independently */}
         <aside
           className={cn(
-            'fixed left-0 top-0 z-50 h-full w-80 transform border-r border-slate-200 bg-white transition-transform lg:static lg:z-auto lg:h-auto lg:w-80 lg:translate-x-0',
+            'app-sidebar fixed left-0 top-0 z-50 h-full w-80 transform border-r transition-transform lg:static lg:z-auto lg:h-auto lg:w-80 lg:translate-x-0',
             sidebarOpen ? 'translate-x-0' : '-translate-x-full',
           )}
         >
           <div className="flex h-full flex-col">
-            <div className="flex items-center justify-between border-b border-slate-200 p-4 lg:hidden">
+            <div className="flex items-center justify-between border-b border-slate-200/10 p-4 lg:hidden">
               <span className="font-semibold">Navigation</span>
               <Button variant="ghost" size="icon" onClick={() => setSidebarOpen(false)}>
                 <X className="h-5 w-5" />
               </Button>
+            </div>
+            <div className="hidden border-b border-white/10 p-4 lg:block">
+              <div className="flex items-center gap-3">
+                <div className="app-brand-mark flex h-11 w-11 items-center justify-center rounded-xl">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-white/60">SMFCL ERP</p>
+                  <p className="text-sm font-semibold text-white">Navigation</p>
+                </div>
+              </div>
             </div>
             <nav className="flex-1 space-y-1 overflow-y-auto p-4">
               {visibleNavItems.map(renderNavItem)}
@@ -538,7 +593,7 @@ export function AdminLayout() {
         </aside>
 
         {/* Main content - Scrolls independently */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <main className="app-main flex-1 overflow-y-auto p-4 lg:p-6">
           <RequireModuleAccess>
             <Outlet />
           </RequireModuleAccess>

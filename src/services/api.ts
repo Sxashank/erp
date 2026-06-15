@@ -849,7 +849,7 @@ export const dashboardApi = {
 // Integrations API
 export const integrationsApi = {
   // List all integrations for an organization
-  list: (params: { integration_type?: string; page?: number; page_size?: number }) =>
+  list: (params: { integrationType?: string; page?: number; pageSize?: number }) =>
     api.get('/integrations', { params }),
 
   // Get available integration types
@@ -868,29 +868,29 @@ export const integrationsApi = {
 
   // Create new integration
   create: (data: {
-    integration_type: string;
+    integrationType: string;
     provider: string;
-    display_name?: string;
-    config_data: Record<string, unknown>;
-    sandbox_mode?: boolean;
-    base_url?: string;
-    sandbox_url?: string;
-    webhook_url?: string;
-    webhook_secret?: string;
+    displayName?: string;
+    configData: Record<string, unknown>;
+    sandboxMode?: boolean;
+    baseUrl?: string;
+    sandboxUrl?: string;
+    webhookUrl?: string;
+    webhookSecret?: string;
   }) => api.post('/integrations', data),
 
   // Update integration
   update: (
     configId: string,
     data: {
-      display_name?: string;
-      config_data?: Record<string, unknown>;
-      sandbox_mode?: boolean;
-      base_url?: string;
-      sandbox_url?: string;
-      webhook_url?: string;
-      webhook_secret?: string;
-      is_active?: boolean;
+      displayName?: string;
+      configData?: Record<string, unknown>;
+      sandboxMode?: boolean;
+      baseUrl?: string;
+      sandboxUrl?: string;
+      webhookUrl?: string;
+      webhookSecret?: string;
+      isActive?: boolean;
     },
   ) => api.put(`/integrations/${configId}`, data),
 
@@ -905,22 +905,22 @@ export const integrationsApi = {
     configId: string,
     params?: {
       page?: number;
-      page_size?: number;
+      pageSize?: number;
     },
   ) => api.get(`/integrations/${configId}/logs`, { params }),
 
   // Get all logs for an organization
   getOrganizationLogs: (params: {
-    integration_type?: string;
-    from_date?: string;
-    to_date?: string;
-    success_only?: boolean;
+    integrationType?: string;
+    fromDate?: string;
+    toDate?: string;
+    successOnly?: boolean;
     page?: number;
-    page_size?: number;
+    pageSize?: number;
   }) => api.get('/integrations/logs/organization', { params }),
 
   // Get log statistics
-  getLogStats: (params: { integration_type?: string; from_date?: string; to_date?: string }) =>
+  getLogStats: (params: { integrationType?: string; fromDate?: string; toDate?: string }) =>
     api.get('/integrations/logs/stats', { params }),
 
   // Get config template

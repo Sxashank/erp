@@ -146,14 +146,14 @@ class HelpdeskTicket(BaseModel):
         nullable=True,
     )
     category_type: Mapped[str] = mapped_column(
-        SQLEnum(TicketCategory, name="ticket_category_enum", create_type=False),
+        String(30),
         nullable=False,
     )
 
     # Priority
     priority: Mapped[str] = mapped_column(
-        SQLEnum(TicketPriority, name="ticket_priority_enum", create_type=False),
-        default=TicketPriority.NORMAL,
+        String(20),
+        default=TicketPriority.NORMAL.value,
         nullable=False,
     )
 
@@ -227,8 +227,8 @@ class HelpdeskTicket(BaseModel):
 
     # Status
     status: Mapped[str] = mapped_column(
-        SQLEnum(TicketStatus, name="ticket_status_enum", create_type=False),
-        default=TicketStatus.OPEN,
+        String(20),
+        default=TicketStatus.OPEN.value,
         nullable=False,
     )
 

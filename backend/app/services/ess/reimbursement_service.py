@@ -482,7 +482,7 @@ class ESSReimbursementService:
         }
 
         for row in rows:
-            status = row.status.value if row.status else "UNKNOWN"
+            status = row.status if row.status else "UNKNOWN"
             summary["by_status"][status] = {
                 "count": row.count,
                 "claimed": float(row.claimed or 0),
@@ -492,9 +492,9 @@ class ESSReimbursementService:
             summary["total_claimed"] += row.claimed or Decimal("0")
             summary["total_approved"] += row.approved or Decimal("0")
 
-            if row.status == ClaimStatus.PAID:
+            if status == ClaimStatus.PAID.value:
                 summary["total_paid"] += row.approved or Decimal("0")
-            elif row.status in [ClaimStatus.SUBMITTED, ClaimStatus.PENDING_APPROVAL]:
+            elif status in [ClaimStatus.SUBMITTED.value, ClaimStatus.PENDING_APPROVAL.value]:
                 summary["pending_claims"] += row.count
 
         # Convert decimals to float for JSON serialization

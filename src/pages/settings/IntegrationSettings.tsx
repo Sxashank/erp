@@ -1,15 +1,17 @@
 import {
   AlertCircle,
   ArrowRight,
-  Building2,
+  BadgeCheck,
   Check,
   CreditCard,
   Database,
   Eye,
   EyeOff,
+  Fingerprint,
   FileText,
   Loader2,
-  RefreshCw,
+  Mail,
+  MessageSquare,
   Save,
   Server,
   Shield,
@@ -36,10 +38,10 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { integrationsApi, organizationsApi } from '@/services/api';
+import { getErrorMessage } from '@/lib/errorMessage';
+import { logger } from '@/lib/logger';
+import { integrationsApi } from '@/services/api';
 
-import { logger } from "@/lib/logger";
-import { getErrorMessage } from "@/lib/errorMessage";
 interface IntegrationType {
   type: string;
   label: string;
@@ -62,18 +64,17 @@ interface IntegrationConfig {
   failedRequests: number;
 }
 
-interface Organization {
-  id: string;
-  name: string;
-  code: string;
-}
-
 const INTEGRATION_ICONS: Record<string, React.ReactNode> = {
   NACH: <Wallet className="h-5 w-5" />,
   ACCOUNT_AGGREGATOR: <Database className="h-5 w-5" />,
+  AADHAAR_KYC: <Fingerprint className="h-5 w-5" />,
+  PAN_VERIFICATION: <BadgeCheck className="h-5 w-5" />,
   GSTN: <FileText className="h-5 w-5" />,
   CREDIT_BUREAU: <Shield className="h-5 w-5" />,
   PAYMENT_GATEWAY: <CreditCard className="h-5 w-5" />,
+  SMS_GATEWAY: <MessageSquare className="h-5 w-5" />,
+  EMAIL_GATEWAY: <Mail className="h-5 w-5" />,
+  E_INVOICE: <FileText className="h-5 w-5" />,
 };
 
 const HEALTH_STATUS_STYLES: Record<string, string> = {
@@ -83,10 +84,24 @@ const HEALTH_STATUS_STYLES: Record<string, string> = {
   UNKNOWN: 'bg-slate-100 text-slate-600',
 };
 
+const INTEGRATION_CAPABILITIES: Record<string, string[]> = {
+  NACH: ['Mandate registration', 'Mandate status sync', 'Debit batch status retrieval'],
+  ACCOUNT_AGGREGATOR: ['Consent creation', 'Bank statement retrieval', 'Statement parsing handoff'],
+  AADHAAR_KYC: ['Aadhaar XML/eKYC initiation', 'KYC status retrieval', 'Verified identity handoff'],
+  PAN_VERIFICATION: ['PAN status lookup', 'Name match verification', 'KYC validation handoff'],
+  GSTN: ['GST return status retrieval', 'ITC reconciliation inputs', 'Manual filing status tracking'],
+  CREDIT_BUREAU: ['Bureau pull initiation', 'Commercial credit report retrieval', 'Credit score handoff'],
+  PAYMENT_GATEWAY: ['Payment link creation', 'Payment status retrieval', 'Webhook reconciliation'],
+  SMS_GATEWAY: ['OTP dispatch', 'Transactional SMS delivery', 'DLT template metadata'],
+  EMAIL_GATEWAY: ['Transactional email dispatch', 'Certificate/report delivery', 'Delivery event logging'],
+  E_INVOICE: ['IRN generation', 'E-way bill generation', 'Reference status retrieval'],
+};
+
+const LIVE_CONNECTOR_COPY =
+  'This stores real tenant credentials. Live API retrieval is available only after the backend connector for the selected provider is implemented and enabled; the system will not show mock retrieval results.';
+
 export function IntegrationSettings() {
   const { toast } = useToast();
-  const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<string>('');
   const [integrationTypes, setIntegrationTypes] = useState<IntegrationType[]>([]);
   const [configs, setConfigs] = useState<IntegrationConfig[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,15 +116,12 @@ export function IntegrationSettings() {
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    fetchOrganizations();
     fetchIntegrationTypes();
   }, []);
 
   useEffect(() => {
-    if (selectedOrgId) {
-      fetchConfigs();
-    }
-  }, [selectedOrgId]);
+    fetchConfigs();
+  }, []);
 
   useEffect(() => {
     // Load existing config when tab changes
@@ -124,18 +136,6 @@ export function IntegrationSettings() {
       setSandboxMode(true);
     }
   }, [activeTab, configs]);
-
-  const fetchOrganizations = async () => {
-    try {
-      const response = await organizationsApi.list({ pageSize: 100 });
-      setOrganizations(response.data.items);
-      if (response.data.items.length > 0) {
-        setSelectedOrgId(response.data.items[0].id);
-      }
-    } catch (error) {
-      logger.error('Failed to fetch organizations:', error);
-    }
-  };
 
   const fetchIntegrationTypes = async () => {
     try {
@@ -152,9 +152,7 @@ export function IntegrationSettings() {
   const fetchConfigs = async () => {
     try {
       setLoading(true);
-      const response = await integrationsApi.list({
-        page_size: 50,
-      });
+      const response = await integrationsApi.list({ pageSize: 50 });
       setConfigs(response.data.items);
     } catch (error) {
       logger.error('Failed to fetch configs:', error);
@@ -172,7 +170,7 @@ export function IntegrationSettings() {
   };
 
   const handleSave = async () => {
-    if (!selectedOrgId || !selectedProvider) {
+    if (!selectedProvider) {
       toast({
         title: 'Error',
         description: 'Please select a provider',
@@ -188,8 +186,8 @@ export function IntegrationSettings() {
       if (existingConfig) {
         // Update existing
         await integrationsApi.update(existingConfig.id, {
-          config_data: formData,
-          sandbox_mode: sandboxMode,
+          configData: formData,
+          sandboxMode,
         });
         toast({
           title: 'Success',
@@ -198,10 +196,10 @@ export function IntegrationSettings() {
       } else {
         // Create new
         await integrationsApi.create({
-          integration_type: activeTab,
+          integrationType: activeTab,
           provider: selectedProvider,
-          config_data: formData,
-          sandbox_mode: sandboxMode,
+          configData: formData,
+          sandboxMode,
         });
         toast({
           title: 'Success',
@@ -311,6 +309,20 @@ export function IntegrationSettings() {
         { label: 'Client ID', type: 'text', placeholder: 'OAuth Client ID' },
         { label: 'Client Secret', type: 'text', sensitive: true, placeholder: 'OAuth Client Secret' },
       ],
+      AADHAAR_KYC: [
+        { label: 'Client ID', type: 'text', placeholder: 'Provider client ID' },
+        { label: 'Client Secret', type: 'text', sensitive: true, placeholder: 'Provider client secret' },
+        { label: 'API Key', type: 'text', sensitive: true, placeholder: 'API key / license key' },
+        { label: 'API Secret', type: 'text', sensitive: true, placeholder: 'API secret' },
+        { label: 'Redirect URL', type: 'text', placeholder: 'KYC callback / redirect URL' },
+      ],
+      PAN_VERIFICATION: [
+        { label: 'Client ID', type: 'text', placeholder: 'Provider client ID' },
+        { label: 'Client Secret', type: 'text', sensitive: true, placeholder: 'Provider client secret' },
+        { label: 'API Key', type: 'text', sensitive: true, placeholder: 'PAN API key' },
+        { label: 'API Secret', type: 'text', sensitive: true, placeholder: 'PAN API secret' },
+        { label: 'Purpose Code', type: 'text', placeholder: 'Provider purpose / consent code' },
+      ],
       GSTN: [
         { label: 'GSTIN', type: 'text', placeholder: '15-digit GSTIN' },
         { label: 'Username', type: 'text', placeholder: 'Portal username' },
@@ -328,6 +340,27 @@ export function IntegrationSettings() {
         { label: 'Key ID', type: 'text', placeholder: 'Razorpay Key ID / Merchant ID' },
         { label: 'Key Secret', type: 'text', sensitive: true, placeholder: 'Key Secret / API Secret' },
         { label: 'Webhook Secret', type: 'text', sensitive: true, placeholder: 'Webhook verification secret' },
+      ],
+      SMS_GATEWAY: [
+        { label: 'Sender ID', type: 'text', placeholder: 'DLT sender ID' },
+        { label: 'API Key', type: 'text', sensitive: true, placeholder: 'SMS API key' },
+        { label: 'Auth Token', type: 'text', sensitive: true, placeholder: 'SMS auth token' },
+        { label: 'DLT Entity ID', type: 'text', placeholder: 'DLT principal entity ID' },
+        { label: 'Default Template ID', type: 'text', placeholder: 'Default DLT template ID' },
+      ],
+      EMAIL_GATEWAY: [
+        { label: 'From Email', type: 'text', placeholder: 'no-reply@example.com' },
+        { label: 'From Name', type: 'text', placeholder: 'Sender display name' },
+        { label: 'API Key', type: 'text', sensitive: true, placeholder: 'Email provider API key' },
+        { label: 'API Secret', type: 'text', sensitive: true, placeholder: 'Email provider secret' },
+        { label: 'Webhook Secret', type: 'text', sensitive: true, placeholder: 'Delivery webhook secret' },
+      ],
+      E_INVOICE: [
+        { label: 'GSTIN', type: 'text', placeholder: 'Registered GSTIN' },
+        { label: 'Username', type: 'text', placeholder: 'E-invoice username' },
+        { label: 'Password', type: 'text', sensitive: true, placeholder: 'E-invoice password' },
+        { label: 'API Key', type: 'text', sensitive: true, placeholder: 'GSP API key' },
+        { label: 'API Secret', type: 'text', sensitive: true, placeholder: 'GSP API secret' },
       ],
     };
 
@@ -362,22 +395,7 @@ export function IntegrationSettings() {
     <div className="space-y-6">
       <PageHeader
         title="Integration Settings"
-        subtitle="Configure external service integrations for your organization"
-        actions={
-          <Select value={selectedOrgId} onValueChange={setSelectedOrgId}>
-            <SelectTrigger className="w-64">
-              <Building2 className="mr-2 h-4 w-4" />
-              <SelectValue placeholder="Select organization" />
-            </SelectTrigger>
-            <SelectContent>
-              {organizations.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        }
+        subtitle="Configure real tenant credentials for external APIs. No mock data is returned from this setup page."
       />
 
       {loading ? (
@@ -386,14 +404,14 @@ export function IntegrationSettings() {
         </div>
       ) : (
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-5">
+          <TabsList className="flex h-auto w-full flex-wrap justify-start gap-2 bg-transparent p-0">
             {integrationTypes.map((type) => {
               const config = configs.find((c) => c.integrationType === type.type);
               return (
                 <TabsTrigger
                   key={type.type}
                   value={type.type}
-                  className="flex items-center gap-2"
+                  className="rounded-md border bg-white px-3 py-2 data-[state=active]:border-blue-200 data-[state=active]:bg-blue-50"
                 >
                   {INTEGRATION_ICONS[type.type]}
                   <span className="hidden md:inline">{type.label}</span>
@@ -442,6 +460,26 @@ export function IntegrationSettings() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  <Alert>
+                    <Server className="h-4 w-4" />
+                    <AlertDescription>{LIVE_CONNECTOR_COPY}</AlertDescription>
+                  </Alert>
+
+                  <div className="rounded-lg border p-4">
+                    <h3 className="mb-3 text-sm font-semibold">Live Data Capabilities</h3>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {(INTEGRATION_CAPABILITIES[type.type] || []).map((capability) => (
+                        <div
+                          key={capability}
+                          className="flex items-center gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700"
+                        >
+                          <ArrowRight className="h-4 w-4 text-slate-400" />
+                          <span>{capability}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Provider Selection */}
                   <div className="space-y-2">
                     <Label>Provider</Label>
@@ -538,7 +576,7 @@ export function IntegrationSettings() {
                         ) : (
                           <TestTube2 className="mr-2 h-4 w-4" />
                         )}
-                        Test Connection
+                        Live Test
                       </Button>
                       <Button onClick={handleSave} disabled={!selectedProvider || saving}>
                         {saving ? (

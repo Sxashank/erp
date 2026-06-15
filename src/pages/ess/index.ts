@@ -16,7 +16,7 @@ export { default as ESSExpenseList } from './ESSExpenseList';
 export { default as ESSExpenseForm } from './ESSExpenseForm';
 export { default as ESSExpenseDetail } from './ESSExpenseDetail';
 export { default as ESSAttendance } from './ESSAttendance';
-export { default as ESSTimesheet } from './ESSTimesheet';
+export { default as ESSLeave } from './ESSLeave';
 export { default as ESSAssetList } from './ESSAssetList';
 export { default as ESSTrainingList } from './ESSTrainingList';
 export { default as ESSGoals } from './ESSGoals';

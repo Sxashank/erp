@@ -3,9 +3,9 @@ import { persist } from 'zustand/middleware';
 
 export interface ESSSessionUser {
   id?: string;
-  employee_id?: string;
-  employee_code?: string;
-  employee_name?: string;
+  employeeId?: string;
+  employeeCode?: string;
+  employeeName?: string;
   name?: string;
   mobile?: string;
   email?: string | null;

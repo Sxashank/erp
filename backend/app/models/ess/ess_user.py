@@ -7,11 +7,11 @@ from uuid import UUID
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Enum as SQLEnum,
     ForeignKey,
     Integer,
     String,
     Text,
-    Enum as SQLEnum,
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID as PGUUID, JSONB
@@ -91,8 +91,8 @@ class ESSUser(BaseModel):
 
     # Status
     status: Mapped[str] = mapped_column(
-        SQLEnum(ESSUserStatus, name="ess_user_status_enum", create_type=False),
-        default=ESSUserStatus.ACTIVE,
+        String(20),
+        default=ESSUserStatus.ACTIVE.value,
         nullable=False,
     )
 
@@ -295,7 +295,7 @@ class ProfileUpdateRequest(BaseModel):
     # Request Details
     request_number: Mapped[str] = mapped_column(String(30), nullable=False, unique=True)
     update_type: Mapped[str] = mapped_column(
-        SQLEnum(ProfileUpdateType, name="profile_update_type_enum", create_type=False),
+        String(30),
         nullable=False,
     )
 
@@ -320,8 +320,8 @@ class ProfileUpdateRequest(BaseModel):
 
     # Status
     status: Mapped[str] = mapped_column(
-        SQLEnum(ProfileUpdateStatus, name="profile_update_status_enum", create_type=False),
-        default=ProfileUpdateStatus.PENDING,
+        String(30),
+        default=ProfileUpdateStatus.PENDING.value,
         nullable=False,
     )
 

@@ -6,6 +6,7 @@ Handles customer portal authentication and session management.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -17,6 +18,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Numeric,
     String,
     Text,
 )
@@ -84,6 +86,10 @@ class PortalUser(BaseModel):
     registration_requested_cin: Mapped[str | None] = mapped_column(String(30))
     registration_requested_gstin: Mapped[str | None] = mapped_column(String(20))
     registration_requested_llpin: Mapped[str | None] = mapped_column(String(20))
+    registration_requested_loan_account_number: Mapped[str | None] = mapped_column(String(80))
+    registration_requested_sanctioned_amount: Mapped[Decimal | None] = mapped_column(
+        Numeric(20, 2)
+    )
     registration_authorized_signatory_name: Mapped[str | None] = mapped_column(String(200))
 
     registered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -153,23 +159,23 @@ class PortalUser(BaseModel):
     reset_token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships
-    sessions: Mapped[list["PortalSession"]] = relationship(
+    sessions: Mapped[list[PortalSession]] = relationship(
         "PortalSession",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    devices: Mapped[list["PortalDevice"]] = relationship(
+    devices: Mapped[list[PortalDevice]] = relationship(
         "PortalDevice",
         back_populates="user",
         cascade="all, delete-orphan",
     )
-    consents: Mapped[list["PortalConsent"]] = relationship(
+    consents: Mapped[list[PortalConsent]] = relationship(
         "PortalConsent",
         back_populates="user",
         cascade="all, delete-orphan",
     )
     # Borrower-portal: many lending entities per portal user.
-    entities: Mapped[list["PortalUserEntity"]] = relationship(
+    entities: Mapped[list[PortalUserEntity]] = relationship(
         "PortalUserEntity",
         back_populates="portal_user",
         cascade="all, delete-orphan",
@@ -217,7 +223,7 @@ class PortalSession(BaseModel):
     logout_reason: Mapped[str | None] = mapped_column(String(100))
 
     # Relationships
-    user: Mapped["PortalUser"] = relationship("PortalUser", back_populates="sessions")
+    user: Mapped[PortalUser] = relationship("PortalUser", back_populates="sessions")
 
     __table_args__ = (
         Index("ix_portal_session_token", "session_token"),
@@ -266,7 +272,7 @@ class PortalDevice(BaseModel):
     block_reason: Mapped[str | None] = mapped_column(String(255))
 
     # Relationships
-    user: Mapped["PortalUser"] = relationship("PortalUser", back_populates="devices")
+    user: Mapped[PortalUser] = relationship("PortalUser", back_populates="devices")
 
     __table_args__ = (Index("ix_portal_device_user_device", "user_id", "device_id"),)
 
@@ -353,6 +359,6 @@ class PortalConsent(BaseModel):
     )  # PORTAL, MOBILE_APP, API
 
     # Relationships
-    user: Mapped["PortalUser"] = relationship("PortalUser", back_populates="consents")
+    user: Mapped[PortalUser] = relationship("PortalUser", back_populates="consents")
 
     __table_args__ = (Index("ix_portal_consent_user_type", "user_id", "consent_type"),)

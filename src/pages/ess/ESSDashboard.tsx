@@ -22,16 +22,14 @@ import { useNavigate, Link } from 'react-router-dom';
 
 import { DateDisplay } from '@/components/common/DateDisplay';
 import { PageHeader } from '@/components/common/PageHeader';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { logger } from '@/lib/logger';
 import { essProfileApi } from '@/services/essApi';
 import { useEssAuthStore } from '@/stores/essAuthStore';
 import type { ESSDashboard, ESSUser } from '@/types/ess';
-
-import { logger } from '@/lib/logger';
 export default function ESSDashboardPage() {
   const navigate = useNavigate();
   const accessToken = useEssAuthStore((state) => state.accessToken);
@@ -106,8 +104,8 @@ export default function ESSDashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title={`Welcome, ${dashboard?.employee?.name || user?.employee_name || 'Employee'}!`}
-        subtitle={`${dashboard?.employee?.designation ?? ''} • ${dashboard?.employee?.department ?? ''} • Employee ID: ${dashboard?.employee?.employee_code || user?.employee_code || ''}`}
+        title={`Welcome, ${dashboard?.employee?.name || sessionUser?.employeeName || user?.employee_name || 'Employee'}!`}
+        subtitle={`${dashboard?.employee?.designation ?? ''} • ${dashboard?.employee?.department ?? ''} • Employee ID: ${dashboard?.employee?.employee_code || sessionUser?.employeeCode || user?.employee_code || ''}`}
         actions={
           <Button variant="outline" size="sm">
             <Bell className="mr-2 h-4 w-4" />

@@ -12,9 +12,9 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { getErrorMessage } from '@/lib/errorMessage';
 import { essAuthApi } from '@/services/essApi';
 import { useEssAuthStore } from '@/stores/essAuthStore';
-import { getErrorMessage } from "@/lib/errorMessage";
 
 type LoginStep = 'mobile' | 'otp';
 
@@ -81,13 +81,13 @@ export default function ESSLogin() {
       const response = await essAuthApi.login({
         mobile: mobile.replace(/\D/g, ''),
         otp,
-        device_info: {
-          device_type: 'WEB',
+        deviceInfo: {
+          deviceType: 'WEB',
           browser: navigator.userAgent,
         },
       });
 
-      setSession(response.data.access_token, response.data.refresh_token, response.data.user);
+      setSession(response.data.accessToken, response.data.refreshToken, response.data.user);
 
       // Navigate to dashboard
       navigate('/ess/dashboard');
@@ -165,7 +165,6 @@ export default function ESSLogin() {
                       className="pl-10"
                       maxLength={10}
                       disabled={loading}
-                      autoFocus
                     />
                   </div>
                 </div>
@@ -195,7 +194,6 @@ export default function ESSLogin() {
                       className="pl-10 text-center text-lg tracking-widest"
                       maxLength={6}
                       disabled={loading}
-                      autoFocus
                     />
                   </div>
                 </div>

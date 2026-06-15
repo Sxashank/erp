@@ -16,7 +16,7 @@ import {
   Clock,
   AlertTriangle,
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { PageHeader } from '@/components/common/PageHeader';
@@ -35,30 +35,23 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { logger } from '@/lib/logger';
 import { essITDeclarationApi } from '@/services/essApi';
 import { useEssAuthStore } from '@/stores/essAuthStore';
-import type {
-  ITDeclaration,
-  ITDeclarationSection,
-  ITDeclarationItem,
-  TaxCalculation,
-} from '@/types/ess';
+import type { ITDeclaration, ITDeclarationSection, TaxCalculation } from '@/types/ess';
 
-import { logger } from '@/lib/logger';
+function getCurrentIndianFinancialYear() {
+  const today = new Date();
+  const startYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  const endYear = String((startYear + 1) % 100).padStart(2, '0');
+  return `${startYear}-${endYear}`;
+}
+
 export default function ESSITDeclarationPage() {
   const navigate = useNavigate();
   const accessToken = useEssAuthStore((state) => state.accessToken);
@@ -70,17 +63,9 @@ export default function ESSITDeclarationPage() {
   const [selectedSection, setSelectedSection] = useState<ITDeclarationSection | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  const currentFY = '2024-25';
+  const currentFY = getCurrentIndianFinancialYear();
 
-  useEffect(() => {
-    if (!accessToken) {
-      navigate('/ess/login');
-      return;
-    }
-    fetchData();
-  }, [accessToken, navigate]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [declRes, sectionsRes] = await Promise.all([
         essITDeclarationApi.getDeclaration(currentFY),
@@ -98,7 +83,15 @@ export default function ESSITDeclarationPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentFY]);
+
+  useEffect(() => {
+    if (!accessToken) {
+      navigate('/ess/login');
+      return;
+    }
+    void fetchData();
+  }, [accessToken, fetchData, navigate]);
 
   const handleAddItem = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -117,7 +110,7 @@ export default function ESSITDeclarationPage() {
       });
       setAddItemDialogOpen(false);
       setSelectedSection(null);
-      fetchData();
+      void fetchData();
     } catch (error) {
       logger.error('Failed to add item:', error);
     } finally {
@@ -129,7 +122,7 @@ export default function ESSITDeclarationPage() {
     if (!declaration) return;
     try {
       await essITDeclarationApi.submitDeclaration(declaration.id);
-      fetchData();
+      void fetchData();
     } catch (error) {
       logger.error('Failed to submit declaration:', error);
     }

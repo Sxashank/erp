@@ -140,7 +140,7 @@ class PaymentGatewayConfigData(BaseSchema):
 class IntegrationConfigCreate(BaseSchema):
     """Schema for creating an integration configuration."""
 
-    organization_id: UUID
+    organization_id: Optional[UUID] = None
     integration_type: IntegrationType
     provider: IntegrationProvider
     display_name: Optional[str] = Field(None, max_length=100)

@@ -59,14 +59,16 @@ const STATUS_FILTERS: {
 ];
 
 const MATCH_STRENGTH_ORDER: Record<EntityMatchStrength, number> = {
-  EXACT_CIN: 0,
-  EXACT_GSTIN: 1,
-  EXACT_PAN: 2,
-  EXACT_LLPIN: 3,
-  FUZZY_NAME: 4,
+  EXACT_LOAN_ACCOUNT: 0,
+  EXACT_CIN: 1,
+  EXACT_GSTIN: 2,
+  EXACT_PAN: 3,
+  EXACT_LLPIN: 4,
+  FUZZY_NAME: 5,
 };
 
 const EXACT_STRENGTHS: EntityMatchStrength[] = [
+  'EXACT_LOAN_ACCOUNT',
   'EXACT_CIN',
   'EXACT_GSTIN',
   'EXACT_PAN',
@@ -101,14 +103,18 @@ export default function AdminPortalRegistrations(): JSX.Element {
         key: 'identifier',
         header: 'Identifier',
         render: (r) => {
-          const id = r.requestedCin ?? r.requestedGstin ?? r.requestedLlpin ?? r.requestedPan;
-          const type = r.requestedCin
-            ? 'CIN'
-            : r.requestedGstin
-              ? 'GSTIN'
-              : r.requestedLlpin
-                ? 'LLPIN'
-                : 'PAN';
+          const id = r.requestedLoanAccountNumber
+            ? `${r.requestedLoanAccountNumber} / ${r.requestedSanctionedAmount ?? '—'}`
+            : r.requestedCin ?? r.requestedGstin ?? r.requestedLlpin ?? r.requestedPan;
+          const type = r.requestedLoanAccountNumber
+            ? 'LOAN'
+            : r.requestedCin
+              ? 'CIN'
+              : r.requestedGstin
+                ? 'GSTIN'
+                : r.requestedLlpin
+                  ? 'LLPIN'
+                  : 'PAN';
           return (
             <div>
               <Badge variant="secondary" className="mr-1">
@@ -444,9 +450,13 @@ function ReviewDialog({
 }
 
 function idDescriptor(s: EntitySuggestion): string {
+  if (s.loanAccountNumber) {
+    return `Loan ${s.loanAccountNumber} · Sanctioned ${s.sanctionedAmount ?? '—'}`;
+  }
   if (s.cin) return `CIN ${s.cin}`;
   if (s.gstin) return `GSTIN ${s.gstin}`;
   if (s.pan) return `PAN ${s.pan}`;
+  if (s.llpin) return `LLPIN ${s.llpin}`;
   return s.entityId;
 }
 

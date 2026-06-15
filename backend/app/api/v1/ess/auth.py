@@ -15,6 +15,7 @@ from app.api.deps import (
 )
 from app.core.database import get_session
 from app.core.rate_limit import portal_generic_limit, portal_login_limit
+from app.schemas.base import CamelSchema
 from app.services.ess.auth_service import ESSAuthService
 from app.core.exceptions import NotFoundException, UnauthorizedException
 
@@ -24,13 +25,13 @@ router = APIRouter(prefix="/auth", tags=["ESS Authentication"])
 # ==================== Schemas ====================
 
 
-class SendOTPRequest(BaseModel):
+class SendOTPRequest(CamelSchema):
     """Request to send OTP."""
 
     mobile: str = Field(..., pattern=r"^\d{10}$", description="10-digit mobile number")
 
 
-class SendOTPResponse(BaseModel):
+class SendOTPResponse(CamelSchema):
     """Response after sending OTP."""
 
     success: bool
@@ -38,14 +39,14 @@ class SendOTPResponse(BaseModel):
     expires_in_seconds: int = 300
 
 
-class VerifyOTPRequest(BaseModel):
+class VerifyOTPRequest(CamelSchema):
     """Request to verify OTP and login."""
 
     mobile: str = Field(..., pattern=r"^\d{10}$")
     otp: str = Field(..., min_length=6, max_length=6)
 
 
-class DeviceInfo(BaseModel):
+class DeviceInfo(CamelSchema):
     """Device information for session."""
 
     device_type: Optional[str] = None
@@ -56,7 +57,7 @@ class DeviceInfo(BaseModel):
     app_version: Optional[str] = None
 
 
-class LoginRequest(BaseModel):
+class LoginRequest(CamelSchema):
     """Login request with OTP."""
 
     mobile: str = Field(..., pattern=r"^\d{10}$")
@@ -64,7 +65,7 @@ class LoginRequest(BaseModel):
     device_info: Optional[DeviceInfo] = None
 
 
-class TokenResponse(BaseModel):
+class TokenResponse(CamelSchema):
     """Token response after successful login."""
 
     access_token: str
@@ -74,13 +75,13 @@ class TokenResponse(BaseModel):
     user: dict
 
 
-class RefreshTokenRequest(BaseModel):
+class RefreshTokenRequest(CamelSchema):
     """Request to refresh token."""
 
     refresh_token: str
 
 
-class RegisterDeviceRequest(BaseModel):
+class RegisterDeviceRequest(CamelSchema):
     """Request to register device for push notifications."""
 
     device_uuid: str
@@ -93,7 +94,7 @@ class RegisterDeviceRequest(BaseModel):
     os_version: Optional[str] = None
 
 
-class SessionResponse(BaseModel):
+class SessionResponse(CamelSchema):
     """Active session information."""
 
     id: str

@@ -637,6 +637,7 @@ const ESSExpenseDetail = lazy(() =>
   import('./pages/ess').then((m) => ({ default: m.ESSExpenseDetail })),
 );
 const ESSAttendance = lazy(() => import('./pages/ess').then((m) => ({ default: m.ESSAttendance })));
+const ESSLeave = lazy(() => import('./pages/ess').then((m) => ({ default: m.ESSLeave })));
 const ESSAssetList = lazy(() => import('./pages/ess').then((m) => ({ default: m.ESSAssetList })));
 const ESSTrainingList = lazy(() =>
   import('./pages/ess').then((m) => ({ default: m.ESSTrainingList })),
@@ -1891,6 +1892,7 @@ export default function App() {
             <Route path="profile" element={<ESSProfile />} />
             <Route path="settings" element={<ESSProfile />} />
             <Route path="attendance" element={<ESSAttendance />} />
+            <Route path="leave" element={<ESSLeave />} />
             <Route path="payslips" element={<ESSPayslips />} />
             <Route path="reimbursements" element={<ESSReimbursements />} />
             <Route path="helpdesk" element={<ESSHelpdesk />} />

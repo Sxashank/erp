@@ -36,6 +36,12 @@ SENSITIVE_FIELDS = {
     IntegrationType.ACCOUNT_AGGREGATOR: [
         "api_key", "api_secret", "client_secret"
     ],
+    IntegrationType.AADHAAR_KYC: [
+        "api_key", "api_secret", "client_secret", "license_key", "private_key"
+    ],
+    IntegrationType.PAN_VERIFICATION: [
+        "api_key", "api_secret", "client_secret", "license_key"
+    ],
     IntegrationType.GSTN: [
         "password", "asp_secret", "gsp_client_secret", "einvoice_password"
     ],
@@ -270,29 +276,10 @@ class IntegrationService:
         details = {}
 
         try:
-            # Test based on integration type
-            if config.integration_type == IntegrationType.NACH:
-                success, message, details = await self._test_nach_connection(
-                    config, decrypted_config
-                )
-            elif config.integration_type == IntegrationType.ACCOUNT_AGGREGATOR:
-                success, message, details = await self._test_aa_connection(
-                    config, decrypted_config
-                )
-            elif config.integration_type == IntegrationType.GSTN:
-                success, message, details = await self._test_gstn_connection(
-                    config, decrypted_config
-                )
-            elif config.integration_type == IntegrationType.CREDIT_BUREAU:
-                success, message, details = await self._test_bureau_connection(
-                    config, decrypted_config
-                )
-            elif config.integration_type == IntegrationType.PAYMENT_GATEWAY:
-                success, message, details = await self._test_payment_connection(
-                    config, decrypted_config
-                )
-            else:
-                message = f"Test not implemented for {config.integration_type.value}"
+            success, message, details = await self._test_live_connection(
+                config,
+                decrypted_config,
+            )
 
         except Exception as e:
             message = str(e)
@@ -330,79 +317,28 @@ class IntegrationService:
             error_code=error_code,
         )
 
-    async def _test_nach_connection(
+    async def _test_live_connection(
         self,
         config: IntegrationConfig,
         decrypted_config: Dict[str, Any],
     ) -> Tuple[bool, str, Dict[str, Any]]:
-        """Test NACH integration connection."""
-        # Placeholder - actual implementation would call NACH API
-        if decrypted_config.get("api_key") and decrypted_config.get("merchant_id"):
-            return True, "NACH credentials validated successfully", {
-                "merchant_id": decrypted_config.get("merchant_id"),
-                "environment": "sandbox" if config.sandbox_mode else "production",
-            }
-        return False, "Missing required NACH credentials (api_key, merchant_id)", {}
+        """Test a live connector only when a real client is wired.
 
-    async def _test_aa_connection(
-        self,
-        config: IntegrationConfig,
-        decrypted_config: Dict[str, Any],
-    ) -> Tuple[bool, str, Dict[str, Any]]:
-        """Test Account Aggregator connection."""
-        if decrypted_config.get("fiu_id") and decrypted_config.get("api_key"):
-            return True, "Account Aggregator credentials validated successfully", {
-                "fiu_id": decrypted_config.get("fiu_id"),
-                "environment": "sandbox" if config.sandbox_mode else "production",
-            }
-        return False, "Missing required AA credentials (fiu_id, api_key)", {}
-
-    async def _test_gstn_connection(
-        self,
-        config: IntegrationConfig,
-        decrypted_config: Dict[str, Any],
-    ) -> Tuple[bool, str, Dict[str, Any]]:
-        """Test GSTN portal connection."""
-        if decrypted_config.get("gstin") and decrypted_config.get("username"):
-            return True, "GSTN credentials configured", {
-                "gstin": decrypted_config.get("gstin"),
-                "environment": "sandbox" if config.sandbox_mode else "production",
-            }
-        return False, "Missing required GSTN credentials (gstin, username)", {}
-
-    async def _test_bureau_connection(
-        self,
-        config: IntegrationConfig,
-        decrypted_config: Dict[str, Any],
-    ) -> Tuple[bool, str, Dict[str, Any]]:
-        """Test Credit Bureau connection."""
-        if decrypted_config.get("member_id"):
-            return True, "Credit Bureau credentials configured", {
-                "member_id": decrypted_config.get("member_id"),
-                "bureau": config.provider.value,
-                "environment": "sandbox" if config.sandbox_mode else "production",
-            }
-        return False, "Missing required Bureau credentials (member_id)", {}
-
-    async def _test_payment_connection(
-        self,
-        config: IntegrationConfig,
-        decrypted_config: Dict[str, Any],
-    ) -> Tuple[bool, str, Dict[str, Any]]:
-        """Test Payment Gateway connection."""
-        if config.provider == IntegrationProvider.RAZORPAY:
-            if decrypted_config.get("key_id") and decrypted_config.get("key_secret"):
-                return True, "Razorpay credentials validated", {
-                    "key_id": decrypted_config.get("key_id")[:8] + "...",
-                    "environment": "sandbox" if config.sandbox_mode else "production",
-                }
-            return False, "Missing Razorpay credentials (key_id, key_secret)", {}
-        elif decrypted_config.get("merchant_id") and decrypted_config.get("api_key"):
-            return True, "Payment Gateway credentials configured", {
-                "merchant_id": decrypted_config.get("merchant_id"),
-                "environment": "sandbox" if config.sandbox_mode else "production",
-            }
-        return False, "Missing required Payment Gateway credentials", {}
+        This intentionally fails closed. Earlier versions returned success when
+        mandatory fields were present, which made fake "connected" states look
+        real. Configuration can be saved, but live test/retrieval must be backed
+        by a provider client before this method reports HEALTHY.
+        """
+        _ = decrypted_config
+        return (
+            False,
+            (
+                f"Live connection test is not implemented for "
+                f"{config.integration_type.value}/{config.provider.value}. "
+                "Configuration is stored, but no external API call was made."
+            ),
+            {},
+        )
 
     def _validate_provider_for_type(
         self,
@@ -422,6 +358,18 @@ class IntegrationService:
                 IntegrationProvider.ONEMONEY,
                 IntegrationProvider.SETU,
                 IntegrationProvider.YODLEE,
+            ],
+            IntegrationType.AADHAAR_KYC: [
+                IntegrationProvider.UIDAI,
+                IntegrationProvider.DIGILOCKER,
+                IntegrationProvider.KARZA,
+                IntegrationProvider.IDFY,
+            ],
+            IntegrationType.PAN_VERIFICATION: [
+                IntegrationProvider.NSDL_PAN,
+                IntegrationProvider.PROTEAN,
+                IntegrationProvider.KARZA,
+                IntegrationProvider.IDFY,
             ],
             IntegrationType.GSTN: [
                 IntegrationProvider.GSTN,

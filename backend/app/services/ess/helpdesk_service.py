@@ -656,17 +656,17 @@ class ESSHelpdeskService:
         }
 
         for row in rows:
-            status = row.status.value if row.status else "UNKNOWN"
+            status = row.status if row.status else "UNKNOWN"
             summary["by_status"][status] = row.count
             summary["total"] += row.count
 
-            if row.status in [TicketStatus.OPEN, TicketStatus.ASSIGNED]:
+            if status in [TicketStatus.OPEN.value, TicketStatus.ASSIGNED.value]:
                 summary["open"] += row.count
-            elif row.status == TicketStatus.IN_PROGRESS:
+            elif status == TicketStatus.IN_PROGRESS.value:
                 summary["in_progress"] += row.count
-            elif row.status == TicketStatus.RESOLVED:
+            elif status == TicketStatus.RESOLVED.value:
                 summary["resolved"] += row.count
-            elif row.status == TicketStatus.CLOSED:
+            elif status == TicketStatus.CLOSED.value:
                 summary["closed"] += row.count
 
         return summary

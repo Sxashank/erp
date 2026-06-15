@@ -54,7 +54,7 @@ class ReimbursementCategory(BaseModel):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     claim_type: Mapped[str] = mapped_column(
-        SQLEnum(ClaimType, name="claim_type_enum", create_type=False),
+        String(30),
         nullable=False,
     )
 
@@ -145,7 +145,7 @@ class ReimbursementClaim(BaseModel):
         nullable=True,
     )
     claim_type: Mapped[str] = mapped_column(
-        SQLEnum(ClaimType, name="claim_type_enum", create_type=False),
+        String(30),
         nullable=False,
     )
 
@@ -193,8 +193,8 @@ class ReimbursementClaim(BaseModel):
 
     # Status
     status: Mapped[str] = mapped_column(
-        SQLEnum(ClaimStatus, name="claim_status_enum", create_type=False),
-        default=ClaimStatus.DRAFT,
+        String(30),
+        default=ClaimStatus.DRAFT.value,
         nullable=False,
     )
 

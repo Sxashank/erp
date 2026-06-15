@@ -23,6 +23,13 @@ const api = axios.create({
   },
 });
 
+function getCurrentIndianFinancialYear() {
+  const today = new Date();
+  const startYear = today.getMonth() >= 3 ? today.getFullYear() : today.getFullYear() - 1;
+  const endYear = String((startYear + 1) % 100).padStart(2, '0');
+  return `${startYear}-${endYear}`;
+}
+
 api.interceptors.request.use((config) => {
   const token = useEssAuthStore.getState().accessToken;
   if (token) {
@@ -46,16 +53,16 @@ api.interceptors.response.use(
       if (refreshToken) {
         try {
           const response = await axios.post(`${API_BASE_URL}/ess/auth/refresh`, {
-            refresh_token: refreshToken,
+            refreshToken,
           });
           useEssAuthStore
             .getState()
             .setSession(
-              response.data.access_token,
-              response.data.refresh_token,
+              response.data.accessToken,
+              response.data.refreshToken,
               response.data.user,
             );
-          originalRequest.headers.Authorization = `Bearer ${response.data.access_token}`;
+          originalRequest.headers.Authorization = `Bearer ${response.data.accessToken}`;
           return api(originalRequest);
         } catch (_refreshError) {
           useEssAuthStore.getState().clear();
@@ -414,19 +421,87 @@ export interface AttendanceRecordRow {
   shift?: string | null;
 }
 
-export type AttendanceRecordsResponse = AttendanceRecordRow[];
+export interface AttendanceRecordsResponse {
+  items: AttendanceRecordRow[];
+}
 
 export interface AttendanceRegularizationRow {
   id: string;
-  requestNumber: string;
   attendanceDate: string;
-  regularizationType: string;
+  requestType: string;
   reason: string;
   status: string;
   approvedBy?: string | null;
-  approvedDate?: string | null;
+  approvedAt?: string | null;
   approverRemarks?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
   createdAt: string;
+}
+
+export interface RegularizationTypeOption {
+  code: string;
+  label: string;
+  description: string;
+}
+
+export interface ESSLeaveTypeOption {
+  id: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  annualQuota: number;
+  availableBalance: number;
+  used: number;
+  documentRequired: boolean;
+  documentRequiredAfterDays?: number | null;
+  halfDayAllowed: boolean;
+}
+
+export interface ESSLeaveBalanceRow {
+  leaveTypeId: string;
+  code: string;
+  name: string;
+  openingBalance: number;
+  accrued: number;
+  carryForward: number;
+  used: number;
+  lapsed: number;
+  availableBalance: number;
+}
+
+export interface ESSLeaveApplication {
+  id: string;
+  applicationNumber: string;
+  leaveTypeId: string;
+  leaveTypeCode?: string | null;
+  leaveTypeName?: string | null;
+  fromDate: string;
+  toDate: string;
+  isHalfDay: boolean;
+  halfDayType?: string | null;
+  totalDays: number;
+  workingDays: number;
+  reason: string;
+  contactNumber?: string | null;
+  contactAddress?: string | null;
+  attachments?: string[] | null;
+  status: string;
+  approverRemarks?: string | null;
+  rejectionReason?: string | null;
+  cancellationReason?: string | null;
+  approvedAt?: string | null;
+  rejectedAt?: string | null;
+  cancelledAt?: string | null;
+  createdAt: string;
+}
+
+export interface ESSLeaveSummaryResponse {
+  balances: ESSLeaveBalanceRow[];
+  applications: ESSLeaveApplication[];
+  leaveTypes: ESSLeaveTypeOption[];
+  pendingCount: number;
+  approvedThisYear: number;
 }
 
 // ==================== Auth APIs ====================
@@ -440,13 +515,13 @@ export const essAuthApi = {
   /**
    * Verify OTP and login
    */
-  login: (data: { mobile: string; otp: string; device_info?: Record<string, unknown> }) =>
+  login: (data: { mobile: string; otp: string; deviceInfo?: Record<string, unknown> }) =>
     api.post('/ess/auth/login', data),
 
   /**
    * Refresh access token
    */
-  refresh: (data: { refresh_token: string }) => api.post('/ess/auth/refresh', data),
+  refresh: (data: { refreshToken: string }) => api.post('/ess/auth/refresh', data),
 
   /**
    * Logout current session
@@ -732,7 +807,7 @@ export const essITDeclarationApi = {
   /**
    * Get current declaration
    */
-  getDeclaration: (financialYear = '2024-25', taxRegime = 'OLD') =>
+  getDeclaration: (financialYear = getCurrentIndianFinancialYear(), taxRegime = 'OLD') =>
     api.post(`/ess/it-declaration/${financialYear}`, null, { params: { tax_regime: taxRegime } }),
 
   /**
@@ -822,6 +897,11 @@ export const essITDeclarationApi = {
 // ==================== Attendance Regularization APIs ====================
 
 export const essAttendanceApi = {
+  getRegularizationTypes: () =>
+    api
+      .get<RegularizationTypeOption[]>('/ess/attendance/regularization-types')
+      .then((response) => response.data),
+
   /**
    * Get regularization requests
    */
@@ -833,11 +913,11 @@ export const essAttendanceApi = {
     offset?: number;
   }) =>
     api
-      .get<AttendanceRegularizationRow[]>('/ess/it-declaration/regularization', {
+      .get<AttendanceRegularizationRow[]>('/ess/attendance/regularizations', {
         params: {
           status: params?.status,
-          from_date: params?.fromDate,
-          to_date: params?.toDate,
+          fromDate: params?.fromDate,
+          toDate: params?.toDate,
           limit: params?.limit,
           offset: params?.offset,
         },
@@ -849,25 +929,84 @@ export const essAttendanceApi = {
    */
   createRegularization: (data: {
     attendanceDate: string;
-    regularizationType: string;
-    requestedInTime?: string;
-    requestedOutTime?: string;
+    requestType: string;
+    requestedFirstIn?: string;
+    requestedLastOut?: string;
     reason: string;
   }) =>
     api
-      .post<AttendanceRegularizationRow>('/ess/it-declaration/regularization', {
-        attendance_date: data.attendanceDate,
-        regularization_type: data.regularizationType,
-        requested_in_time: data.requestedInTime,
-        requested_out_time: data.requestedOutTime,
+      .post<AttendanceRegularizationRow>('/ess/attendance/regularizations', {
+        attendanceDate: data.attendanceDate,
+        requestType: data.requestType,
+        requestedFirstIn: data.requestedFirstIn,
+        requestedLastOut: data.requestedLastOut,
         reason: data.reason,
       })
       .then((response) => response.data),
 
   getAttendanceSummary: (month: string) =>
-    essProfileApi.getAttendanceSummary(month).then((response) => response.data),
+    api
+      .get<AttendanceSummaryResponse>('/ess/attendance/summary', { params: { month } })
+      .then((response) => response.data),
   getAttendanceRecords: (params: { fromDate: string; toDate: string }) =>
-    essProfileApi.getAttendanceRecords(params).then((response) => response.data),
+    api
+      .get<AttendanceRecordsResponse>('/ess/attendance/records', {
+        params: { fromDate: params.fromDate, toDate: params.toDate },
+      })
+      .then((response) => response.data),
+};
+
+export const essLeaveApi = {
+  getSummary: (year?: number) =>
+    api
+      .get<ESSLeaveSummaryResponse>('/ess/leave/summary', { params: { year } })
+      .then((response) => response.data),
+
+  getApplications: (params?: {
+    status?: string;
+    fromDate?: string;
+    toDate?: string;
+    limit?: number;
+    offset?: number;
+  }) =>
+    api
+      .get<ESSLeaveApplication[]>('/ess/leave/applications', { params })
+      .then((response) => response.data),
+
+  createApplication: (data: {
+    leaveTypeId: string;
+    fromDate: string;
+    toDate: string;
+    isHalfDay?: boolean;
+    halfDayType?: string;
+    reason: string;
+    contactNumber?: string;
+    contactAddress?: string;
+    attachments?: string[];
+    compOffDate?: string;
+  }) => api.post<ESSLeaveApplication>('/ess/leave/applications', data).then((response) => response.data),
+
+  updateApplication: (
+    applicationId: string,
+    data: Partial<{
+      fromDate: string;
+      toDate: string;
+      isHalfDay: boolean;
+      halfDayType: string;
+      reason: string;
+      contactNumber: string;
+      contactAddress: string;
+      attachments: string[];
+    }>,
+  ) =>
+    api
+      .put<ESSLeaveApplication>(`/ess/leave/applications/${applicationId}`, data)
+      .then((response) => response.data),
+
+  cancelApplication: (applicationId: string, reason: string) =>
+    api
+      .post<ESSLeaveApplication>(`/ess/leave/applications/${applicationId}/cancel`, { reason })
+      .then((response) => response.data),
 };
 
 export const essOperationsApi = {
@@ -903,5 +1042,6 @@ export default {
   helpdesk: essHelpdeskApi,
   itDeclaration: essITDeclarationApi,
   attendance: essAttendanceApi,
+  leave: essLeaveApi,
   operations: essOperationsApi,
 };

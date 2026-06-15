@@ -7,10 +7,80 @@
 @layer base {
   :root {
     color-scheme: light;
+    --app-shell-bg: #edf2f8;
+    --app-header-bg: rgba(248, 250, 252, 0.92);
+    --app-header-border: rgba(148, 163, 184, 0.22);
+    --app-header-glow: rgba(59, 130, 246, 0.16);
+    --app-sidebar-bg: linear-gradient(180deg, #1e3a5f 0%, #23456e 100%);
+    --app-sidebar-border: rgba(191, 219, 254, 0.16);
+    --app-sidebar-text: rgba(239, 246, 255, 0.94);
+    --app-sidebar-muted: rgba(219, 234, 254, 0.66);
+    --app-sidebar-hover-bg: rgba(255, 255, 255, 0.09);
+    --app-sidebar-hover-text: #ffffff;
+    --app-sidebar-active-bg: rgba(255, 255, 255, 0.16);
+    --app-sidebar-active-text: #ffffff;
+    --app-sidebar-subnav-border: rgba(191, 219, 254, 0.18);
+    --app-main-bg: #f6f8fc;
+    --app-main-gradient-a: rgba(63, 118, 199, 0.14);
+    --app-main-gradient-b: rgba(255, 255, 255, 0);
+    --app-panel-bg: rgba(255, 255, 255, 0.82);
+    --app-panel-border: rgba(148, 163, 184, 0.18);
+    --app-brand-bg: linear-gradient(135deg, #3f76c7 0%, #274d86 100%);
+    --app-brand-fg: #ffffff;
+    --app-page-header-accent: rgba(63, 118, 199, 0.12);
+  }
+
+  :root[data-app-theme='sage'] {
+    --app-shell-bg: #edf1ed;
+    --app-header-bg: rgba(249, 250, 246, 0.94);
+    --app-header-border: rgba(125, 146, 126, 0.18);
+    --app-header-glow: rgba(106, 156, 143, 0.18);
+    --app-sidebar-bg: linear-gradient(180deg, #1f3a38 0%, #284644 100%);
+    --app-sidebar-border: rgba(196, 221, 212, 0.14);
+    --app-sidebar-text: rgba(244, 248, 244, 0.94);
+    --app-sidebar-muted: rgba(216, 229, 223, 0.68);
+    --app-sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+    --app-sidebar-hover-text: #ffffff;
+    --app-sidebar-active-bg: rgba(255, 255, 255, 0.16);
+    --app-sidebar-active-text: #ffffff;
+    --app-sidebar-subnav-border: rgba(196, 221, 212, 0.16);
+    --app-main-bg: #f5f5ef;
+    --app-main-gradient-a: rgba(106, 156, 143, 0.12);
+    --app-main-gradient-b: rgba(255, 255, 255, 0);
+    --app-panel-bg: rgba(255, 255, 251, 0.84);
+    --app-panel-border: rgba(125, 146, 126, 0.16);
+    --app-brand-bg: linear-gradient(135deg, #6a9c8f 0%, #315d58 100%);
+    --app-brand-fg: #ffffff;
+    --app-page-header-accent: rgba(106, 156, 143, 0.12);
+  }
+
+  :root[data-app-theme='dusk'] {
+    --app-shell-bg: #efe9e1;
+    --app-header-bg: rgba(249, 245, 240, 0.94);
+    --app-header-border: rgba(145, 114, 88, 0.18);
+    --app-header-glow: rgba(179, 122, 76, 0.18);
+    --app-sidebar-bg: linear-gradient(180deg, #2b2430 0%, #3a2f40 100%);
+    --app-sidebar-border: rgba(229, 214, 202, 0.14);
+    --app-sidebar-text: rgba(249, 244, 240, 0.94);
+    --app-sidebar-muted: rgba(229, 214, 202, 0.7);
+    --app-sidebar-hover-bg: rgba(255, 255, 255, 0.08);
+    --app-sidebar-hover-text: #ffffff;
+    --app-sidebar-active-bg: rgba(255, 255, 255, 0.16);
+    --app-sidebar-active-text: #ffffff;
+    --app-sidebar-subnav-border: rgba(229, 214, 202, 0.16);
+    --app-main-bg: #f7f2ea;
+    --app-main-gradient-a: rgba(179, 122, 76, 0.12);
+    --app-main-gradient-b: rgba(255, 255, 255, 0);
+    --app-panel-bg: rgba(255, 251, 247, 0.84);
+    --app-panel-border: rgba(145, 114, 88, 0.16);
+    --app-brand-bg: linear-gradient(135deg, #b37a4c 0%, #594045 100%);
+    --app-brand-fg: #fffaf5;
+    --app-page-header-accent: rgba(179, 122, 76, 0.12);
   }
 
   body {
-    @apply bg-slate-50 text-slate-900;
+    background: var(--app-shell-bg);
+    color: #0f172a;
     font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
   }
 
@@ -19,5 +89,117 @@
   h3,
   h4 {
     font-family: "Space Grotesk", "IBM Plex Sans", sans-serif;
+  }
+}
+
+@layer components {
+  .app-shell {
+    background: var(--app-shell-bg);
+  }
+
+  .app-header {
+    background:
+      linear-gradient(90deg, var(--app-header-glow) 0%, transparent 34%),
+      var(--app-header-bg);
+    border-color: var(--app-header-border);
+    backdrop-filter: blur(10px);
+  }
+
+  .app-sidebar {
+    background: var(--app-sidebar-bg);
+    border-color: var(--app-sidebar-border);
+    color: var(--app-sidebar-text);
+    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.03);
+  }
+
+  .app-sidebar-item {
+    color: var(--app-sidebar-muted);
+  }
+
+  .app-sidebar-item:hover {
+    background: var(--app-sidebar-hover-bg);
+    color: var(--app-sidebar-hover-text);
+  }
+
+  .app-sidebar-item-active {
+    background: var(--app-sidebar-active-bg);
+    color: var(--app-sidebar-active-text);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+  }
+
+  .app-sidebar-subnav {
+    border-color: var(--app-sidebar-subnav-border);
+  }
+
+  .app-main {
+    background:
+      radial-gradient(circle at top right, var(--app-main-gradient-a) 0%, transparent 32rem),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.38) 0%, var(--app-main-gradient-b) 30%),
+      var(--app-main-bg);
+  }
+
+  .app-brand-mark {
+    background: var(--app-brand-bg);
+    color: var(--app-brand-fg);
+    box-shadow: 0 14px 32px rgba(15, 23, 42, 0.16);
+  }
+
+  .app-page-header {
+    border: 1px solid var(--app-panel-border);
+    background:
+      linear-gradient(135deg, var(--app-page-header-accent) 0%, transparent 60%),
+      var(--app-panel-bg);
+    backdrop-filter: blur(8px);
+    border-radius: 1rem;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.04);
+    padding: 1.1rem 1.25rem;
+  }
+
+  .app-theme-swatch {
+    box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06);
+  }
+
+  .auth-shell {
+    background:
+      radial-gradient(circle at left top, var(--app-main-gradient-a) 0%, transparent 26rem),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.3) 0%, transparent 28%),
+      var(--app-shell-bg);
+  }
+
+  .auth-hero {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, transparent 24%),
+      var(--app-sidebar-bg);
+    color: var(--app-sidebar-text);
+  }
+
+  .auth-hero-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(8px);
+  }
+
+  .auth-form-side {
+    background:
+      radial-gradient(circle at top right, var(--app-main-gradient-a) 0%, transparent 24rem),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.58) 0%, transparent 38%),
+      var(--app-main-bg);
+  }
+
+  .auth-form-card {
+    border: 1px solid var(--app-panel-border);
+    background:
+      linear-gradient(145deg, rgba(255, 255, 255, 0.92) 0%, rgba(255, 255, 255, 0.84) 100%);
+    box-shadow: 0 22px 48px rgba(15, 23, 42, 0.08);
+    backdrop-filter: blur(10px);
+  }
+
+  .auth-link {
+    color: rgb(37 99 235);
+  }
+
+  .auth-link:hover {
+    color: rgb(29 78 216);
   }
 }

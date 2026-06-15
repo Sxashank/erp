@@ -2,19 +2,19 @@
 
 from typing import Any, Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel
+from app.schemas.base import BaseSchema
 
 T = TypeVar("T")
 
 
-class APIResponse(BaseModel, Generic[T]):
+class APIResponse(BaseSchema, Generic[T]):
     """Standard API response wrapper."""
     success: bool = True
     message: str = "Success"
     data: Optional[T] = None
 
 
-class PaginatedResponse(BaseModel, Generic[T]):
+class PaginatedResponse(BaseSchema, Generic[T]):
     """Paginated response wrapper."""
     success: bool = True
     message: str = "Success"
@@ -43,7 +43,7 @@ class PaginatedResponse(BaseModel, Generic[T]):
         )
 
 
-class ErrorResponse(BaseModel):
+class ErrorResponse(BaseSchema):
     """Error response schema."""
     success: bool = False
     message: str
@@ -51,7 +51,7 @@ class ErrorResponse(BaseModel):
     details: Optional[Any] = None
 
 
-class MessageResponse(BaseModel):
+class MessageResponse(BaseSchema):
     """Simple message response."""
     success: bool = True
     message: str

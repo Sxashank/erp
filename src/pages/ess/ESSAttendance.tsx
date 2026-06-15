@@ -15,11 +15,19 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
   useAttendanceRecords,
   useAttendanceSummary,
   useCreateRegularization,
+  useRegularizationTypes,
   useRegularizations,
 } from '@/hooks/ess/useEssOperations';
 import type { AttendanceRecordRow, AttendanceRegularizationRow } from '@/services/essApi';
@@ -63,7 +71,7 @@ export default function ESSAttendance() {
   const [month, setMonth] = useState(currentMonthString());
   const [showRegularizationDialog, setShowRegularizationDialog] = useState(false);
   const [attendanceDate, setAttendanceDate] = useState('');
-  const [regularizationType, setRegularizationType] = useState('FORGOT_PUNCH');
+  const [requestType, setRequestType] = useState('');
   const [requestedInTime, setRequestedInTime] = useState('');
   const [requestedOutTime, setRequestedOutTime] = useState('');
   const [reason, setReason] = useState('');
@@ -71,6 +79,7 @@ export default function ESSAttendance() {
   const bounds = useMemo(() => monthBounds(month), [month]);
   const summaryQuery = useAttendanceSummary(month);
   const recordsQuery = useAttendanceRecords(bounds.fromDate, bounds.toDate);
+  const regularizationTypesQuery = useRegularizationTypes();
   const regularizationsQuery = useRegularizations({
     fromDate: bounds.fromDate,
     toDate: bounds.toDate,
@@ -78,6 +87,7 @@ export default function ESSAttendance() {
     offset: 0,
   });
   const createRegularizationMutation = useCreateRegularization();
+  const attendanceRecords = recordsQuery.data?.items ?? [];
 
   const attendanceColumns: Column<AttendanceRecordRow>[] = [
     {
@@ -105,7 +115,7 @@ export default function ESSAttendance() {
   ];
 
   const regularizationColumns: Column<AttendanceRegularizationRow>[] = [
-    { key: 'requestNumber', header: 'Request #' },
+    { key: 'id', header: 'Request #', render: (row) => row.id.slice(0, 8).toUpperCase() },
     {
       key: 'attendanceDate',
       header: 'Attendance Date',
@@ -113,7 +123,13 @@ export default function ESSAttendance() {
       sortable: true,
       sortValue: (row) => row.attendanceDate,
     },
-    { key: 'regularizationType', header: 'Type' },
+    {
+      key: 'requestType',
+      header: 'Type',
+      render: (row) =>
+        regularizationTypesQuery.data?.find((item) => item.code === row.requestType)?.label ??
+        row.requestType,
+    },
     {
       key: 'status',
       header: 'Status',
@@ -125,9 +141,9 @@ export default function ESSAttendance() {
   const handleCreateRegularization = async () => {
     await createRegularizationMutation.mutateAsync({
       attendanceDate,
-      regularizationType,
-      requestedInTime: requestedInTime || undefined,
-      requestedOutTime: requestedOutTime || undefined,
+      requestType,
+      requestedFirstIn: requestedInTime || undefined,
+      requestedLastOut: requestedOutTime || undefined,
       reason,
     });
     setShowRegularizationDialog(false);
@@ -171,11 +187,18 @@ export default function ESSAttendance() {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="regularizationType">Regularization Type</Label>
-                    <Input
-                      id="regularizationType"
-                      value={regularizationType}
-                      onChange={(event) => setRegularizationType(event.target.value)}
-                    />
+                    <Select value={requestType} onValueChange={setRequestType}>
+                      <SelectTrigger id="regularizationType">
+                        <SelectValue placeholder="Select request type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(regularizationTypesQuery.data ?? []).map((item) => (
+                          <SelectItem key={item.code} value={item.code}>
+                            {item.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
@@ -210,7 +233,7 @@ export default function ESSAttendance() {
                       onClick={() => void handleCreateRegularization()}
                       disabled={
                         !attendanceDate ||
-                        !regularizationType ||
+                        !requestType ||
                         reason.trim().length === 0 ||
                         createRegularizationMutation.isPending
                       }
@@ -254,8 +277,8 @@ export default function ESSAttendance() {
             <CardTitle className="text-base">Attendance Records</CardTitle>
           </CardHeader>
           <CardContent>
-            <DataTable
-              data={recordsQuery.data ?? []}
+          <DataTable
+              data={attendanceRecords}
               columns={attendanceColumns}
               getRowId={(row) => `${row.date}-${row.status}`}
               isLoading={recordsQuery.isLoading}

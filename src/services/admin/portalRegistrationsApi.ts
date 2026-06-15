@@ -14,6 +14,7 @@ import api from '@/services/api';
 export type PortalRegistrationStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED';
 
 export type EntityMatchStrength =
+  | 'EXACT_LOAN_ACCOUNT'
   | 'EXACT_CIN'
   | 'EXACT_GSTIN'
   | 'EXACT_PAN'
@@ -28,6 +29,8 @@ export interface AdminRegistrationListItem {
   requestedGstin: string | null;
   requestedLlpin: string | null;
   requestedPan: string | null;
+  requestedLoanAccountNumber: string | null;
+  requestedSanctionedAmount: string | null;
   authorizedSignatoryName: string;
   mobile: string;
   email: string;
@@ -42,6 +45,9 @@ export interface EntitySuggestion {
   cin: string | null;
   gstin: string | null;
   pan: string | null;
+  llpin: string | null;
+  loanAccountNumber: string | null;
+  sanctionedAmount: string | null;
   matchStrength: EntityMatchStrength;
 }
 

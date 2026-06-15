@@ -140,6 +140,8 @@ export interface RegisterRequest {
   gstin?: string;
   llpin?: string;
   pan?: string;
+  loanAccountNumber?: string;
+  sanctionedAmount?: string;
   authorizedSignatoryName: string;
   mobile: string;
   email: string;

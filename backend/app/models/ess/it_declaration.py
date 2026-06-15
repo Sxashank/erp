@@ -196,8 +196,8 @@ class ITDeclaration(BaseModel):
 
     # Status
     status: Mapped[str] = mapped_column(
-        SQLEnum(ITDeclarationStatus, name="it_declaration_status_enum", create_type=False),
-        default=ITDeclarationStatus.DRAFT,
+        String(20),
+        default=ITDeclarationStatus.DRAFT.value,
         nullable=False,
     )
 

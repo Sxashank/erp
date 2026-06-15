@@ -404,7 +404,8 @@ class ESSProfileService:
         """Get attendance summary for a month."""
         # Parse month
         year, month_num = map(int, month.split("-"))
-        from datetime import calendar
+        import calendar
+
         _, last_day = calendar.monthrange(year, month_num)
         start_date = date(year, month_num, 1)
         end_date = date(year, month_num, last_day)
@@ -499,9 +500,9 @@ class ESSProfileService:
             },
             "leave_balance": [
                 {
-                    "type": lb.leave_type.name if lb.leave_type else None,
-                    "code": lb.leave_type.code if lb.leave_type else None,
-                    "balance": float(lb.balance),
+                    "type": lb.leave_type.leave_name if lb.leave_type else None,
+                    "code": lb.leave_type.leave_code if lb.leave_type else None,
+                    "balance": float(lb.available_balance),
                     "used": float(lb.used),
                 }
                 for lb in leave_balances

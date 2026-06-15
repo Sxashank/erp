@@ -217,7 +217,7 @@ async def get_current_ess_user(
     if not ess_user:
         raise UnauthorizedException("ESS user not found")
 
-    if ess_user.status != ESSUserStatus.ACTIVE:
+    if ess_user.status != ESSUserStatus.ACTIVE.value:
         raise UnauthorizedException("ESS user is inactive")
 
     token_employee_id = payload.get("employee_id")

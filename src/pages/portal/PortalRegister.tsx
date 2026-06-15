@@ -2,7 +2,7 @@
  * Borrower Portal - Borrower Registration
  *
  * 2-step wizard:
- *   1. Organisation details (one-of CIN / GSTIN / LLPIN / PAN)
+ *   1. Borrower verification via organisation ID or existing loan
  *   2. OTP verification
  *
  * After verification a status panel polls /portal/auth/registration-status
@@ -40,15 +40,15 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { showErrorToast } from '@/lib/errorToast';
 import {
-  type OrgDetailsInput,
+  type RegistrationStartInput,
   type OtpVerifyInput,
-  orgDetailsSchema,
+  registrationStartSchema,
   otpVerifySchema,
 } from '@/schemas/portal/registrationSchema';
 
 type RegistrationStage = 'details' | 'otp' | 'status';
 
-const ID_OPTIONS: { value: OrgDetailsInput['idType']; label: string; placeholder: string }[] = [
+const ID_OPTIONS: { value: RegistrationStartInput['idType']; label: string; placeholder: string }[] = [
   { value: 'cin', label: 'CIN', placeholder: 'L12345AB6789CDE123456' },
   { value: 'gstin', label: 'GSTIN', placeholder: '22ABCDE1234F1Z5' },
   { value: 'llpin', label: 'LLPIN', placeholder: 'AAB-1234' },
@@ -66,11 +66,14 @@ export default function PortalRegister(): JSX.Element {
     registrationStatus: 'PENDING_APPROVAL' | 'ACTIVE';
   } | null>(null);
 
-  const detailsForm = useForm<OrgDetailsInput>({
-    resolver: zodResolver(orgDetailsSchema),
+  const detailsForm = useForm<RegistrationStartInput>({
+    resolver: zodResolver(registrationStartSchema),
     defaultValues: {
+      registrationMode: 'organizationIdentity',
       idType: 'cin',
       idValue: '',
+      loanAccountNumber: '',
+      sanctionedAmount: '',
       authorizedSignatoryName: '',
       mobile: '+91',
       email: '',
@@ -93,14 +96,22 @@ export default function PortalRegister(): JSX.Element {
 
   const onSubmitDetails = detailsForm.handleSubmit(async (values) => {
     try {
+      const idValue = (values.idValue ?? '').toUpperCase();
       const body = {
         authorizedSignatoryName: values.authorizedSignatoryName,
         mobile: values.mobile,
         email: values.email,
-        ...(values.idType === 'cin' ? { cin: values.idValue.toUpperCase() } : {}),
-        ...(values.idType === 'gstin' ? { gstin: values.idValue.toUpperCase() } : {}),
-        ...(values.idType === 'llpin' ? { llpin: values.idValue.toUpperCase() } : {}),
-        ...(values.idType === 'pan' ? { pan: values.idValue.toUpperCase() } : {}),
+        ...(values.registrationMode === 'organizationIdentity'
+          ? {
+              ...(values.idType === 'cin' ? { cin: idValue } : {}),
+              ...(values.idType === 'gstin' ? { gstin: idValue } : {}),
+              ...(values.idType === 'llpin' ? { llpin: idValue } : {}),
+              ...(values.idType === 'pan' ? { pan: idValue } : {}),
+            }
+          : {
+              loanAccountNumber: (values.loanAccountNumber ?? '').trim().toUpperCase(),
+              sanctionedAmount: (values.sanctionedAmount ?? '').trim(),
+            }),
       };
       const res = await startRegistration.mutateAsync(body);
       setRegistrationReference(res.registrationReference);
@@ -153,15 +164,67 @@ export default function PortalRegister(): JSX.Element {
         {stage === 'details' && (
           <Card className="shadow-xl">
             <CardHeader>
-              <CardTitle>Organisation details</CardTitle>
+              <CardTitle>Borrower verification</CardTitle>
               <CardDescription>
-                Provide one regulator-issued identifier and an authorised signatory. We will send an
-                OTP to the mobile number you list.
+                Register using your organisation identifier or validate against an existing loan
+                account already seeded by SFC. We will send an OTP to the registered mobile number.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Form {...detailsForm}>
                 <form className="space-y-6" onSubmit={onSubmitDetails}>
+                  <FormField
+                    control={detailsForm.control}
+                    name="registrationMode"
+                    render={({ field }) => (
+                      <FormItem className="space-y-3">
+                        <FormLabel>Registration path</FormLabel>
+                        <FormControl>
+                          <RadioGroup
+                            value={field.value}
+                            onValueChange={(value) =>
+                              field.onChange(value as RegistrationStartInput['registrationMode'])
+                            }
+                            className="grid gap-3 md:grid-cols-2"
+                          >
+                            <label
+                              htmlFor="mode-organization-identity"
+                              className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted"
+                            >
+                              <RadioGroupItem
+                                value="organizationIdentity"
+                                id="mode-organization-identity"
+                              />
+                              <span className="space-y-1">
+                                <span className="block text-sm font-medium">
+                                  Organisation identifier
+                                </span>
+                                <span className="block text-xs text-muted-foreground">
+                                  Use CIN, GSTIN, LLPIN, or organisation PAN.
+                                </span>
+                              </span>
+                            </label>
+                            <label
+                              htmlFor="mode-existing-loan"
+                              className="flex cursor-pointer items-start gap-3 rounded-md border p-3 hover:bg-muted"
+                            >
+                              <RadioGroupItem value="existingLoan" id="mode-existing-loan" />
+                              <span className="space-y-1">
+                                <span className="block text-sm font-medium">Existing loan</span>
+                                <span className="block text-xs text-muted-foreground">
+                                  Validate with loan account number and sanctioned amount.
+                                </span>
+                              </span>
+                            </label>
+                          </RadioGroup>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {detailsForm.watch('registrationMode') === 'organizationIdentity' ? (
+                    <>
                   <FormField
                     control={detailsForm.control}
                     name="idType"
@@ -171,7 +234,9 @@ export default function PortalRegister(): JSX.Element {
                         <FormControl>
                           <RadioGroup
                             value={field.value}
-                            onValueChange={(v) => field.onChange(v as OrgDetailsInput['idType'])}
+                            onValueChange={(v) =>
+                              field.onChange(v as RegistrationStartInput['idType'])
+                            }
                             className="grid grid-cols-2 gap-2 md:grid-cols-4"
                           >
                             {ID_OPTIONS.map((opt) => (
@@ -218,6 +283,57 @@ export default function PortalRegister(): JSX.Element {
                       );
                     }}
                   />
+                    </>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                      <FormField
+                        control={detailsForm.control}
+                        name="loanAccountNumber"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Loan account number</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                placeholder="SMFC/LA/2026/00001"
+                                autoCapitalize="characters"
+                                spellCheck={false}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Use the exact loan account number issued by SFC.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={detailsForm.control}
+                        name="sanctionedAmount"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Sanctioned amount</FormLabel>
+                            <FormControl>
+                              <Input
+                                {...field}
+                                inputMode="decimal"
+                                placeholder="2500000.00"
+                                onChange={(e) =>
+                                  field.onChange(
+                                    e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1'),
+                                  )
+                                }
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Enter the sanctioned loan amount exactly as per sanction/loan advice.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </div>
+                  )}
 
                   <FormField
                     control={detailsForm.control}
@@ -382,8 +498,8 @@ export default function PortalRegister(): JSX.Element {
                   <AlertTitle>Awaiting approval</AlertTitle>
                   <AlertDescription>
                     Our operations team is reviewing your registration. This page refreshes
-                    automatically every 30 seconds; you can safely close this window — we will email{' '}
-                    <span className="font-medium">{maskedMobile}</span> once you are approved.
+                    automatically every 30 seconds; you can safely close this window. We will
+                    notify the registered mobile number and email address once you are approved.
                   </AlertDescription>
                 </Alert>
               )}

@@ -37,7 +37,7 @@ export function PageHeader({
   className,
 }: PageHeaderProps): JSX.Element {
   return (
-    <header className={cn('mb-6 flex flex-col gap-3', className)}>
+    <header className={cn('app-page-header mb-6 flex flex-col gap-3', className)}>
       {breadcrumbs && breadcrumbs.length > 0 && (
         <nav aria-label="Breadcrumb">
           <ol className="flex flex-wrap items-center gap-1 text-sm text-muted-foreground">

@@ -12,6 +12,7 @@ are never collected here.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -36,14 +37,25 @@ class RegisterRequest(CamelSchema):
     gstin: str | None = Field(None, max_length=20)
     llpin: str | None = Field(None, max_length=20)
     pan: str | None = Field(None, max_length=20)
+    loan_account_number: str | None = Field(None, max_length=80)
+    sanctioned_amount: Decimal | None = Field(None, gt=0)
     authorized_signatory_name: str = Field(..., min_length=2, max_length=200)
     mobile: str = Field(..., min_length=10, max_length=15)
     email: EmailStr
 
     @model_validator(mode="after")
     def at_least_one_id(self) -> RegisterRequest:
-        if not any([self.cin, self.gstin, self.llpin, self.pan]):
-            raise ValueError("At least one of cin/gstin/llpin/pan is required")
+        has_org_id = any([self.cin, self.gstin, self.llpin, self.pan])
+        has_existing_loan = bool(self.loan_account_number and self.sanctioned_amount is not None)
+        if not has_org_id and not has_existing_loan:
+            raise ValueError(
+                "Provide either one of cin/gstin/llpin/pan or both "
+                "loanAccountNumber and sanctionedAmount"
+            )
+        if (self.loan_account_number is None) != (self.sanctioned_amount is None):
+            raise ValueError(
+                "loanAccountNumber and sanctionedAmount must be provided together"
+            )
         return self
 
 
@@ -96,7 +108,10 @@ class EntitySuggestion(CamelSchema):
     gstin: str | None = None
     pan: str | None = None
     llpin: str | None = None
+    loan_account_number: str | None = None
+    sanctioned_amount: Decimal | None = None
     match_strength: Literal[
+        "EXACT_LOAN_ACCOUNT",
         "EXACT_CIN",
         "EXACT_GSTIN",
         "EXACT_PAN",
@@ -115,6 +130,8 @@ class AdminRegistrationListItem(CamelSchema):
     requested_gstin: str | None = None
     requested_llpin: str | None = None
     requested_pan: str | None = None
+    requested_loan_account_number: str | None = None
+    requested_sanctioned_amount: Decimal | None = None
     authorized_signatory_name: str
     mobile: str
     email: str
