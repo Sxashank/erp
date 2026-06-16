@@ -44,3 +44,4 @@ python-dateutil>=2.9.0
 
 # Crypto primitives used by core.encryption
 cryptography>=42.0.0
+reportlab>=4.0.0
